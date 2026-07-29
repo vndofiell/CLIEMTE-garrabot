@@ -760,9 +760,13 @@
     z-index: 1400;
 }
 
+/* ── Nav inferior e cards — só mobile ──────────────── */
+#mob-bottom-nav   { display: none; }
+#mob-dashboard    { display: none; }
+
 @media (max-width: 768px) {
 
-    body { padding: 0; overflow-x: hidden; }
+    body { padding: 0; overflow-x: hidden; padding-bottom: 66px; }
 
     #mob-menu-btn { display: flex; }
     #mob-dots { display: none; }
@@ -823,6 +827,123 @@
     #cmd-input { font-size: 16px !important; }
     .modal-overlay { z-index: 1600 !important; }
     canvas#matrix { display: none; }
+
+    /* ── Dashboard mobile ── */
+    #mob-dashboard {
+        display: block;
+        background: #000;
+        padding: 10px 12px 6px;
+        border-bottom: 1px solid rgba(0,255,65,0.15);
+    }
+
+    /* ── Cards de stats ── */
+    .mob-cards {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        margin-bottom: 10px;
+    }
+    .mob-card {
+        background: #0a0a0a;
+        border: 1px solid rgba(0,255,65,0.25);
+        border-radius: 10px;
+        padding: 10px 12px;
+        position: relative;
+        overflow: hidden;
+    }
+    .mob-card::before {
+        content: '';
+        position: absolute;
+        top: 0; left: 0; right: 0;
+        height: 2px;
+        background: linear-gradient(90deg, #00ff41, transparent);
+    }
+    .mob-card-label {
+        font-family: 'Share Tech Mono', monospace;
+        font-size: 0.6rem;
+        color: #555;
+        letter-spacing: 2px;
+        text-transform: uppercase;
+        margin-bottom: 4px;
+    }
+    .mob-card-value {
+        font-family: 'Share Tech Mono', monospace;
+        font-size: 1.25rem;
+        font-weight: bold;
+        color: #00ff41;
+        line-height: 1;
+    }
+    .mob-card-sub {
+        font-family: 'Share Tech Mono', monospace;
+        font-size: 0.58rem;
+        color: #444;
+        margin-top: 3px;
+    }
+    .mob-card.card-lucro .mob-card-value { color: #00ff41; }
+    .mob-card.card-lucro.neg .mob-card-value { color: #f44; }
+    .mob-card.card-winrate .mob-card-value { color: #ffbd2e; }
+    .mob-card.card-strat .mob-card-value  { font-size: 0.78rem; color: #0ff; }
+    .mob-card.card-full { grid-column: 1 / -1; }
+
+    /* ── Botão INICIAR/PARAR grande ── */
+    #mob-btn-bot {
+        width: 100%;
+        padding: 14px;
+        border-radius: 50px;
+        border: 2px solid #00ff41;
+        background: linear-gradient(135deg, rgba(0,255,65,0.15), rgba(0,255,65,0.05));
+        color: #00ff41;
+        font-family: 'Share Tech Mono', monospace;
+        font-size: 1rem;
+        font-weight: bold;
+        letter-spacing: 3px;
+        cursor: pointer;
+        box-shadow: 0 0 20px rgba(0,255,65,0.3);
+        transition: all 0.2s;
+        margin-bottom: 4px;
+    }
+    #mob-btn-bot.parar {
+        border-color: #f44;
+        color: #f44;
+        background: linear-gradient(135deg, rgba(255,68,68,0.15), rgba(255,68,68,0.05));
+        box-shadow: 0 0 20px rgba(255,68,68,0.3);
+    }
+
+    /* ── Barra de navegação inferior ── */
+    #mob-bottom-nav {
+        display: flex;
+        position: fixed;
+        bottom: 0; left: 0; right: 0;
+        height: 62px;
+        background: #000;
+        border-top: 1px solid rgba(0,255,65,0.2);
+        z-index: 1600;
+        justify-content: space-around;
+        align-items: center;
+        padding: 0 4px;
+    }
+    .mob-nav-item {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 3px;
+        flex: 1;
+        padding: 6px 0;
+        cursor: pointer;
+        border-radius: 8px;
+        transition: background 0.15s;
+        -webkit-tap-highlight-color: transparent;
+    }
+    .mob-nav-item.active .mob-nav-icon { color: #00ff41; }
+    .mob-nav-item.active .mob-nav-label { color: #00ff41; }
+    .mob-nav-item:not(.active) .mob-nav-icon { color: #444; }
+    .mob-nav-item:not(.active) .mob-nav-label { color: #444; }
+    .mob-nav-icon { font-size: 1.3rem; line-height: 1; }
+    .mob-nav-label {
+        font-family: 'Share Tech Mono', monospace;
+        font-size: 0.55rem;
+        letter-spacing: 1px;
+    }
 }
 
 </style>
@@ -912,6 +1033,64 @@
     </button>
   </div>
 </div>
+
+<!-- ══ DASHBOARD MOBILE — cards + botão (só aparece em mobile via CSS) ══ -->
+<div id="mob-dashboard">
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+    <div style="font-family:'Share Tech Mono',monospace; font-size:0.7rem; color:rgba(0,255,65,0.5); letter-spacing:3px;">GARRABOT</div>
+    <div style="display:flex; align-items:center; gap:5px; font-family:'Share Tech Mono',monospace; font-size:0.65rem; color:#444;">
+      <span id="mob-dot" style="width:7px;height:7px;border-radius:50%;background:#333;display:inline-block;"></span>
+      <span id="mob-status-txt">OFFLINE</span>
+    </div>
+  </div>
+  <div class="mob-cards">
+    <div class="mob-card">
+      <div class="mob-card-label">BANCA</div>
+      <div class="mob-card-value" id="mob-banca">--</div>
+      <div class="mob-card-sub" id="mob-banca-brl">R$ --</div>
+    </div>
+    <div class="mob-card card-lucro" id="mob-card-lucro">
+      <div class="mob-card-label">SESSÃO</div>
+      <div class="mob-card-value" id="mob-lucro">$0.00</div>
+      <div class="mob-card-sub">
+        <span style="color:#00ff41;">✅ <span id="mob-wins">0</span></span>
+        &nbsp;
+        <span style="color:#f44;">🔁 <span id="mob-losses">0</span></span>
+      </div>
+    </div>
+    <div class="mob-card card-winrate">
+      <div class="mob-card-label">WIN RATE</div>
+      <div class="mob-card-value" id="mob-winrate">--%</div>
+      <div class="mob-card-sub">⚡ <span id="mob-nextstake">$--</span></div>
+    </div>
+    <div class="mob-card card-strat">
+      <div class="mob-card-label">ESTRATÉGIA</div>
+      <div class="mob-card-value" id="mob-strat">--</div>
+      <div class="mob-card-sub" id="mob-mgmt">--</div>
+    </div>
+  </div>
+  <button id="mob-btn-bot" onclick="mobToggleBot()">▶ INICIAR BOT</button>
+</div>
+
+<!-- ══ NAVEGAÇÃO INFERIOR MOBILE ══ -->
+<nav id="mob-bottom-nav">
+  <div class="mob-nav-item active" id="mob-nav-home" onclick="mobNavClick('home')">
+    <span class="mob-nav-icon">⚡</span>
+    <span class="mob-nav-label">HOME</span>
+  </div>
+  <div class="mob-nav-item" id="mob-nav-estrategias" onclick="mobNavClick('estrategias')">
+    <span class="mob-nav-icon">📊</span>
+    <span class="mob-nav-label">ESTRATÉGIAS</span>
+  </div>
+  <div class="mob-nav-item" id="mob-nav-config" onclick="mobNavClick('config')">
+    <span class="mob-nav-icon">⚙️</span>
+    <span class="mob-nav-label">CONFIG</span>
+  </div>
+  <div class="mob-nav-item" id="mob-nav-perfil" onclick="mobNavClick('perfil')">
+    <span class="mob-nav-icon">👤</span>
+    <span class="mob-nav-label">PERFIL</span>
+  </div>
+</nav>
 
 <!-- ══ OVERLAY MOBILE ══ -->
 <div id="mob-overlay" onclick="mobFecharMenu()"></div>
@@ -13932,6 +14111,82 @@ iniciarTelaAuth = function(dadosLogin) {
 </script>
 
 <script>
+// ══ DASHBOARD MOBILE — sync de dados e controles ══════════════
+(function() {
+  function mobSync() {
+    try {
+      const bal = document.getElementById('hd-balance')?.textContent || '--';
+      document.getElementById('mob-banca').textContent = bal;
+
+      const lucro = document.getElementById('hd-profit')?.textContent || '$0.00';
+      const lucroEl = document.getElementById('mob-lucro');
+      const cardEl  = document.getElementById('mob-card-lucro');
+      lucroEl.textContent = lucro;
+      const neg = lucro.includes('-');
+      cardEl.classList.toggle('neg', neg);
+      lucroEl.style.color = neg ? '#f44' : '#00ff41';
+
+      document.getElementById('mob-wins').textContent    = document.getElementById('hd-wins')?.textContent   || '0';
+      document.getElementById('mob-losses').textContent  = document.getElementById('hd-losses')?.textContent || '0';
+      document.getElementById('mob-winrate').textContent = document.getElementById('hd-taxa')?.textContent   || '--%';
+      document.getElementById('mob-nextstake').textContent = document.getElementById('hd-nextstake')?.textContent || '$--';
+      document.getElementById('mob-strat').textContent   = document.getElementById('hd-strat')?.textContent  || '--';
+      document.getElementById('mob-mgmt').textContent    = document.getElementById('hd-mgmt')?.textContent   || '--';
+
+      const btnIniciar = document.getElementById('btn-iniciar');
+      const rodando = btnIniciar && btnIniciar.textContent.toLowerCase().includes('parar');
+      const dot = document.getElementById('mob-dot');
+      const txt = document.getElementById('mob-status-txt');
+      const btn = document.getElementById('mob-btn-bot');
+      if (dot && txt && btn) {
+        if (rodando) {
+          dot.style.background = '#00ff41';
+          dot.style.boxShadow  = '0 0 6px #00ff41';
+          txt.textContent = 'ATIVO'; txt.style.color = '#00ff41';
+          btn.textContent = '⏹ PARAR BOT'; btn.classList.add('parar');
+        } else {
+          dot.style.background = '#333'; dot.style.boxShadow = 'none';
+          txt.textContent = 'OFFLINE'; txt.style.color = '#444';
+          btn.textContent = '▶ INICIAR BOT'; btn.classList.remove('parar');
+        }
+      }
+    } catch(e) {}
+  }
+  setInterval(mobSync, 1500);
+  mobSync();
+})();
+
+function mobToggleBot() {
+  const rodando = document.getElementById('mob-btn-bot')?.classList.contains('parar');
+  runCmd(rodando ? 'parar' : 'iniciar');
+}
+
+function mobNavClick(aba) {
+  ['home','estrategias','config','perfil'].forEach(id => {
+    document.getElementById('mob-nav-' + id)?.classList.remove('active');
+  });
+  document.getElementById('mob-nav-' + aba)?.classList.add('active');
+  if (aba === 'home') {
+    mobFecharMenu();
+  } else if (aba === 'estrategias') {
+    mobFecharMenu();
+    const painel = document.getElementById('mob-painel-esq');
+    const overlay = document.getElementById('mob-overlay');
+    const btn = document.getElementById('mob-menu-btn');
+    if (painel && !painel.classList.contains('mob-open')) {
+      painel.classList.add('mob-open');
+      if (overlay) overlay.style.display = 'block';
+      if (btn) btn.textContent = '✕';
+    }
+  } else if (aba === 'config') {
+    mobFecharMenu();
+    document.getElementById('mob-painel-dir')?.scrollIntoView({ behavior: 'smooth' });
+  } else if (aba === 'perfil') {
+    mobFecharMenu();
+    runCmd('status');
+  }
+}
+
 // ══ MENU HAMBURGUER MOBILE ══════════════════════════════
 function mobToggleMenu() {
     const painel  = document.getElementById('mob-painel-esq');
