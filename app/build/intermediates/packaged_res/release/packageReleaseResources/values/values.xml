@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <bool name="enableNotification">true</bool>
+    <bool name="enableSiteSettingsShortcut">true</bool>
+    <color name="backgroundColor">#000000</color>
+    <color name="colorPrimary">#00FF41</color>
+    <color name="colorPrimaryDark">#000000</color>
+    <color name="navigationColor">#000000</color>
+    <color name="navigationColorDark">#000000</color>
+    <color name="navigationDividerColor">#000000</color>
+    <color name="navigationDividerColorDark">#000000</color>
+    <color name="shortcut_background">#F5F5F5</color>
+    <integer name="splashScreenFadeOutDuration">300</integer>
+    <string name="appName" translatable="false">GARRABOT Elite</string>
+    <string name="assetStatements">
+    [{
+        \"relation\": [\"delegate_permission/common.handle_all_urls\"],
+        \"target\": {
+            \"namespace\": \"web\",
+            \"site\": \"https://garrabot.duckdns.org\"
+        }
+    }]
+    
+  </string>
+    <string name="fallbackType" translatable="false">customtabs</string>
+    <string name="fullScopeUrl" translatable="false">https://garrabot.duckdns.org/</string>
+    <string name="generatorApp" translatable="false">bubblewrap-cli</string>
+    <string name="hostName" translatable="false">garrabot.duckdns.org</string>
+    <string name="launchUrl" translatable="false">https://garrabot.duckdns.org/</string>
+    <string name="launcherName" translatable="false">GARRABOT</string>
+    <string name="orientation" translatable="false">portrait</string>
+    <string name="providerAuthority" translatable="false">com.garrabot.elite.fileprovider</string>
+    <string name="shortcut_name_0" translatable="false">Dashboard</string>
+    <string name="shortcut_short_name_0" translatable="false">Dashboard</string>
+    <string name="webManifestUrl" translatable="false">http://localhost:8080/manifest.json</string>
+</resources>

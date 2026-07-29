@@ -1,0 +1,7 @@
+{
+  "gerenciamento": "🔄 Martingale",
+  "stake": 0.35,
+  "stopWin": 50.1,
+  "stopLoss": 100,
+  "limitePerda": 5
+}

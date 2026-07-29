@@ -1,0 +1,14 @@
+{
+  "name": "garrabot-whatsapp-api",
+  "version": "1.0.0",
+  "description": "API WhatsApp local para GarraBot (wwebjs)",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "qrcode": "^1.5.3",
+    "whatsapp-web.js": "^1.26.0"
+  }
+}

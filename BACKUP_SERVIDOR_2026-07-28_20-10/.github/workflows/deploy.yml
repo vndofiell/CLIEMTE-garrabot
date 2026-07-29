@@ -1,0 +1,27 @@
+name: 🚀 Deploy Automático para VPS Oracle
+
+on:
+  push:
+    branches:
+      - main   # dispara toda vez que você der push na branch main
+
+jobs:
+  deploy:
+    name: Deploy via SSH
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: ✅ Checkout do código
+        uses: actions/checkout@v4
+
+      - name: 🚀 Deploy na VPS
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            cd ~/CLIEMTE-garrabot
+            git pull
+            pm2 restart garrabot
+            pm2 status

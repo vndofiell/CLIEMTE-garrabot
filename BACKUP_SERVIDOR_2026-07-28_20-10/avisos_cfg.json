@@ -1,0 +1,6 @@
+{
+  "ativo": "1",
+  "dias_aviso": 3,
+  "msg_teste": "⏳ ATENÇÃO, {USUARIO}!\n\nSeu período de TESTE está se encerrando.\n\n⏱ Tempo restante: {DIAS}d {HORAS}h {MINS}min\n\nAproveite para conhecer todos os recursos antes do prazo acabar. Entre em contato com o administrador para renovar seu acesso e continuar operando com o GARRABOT ELITE.",
+  "msg_plano": "🔔 AVISO IMPORTANTE, {USUARIO}!\n\nSeu plano está prestes a expirar.\n\n⏱ Tempo restante: {DIAS}d {HORAS}h {MINS}min\n\nPara não perder o acesso ao GARRABOT ELITE e continuar suas operações sem interrupção, renove seu plano agora mesmo. Após o vencimento o acesso será suspenso automaticamente."
+}

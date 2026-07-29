@@ -1,0 +1,118 @@
+==================================================
+   SISTEMA DE DEPLOY AUTOMÁTICO - GARRABOT
+   3 Formas de Atualizar Sem Abrir o Site da Oracle
+==================================================
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ OPÇÃO 1 — SCRIPT .BAT (1 CLIQUE) ⭐ MAIS FÁCIL
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Arquivo: DEPLOY_1CLICK.bat
+
+COMO USAR:
+  1. Dê git push no GitHub normalmente (como já faz)
+  2. Clique 2x no arquivo "DEPLOY_1CLICK.bat"
+  3. Aguarde aparecer "DEPLOY CONCLUIDO COM SUCESSO!"
+  4. Pronto! O bot já está atualizado.
+
+REQUISITO:
+  - Nenhum. Funciona direto do seu computador Windows.
+  - A chave SSH já está configurada no caminho certo.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ OPÇÃO 2 — WEBHOOK HTTP (DEPLOY VIA LINK) 🌐
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Arquivo: deploy_webhook.py
+
+COMO INSTALAR NO SERVIDOR (faça 1 única vez):
+
+  1. Copie o arquivo para o servidor:
+     scp -i "C:\Users\vando\Downloads\ssh-key-2026-07-26.key" deploy_webhook.py ubuntu@158.101.108.207:~/
+
+  2. Conecte na VPS:
+     ssh -i "C:\Users\vando\Downloads\ssh-key-2026-07-26.key" ubuntu@158.101.108.207
+
+  3. Edite o token secreto no arquivo:
+     nano ~/deploy_webhook.py
+     (troque "TROQUE_ESSE_TOKEN_AQUI" por uma senha sua)
+
+  4. Abra a porta 9000 no firewall Oracle:
+     - Acesse: cloud.oracle.com > Instância > Security List
+     - Adicione regra: TCP porta 9000, origem 0.0.0.0/0
+
+  5. Também libere no firewall do Ubuntu:
+     sudo iptables -I INPUT -p tcp --dport 9000 -j ACCEPT
+     sudo netfilter-persistent save
+
+  6. Inicie o webhook com PM2:
+     pm2 start ~/deploy_webhook.py --name deploy-webhook --interpreter python3
+     pm2 save
+
+COMO USAR DEPOIS DE INSTALADO:
+  - Abra o navegador e acesse:
+    http://158.101.108.207:9000/health
+    (deve aparecer: {"status": "webhook online"})
+
+  - Para fazer deploy, chame via PowerShell:
+    Invoke-RestMethod -Uri "http://158.101.108.207:9000/deploy" `
+      -Method POST `
+      -Body '{"token":"SUA_SENHA_AQUI"}' `
+      -ContentType "application/json"
+
+  - Ou crie um segundo .bat que faça isso automaticamente!
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ OPÇÃO 3 — GITHUB ACTIONS (100% AUTOMÁTICO) 🤖
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Arquivo: .github/workflows/deploy.yml
+
+Com essa opção, toda vez que você der "git push",
+o GitHub deploya AUTOMATICAMENTE na VPS. Zero cliques!
+
+COMO CONFIGURAR (faça 1 única vez no GitHub):
+
+  1. Acesse: github.com/vndofiell/CLIEMTE-garrabot
+     (ou o nome do seu repositório)
+
+  2. Vá em: Settings > Secrets and variables > Actions
+
+  3. Crie os 3 secrets abaixo (botão "New repository secret"):
+
+     Nome: VPS_HOST
+     Valor: 158.101.108.207
+
+     Nome: VPS_USER
+     Valor: ubuntu
+
+     Nome: VPS_SSH_KEY
+     Valor: (cole o conteúdo COMPLETO do arquivo .key)
+             Para ver o conteúdo: Get-Content "C:\Users\vando\Downloads\ssh-key-2026-07-26.key"
+
+  4. Faça push do arquivo .github/workflows/deploy.yml:
+     git add .github/workflows/deploy.yml
+     git commit -m "add: deploy automatico github actions"
+     git push
+
+RESULTADO:
+  - Toda vez que você der "git push" na branch "main"
+  - O GitHub roda automaticamente: git pull + pm2 restart
+  - Você vê o status em: github.com > seu repo > Actions
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ COMPARAÇÃO - QUAL ESCOLHER?
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Opção 1 (.bat)        → Mais fácil, 0 configuração, 1 clique
+  Opção 2 (webhook)     → Deploy por link/URL de qualquer lugar
+  Opção 3 (GitHub)      → 100% automático, zero trabalho manual
+
+  RECOMENDAÇÃO: Comece pela Opção 1 (mais simples).
+  Quando quiser evoluir, use a Opção 3 (GitHub Actions).
+
+==================================================

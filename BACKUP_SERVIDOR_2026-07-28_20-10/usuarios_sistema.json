@@ -1,0 +1,40 @@
+{
+  "usuarios": [
+    {
+      "username": "pedro",
+      "email": "samtos3510@gmail.com",
+      "status": "APROVADO",
+      "senha_hash": "b269be3b6ecf2d7aa70b8fc581d805b051dc6ac87b94521db56ed8623bf00f55",
+      "criado_em": "2026-07-24 18:52:05",
+      "aprovado_em": "2026-07-28 00:00:00",
+      "dias_teste": 90,
+      "login_token": null,
+      "ultimo_ip": null,
+      "ultimo_pc": null,
+      "ultima_atividade": "2026-07-28 00:00:00",
+      "tentativas_login_duplo": 0,
+      "bloqueado_em": null,
+      "motivo_bloqueio": null,
+      "primeira_tentativa_ip": null,
+      "primeira_tentativa_pc": null
+    },
+    {
+      "username": "fiell",
+      "email": "esacontaeminha@gmail.com",
+      "status": "APROVADO",
+      "senha_hash": "35bb6cad15cae91a57c2cf2914ef2fa2f02a126a2d6e1bebc9bfe5412a8cb6ee",
+      "criado_em": "2026-07-25 16:18:32",
+      "aprovado_em": "2026-07-28 00:00:00",
+      "dias_teste": 90,
+      "login_token": null,
+      "ultimo_ip": null,
+      "ultimo_pc": null,
+      "ultima_atividade": "2026-07-28 00:00:00",
+      "tentativas_login_duplo": 0,
+      "bloqueado_em": null,
+      "motivo_bloqueio": null,
+      "primeira_tentativa_ip": null,
+      "primeira_tentativa_pc": null
+    }
+  ]
+}

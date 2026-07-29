@@ -1,0 +1,9 @@
+{
+  "dia_atual": 1,
+  "historico": [],
+  "banca_base": 9805.01,
+  "banca_atual": 9805.01,
+  "perc": 0.05,
+  "ativo": false,
+  "dias": 30
+}

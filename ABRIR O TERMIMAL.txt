@@ -1,0 +1,52 @@
+==================================================
+   COMO ABRIR O TERMINAL E ACESSAR A VPS (ORACLE)
+==================================================
+
+1. Abra o Windows PowerShell no seu computador:
+   - Aperte as teclas "Windows + X" e escolha "Terminal" ou "PowerShell".
+   - Ou digite "PowerShell" na barra de pesquisa do Windows.
+
+2. Copie e cole o comando abaixo no PowerShell e aperte ENTER:
+
+ssh -i "C:\Users\vando\Downloads\ssh-key-2026-07-26.key" ubuntu@158.101.108.207
+
+==================================================
+   COMANDOS ÚTEIS NO TERMINAL (CASO PRECISE)
+==================================================
+
+- Ver se o bot está rodando:
+  pm2 status
+
+- Ver os erros/logs do bot em tempo real:
+  pm2 logs garrabot
+
+- Reiniciar o bot:
+  pm2 restart garrabot
+
+
+
+
+==================================================
+   COMO ATUALIZAR O BOT NA VPS (ORACLE CLOUD)
+==================================================
+
+Sempre que você alterar o código no seu computador e mandar 
+para o GitHub, siga estes passos para atualizar no servidor:
+
+1. Abra o Windows PowerShell e conecte-se na VPS:
+   ssh -i "C:\Users\vando\Downloads\ssh-key-2026-07-26.key" ubuntu@158.101.108.207
+
+2. Entre na pasta do seu projeto:
+   cd ~/CLIEMTE-garrabot
+
+3. Baixe os arquivos novos direto do GitHub:
+   git pull
+
+4. Reinicie o bot para aplicar as alterações:
+   pm2 restart garrabot
+
+==================================================
+   COMANDOS EXTRAS ÚTEIS:
+==================================================
+- Ver se está rodando: pm2 status
+- Ver os erros/logs ao vivo: pm2 logs garrabot
