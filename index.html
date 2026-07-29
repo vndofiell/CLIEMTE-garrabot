@@ -844,26 +844,72 @@
 </div>
 
 <!-- ══ MODAL DOWNLOAD ANDROID ════════════════════════════════ -->
+<!-- ══ TELA DOWNLOAD APK — MATRIX ════════════════════════════ -->
 <div id="modal-download-android" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%;
-     background:rgba(0,0,0,0.9); z-index:10000; align-items:center; justify-content:center;">
-  <div style="background:#000; border:2px solid #00ff41; padding:30px; max-width:400px; text-align:center;
-              border-radius:10px; box-shadow:0 0 30px rgba(0,255,65,0.5);">
-    <h2 style="color:#00ff41; margin-bottom:20px; font-family:'Courier New',monospace;">📱 GARRABOT MOBILE</h2>
-    <p style="color:#aaa; margin-bottom:20px; font-size:14px;">
-      Baixe o app para Android e tenha acesso rápido ao bot com notificações push!
-    </p>
-    <div style="margin:20px 0;">
-      <a href="/garrabot.apk" download
-         style="display:block; background:#00ff41; color:#000; padding:15px;
-                text-decoration:none; font-weight:bold; border-radius:5px; margin:10px 0;">
-        ⬇️ BAIXAR APK
-      </a>
-      <button onclick="document.getElementById('modal-download-android').style.display='none'"
-              style="background:transparent; border:1px solid #00ff41; color:#00ff41;
-                     padding:10px; width:100%; cursor:pointer; border-radius:5px;">
-        FECHAR
-      </button>
+     background:#000; z-index:10000; align-items:center; justify-content:center; flex-direction:column;">
+
+  <!-- Canvas Matrix de fundo -->
+  <canvas id="matrix-apk-canvas" style="position:absolute;top:0;left:0;width:100%;height:100%;z-index:0;opacity:0.45;"></canvas>
+
+  <!-- Conteúdo centralizado -->
+  <div style="position:relative; z-index:1; text-align:center; max-width:420px; width:92%; padding:36px 28px;
+              border:2px solid #00ff41; border-radius:12px;
+              background:rgba(0,0,0,0.82);
+              box-shadow:0 0 40px rgba(0,255,65,0.5), 0 0 80px rgba(0,255,65,0.2);
+              font-family:'Share Tech Mono',monospace;">
+
+    <!-- Título animado -->
+    <div style="color:#00ff41; font-size:1.6rem; font-weight:bold; letter-spacing:4px; margin-bottom:6px;
+                text-shadow:0 0 15px #00ff41;">
+      📱 GARRABOT
     </div>
+    <div style="color:#00ff41; font-size:0.75rem; letter-spacing:6px; margin-bottom:24px; opacity:0.7;">
+      ELITE · CYBER · TRADING
+    </div>
+
+    <!-- Separador -->
+    <div style="border-top:1px solid rgba(0,255,65,0.3); margin-bottom:20px;"></div>
+
+    <!-- Info -->
+    <div style="color:#aaa; font-size:0.82rem; line-height:1.7; margin-bottom:24px;">
+      Instale o app nativo Android e tenha<br>
+      <span style="color:#00ff41;">acesso rápido · notificações push · offline</span>
+    </div>
+
+    <!-- Specs -->
+    <div style="display:flex; justify-content:center; gap:20px; margin-bottom:28px; font-size:0.72rem; color:#555;">
+      <span style="color:#00ff41;">▸ Android 5.0+</span>
+      <span style="color:#00ff41;">▸ ~1 MB</span>
+      <span style="color:#00ff41;">▸ Gratuito</span>
+    </div>
+
+    <!-- Botão Download -->
+    <a href="/garrabot.apk" download id="apk-download-btn"
+       style="display:block; background:linear-gradient(135deg,#00ff41,#00cc33);
+              color:#000; padding:16px; text-decoration:none; font-weight:bold;
+              border-radius:8px; font-size:1rem; letter-spacing:2px; margin-bottom:12px;
+              font-family:'Share Tech Mono',monospace;
+              box-shadow:0 0 20px rgba(0,255,65,0.5);"
+       onmouseover="this.style.boxShadow='0 0 35px rgba(0,255,65,0.9)'"
+       onmouseout="this.style.boxShadow='0 0 20px rgba(0,255,65,0.5)'">
+      ⬇ BAIXAR APK
+    </a>
+
+    <!-- Instrução -->
+    <div style="color:#555; font-size:0.68rem; margin-bottom:20px; line-height:1.6;">
+      Após baixar: abra o arquivo → permita fonte desconhecida → instale
+    </div>
+
+    <!-- Fechar -->
+    <button onclick="fecharTelaDownloadApk()"
+            style="background:transparent; border:1px solid rgba(0,255,65,0.4); color:#00ff41;
+                   padding:10px 30px; width:100%; cursor:pointer; border-radius:6px;
+                   font-family:'Share Tech Mono',monospace; font-size:0.8rem; letter-spacing:2px;
+                   transition:all 0.2s;"
+            onmouseover="this.style.background='rgba(0,255,65,0.1)'"
+            onmouseout="this.style.background='transparent'">
+      [ FECHAR ]
+    </button>
   </div>
 </div>
 
@@ -1719,6 +1765,13 @@
         overflow:visible;
         position:relative;
     ">Aguardando ticks...</div>
+
+    <div class="cmd-section">▸ APP MOBILE</div>
+    <button class="cmd-btn" onclick="abrirTelaDownloadApk()"
+        style="border-color:rgba(0,255,65,0.6); color:#00ff41; font-weight:bold;">
+        📱 BAIXAR APP
+        <span class="cmd-label" style="color:#00ff41;">Instalar GARRABOT no Android</span>
+    </button>
 
     <div class="cmd-section">▸ TERMINAL</div>
     <button class="cmd-btn" onclick="runCmd('ajuda')">
@@ -13966,6 +14019,50 @@ function notificarMobile(titulo, corpo) {
 // Solicita permissão de notificação ao carregar
 if ('Notification' in window && Notification.permission === 'default') {
   Notification.requestPermission();
+}
+
+// ══ TELA DOWNLOAD APK — MATRIX ════════════════════════════════
+let _matrixApkRAF = null;
+
+function abrirTelaDownloadApk() {
+  const modal = document.getElementById('modal-download-android');
+  modal.style.display = 'flex';
+  _iniciarMatrixApk();
+}
+
+function fecharTelaDownloadApk() {
+  const modal = document.getElementById('modal-download-android');
+  modal.style.display = 'none';
+  if (_matrixApkRAF) { cancelAnimationFrame(_matrixApkRAF); _matrixApkRAF = null; }
+}
+
+function _iniciarMatrixApk() {
+  const canvas = document.getElementById('matrix-apk-canvas');
+  const ctx = canvas.getContext('2d');
+  canvas.width  = window.innerWidth;
+  canvas.height = window.innerHeight;
+
+  const chars = 'ガギグゲゴサシスセソGARRABOTエリート01アイウエオカキクケコ@#$%&<>[]{}0110'.split('');
+  const tam = 14;
+  const cols = Math.floor(canvas.width / tam);
+  const drops = Array(cols).fill(1);
+
+  function draw() {
+    ctx.fillStyle = 'rgba(0,0,0,0.05)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.font = tam + 'px "Share Tech Mono", monospace';
+    for (let i = 0; i < drops.length; i++) {
+      const ch = chars[Math.floor(Math.random() * chars.length)];
+      ctx.fillStyle = Math.random() > 0.95 ? '#ffffff' : '#00ff41';
+      ctx.fillText(ch, i * tam, drops[i] * tam);
+      if (drops[i] * tam > canvas.height && Math.random() > 0.975) drops[i] = 0;
+      drops[i]++;
+    }
+    _matrixApkRAF = requestAnimationFrame(draw);
+  }
+
+  if (_matrixApkRAF) cancelAnimationFrame(_matrixApkRAF);
+  draw();
 }
 </script>
 
