@@ -13870,18 +13870,20 @@ function iniciarTelaAuth(dadosLogin) {
         elUserInfo.style.display = 'block';
     }, 10500);
 
-    // Mostra aviso de risco aos 13s
-    setTimeout(() => {
-        elAviso.innerHTML =
-            `<div style="color:#ffbd2e;font-size:1rem;letter-spacing:3px;margin-bottom:14px;text-shadow:0 0 8px rgba(255,189,46,0.5);">⚠ AVISO DE RISCO</div>` +
-            `<div style="border-bottom:1px solid rgba(255,189,46,0.2);margin-bottom:12px;"></div>` +
-            `<div style="margin-bottom:10px;">O <b style="color:#fff">GARRABOT ELITE</b> é uma ferramenta de automação de trading desenvolvida para auxiliar na análise e execução de operações em opções binárias.</div>` +
-            `<div style="margin-bottom:8px;">• Opções binárias envolvem <b style="color:#ff6b6b;font-size:0.9rem;">ALTO RISCO</b> e podem resultar na <b style="color:#ff6b6b">perda total</b> do capital investido.</div>` +
-            `<div style="margin-bottom:8px;">• <b style="color:#fff">NUNCA utilize dinheiro que possa te fazer falta.</b> Opere apenas com capital de risco.</div>` +
-            `<div style="margin-bottom:8px;">• <b style="color:#fff">SEMPRE teste suas estratégias em conta DEMO</b> antes de operar com dinheiro real.</div>` +
-            `<div>• O bot <b style="color:#ff6b6b">não garante lucro.</b> Resultados passados não garantem resultados futuros.</div>`;
-        elAviso.style.display = 'block';
-    }, 13000);
+    // Mostra aviso de risco aos 13s — apenas no desktop
+    if (window.innerWidth > 768) {
+        setTimeout(() => {
+            elAviso.innerHTML =
+                `<div style="color:#ffbd2e;font-size:1rem;letter-spacing:3px;margin-bottom:14px;text-shadow:0 0 8px rgba(255,189,46,0.5);">⚠ AVISO DE RISCO</div>` +
+                `<div style="border-bottom:1px solid rgba(255,189,46,0.2);margin-bottom:12px;"></div>` +
+                `<div style="margin-bottom:10px;">O <b style="color:#fff">GARRABOT ELITE</b> é uma ferramenta de automação de trading desenvolvida para auxiliar na análise e execução de operações em opções binárias.</div>` +
+                `<div style="margin-bottom:8px;">• Opções binárias envolvem <b style="color:#ff6b6b;font-size:0.9rem;">ALTO RISCO</b> e podem resultar na <b style="color:#ff6b6b">perda total</b> do capital investido.</div>` +
+                `<div style="margin-bottom:8px;">• <b style="color:#fff">NUNCA utilize dinheiro que possa te fazer falta.</b> Opere apenas com capital de risco.</div>` +
+                `<div style="margin-bottom:8px;">• <b style="color:#fff">SEMPRE teste suas estratégias em conta DEMO</b> antes de operar com dinheiro real.</div>` +
+                `<div>• O bot <b style="color:#ff6b6b">não garante lucro.</b> Resultados passados não garantem resultados futuros.</div>`;
+            elAviso.style.display = 'block';
+        }, 13000);
+    }
 
     // Barra de progresso contínua ao longo dos 20s
     const inicio = Date.now();
