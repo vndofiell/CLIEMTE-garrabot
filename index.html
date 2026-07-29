@@ -828,12 +828,29 @@
     .modal-overlay { z-index: 1600 !important; }
     canvas#matrix { display: none; }
 
-    /* ── Dashboard mobile ── */
+    /* ── Terminal mobile — altura fixa + auto-scroll ── */
+    .terminal-container {
+        display: flex;
+        flex-direction: column;
+        max-height: 60dvh;
+    }
+    .terminal-body {
+        flex: 1;
+        overflow-y: auto !important;
+        max-height: 42dvh;
+        scroll-behavior: smooth;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    /* ── Dashboard mobile — FIXO no topo ── */
     #mob-dashboard {
         display: block;
         background: #000;
         padding: 10px 12px 6px;
         border-bottom: 1px solid rgba(0,255,65,0.15);
+        position: sticky;
+        top: 0;
+        z-index: 1200;
     }
 
     /* ── Cards de stats ── */
