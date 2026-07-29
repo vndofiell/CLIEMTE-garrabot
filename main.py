@@ -1075,6 +1075,49 @@ def avisos_debug():
 
 # ── Rota: serve o painel de administração ─────────────────────────────────
 
+# ═══════════════════════════════════════════════════════════════
+# PWA — Manifest, Service Worker, Assets e APK
+# ═══════════════════════════════════════════════════════════════
+@app.route('/manifest.json')
+def manifest_json():
+    from flask import Response
+    try:
+        with open('manifest.json', 'r', encoding='utf-8') as f:
+            data = f.read()
+        resp = Response(data, mimetype='application/manifest+json')
+        resp.headers['Cache-Control'] = 'public, max-age=86400'
+        return resp
+    except FileNotFoundError:
+        return jsonify({"erro": "manifest.json não encontrado"}), 404
+
+@app.route('/sw.js')
+def service_worker():
+    from flask import Response
+    try:
+        with open('sw.js', 'r', encoding='utf-8') as f:
+            data = f.read()
+        resp = Response(data, mimetype='application/javascript')
+        resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        resp.headers['Service-Worker-Allowed'] = '/'
+        return resp
+    except FileNotFoundError:
+        return "Service Worker não encontrado", 404
+
+@app.route('/assets/<path:filename>')
+def assets_static(filename):
+    """Serve ícones e assets da pasta /assets/"""
+    from flask import send_from_directory
+    return send_from_directory('assets', filename)
+
+@app.route('/garrabot.apk')
+def download_apk():
+    """Rota para download do APK"""
+    from flask import send_file
+    try:
+        return send_file('garrabot.apk', as_attachment=True, download_name='GARRABOT.apk')
+    except FileNotFoundError:
+        return jsonify({"erro": "APK ainda não disponível. Em breve!"}), 404
+
 @app.route('/admin')
 def admin_panel():
     try:
@@ -1110,20 +1153,69 @@ def callback_html():
     erro_desc  = request.args.get('error_description', '')
     code       = request.args.get('code', '').strip()
 
-    # Monta HTML de resposta visual (mesma aparência do callback.html do Netlify)
-    def _html(icone, titulo, cor, detalhe, fechar=True):
-        btn = '<br><br><button onclick="window.close()" style="margin-top:16px;width:100%;padding:10px;background:rgba(0,255,65,0.08);border:1px solid #00ff41;color:#00ff41;font-family:\'Courier New\',monospace;font-size:0.78rem;letter-spacing:2px;cursor:pointer;">&#10005; FECHAR ESTA ABA</button>' if fechar else ''
-        return Response(f"""<!DOCTYPE html><html lang="pt-br"><head>
+    # ── HTML base com Matrix rain — usado por todas as telas do callback ──────
+    MATRIX_HEAD = """<!DOCTYPE html><html lang="pt-br"><head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>GARRABOT — Callback</title>
-<style>*{{margin:0;padding:0;box-sizing:border-box}}body{{background:#000;font-family:'Courier New',monospace;display:flex;align-items:center;justify-content:center;min-height:100vh}}.box{{border:1px solid #00ff41;padding:40px 36px;width:420px;text-align:center;box-shadow:0 0 40px rgba(0,255,65,0.3);background:rgba(0,5,0,0.95)}}.logo{{font-size:1.4rem;letter-spacing:6px;color:#00ff41;margin-bottom:4px;text-shadow:0 0 14px #00ff41}}.sub{{font-size:0.6rem;letter-spacing:3px;color:#1a5c2a;margin-bottom:24px}}.icone{{font-size:2.5rem;margin:12px 0}}.titulo{{font-size:0.95rem;letter-spacing:2px;margin:10px 0 8px;color:{cor}}}.msg{{font-size:0.72rem;color:#888;line-height:1.8;margin:10px 0}}.msg b{{color:#ccc}}</style>
-</head><body><div class="box">
+<title>GARRABOT</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#000;font-family:'Courier New',monospace;overflow:hidden}
+canvas{position:fixed;top:0;left:0;z-index:0}
+.center{position:fixed;top:0;left:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;z-index:10}
+.box{border:1px solid #00ff41;padding:44px 38px;width:430px;text-align:center;box-shadow:0 0 50px rgba(0,255,65,0.4),inset 0 0 40px rgba(0,255,65,0.04);background:rgba(0,5,0,0.90);position:relative}
+.box::before{content:'';position:absolute;top:-1px;left:10%;width:80%;height:2px;background:linear-gradient(90deg,transparent,#00ff41,transparent)}
+.logo{font-size:1.5rem;letter-spacing:8px;color:#00ff41;margin-bottom:4px;text-shadow:0 0 20px #00ff41}
+.sub{font-size:0.6rem;letter-spacing:4px;color:#1a5c2a;margin-bottom:28px}
+.icone{font-size:2.4rem;margin:10px 0}
+.titulo{font-size:0.95rem;letter-spacing:2px;margin:10px 0 8px}
+.msg{font-size:0.72rem;color:#888;line-height:1.9;margin:10px 0}
+.msg b{color:#ccc}
+.msg span.inst{color:#aaa}
+.btn{margin-top:16px;width:100%;padding:11px;background:rgba(0,255,65,0.08);border:1px solid #00ff41;color:#00ff41;font-family:'Courier New',monospace;font-size:0.78rem;letter-spacing:2px;cursor:pointer}
+.btn:hover{background:rgba(0,255,65,0.2)}
+.cnt-wrap{font-size:0.62rem;color:#555;letter-spacing:1px;margin-top:10px}
+.cnt-num{font-size:1.4rem;color:#ffbd2e;text-shadow:0 0 10px #ffbd2e;vertical-align:middle}
+</style>
+</head><body>
+<canvas id="mx"></canvas>
+<div class="center"><div class="box">
 <div class="logo">GARRABOT</div>
-<div class="sub">CYBER TRADING SYSTEM v2.0</div>
+<div class="sub">CYBER TRADING SYSTEM v2.0</div>"""
+
+    MATRIX_SCRIPT = """<script>
+(function(){
+var cv=document.getElementById('mx'),ctx=cv.getContext('2d');
+var ch='GARRABOT01ABCDEFｦｧｨｩｪｫｬｭｮｯｰｱｲｳｴｵｶｷｸｹｺ0123456789$#@%&'.split('');
+var cols,drops;
+function rsz(){cv.width=window.innerWidth;cv.height=window.innerHeight;cols=Math.floor(cv.width/16);drops=Array(cols).fill(1);}
+rsz();window.addEventListener('resize',rsz);
+setInterval(function(){
+  ctx.fillStyle='rgba(0,0,0,0.05)';ctx.fillRect(0,0,cv.width,cv.height);
+  ctx.font='14px Courier New';
+  for(var i=0;i<drops.length;i++){
+    var c=ch[Math.floor(Math.random()*ch.length)];
+    ctx.fillStyle=drops[i]*16<cv.height*0.1?'#fff':'#00ff41';
+    ctx.fillText(c,i*16,drops[i]*16);
+    if(drops[i]*16>cv.height&&Math.random()>0.975)drops[i]=0;
+    drops[i]++;
+  }
+},50);
+})();
+</script>"""
+
+    MATRIX_FOOT = "</div></div></body></html>"
+
+    def _html(icone, titulo, cor, detalhe, fechar=True):
+        cnt_html = '<div class="cnt-wrap">FECHANDO EM <span id="cnt" class="cnt-num">5</span> SEGUNDOS...</div>' if fechar else ''
+        btn_html = '<button class="btn" onclick="window.close()">&#10005; FECHAR ESTA ABA</button>' if fechar else ''
+        cnt_js   = '<script>var c=5,t=setInterval(function(){c--;var e=document.getElementById("cnt");if(e)e.textContent=c;if(c<=0){clearInterval(t);window.close();}},1000);</script>' if fechar else ''
+        body = f"""
 <div class="icone">{icone}</div>
-<div class="titulo">{titulo}</div>
-<div class="msg">{detalhe}{btn}</div>
-</div></body></html>""", mimetype='text/html')
+<div class="titulo" style="color:{cor}">{titulo}</div>
+<div class="msg">{detalhe}</div>
+{cnt_html}
+{btn_html}"""
+        return Response(MATRIX_HEAD + body + MATRIX_FOOT + MATRIX_SCRIPT + cnt_js, mimetype='text/html')
 
     # ── Erro vindo da Deriv (link já usado, acesso negado, etc.) ────────────
     if erro_param:
@@ -1191,30 +1283,70 @@ def callback_html():
             return _html('&#10060;', 'FALHA NA AUTENTICACAO', '#ff4444',
                 f'access_token nao retornado.<br><small style="color:#555">{r.text[:150]}</small><br><br>Feche e tente novamente.')
         with _token_lock:
-            _token_recebido["access_token"] = access_token
-            _token_recebido["ts"]           = time.time()
-            _token_recebido.pop("_pkce_verifier", None)  # limpa verifier usado
+            _token_recebido["access_token"]      = access_token
+            _token_recebido["ts"]                = time.time()
+            _token_recebido["_bot_confirmou"]    = False   # flag: bot ainda não leu
+            _token_recebido.pop("_pkce_verifier", None)   # limpa verifier usado
         print(f"[Callback] access_token armazenado: {access_token[:10]}... ({len(access_token)} chars)")
-        # Sucesso — fecha automaticamente em 5 segundos
-        return Response(f"""<!DOCTYPE html><html lang="pt-br"><head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>GARRABOT — Conectado</title>
-<style>*{{margin:0;padding:0;box-sizing:border-box}}body{{background:#000;font-family:'Courier New',monospace;display:flex;align-items:center;justify-content:center;min-height:100vh}}.box{{border:1px solid #00ff41;padding:40px 36px;width:420px;text-align:center;box-shadow:0 0 40px rgba(0,255,65,0.3);background:rgba(0,5,0,0.95)}}.logo{{font-size:1.4rem;letter-spacing:6px;color:#00ff41;margin-bottom:4px;text-shadow:0 0 14px #00ff41}}.sub{{font-size:0.6rem;letter-spacing:3px;color:#1a5c2a;margin-bottom:24px}}.cnt{{font-size:2.5rem;color:#ffbd2e;text-shadow:0 0 16px #ffbd2e;margin:8px 0}}</style>
-</head><body><div class="box">
-<div class="logo">GARRABOT</div>
-<div class="sub">CYBER TRADING SYSTEM v2.0</div>
-<div style="font-size:2rem;margin:12px 0">&#9989;</div>
-<div style="font-size:0.95rem;letter-spacing:2px;color:#00ff41;margin-bottom:8px;text-shadow:0 0 10px #00ff41">ACESSO AUTORIZADO</div>
-<div style="font-size:0.65rem;color:#888;line-height:2">TOKEN RECEBIDO COM SUCESSO<br>FECHANDO EM <span id="cnt" class="cnt">5</span> SEGUNDOS...</div>
-<button onclick="window.close()" style="margin-top:16px;width:100%;padding:10px;background:rgba(0,255,65,0.08);border:1px solid #00ff41;color:#00ff41;font-family:'Courier New',monospace;font-size:0.78rem;letter-spacing:2px;cursor:pointer;">&#10005; FECHAR ESTA ABA</button>
-</div>
-<script>var c=5;var t=setInterval(function(){{c--;var e=document.getElementById('cnt');if(e)e.textContent=c;if(c<=0){{clearInterval(t);window.close();}}}},1000);</script>
-</body></html>""", mimetype='text/html')
+        # Sucesso — aguarda o bot confirmar antes de iniciar countdown
+        sucesso_body = """
+<div class="icone">&#9989;</div>
+<div class="titulo" style="color:#00ff41;text-shadow:0 0 14px #00ff41">ACESSO AUTORIZADO</div>
+<div id="stmsg" class="msg">AGUARDANDO BOT CONECTAR<span id="dots">...</span></div>
+<div id="cnt-area" class="cnt-wrap" style="display:none">FECHANDO EM <span id="cnt" class="cnt-num">5</span> SEGUNDOS...</div>
+<button class="btn" onclick="window.close()">&#10005; FECHAR ESTA ABA</button>"""
+
+        sucesso_js = """<script>
+(function(){
+var cv=document.getElementById('mx'),ctx=cv.getContext('2d');
+var ch='GARRABOT01ABCDEFｦｧｨｩｪｫｬｭｮｯｰｱｲｳｴｵｶｷｸｹｺ0123456789$#@%&'.split('');
+var cols,drops;
+function rsz(){cv.width=window.innerWidth;cv.height=window.innerHeight;cols=Math.floor(cv.width/16);drops=Array(cols).fill(1);}
+rsz();window.addEventListener('resize',rsz);
+setInterval(function(){
+  ctx.fillStyle='rgba(0,0,0,0.05)';ctx.fillRect(0,0,cv.width,cv.height);
+  ctx.font='14px Courier New';
+  for(var i=0;i<drops.length;i++){
+    var c=ch[Math.floor(Math.random()*ch.length)];
+    ctx.fillStyle=drops[i]*16<cv.height*0.1?'#fff':'#00ff41';
+    ctx.fillText(c,i*16,drops[i]*16);
+    if(drops[i]*16>cv.height&&Math.random()>0.975)drops[i]=0;
+    drops[i]++;
+  }
+},50);
+var dotF=['...','.. ','.','.  '],dotI=0;
+var dotT=setInterval(function(){var d=document.getElementById('dots');if(d)d.textContent=dotF[dotI++%4];},400);
+var tries=0;
+function startCountdown(){
+  clearInterval(dotT);
+  var s=document.getElementById('stmsg');
+  if(s){s.innerHTML='BOT CONECTADO COM SUCESSO!';s.style.color='#00ff41';}
+  var a=document.getElementById('cnt-area');if(a)a.style.display='block';
+  var c=5,t=setInterval(function(){c--;var e=document.getElementById('cnt');if(e)e.textContent=c;if(c<=0){clearInterval(t);window.close();}},1000);
+}
+function poll(){
+  fetch('/auth/token-confirmado').then(function(r){return r.json();}).then(function(d){
+    if(d.ok){startCountdown();}
+    else{tries++;if(tries<30)setTimeout(poll,1000);else{clearInterval(dotT);var s=document.getElementById('stmsg');if(s){s.innerHTML='BOT DEMOROU — FECHE MANUALMENTE';s.style.color='#ffbd2e';}}}
+  }).catch(function(){tries++;if(tries<30)setTimeout(poll,1000);});
+}
+setTimeout(poll,1000);
+})();
+</script>"""
+
+        return Response(MATRIX_HEAD + sucesso_body + MATRIX_FOOT + sucesso_js, mimetype='text/html')
     except Exception as e:
         print(f"[Callback] Erro: {e}")
         return _html('&#10060;', 'ERRO DE CONEXAO', '#ff4444',
             f'Nao foi possivel contactar o servidor Deriv.<br><small>{e}</small><br><br>Feche e tente novamente.')
 
+
+@app.route('/auth/token-confirmado', methods=['GET'])
+def auth_token_confirmado():
+    """Consultado pela página de sucesso do callback para saber se o bot já leu o token."""
+    with _token_lock:
+        ok = bool(_token_recebido.get("_bot_confirmou", False))
+    return jsonify({"ok": ok})
 
 @app.route('/store-verifier', methods=['POST'])
 def store_verifier():
@@ -1655,6 +1787,9 @@ def get_token():
         # Token expira após 10 minutos sem uso
         if access_token and (time.time() - token_ts) < 600:
             print(f"[Token] Usando token local: {access_token[:10]}...")
+            # Marca que o bot leu o token (sinaliza para a página de callback)
+            with _token_lock:
+                _token_recebido["_bot_confirmou"] = True
             tipo = _access_token.get("tipo", "DEMO")
             return jsonify(_get_token_com_access(access_token, tipo))
 
