@@ -13388,9 +13388,10 @@ function mcAtualizarFaixa(estado) {
         texto.textContent = '✅ Login detectado — clique em "+ Conectar" abaixo.';
         botoes.innerHTML  = '';
     } else if (estado === 'aguardando_login') {
-        texto.style.color = '#60a5fa';
-        texto.textContent = '🤖 Selenium rodando no servidor — login automático em andamento…';
+        texto.style.color = '#4ade80';
+        texto.textContent = '🔑 Faça login na aba que abriu — servidor aguardando token…';
         botoes.innerHTML  = `
+            <button onclick="window.open('https://garrabot.duckdns.org/login','_blank')" class="mc-btn mc-btn-verde" style="width:auto;padding:5px 12px;font-size:0.72rem;">🔓 Abrir Login</button>
             <button onclick="mcCancelarLogin()" class="mc-btn mc-btn-vermelho" style="width:auto;padding:5px 12px;font-size:0.72rem;">✕ Cancelar</button>`;
     } else {
         texto.style.color = '#fbbf24';
@@ -13471,13 +13472,18 @@ async function mcFazerLogin(tipo) {
         return;
     }
     if (dataSel.status === 'already_opened') {
-        mcCancelarLogin();
-        mcStatus('⚠️ Login já está em andamento. Aguarde…', '#fbbf24');
+        // Já tem Selenium rodando — só abre a URL de login no dispositivo
+        window.open('https://garrabot.duckdns.org/login', '_blank');
+        mcAtualizarFaixa('aguardando_login');
+        mcStatus('🔑 Faça login na aba que abriu. O servidor detecta automaticamente…', '#60a5fa');
         return;
     }
 
+    // Abre URL de login no dispositivo do usuário enquanto Selenium aguarda no servidor
+    window.open('https://garrabot.duckdns.org/login', '_blank');
+
     mcAtualizarFaixa('aguardando_login');
-    mcStatus('🤖 Selenium iniciado no servidor! Aguarde — login sendo feito automaticamente…', '#60a5fa');
+    mcStatus('🔑 Faça login na aba que abriu! O servidor captura o token automaticamente…', '#4ade80');
     
     // Polling do backend que está monitorando o login
     _mcLoginTimer = setInterval(async () => {
