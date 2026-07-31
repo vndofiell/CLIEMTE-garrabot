@@ -3669,8 +3669,9 @@ let bot = {
         ativo:         false,   // opção habilitada pelo usuário
         emRecuperacao: false,   // true = está em modo recuperação (após um loss)
         // TTR inteligente
-        _gales:  0,             // quantas recuperações já tentadas neste ciclo
-        _espera: 0,             // ticks restantes de cooldown antes da próxima entrada
+        _gales:    0,           // quantas recuperações já tentadas neste ciclo
+        _espera:   0,           // ticks restantes de cooldown antes da próxima entrada
+        _bloqueado: false,      // true = gales esgotados, aguarda Martingale voltar ao nível 0
     },
     // Filtro de Histograma — só entra quando WIN domina o volume
     bloqHist: {
@@ -6559,13 +6560,25 @@ function initWebSocket(wssUrl) {
 
         function ttrRecuperacao(ultDigitos) {
             const tr = bot.tickRecovery;
+            // Bloqueado: aguarda Martingale voltar ao nível 0 antes de tentar de novo
+            if (tr._bloqueado) {
+                const nivelAtual = bot.mgr._nivelGale || 0;
+                if (nivelAtual === 0) {
+                    tr._bloqueado   = false;
+                    tr._gales       = 0;
+                    tr._espera      = 0;
+                    tr.emRecuperacao = false;
+                    print(`🔓 TTR desbloqueado — Martingale voltou ao nível 0. Modo normal retomado.`, 'log-win');
+                }
+                return false;
+            }
             // Cooldown após última tentativa
             if (tr._espera > 0) { tr._espera--; return false; }
-            // Limite de gales atingido — zera e sai do modo recuperação
+            // Limite de gales atingido — bloqueia até Martingale voltar à base
             if (tr._gales >= TTR_MAX_GALES) {
-                tr._gales = 0;
+                tr._bloqueado    = true;
                 tr.emRecuperacao = false;
-                print(`⚠️ TTR — máximo de recuperações (${TTR_MAX_GALES}) atingido. Aguardando próximo sinal.`, 'log-loss');
+                print(`⛔ TTR — limite de ${TTR_MAX_GALES} gales atingido. Bloqueado até Martingale voltar ao nível 0.`, 'log-loss');
                 return false;
             }
             // Mercado desfavorável — aguarda
@@ -6576,8 +6589,9 @@ function initWebSocket(wssUrl) {
         }
 
         function ttrReset() {
-            bot.tickRecovery._gales  = 0;
-            bot.tickRecovery._espera = 0;
+            bot.tickRecovery._gales      = 0;
+            bot.tickRecovery._espera     = 0;
+            bot.tickRecovery._bloqueado  = false;
             bot.tickRecovery.emRecuperacao = false;
         }
         // ==========================
@@ -7009,7 +7023,10 @@ function initWebSocket(wssUrl) {
                 // ── Recuperação Tick a Tick: ativa após LOSS, desativa ao zerar dívida ──
                 if (bot.tickRecovery.ativo) {
                     if (!wonReal) {
-                        bot.tickRecovery.emRecuperacao = true;
+                        // Só ativa TTR se não estiver bloqueado (limite de gales não esgotado)
+                        if (!bot.tickRecovery._bloqueado) {
+                            bot.tickRecovery.emRecuperacao = true;
+                        }
                         const _ttrDiv2 = Math.max(bot.mgr._dividaLR || 0, bot.mgr._raDivida || 0, bot.mgr._drDivida || 0);
                         print(`⚡ TTR ATIVADO — entrando em cada tick até recuperar dívida ($${_ttrDiv2 > 0 ? _ttrDiv2.toFixed(2) : Math.abs(totalProfit).toFixed(2)})`, 'log-info');
                     } else if (bot.tickRecovery.emRecuperacao) {
@@ -7076,7 +7093,10 @@ function initWebSocket(wssUrl) {
                 // ── Recuperação Tick a Tick: ativa após LOSS, desativa ao zerar dívida ──
                 if (bot.tickRecovery.ativo) {
                     if (!won) {
-                        bot.tickRecovery.emRecuperacao = true;
+                        // Só ativa TTR se não estiver bloqueado (limite de gales não esgotado)
+                        if (!bot.tickRecovery._bloqueado) {
+                            bot.tickRecovery.emRecuperacao = true;
+                        }
                         const _ttrDiv = Math.max(bot.mgr._dividaLR || 0, bot.mgr._raDivida || 0, bot.mgr._drDivida || 0);
                         print(`⚡ TTR ATIVADO — entrando em cada tick até recuperar dívida ($${_ttrDiv > 0 ? _ttrDiv.toFixed(2) : Math.abs(profit).toFixed(2)})`, 'log-info');
                     } else if (bot.tickRecovery.emRecuperacao) {
