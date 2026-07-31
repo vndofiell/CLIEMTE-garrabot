@@ -1,5 +1,5 @@
 // ══ Service Worker — GARRABOT Elite PWA ════════════════════
-const CACHE_NAME = 'garrabot-v1';
+const CACHE_NAME = 'garrabot-v2';
 const ASSETS = [
   '/',
   '/index.html',
@@ -47,6 +47,18 @@ self.addEventListener('fetch', (e) => {
   );
 });
 
+// ── Keep-Alive via Web Lock API ────────────────────────────
+// Mantém o SW ativo mesmo com tela apagada ou app minimizado
+self.addEventListener('message', (e) => {
+  if (e.data === 'KEEP_ALIVE') {
+    // Responde para confirmar que o SW está vivo
+    e.source && e.source.postMessage('SW_ALIVE');
+  }
+  if (e.data === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+});
+
 // Notificações Push
 self.addEventListener('push', (e) => {
   const data = e.data ? e.data.json() : {};
@@ -62,5 +74,27 @@ self.addEventListener('push', (e) => {
 
 self.addEventListener('notificationclick', (e) => {
   e.notification.close();
-  e.waitUntil(clients.openWindow(e.notification.data?.url || '/'));
+  e.waitUntil(
+    clients.matchAll({ type: 'window' }).then((clientList) => {
+      // Se já tem janela aberta, foca nela
+      for (const client of clientList) {
+        if (client.url.includes('garrabot') && 'focus' in client) {
+          return client.focus();
+        }
+      }
+      // Senão abre nova
+      return clients.openWindow(e.notification.data?.url || '/');
+    })
+  );
+});
+
+// ── Background Sync: tenta reconectar bot após voltar online ──
+self.addEventListener('sync', (e) => {
+  if (e.tag === 'bot-reconnect') {
+    e.waitUntil(
+      self.clients.matchAll().then((clients) => {
+        clients.forEach(client => client.postMessage('RECONNECT'));
+      })
+    );
+  }
 });

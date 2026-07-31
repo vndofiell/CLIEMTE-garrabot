@@ -14134,6 +14134,69 @@ iniciarTelaAuth = function(dadosLogin) {
 </script>
 
 <script>
+// ══ WAKE LOCK — tela não apaga enquanto o app estiver aberto ══
+let _wakeLock = null;
+
+async function _wakeLockAtivar() {
+  if (!('wakeLock' in navigator)) return;
+  try {
+    _wakeLock = await navigator.wakeLock.request('screen');
+    _wakeLock.addEventListener('release', () => { _wakeLock = null; });
+    console.log('🔆 Wake Lock ativo — tela não vai apagar');
+  } catch (e) {
+    console.warn('Wake Lock não disponível:', e.message);
+  }
+}
+
+// Reativa o Wake Lock quando a página volta ao foco (ex: após minimizar)
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && _wakeLock === null) {
+    _wakeLockAtivar();
+  }
+});
+
+// Ativa imediatamente ao carregar
+_wakeLockAtivar();
+
+// ══ KEEP-ALIVE — mantém SW e WebSocket ativos com tela apagada ══
+(function() {
+  // 1. Pinga o Service Worker a cada 20s para não ser suspenso
+  function pingSW() {
+    if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+      navigator.serviceWorker.controller.postMessage('KEEP_ALIVE');
+    }
+  }
+  setInterval(pingSW, 20000);
+
+  // 2. Web Locks API — bloqueia um recurso leve para manter a aba viva
+  if (navigator.locks) {
+    navigator.locks.request('garrabot-bot-ativo', { mode: 'shared' }, () => {
+      // Promessa nunca resolve — mantém o lock (e a aba) sempre ativo
+      return new Promise(() => {});
+    });
+  }
+
+  // 3. Reconecta WebSocket automaticamente ao voltar do background
+  navigator.serviceWorker && navigator.serviceWorker.addEventListener('message', (e) => {
+    if (e.data === 'RECONNECT' && bot && bot.running && (!bot.ws || bot.ws.readyState !== 1)) {
+      console.log('📡 SW pediu reconexão — tentando...');
+      try { runCmd('reconectar'); } catch(_) {}
+    }
+  });
+
+  // 4. Detecta quando volta do background e revalida conexão
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      setTimeout(() => {
+        if (bot && bot.running && bot.ws && bot.ws.readyState !== 1) {
+          print('📡 Voltou do background — reconectando WebSocket...', 'log-info');
+          try { runCmd('reconectar'); } catch(_) {}
+        }
+      }, 1500);
+    }
+  });
+})();
+
 // ══ DASHBOARD MOBILE — sync de dados e controles ══════════════
 (function() {
   function mobSync() {
