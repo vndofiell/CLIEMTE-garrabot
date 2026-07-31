@@ -8688,6 +8688,10 @@ def contas_adicionar():
     tipo  = dados.get("tipo", "TESTE").upper()
     nome  = dados.get("nome", "")
 
+    # "DEMO" é sinônimo de "TESTE" (front-end envia "DEMO" para conta demo)
+    if tipo == "DEMO":
+        tipo = "TESTE"
+
     if tipo not in ("TESTE", "REAL"):
         return jsonify({"erro": "Tipo deve ser TESTE ou REAL."})
 
