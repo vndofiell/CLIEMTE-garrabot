@@ -13459,27 +13459,17 @@ async function mcFazerLogin(tipo) {
             mcStatus('⏱️ Tempo esgotado. Tente novamente.', '#fbbf24');
         }
     }, 120000);
-    // Abre browser em modo INCÓGNITO/PRIVADO para conta DIFERENTE da teste
-    let resp, data;
+    // Abre a URL de login diretamente no dispositivo do usuário (Oracle não tem tela)
+    const _loginUrl = 'https://garrabot.duckdns.org/login';
+    window.open(_loginUrl, '_blank');
+
+    // Notifica o servidor para começar a monitorar o token
     try {
-        resp = await fetch(`/open-login-secundaria?tipo=${tipo}`);
-        data = await resp.json();
-    } catch (e) {
-        _mcLoginEmAndamento = false;
-        mcStatus('❌ Erro ao abrir navegador.', '#f87171');
-        return;
-    }
-    if (data.status === 'already_opened') {
-        _mcLoginEmAndamento = false;
-        mcStatus('⚠️ Login já está em andamento. Aguarde…', '#fbbf24');
-        return;
-    }
-    if (data.status === 'error') {
-        mcStatus(`❌ ${data.erro}`, '#f87171');
-        return;
-    }
+        await fetch(`/open-login-secundaria?tipo=${tipo}`);
+    } catch (_) {}
+
     mcAtualizarFaixa('aguardando_login');
-    mcStatus('🔑 Navegador anônimo aberto! Faça login com a conta SECUNDÁRIA (diferente da TESTE). O navegador fechará automaticamente.', '#60a5fa');
+    mcStatus('🔑 Aba de login aberta! Faça login com a conta SECUNDÁRIA na aba que abriu. Aguardando token…', '#60a5fa');
     
     // Polling do backend que está monitorando o login
     _mcLoginTimer = setInterval(async () => {
