@@ -3663,6 +3663,7 @@ let bot = {
         aguardando:     false,    // true = threshold atingido, aguarda próximo sinal
         bloqueado:      false,    // true = aguardando WIN real para reativar (modo apos_win)
         emRecuperacao:  false,    // true = disparou LV, perdeu, segue entrando até WIN
+        _espera:        0,        // cooldown de ticks entre tentativas de recuperação LV
     },
     // ⚡ Recuperação Tick a Tick — ignora LV e seq_gatilho após loss até zerar dívida
     tickRecovery: {
@@ -4229,13 +4230,29 @@ function lvVerificar(digit) {
     const lv = bot.lv;
     if (!lv.ativo) return true;          // LV inativo — passa tudo
 
-    // ── Modo Recuperação: LV já disparou e o bot perdeu — entra em TODOS os ticks até WIN ──
-    // Ativado automaticamente após qualquer LOSS real quando o LV está ativo.
-    // Não depende de checkbox. Só sai deste modo após WIN real.
-    // ⚠️ Respeita o Filtro de Histograma mesmo em recuperação — não entra se hist bloquear
+    // ── Modo Recuperação: LV já disparou e o bot perdeu — entra com cooldown e filtro de mercado ──
     if (lv.emRecuperacao) {
-        if (!histVerificar()) return false;  // hist bloqueado → aguarda mesmo em recuperação
-        // hist liberado → pode entrar
+        if (!histVerificar()) return false;
+
+        // Se o TTR estiver bloqueado (gales esgotados), LV também não entra — espera Martingale resetar
+        if (bot.tickRecovery.ativo && bot.tickRecovery._bloqueado) return false;
+
+        // Cooldown entre tentativas de recuperação LV (igual ao TTR)
+        if (lv._espera > 0) { lv._espera--; return false; }
+        lv._espera = 3;  // aguarda 3 ticks antes da próxima entrada
+
+        // Filtro de mercado: só entra se confiança ≥ 75%
+        const _ultDigLV = (bot._digitRecentes || []).slice(-10).map(d => parseInt(d));
+        if (_ultDigLV.length >= 10) {
+            let _altLV = 0;
+            for (let _i = 1; _i < _ultDigLV.length; _i++) {
+                if (_ultDigLV[_i] !== _ultDigLV[_i-1]) _altLV++;
+            }
+            if (_altLV >= 8) return false;  // mercado muito alternado
+            const _confLV = _ultDigLV.filter(d => d > 3).length / _ultDigLV.length;
+            if (_confLV < 0.75) return false;  // confiança insuficiente
+        }
+
         return true;
     }
 
@@ -4360,6 +4377,7 @@ function lvOnResultado(won) {
         lv.bloqueado     = false;
         lv.aguardando    = false;
         lv.contador      = 0;
+        lv._espera       = 0;
     }
 }
 
