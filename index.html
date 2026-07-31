@@ -3885,6 +3885,8 @@ let _seqStatusEl = null;
 // ── Watchdog: libera _buying se ficar travado por mais de 12s ────────────────
 let _buyingTs = 0;
 setInterval(() => {
+    // ⚠️ Nunca libera _buying se o bot foi parado (stop win/loss ou manual)
+    if (!bot.running) { _buyingTs = 0; return; }
     if (bot._buying) {
         if (_buyingTs === 0) { _buyingTs = Date.now(); return; }
         if (Date.now() - _buyingTs > 12000) {
@@ -7091,10 +7093,12 @@ function initWebSocket(wssUrl) {
             }
             // ── Stop Loss ─────────────────────────────────────────────────────────
             if (bot.profit <= -bot.stopLoss) {
-                bot.running = false;
-                bot._buying = true;
+                bot.running         = false;
+                bot._buying         = true;
+                bot._metaEncerrada  = true;   // bloqueia watchdog e reativação automática
                 _timer.pausar();
                 print(`🛑 STOP LOSS ATINGIDO! Perda: $${Math.abs(bot.profit).toFixed(2)}`, "log-loss");
+                print(`🔒 SISTEMA ENCERRADO — Stop Loss atingido. Nenhuma operação será iniciada.`, "log-loss");
                 return;
             }
             // ── Modo gerenciador JC legado (💹 Juros Compostos) — verifica stop loss ──
