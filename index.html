@@ -13430,12 +13430,35 @@ async function mcVerificarToken() {
     }
 }
 
-let _mcLoginTimer = null;
+let _mcLoginTimer    = null;
+let _mcLoginTimeout  = null;   // timeout de segurança — libera após 2 min
 let _mcLoginEmAndamento = false;
+
+function mcCancelarLogin() {
+    if (_mcLoginTimer)   { clearInterval(_mcLoginTimer);  _mcLoginTimer   = null; }
+    if (_mcLoginTimeout) { clearTimeout(_mcLoginTimeout); _mcLoginTimeout = null; }
+    _mcLoginEmAndamento = false;
+    mcAtualizarFaixa('sem_token');
+    mcStatus('🔄 Login cancelado. Tente novamente.', '#fbbf24');
+}
+
 async function mcFazerLogin(tipo) {
-    if (_mcLoginEmAndamento) { mcStatus('⚠️ Login já está em andamento. Aguarde…', '#fbbf24'); return; }
+    // Se travado, cancela automaticamente e deixa tentar de novo
+    if (_mcLoginEmAndamento) {
+        mcCancelarLogin();
+        return;
+    }
     if (_mcLoginTimer) { clearInterval(_mcLoginTimer); _mcLoginTimer = null; }
     _mcLoginEmAndamento = true;
+
+    // Timeout de segurança: libera após 2 minutos caso o navegador não abra
+    if (_mcLoginTimeout) clearTimeout(_mcLoginTimeout);
+    _mcLoginTimeout = setTimeout(() => {
+        if (_mcLoginEmAndamento) {
+            mcCancelarLogin();
+            mcStatus('⏱️ Tempo esgotado. Tente novamente.', '#fbbf24');
+        }
+    }, 120000);
     // Abre browser em modo INCÓGNITO/PRIVADO para conta DIFERENTE da teste
     let resp, data;
     try {
@@ -13464,13 +13487,15 @@ async function mcFazerLogin(tipo) {
             const r = await fetch('/contas/verificar-secundaria', { signal: AbortSignal.timeout(5000) });
             const st = await r.json();
             if (st.status === 'conectado') {
-                clearInterval(_mcLoginTimer); _mcLoginTimer = null;
+                clearInterval(_mcLoginTimer);  _mcLoginTimer   = null;
+                clearTimeout(_mcLoginTimeout); _mcLoginTimeout = null;
                 _mcLoginEmAndamento = false;
                 mcStatus(`✅ Conta SECUNDÁRIA conectada! ID: ${st.conta_id}`, '#4ade80');
                 mcAtualizarFaixa('com_token');
                 mcCarregarContas();
             } else if (st.status === 'erro') {
-                clearInterval(_mcLoginTimer); _mcLoginTimer = null;
+                clearInterval(_mcLoginTimer);  _mcLoginTimer   = null;
+                clearTimeout(_mcLoginTimeout); _mcLoginTimeout = null;
                 _mcLoginEmAndamento = false;
                 mcAtualizarFaixa('sem_token');
                 mcStatus(`❌ ${st.erro || 'Erro ao conectar conta secundária.'}`, '#f87171');
