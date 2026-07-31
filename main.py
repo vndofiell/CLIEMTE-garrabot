@@ -1530,137 +1530,156 @@ def _sec_encontrar_browsers() -> list:
 
 
 def _sec_fechar_navegador():
-    """Mata o processo do navegador anônimo se estiver rodando."""
+    """Fecha o driver Selenium se estiver rodando."""
     with _SEC_LOGIN_LOCK:
-        proc = _SEC_LOGIN_STATE.get("browser_process")
-        if proc and proc.poll() is None:
+        driver = _SEC_LOGIN_STATE.get("browser_process")
+        if driver:
             try:
-                # Tenta matar a árvore de processos
-                if os.name == 'nt':  # Windows
-                    _subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)],
-                                    capture_output=True, timeout=5)
-                else:
-                    proc.kill()
-                print(f"[Secundária] Navegador fechado (PID {proc.pid})")
+                driver.quit()
+                print("[Secundária] Selenium driver fechado.")
             except Exception as e:
-                print(f"[Secundária] Erro ao fechar navegador: {e}")
+                print(f"[Secundária] Erro ao fechar driver: {e}")
         _SEC_LOGIN_STATE["browser_process"] = None
 
 
-def _sec_monitorar_login():
+def _sec_registrar_com_token(tok: str, tipo: str):
+    """Usa o access_token para registrar a conta secundária via API Deriv."""
+    headers = {
+        "Authorization": f"Bearer {tok}",
+        "Deriv-App-ID":  APP_ID,
+        "Content-Type":  "application/json",
+    }
+    res_contas = requests.get(f"{API_BASE}/accounts", headers=headers, timeout=10)
+    if res_contas.status_code != 200:
+        raise Exception(f"Erro ao listar contas: {res_contas.status_code}")
+    contas_api = res_contas.json().get("data", [])
+    conta_id = None
+    for c in contas_api:
+        cid      = str(c.get("account_id", ""))
+        is_virt  = c.get("is_virtual", False)
+        is_demo  = str(c.get("account_type","")).lower() == "demo" or is_virt or cid.upper().startswith(("VR","DOT","VRT"))
+        if tipo == "DEMO" and is_demo:
+            conta_id = cid; break
+        elif tipo == "REAL" and not is_demo:
+            conta_id = cid; break
+    if not conta_id:
+        raise Exception(f"Nenhuma conta {tipo} encontrada")
+    res_otp = requests.post(f"{API_BASE}/accounts/{conta_id}/otp", headers=headers, timeout=10)
+    wss_url = res_otp.json().get("data", {}).get("url", "")
+    if not wss_url:
+        raise Exception("OTP não retornou WSS URL")
+    conta = _account_manager.adicionar_conta(
+        conta_id=conta_id, tipo="SECUNDARIA",
+        wss_url=wss_url, access_token=tok,
+        nome=f"Secundária {tipo}",
+    )
+    with _SEC_LOGIN_LOCK:
+        _SEC_LOGIN_STATE["status"]     = "conectado"
+        _SEC_LOGIN_STATE["conta_id"]   = conta_id
+        _SEC_LOGIN_STATE["conta_nome"] = conta.get("nome", "")
+    # Salva no slot dedicado da secundária também
+    with _token_sec_lock:
+        _token_secundaria["access_token"] = tok
+        _token_secundaria["ts"]           = time.time()
+        _token_secundaria["aguardando"]   = False
+    print(f"[Secundária] Conta registrada! ID={conta_id}")
+
+
+def _sec_login_selenium(tipo: str):
     """
-    Thread em background que monitora o login da conta secundária.
-    Polling no Render a cada 3s até detectar um token NOVO (diferente do old_token).
-    Quando detecta, fecha o navegador e registra a conta como SECUNDARIA.
-    Timeout: 120 segundos.
+    Abre Chrome headless via Selenium no Oracle, navega para o login da Deriv,
+    captura o token do callback e registra a conta secundária automaticamente.
     """
-    timeout = 120  # 2 minutos máx
-    inicio = time.time()
-    old_token = ""
-    tipo = "DEMO"
+    from selenium import webdriver
+    from selenium.webdriver.chrome.options import Options
+    from selenium.webdriver.chrome.service import Service
+    from selenium.webdriver.common.by import By
+    from selenium.webdriver.support.ui import WebDriverWait
+    from selenium.webdriver.support import expected_conditions as EC
 
     with _SEC_LOGIN_LOCK:
-        _SEC_LOGIN_STATE["status"] = "waiting_login"
-        old_token = _SEC_LOGIN_STATE.get("old_token", "")
-        tipo = _SEC_LOGIN_STATE.get("tipo", "DEMO")
+        _SEC_LOGIN_STATE["status"] = "abrindo_navegador"
 
-    print(f"[Secundária] Monitorando login (timeout={timeout}s, old_token={old_token[:10] if old_token else 'vazio'}...)")
+    print("[Secundária] Iniciando Selenium headless...")
 
-    while time.time() - inicio < timeout:
-        try:
-            res = requests.get(RENDER_URL, timeout=8)
-            if res.status_code == 200:
-                data = res.json()
-                tok = (
-                    data.get("token") or
-                    data.get("access_token") or
-                    (data.get("data") or {}).get("token")
-                )
-                if isinstance(tok, dict):
-                    tok = tok.get("token") or tok.get("access_token")
-                tok = str(tok).strip().strip('"') if tok else ""
+    opts = Options()
+    opts.add_argument("--headless=new")
+    opts.add_argument("--no-sandbox")
+    opts.add_argument("--disable-dev-shm-usage")
+    opts.add_argument("--disable-gpu")
+    opts.add_argument("--window-size=1280,900")
+    opts.add_argument("--disable-blink-features=AutomationControlled")
+    opts.add_experimental_option("excludeSwitches", ["enable-automation"])
 
-                if tok and tok not in ("None", "null", "") and tok != old_token:
-                    # Token NOVO detectado! Login concluído!
-                    print(f"[Secundária] Token NOVO detectado: {tok[:10]}...")
-                    with _SEC_LOGIN_LOCK:
-                        _SEC_LOGIN_STATE["status"] = "token_obtido"
+    # Usa o chromedriver do snap
+    service = Service(executable_path="/snap/bin/chromium.chromedriver")
 
-                    # Fecha o navegador
-                    _sec_fechar_navegador()
+    driver = None
+    try:
+        driver = webdriver.Chrome(service=service, options=opts)
+        with _SEC_LOGIN_LOCK:
+            _SEC_LOGIN_STATE["browser_process"] = driver
+            _SEC_LOGIN_STATE["status"] = "aguardando_login"
 
-                    # Agora registra a conta secundária via API
-                    try:
-                        headers = {
-                            "Authorization": f"Bearer {tok}",
-                            "Deriv-App-ID":  APP_ID,
-                            "Content-Type":  "application/json",
-                        }
-                        # Lista contas da Deriv para encontrar a conta DEMO ou REAL
-                        res_contas = requests.get(f"{API_BASE}/accounts", headers=headers, timeout=10)
-                        if res_contas.status_code == 200:
-                            contas_api = res_contas.json().get("data", [])
-                            conta_id = None
-                            for c in contas_api:
-                                cid          = str(c.get("account_id", ""))
-                                account_type = str(c.get("account_type", "")).lower()
-                                is_virt      = c.get("is_virtual", False)
-                                is_demo      = account_type == "demo" or is_virt or cid.upper().startswith(("VR", "DOT", "VRT"))
-                                if tipo == "DEMO" and is_demo:
-                                    conta_id = cid
-                                    break
-                                elif tipo == "REAL" and not is_demo:
-                                    conta_id = cid
-                                    break
+        print(f"[Secundária] Navegando para login: {SITE_LOGIN}")
+        driver.get(SITE_LOGIN)
 
-                            if conta_id:
-                                # Gera OTP para obter WSS URL
-                                res_otp = requests.post(
-                                    f"{API_BASE}/accounts/{conta_id}/otp",
-                                    headers=headers, timeout=10
-                                )
-                                wss_url = res_otp.json().get("data", {}).get("url", "")
+        # Aguarda até 180s que a URL mude para /callback.html?code=...
+        # (o usuário faz login manualmente na tela do celular/PC)
+        timeout = 180
+        inicio  = time.time()
+        token_capturado = None
 
-                                if wss_url:
-                                    # Registra como conta SECUNDARIA (separada da TESTE!)
-                                    conta = _account_manager.adicionar_conta(
-                                        conta_id=conta_id,
-                                        tipo="SECUNDARIA",
-                                        wss_url=wss_url,
-                                        access_token=tok,
-                                        nome=f"Secundária {tipo}",
-                                    )
-                                    with _SEC_LOGIN_LOCK:
-                                        _SEC_LOGIN_STATE["status"] = "conectado"
-                                        _SEC_LOGIN_STATE["conta_id"] = conta_id
-                                        _SEC_LOGIN_STATE["conta_nome"] = conta.get("nome", "")
-                                    print(f"[Secundária] Conta registrada com sucesso! ID={conta_id}")
-                                    return
-                                else:
-                                    raise Exception("OTP não retornou WSS URL")
-                            else:
-                                raise Exception(f"Nenhuma conta {tipo} encontrada na API Deriv")
-                        else:
-                            raise Exception(f"Erro ao listar contas: {res_contas.status_code}")
-                    except Exception as e_reg:
-                        with _SEC_LOGIN_LOCK:
-                            _SEC_LOGIN_STATE["status"] = "erro"
-                            _SEC_LOGIN_STATE["erro"] = str(e_reg)
-                        print(f"[Secundária] Erro ao registrar conta: {e_reg}")
-                        return
-        except requests.exceptions.Timeout:
-            pass  # Timeout normal, continua polling
-        except Exception as e:
-            print(f"[Secundária] Erro no polling: {e}")
+        while time.time() - inicio < timeout:
+            current_url = driver.current_url
+            # Detecta callback com code
+            if "callback.html" in current_url and "code=" in current_url:
+                print(f"[Secundária] Callback detectado: {current_url[:80]}...")
+                # Aguarda o servidor processar (a página de callback chama /auth/deriv internamente)
+                time.sleep(3)
+                # Lê o token do slot da secundária
+                with _token_sec_lock:
+                    tok = _token_secundaria.get("access_token", "")
+                    tok_age = time.time() - _token_secundaria.get("ts", 0)
+                if tok and tok not in ("None","null","") and tok_age < 30:
+                    token_capturado = tok
+                    break
+                # Fallback: lê diretamente da URL se vier como query param
+                from urllib.parse import urlparse, parse_qs
+                parsed = urlparse(current_url)
+                params = parse_qs(parsed.query)
+                tok_url = params.get("access_token", [None])[0]
+                if tok_url:
+                    token_capturado = tok_url
+                    break
+            # Detecta se o token da secundária chegou via /callback.html server-side
+            with _token_sec_lock:
+                tok = _token_secundaria.get("access_token", "")
+                tok_age = time.time() - _token_secundaria.get("ts", 0)
+            if tok and tok not in ("None","null","") and tok_age < 60:
+                token_capturado = tok
+                print(f"[Secundária] Token capturado via slot dedicado: {tok[:10]}...")
+                break
+            time.sleep(2)
 
-        time.sleep(3)
+        driver.quit()
+        with _SEC_LOGIN_LOCK:
+            _SEC_LOGIN_STATE["browser_process"] = None
 
-    # Timeout - não conseguiu detectar login
-    with _SEC_LOGIN_LOCK:
-        _SEC_LOGIN_STATE["status"] = "erro"
-        _SEC_LOGIN_STATE["erro"] = "Tempo limite excedido (120s). Login não detectado."
-    _sec_fechar_navegador()
-    print(f"[Secundária] TIMEOUT - login não detectado em {timeout}s")
+        if token_capturado:
+            _sec_registrar_com_token(token_capturado, tipo)
+        else:
+            raise Exception("Timeout: login não concluído em 3 minutos")
+
+    except Exception as e:
+        print(f"[Secundária] Erro Selenium: {e}")
+        if driver:
+            try: driver.quit()
+            except: pass
+        with _SEC_LOGIN_LOCK:
+            _SEC_LOGIN_STATE["browser_process"] = None
+            _SEC_LOGIN_STATE["status"] = "erro"
+            _SEC_LOGIN_STATE["erro"]   = str(e)
 
 
 # ── Token recebido do Netlify após OAuth Deriv ───────────────────────────────
@@ -1750,12 +1769,27 @@ _token_sec_lock = threading.Lock()
 
 @app.route('/open-login-secundaria')
 def open_login_secundaria():
-    """Marca que o próximo token recebido é da conta secundária."""
+    """Inicia Selenium headless no Oracle para fazer login da conta secundária."""
+    tipo = request.args.get("tipo", "DEMO").upper()
+
+    # Verifica se já tem login em andamento
+    with _SEC_LOGIN_LOCK:
+        st = _SEC_LOGIN_STATE.get("status", "idle")
+        if st in ("abrindo_navegador", "aguardando_login"):
+            return jsonify({"status": "already_opened"})
+
+    # Reseta slot da secundária
     with _token_sec_lock:
         _token_secundaria["access_token"] = ""
         _token_secundaria["ts"]           = 0
         _token_secundaria["aguardando"]   = True
-    return jsonify({"status": "opened", "url": SITE_LOGIN})
+
+    # Inicia Selenium em thread background
+    t = threading.Thread(target=_sec_login_selenium, args=(tipo,), daemon=True)
+    t.start()
+
+    return jsonify({"status": "opened", "url": SITE_LOGIN,
+                    "msg": "Selenium iniciado — aguarde o login ser detectado automaticamente."})
 
 @app.route('/auth/deriv-secundaria', methods=['POST', 'OPTIONS'])
 def auth_deriv_secundaria():

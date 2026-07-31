@@ -13389,10 +13389,9 @@ function mcAtualizarFaixa(estado) {
         botoes.innerHTML  = '';
     } else if (estado === 'aguardando_login') {
         texto.style.color = '#60a5fa';
-        texto.textContent = '🔑 Aba de login aberta! Faça login na Deriv e volte aqui.';
+        texto.textContent = '🤖 Selenium rodando no servidor — login automático em andamento…';
         botoes.innerHTML  = `
-            <button onclick="mcVerificarToken()" class="mc-btn mc-btn-cinza"    style="width:auto;padding:5px 12px;font-size:0.72rem;">🔄 Já fiz login</button>
-            <button onclick="mcCancelarLogin()"  class="mc-btn mc-btn-vermelho" style="width:auto;padding:5px 12px;font-size:0.72rem;">✕ Cancelar</button>`;
+            <button onclick="mcCancelarLogin()" class="mc-btn mc-btn-vermelho" style="width:auto;padding:5px 12px;font-size:0.72rem;">✕ Cancelar</button>`;
     } else {
         texto.style.color = '#fbbf24';
         texto.textContent = '⚠️ Faça login na Deriv para conectar uma conta:';
@@ -13461,17 +13460,24 @@ async function mcFazerLogin(tipo) {
             mcStatus('⏱️ Tempo esgotado. Tente novamente.', '#fbbf24');
         }
     }, 120000);
-    // Abre a URL de login diretamente no dispositivo do usuário (Oracle não tem tela)
-    const _loginUrl = 'https://garrabot.duckdns.org/login';
-    window.open(_loginUrl, '_blank');
-
-    // Notifica o servidor para começar a monitorar o token
+    // Dispara o Selenium headless no Oracle
+    let respSel, dataSel;
     try {
-        await fetch(`/open-login-secundaria?tipo=${tipo}`);
-    } catch (_) {}
+        respSel = await fetch(`/open-login-secundaria?tipo=${tipo}`);
+        dataSel = await respSel.json();
+    } catch (e) {
+        mcCancelarLogin();
+        mcStatus('❌ Erro ao iniciar Selenium.', '#f87171');
+        return;
+    }
+    if (dataSel.status === 'already_opened') {
+        mcCancelarLogin();
+        mcStatus('⚠️ Login já está em andamento. Aguarde…', '#fbbf24');
+        return;
+    }
 
     mcAtualizarFaixa('aguardando_login');
-    mcStatus('🔑 Aba de login aberta! Faça login com a conta SECUNDÁRIA na aba que abriu. Aguardando token…', '#60a5fa');
+    mcStatus('🤖 Selenium iniciado no servidor! Aguarde — login sendo feito automaticamente…', '#60a5fa');
     
     // Polling do backend que está monitorando o login
     _mcLoginTimer = setInterval(async () => {
