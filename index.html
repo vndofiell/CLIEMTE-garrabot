@@ -13478,7 +13478,15 @@ async function mcFazerLogin(tipo) {
         try {
             const r = await fetch('/contas/verificar-secundaria', { signal: AbortSignal.timeout(5000) });
             const st = await r.json();
-            if (st.status === 'conectado') {
+            if (st.status === 'token_pronto' || st.token_pronto) {
+                // Token da secundária chegou — atualiza faixa e avisa usuário
+                clearInterval(_mcLoginTimer);  _mcLoginTimer   = null;
+                clearTimeout(_mcLoginTimeout); _mcLoginTimeout = null;
+                _mcLoginEmAndamento = false;
+                _mcTokenOk = true;
+                mcAtualizarFaixa('com_token');
+                mcStatus('✅ Login detectado! Clique em "+ Conectar" para finalizar.', '#4ade80');
+            } else if (st.status === 'conectado') {
                 clearInterval(_mcLoginTimer);  _mcLoginTimer   = null;
                 clearTimeout(_mcLoginTimeout); _mcLoginTimeout = null;
                 _mcLoginEmAndamento = false;

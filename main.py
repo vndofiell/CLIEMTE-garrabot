@@ -1283,12 +1283,23 @@ setInterval(function(){
         if not access_token:
             return _html('&#10060;', 'FALHA NA AUTENTICACAO', '#ff4444',
                 f'access_token nao retornado.<br><small style="color:#555">{r.text[:150]}</small><br><br>Feche e tente novamente.')
-        with _token_lock:
-            _token_recebido["access_token"]      = access_token
-            _token_recebido["ts"]                = time.time()
-            _token_recebido["_bot_confirmou"]    = False   # flag: bot ainda não leu
-            _token_recebido.pop("_pkce_verifier", None)   # limpa verifier usado
-        print(f"[Callback] access_token armazenado: {access_token[:10]}... ({len(access_token)} chars)")
+        # Verifica se é login da conta secundária (aguardando = True)
+        _eh_secundaria = False
+        with _token_sec_lock:
+            if _token_secundaria.get("aguardando"):
+                _token_secundaria["access_token"] = access_token
+                _token_secundaria["ts"]           = time.time()
+                _token_secundaria["aguardando"]   = False
+                _eh_secundaria = True
+                print(f"[Callback] Token SECUNDÁRIA armazenado: {access_token[:10]}...")
+
+        if not _eh_secundaria:
+            with _token_lock:
+                _token_recebido["access_token"]      = access_token
+                _token_recebido["ts"]                = time.time()
+                _token_recebido["_bot_confirmou"]    = False
+                _token_recebido.pop("_pkce_verifier", None)
+            print(f"[Callback] Token PRINCIPAL armazenado: {access_token[:10]}... ({len(access_token)} chars)")
         # Sucesso — aguarda o bot confirmar antes de iniciar countdown
         sucesso_body = """
 <div class="icone">&#9989;</div>
@@ -1733,14 +1744,41 @@ def pegar_token_robo():
         t = _token_recebido.get("access_token", "")
     return jsonify({"token": t} if t else {"token": None})
 
+# Token exclusivo da conta secundária — separado do token principal
+_token_secundaria: dict = {"access_token": "", "ts": 0}
+_token_sec_lock = threading.Lock()
+
 @app.route('/open-login-secundaria')
 def open_login_secundaria():
-    # Simplificado para nuvem: apenas informa ao usuário o que fazer
-    return jsonify({
-        "status": "opened",
-        "url": SITE_LOGIN,
-        "message": "Acesse este link manualmente em uma janela ANÔNIMA para a conta secundária."
-    })
+    """Marca que o próximo token recebido é da conta secundária."""
+    with _token_sec_lock:
+        _token_secundaria["access_token"] = ""
+        _token_secundaria["ts"]           = 0
+        _token_secundaria["aguardando"]   = True
+    return jsonify({"status": "opened", "url": SITE_LOGIN})
+
+@app.route('/auth/deriv-secundaria', methods=['POST', 'OPTIONS'])
+def auth_deriv_secundaria():
+    """Recebe token OAuth da conta secundária — rota dedicada."""
+    if request.method == 'OPTIONS':
+        resp = app.make_default_options_response()
+        resp.headers['Access-Control-Allow-Origin']  = '*'
+        resp.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+        resp.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+        return resp
+    dados        = request.get_json(silent=True) or {}
+    access_token = (dados.get("access_token") or dados.get("token") or "").strip()
+    if access_token:
+        with _token_sec_lock:
+            _token_secundaria["access_token"] = access_token
+            _token_secundaria["ts"]           = time.time()
+            _token_secundaria["aguardando"]   = False
+        print(f"[SecToken] Token secundária recebido: {access_token[:10]}...")
+        resp = jsonify({"ok": True})
+    else:
+        resp = jsonify({"ok": False, "erro": "token vazio"})
+    resp.headers['Access-Control-Allow-Origin'] = '*'
+    return resp
 
 def _get_token_com_access(access_token: str, tipo: str):
     """Usa o access_token para obter WSS URL via API Deriv. Retorna dict com wss_url ou erro."""
@@ -8697,28 +8735,40 @@ def contas_adicionar():
         return jsonify({"erro": "Tipo deve ser TESTE ou REAL."})
 
     try:
-        # 1. Usa token do cache (preenchido pelo /debug-render) ou busca no Render
+        # 1. Prioriza token exclusivo da secundária (capturado após /open-login-secundaria)
         access_token = ""
-        cache_age = time.time() - _render_token_cache.get("ts", 0)
-        if _render_token_cache.get("token") and cache_age < 300:
-            # Cache válido por até 5 minutos
-            access_token = _render_token_cache["token"]
-        else:
-            res = requests.get(RENDER_URL, timeout=10)
-            if res.status_code != 200:
-                return jsonify({"erro": "Render indisponível. Clique em 🔄 Verificar no modal."})
-            data = res.json()
-            tok  = (
-                data.get("token") or
-                data.get("access_token") or
-                (data.get("data") or {}).get("token")
-            )
-            if isinstance(tok, dict):
-                tok = tok.get("token") or tok.get("access_token")
-            access_token = str(tok).strip().strip('"') if tok else ""
-            if access_token and access_token not in ("None", "null", ""):
-                _render_token_cache["token"] = access_token
-                _render_token_cache["ts"]    = time.time()
+        with _token_sec_lock:
+            sec_tok  = _token_secundaria.get("access_token", "")
+            sec_age  = time.time() - _token_secundaria.get("ts", 0)
+            sec_ok   = bool(sec_tok) and sec_tok not in ("None", "null") and sec_age < 300
+            if sec_ok:
+                access_token = sec_tok
+                # Consome o token — evita reusar na próxima chamada
+                _token_secundaria["access_token"] = ""
+                _token_secundaria["ts"]           = 0
+                print(f"[SecToken] Usando token exclusivo da secundária: {access_token[:10]}...")
+
+        # 2. Fallback: token principal do cache
+        if not access_token:
+            cache_age = time.time() - _render_token_cache.get("ts", 0)
+            if _render_token_cache.get("token") and cache_age < 300:
+                access_token = _render_token_cache["token"]
+            else:
+                res = requests.get(SERVIDOR_URL, timeout=10)
+                if res.status_code != 200:
+                    return jsonify({"erro": "Servidor indisponível. Tente novamente."})
+                data = res.json()
+                tok  = (
+                    data.get("token") or
+                    data.get("access_token") or
+                    (data.get("data") or {}).get("token")
+                )
+                if isinstance(tok, dict):
+                    tok = tok.get("token") or tok.get("access_token")
+                access_token = str(tok).strip().strip('"') if tok else ""
+                if access_token and access_token not in ("None", "null", ""):
+                    _render_token_cache["token"] = access_token
+                    _render_token_cache["ts"]    = time.time()
 
         if not access_token or access_token in ("None", "null", ""):
             return jsonify({"erro": "Token não encontrado. Faça login na Deriv primeiro."})
@@ -8812,15 +8862,23 @@ def contas_verificar_secundaria():
     """
     with _SEC_LOGIN_LOCK:
         state = dict(_SEC_LOGIN_STATE)
-        # Remove objetos não serializáveis
         state.pop("browser_process", None)
         state.pop("browser_path", None)
+
+    # Verifica se token exclusivo da secundária foi recebido
+    with _token_sec_lock:
+        sec_tok = _token_secundaria.get("access_token", "")
+        sec_age = time.time() - _token_secundaria.get("ts", 0)
+        token_pronto = bool(sec_tok) and sec_tok not in ("None", "null") and sec_age < 300
+
+    if token_pronto:
+        state["status"]      = "token_pronto"
+        state["token_pronto"] = True
+        return jsonify(state)
 
     # Conta secundária já registrada E com wss_url válida?
     sec = _account_manager.get_conta_secundaria()
     if sec:
-        # wss_url é limpo ao iniciar o bot (OTP expira).
-        # Só marca "conectado" se ainda houver uma URL WSS ativa na sessão.
         if sec.get("wss_url"):
             state["status"] = "conectado"
         else:
