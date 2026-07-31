@@ -3668,6 +3668,9 @@ let bot = {
     tickRecovery: {
         ativo:         false,   // opção habilitada pelo usuário
         emRecuperacao: false,   // true = está em modo recuperação (após um loss)
+        // TTR inteligente
+        _gales:  0,             // quantas recuperações já tentadas neste ciclo
+        _espera: 0,             // ticks restantes de cooldown antes da próxima entrada
     },
     // Filtro de Histograma — só entra quando WIN domina o volume
     bloqHist: {
@@ -6534,6 +6537,51 @@ function initWebSocket(wssUrl) {
             }
         }
 
+        // ==========================
+        // TTR INTELIGENTE
+        // ==========================
+        const TTR_MAX_GALES   = 2;     // máximo de recuperações por ciclo
+        const TTR_DELAY_TICKS = 3;     // cooldown de ticks após cada tentativa
+        const TTR_MIN_CONF    = 0.75;  // confiança mínima para entrar
+
+        function ttrPodeEntrar(ultDigitos) {
+            if (!ultDigitos || ultDigitos.length < 10) return false;
+            // Evita mercado muito alternado
+            let alt = 0;
+            for (let _i = 1; _i < ultDigitos.length; _i++) {
+                if (ultDigitos[_i] !== ultDigitos[_i - 1]) alt++;
+            }
+            if (alt >= 8) return false;
+            // Confiança simples: proporção de dígitos acima de 3
+            const acima3 = ultDigitos.filter(d => d > 3).length;
+            return (acima3 / ultDigitos.length) >= TTR_MIN_CONF;
+        }
+
+        function ttrRecuperacao(ultDigitos) {
+            const tr = bot.tickRecovery;
+            // Cooldown após última tentativa
+            if (tr._espera > 0) { tr._espera--; return false; }
+            // Limite de gales atingido — zera e sai do modo recuperação
+            if (tr._gales >= TTR_MAX_GALES) {
+                tr._gales = 0;
+                tr.emRecuperacao = false;
+                print(`⚠️ TTR — máximo de recuperações (${TTR_MAX_GALES}) atingido. Aguardando próximo sinal.`, 'log-loss');
+                return false;
+            }
+            // Mercado desfavorável — aguarda
+            if (!ttrPodeEntrar(ultDigitos)) return false;
+            tr._gales++;
+            tr._espera = TTR_DELAY_TICKS;
+            return true;
+        }
+
+        function ttrReset() {
+            bot.tickRecovery._gales  = 0;
+            bot.tickRecovery._espera = 0;
+            bot.tickRecovery.emRecuperacao = false;
+        }
+        // ==========================
+
         // Tick — decide entrada pela estratégia
         if (data.msg_type === 'tick' && bot.running && !bot._buying) {
             const preco  = data.tick.quote;
@@ -6555,13 +6603,15 @@ function initWebSocket(wssUrl) {
                 // emRecuperacao é ativado automaticamente após LOSS real com LV ativo
                 const _lvEmRec = bot.lv.ativo && bot.lv.emRecuperacao;
 
-                // ── Recuperação Tick a Tick: ignora LV e seq_gatilho após LOSS ─
+                // ── Recuperação Tick a Tick inteligente: só entra se mercado favorável e dentro do limite de gales ─
                 const _ttrEmRec = bot.tickRecovery.ativo && bot.tickRecovery.emRecuperacao;
                 if (_ttrEmRec) {
                     if (!histVerificar()) return;
+                    const _ultDig = (bot._digitRecentes || []).slice(-10).map(d => parseInt(d));
+                    if (!ttrRecuperacao(_ultDig)) return;
                     bot._buying = true;
                     const _barrLabel2 = (est.barrier !== null && est.barrier !== undefined) ? ` barr.${est.barrier}` : '';
-                    print(`⚡ TTR RECUPERAÇÃO — entrando direto tick=${digit}${_barrLabel2}`, 'log-info');
+                    print(`⚡ TTR RECUPERAÇÃO [gale ${bot.tickRecovery._gales}/${2}] tick=${digit}${_barrLabel2}`, 'log-info');
                     _edcEntrar(() => buy());
                     return;
                 }
@@ -6635,11 +6685,13 @@ function initWebSocket(wssUrl) {
                 _edcEntrar(() => buy());
 
             } else if (est.tipo === 'dupla') {
-                // ── Recuperação Tick a Tick para modo dupla ─────────────────
+                // ── Recuperação Tick a Tick inteligente para modo dupla ─────────────────
                 if (bot.tickRecovery.ativo && bot.tickRecovery.emRecuperacao) {
                     if (!histVerificar()) return;
+                    const _ultDigD = (bot._digitRecentes || []).slice(-10).map(d => parseInt(d));
+                    if (!ttrRecuperacao(_ultDigD)) return;
                     bot._buying = true;
-                    print(`⚡ TTR RECUPERAÇÃO DUPLA — entrando direto tick=${digit}`, 'log-info');
+                    print(`⚡ TTR RECUPERAÇÃO DUPLA [gale ${bot.tickRecovery._gales}/${2}] tick=${digit}`, 'log-info');
                     _edcEntrar(() => buyDupla());
                     return;
                 }
@@ -6970,7 +7022,7 @@ function initWebSocket(wssUrl) {
                         const voltouBase2 = (bot.mgr._nivelGale || 0) === 0 &&
                                             Math.abs(bot.mgr.currentStake - bot.mgr.initialStake) < 0.02;
                         if (dividaAtual < 0.05 && voltouBase2) {
-                            bot.tickRecovery.emRecuperacao = false;
+                            ttrReset();
                             print(`✅ TTR CONCLUÍDO — dívida zerada! Voltando ao modo normal`, 'log-win');
                         }
                     }
@@ -7038,7 +7090,7 @@ function initWebSocket(wssUrl) {
                         const voltouBase = (bot.mgr._nivelGale || 0) === 0 &&
                                            Math.abs(bot.mgr.currentStake - bot.mgr.initialStake) < 0.02;
                         if (dividaAtual < 0.05 && voltouBase) {
-                            bot.tickRecovery.emRecuperacao = false;
+                            ttrReset();
                             print(`✅ TTR CONCLUÍDO — dívida zerada! Voltando ao modo normal`, 'log-win');
                         }
                     }
