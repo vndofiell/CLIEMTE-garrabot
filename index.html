@@ -13389,14 +13389,16 @@ function mcAtualizarFaixa(estado) {
         botoes.innerHTML  = '';
     } else if (estado === 'aguardando_login') {
         texto.style.color = '#60a5fa';
-        texto.textContent = '🔑 Aguardando login… (o browser abrirá automaticamente)';
-        botoes.innerHTML  = `<button onclick="mcVerificarToken()" class="mc-btn mc-btn-cinza" style="width:auto;padding:5px 12px;font-size:0.72rem;">🔄 Já fiz o login</button>`;
+        texto.textContent = '🔑 Aba de login aberta! Faça login na Deriv e volte aqui.';
+        botoes.innerHTML  = `
+            <button onclick="mcVerificarToken()" class="mc-btn mc-btn-cinza"    style="width:auto;padding:5px 12px;font-size:0.72rem;">🔄 Já fiz login</button>
+            <button onclick="mcCancelarLogin()"  class="mc-btn mc-btn-vermelho" style="width:auto;padding:5px 12px;font-size:0.72rem;">✕ Cancelar</button>`;
     } else {
         texto.style.color = '#fbbf24';
         texto.textContent = '⚠️ Faça login na Deriv para conectar uma conta:';
         botoes.innerHTML  = `
-            <button onclick="mcFazerLogin('DEMO')" class="mc-btn mc-btn-verde"    style="width:auto;padding:5px 12px;font-size:0.72rem;">🧪 Login Demo</button>
-            <button onclick="mcFazerLogin('REAL')" class="mc-btn mc-btn-vermelho" style="width:auto;padding:5px 12px;font-size:0.72rem;">💰 Login Real</button>
+            <button onclick="mcFazerLogin('DEMO')" class="mc-btn mc-btn-verde"    style="width:auto;padding:5px 12px;font-size:0.72rem;">🧪 Abrir Login Demo</button>
+            <button onclick="mcFazerLogin('REAL')" class="mc-btn mc-btn-vermelho" style="width:auto;padding:5px 12px;font-size:0.72rem;">💰 Abrir Login Real</button>
             <button onclick="mcVerificarToken()"   class="mc-btn mc-btn-cinza"    style="width:auto;padding:5px 12px;font-size:0.72rem;">🔄 Verificar</button>`;
     }
 }
