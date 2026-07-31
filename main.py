@@ -14,7 +14,8 @@ from flask import Flask, jsonify, request
 app = Flask(__name__)
 
 APP_ID       = "33qw17TW2WM9OqeTqtRaC"
-RENDER_URL   = "https://garrabot.duckdns.org/pegar-token-robo"
+SERVIDOR_URL = "https://garrabot.duckdns.org/pegar-token-robo"   # Oracle Cloud
+RENDER_URL   = SERVIDOR_URL   # alias de compatibilidade — não usa mais o Render
 SITE_LOGIN   = "https://garrabot.duckdns.org/login"
 API_BASE     = "https://api.derivws.com/trading/v1/options"
 
@@ -9102,17 +9103,15 @@ def wa_ping():
     except Exception as e:
         return jsonify({"online": False, "erro": str(e)})
 
-# URL fixa do servidor no Render (garante ping mesmo sem variável de ambiente)
+# URL fixa do servidor Oracle Cloud
 _SELF_URL = "https://garrabot.duckdns.org"
 
 def _wa_keepalive_loop():
-    """Bate no servidor WA e em si mesmo a cada 13min para impedir que o Render durma.
-    O Render free tier adormece após 15min de inatividade — 13min garante folga."""
+    """Bate no servidor WA e em si mesmo a cada 30min para manter conexões ativas."""
     wa_url   = _wa_cfg_ler().get("api_url", "")
-    # Usa variável de ambiente se disponível, senão usa a URL hardcoded
-    self_url = os.environ.get("RENDER_EXTERNAL_URL", "").rstrip("/") or _SELF_URL
+    self_url = os.environ.get("SELF_URL", "").rstrip("/") or _SELF_URL
     while True:
-        time.sleep(780)  # 13 minutos (abaixo dos 15min de sleep do Render)
+        time.sleep(1800)  # 30 minutos — Oracle não dorme, intervalo maior economiza recursos
         try:
             if wa_url:
                 requests.get(f"{wa_url}/ping", timeout=10)
@@ -9126,12 +9125,11 @@ def _wa_keepalive_loop():
             print(f"[KeepAlive] Self ping falhou: {e}")
 
 def start_server():
-    # O Render exige que o bot rode no host 0.0.0.0 e na porta que ele definir
+    # Oracle Cloud — porta configurável via variável de ambiente, padrão 5000
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
 
 if __name__ == "__main__":
     print("🚀 Iniciando Interface Cyber Cloud...")
-    # Inicia keep-alive para impedir que o Render durma
     threading.Thread(target=_wa_keepalive_loop, daemon=True).start()
     start_server()
