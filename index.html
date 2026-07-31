@@ -1479,8 +1479,8 @@
             <div style="background:rgba(255,189,46,0.06); border:1px solid rgba(255,189,46,0.3); border-radius:6px; padding:10px; font-family:'Share Tech Mono'; font-size:0.67rem; color:#8b949e; line-height:1.7;">
                 ⚡ <b style="color:#ffbd2e">COM ESTA OPÇÃO ATIVA:</b><br>
                 &nbsp;&nbsp;• Após qualquer <b style="color:#f44">LOSS</b>, o bot ignora Loss Virtual e seq. gatilho<br>
-                &nbsp;&nbsp;• Entra em <b style="color:#ffbd2e">CADA TICK</b> sem pular nenhum, usando o gerenciamento ativo<br>
-                &nbsp;&nbsp;• Continua até recuperar toda a dívida (dívida = 0)<br>
+                &nbsp;&nbsp;• Tenta recuperar com no máximo <b style="color:#ffbd2e">2 gales</b>, aguardando <b style="color:#ffbd2e">3 ticks</b> entre cada um<br>
+                &nbsp;&nbsp;• Só entra se o mercado estiver favorável (confiança ≥ 75%)<br>
                 &nbsp;&nbsp;• Ao zerar a dívida, volta ao modo normal automaticamente<br><br>
                 🔵 <b style="color:#ccc">SEM ESTA OPÇÃO:</b><br>
                 &nbsp;&nbsp;• Comportamento normal: Loss Virtual e seq. gatilho são respeitados
