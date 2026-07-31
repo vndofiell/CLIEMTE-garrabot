@@ -5537,6 +5537,15 @@ function processCommand(cmd) {
     } else if (command === 'limpar') {
         content.innerHTML = '';
 
+    } else if (command === 'reconectar') {
+        // Reconecta o WebSocket mantendo o bot rodando
+        if (bot._wssUrl) {
+            if (bot.ws) { try { bot.ws.close(); } catch(e) {} }
+            setTimeout(() => initWebSocket(bot._wssUrl), 500);
+        } else {
+            print("⚠️ Sem URL de conexão. Use 'conectar' primeiro.", "log-loss");
+        }
+
     } else {
         print("COMANDO DESCONHECIDO: '" + command + "' | Digite 'ajuda'", "log-loss");
     }
@@ -6402,9 +6411,21 @@ function _secAtualizarBadge() {
 }
 
 function initWebSocket(wssUrl) {
+    bot._wssUrl = wssUrl;  // guarda URL para reconexão automática
     bot.ws = new WebSocket(wssUrl);
     bot.ws.onerror  = () => print("⚠️ ERRO WEBSOCKET.", "log-loss");
-    bot.ws.onclose  = () => print("🔌 CONEXÃO ENCERRADA.", "log-loss");
+    bot.ws.onclose  = () => {
+        print("🔌 CONEXÃO ENCERRADA.", "log-loss");
+        // Reconecta automaticamente se o bot estava rodando (ex: app minimizado)
+        if (bot.running && bot._wssUrl) {
+            setTimeout(() => {
+                if (bot.running) {
+                    print("📡 Reconectando automaticamente...", "log-info");
+                    initWebSocket(bot._wssUrl);
+                }
+            }, 2000);
+        }
+    };
 
     bot.ws.onopen = () => {
         print("🔒 CONECTADO! BUSCANDO SALDO...", "log-win");
@@ -14176,11 +14197,11 @@ _wakeLockAtivar();
     });
   }
 
-  // 3. Reconecta WebSocket automaticamente ao voltar do background
+  // 3. Reconecta WebSocket automaticamente ao voltar do background (SW message)
   navigator.serviceWorker && navigator.serviceWorker.addEventListener('message', (e) => {
-    if (e.data === 'RECONNECT' && bot && bot.running && (!bot.ws || bot.ws.readyState !== 1)) {
+    if (e.data === 'RECONNECT' && bot && bot.running && bot._wssUrl && (!bot.ws || bot.ws.readyState !== 1)) {
       console.log('📡 SW pediu reconexão — tentando...');
-      try { runCmd('reconectar'); } catch(_) {}
+      try { initWebSocket(bot._wssUrl); } catch(_) {}
     }
   });
 
@@ -14188,9 +14209,9 @@ _wakeLockAtivar();
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') {
       setTimeout(() => {
-        if (bot && bot.running && bot.ws && bot.ws.readyState !== 1) {
+        if (bot && bot.running && bot._wssUrl && (!bot.ws || bot.ws.readyState !== 1)) {
           print('📡 Voltou do background — reconectando WebSocket...', 'log-info');
-          try { runCmd('reconectar'); } catch(_) {}
+          try { initWebSocket(bot._wssUrl); } catch(_) {}
         }
       }, 1500);
     }
