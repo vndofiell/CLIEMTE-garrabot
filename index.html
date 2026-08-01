@@ -1572,6 +1572,11 @@
         conectar
         <span class="cmd-label">Login na Deriv</span>
     </button>
+    <button class="cmd-btn" id="btn-trocar-conta" onclick="trocarContaPrincipal()"
+        style="display:none; border-color:rgba(251,191,36,0.5); color:#fbbf24;">
+        🔄 trocar conta
+        <span class="cmd-label" id="lbl-trocar-conta" style="color:#fbbf24;">Desconectar e logar outra</span>
+    </button>
 
     <div class="cmd-section">▸ ROBÔ</div>
     <button class="cmd-btn" id="btn-iniciar" onclick="runCmd('iniciar')">
@@ -4708,6 +4713,12 @@ function escolherConta(tipo) {
 
                     print("✅ CONTA: " + data.conta_id + " (" + data.tipo + ")", "log-win");
 
+                    // Mostra botão "trocar conta" no painel lateral
+                    const _btnTrocar = document.getElementById('btn-trocar-conta');
+                    const _lblTrocar = document.getElementById('lbl-trocar-conta');
+                    if (_btnTrocar) _btnTrocar.style.display = '';
+                    if (_lblTrocar) _lblTrocar.textContent = data.conta_id + ' (' + (data.tipo||'') + ')';
+
                     // Oculta o loader e conecta após 1 segundo
                     setTimeout(() => {
                         document.getElementById('terminal-loading').style.display = 'none';
@@ -4728,6 +4739,46 @@ function escolherConta(tipo) {
             await new Promise(r => setTimeout(r, 2000));
         }
     })();
+}
+
+/**
+ * Desconecta a conta principal atual e abre o modal de login
+ * para o usuário escolher outra conta (DEMO ou REAL).
+ */
+function trocarContaPrincipal() {
+    // Para o robô se estiver rodando
+    if (bot.running) {
+        bot.running = false;
+        bot._buying = false;
+        print('⏸ Robô parado para troca de conta.', 'log-info');
+    }
+
+    // Fecha WebSocket principal (bot.running já é false → onclose não reconecta)
+    if (bot.ws && bot.ws.readyState <= 1) {
+        bot.ws.close();
+    }
+    bot.token   = null;
+    bot._wssUrl = null;
+
+    // Desconecta secundária também se estiver ativa
+    if (_sec.pronto || (_sec.ws && _sec.ws.readyState <= 1)) {
+        _sec._destruido = true;
+        if (_sec.ws) _sec.ws.close();
+        _sec.pronto          = false;
+        _sec.espelhandoAtivo = false;
+        _sec._destruido      = false;
+        _secAtualizarBadge();
+    }
+
+    // Oculta botão "trocar conta" (vai aparecer de novo após novo login)
+    const _btnTrocar = document.getElementById('btn-trocar-conta');
+    if (_btnTrocar) _btnTrocar.style.display = 'none';
+
+    print('🔄 CONTA DESCONECTADA — escolha uma nova conta para conectar.', 'log-info');
+
+    // Limpa token no servidor e abre modal de login
+    fetch('/clear-token', { method: 'POST' }).catch(() => {});
+    abrirModalConta();
 }
 
 function abrirModalEstrategia() {
