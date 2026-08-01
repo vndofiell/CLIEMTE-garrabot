@@ -5674,8 +5674,10 @@ const _sec = {
     ws:              null,   // WebSocket da conta secundária
     pronto:          false,  // true = conectado e autenticado
     espelhandoAtivo: false,  // true = está espelhando trades agora
-    limitePerda:     -10,    // ativa espelhamento quando bot.profit <= este valor ($)
-    limiteSeqLoss:   0,      // ativa espelhamento após N losses consecutivos na teste (0 = desativado)
+    limitePerda:       -10,  // ativa espelhamento quando bot.profit <= este valor ($)
+    gatilhoPerdaAtivo: false,// se false, gatilho por perda em $ está desativado
+    limiteSeqLoss:     0,    // ativa espelhamento após N losses consecutivos na teste
+    gatilhoSeqAtivo:   false,// se false, gatilho por losses consecutivos está desativado
     nome:            '',
     tipo:            '',
     contaId:         '',
@@ -5702,10 +5704,11 @@ function _secVerificarEspelhamento(profit_atual) {
     // Bloqueia reativação se a planilha JC sec encerrou a sessão
     if (_sec._jcMetaBatida) return;
 
-    // Gatilho por losses consecutivos: ativo se limiteSeqLoss > 0 e sequência atingida
-    const seqAtingida = _sec.limiteSeqLoss > 0 && bot._seqLossAtual >= _sec.limiteSeqLoss;
-    // Gatilho por perda em $: sempre ativo (limitePerda é sempre negativo)
-    const perdaAtingida = profit_atual <= _sec.limitePerda;
+    // Gatilho por losses consecutivos: só avalia se estiver ativado E configurado
+    const seqAtingida = _sec.gatilhoSeqAtivo && _sec.limiteSeqLoss > 0
+        && bot._seqLossAtual >= _sec.limiteSeqLoss;
+    // Gatilho por perda em $: só avalia se estiver ativado
+    const perdaAtingida = _sec.gatilhoPerdaAtivo && profit_atual <= _sec.limitePerda;
 
     const deveEspelhar = seqAtingida || perdaAtingida;
 
@@ -12849,35 +12852,51 @@ select.ia-input { cursor: pointer; }
         <!-- lista oculta — mantida para compatibilidade com código antigo -->
         <div id="mc-gerenciamento-lista" style="display:none;"></div>
 
-        <!-- ── GATILHO POR LOSSES CONSECUTIVOS ── -->
-        <div style="font-family:'Share Tech Mono';font-size:0.72rem;color:#f97316;letter-spacing:1px;margin-bottom:6px;">
-          🔴 ATIVAR APÓS N LOSSES CONSECUTIVOS NA CONTA TESTE
+        <!-- ── GATILHO 1: LOSSES CONSECUTIVOS ── -->
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+          <span style="font-family:'Share Tech Mono';font-size:0.72rem;color:#f97316;letter-spacing:1px;">
+            🔁 LOSSES CONSECUTIVOS NA CONTA TESTE
+          </span>
+          <button id="mc-toggle-seq" onclick="mcToggleGatilhoSeq()"
+              style="padding:3px 10px;font-family:'Share Tech Mono';font-size:0.68rem;font-weight:bold;
+                     border-radius:4px;cursor:pointer;border:1px solid #475569;
+                     background:rgba(71,85,105,0.2);color:#64748b;transition:all .15s;">
+            OFF
+          </button>
         </div>
-        <div style="display:grid;grid-template-columns:auto 1fr;align-items:center;gap:8px;margin-bottom:14px;box-sizing:border-box;">
+        <div id="mc-gatilho-seq-body" style="display:grid;grid-template-columns:auto 1fr;align-items:center;gap:8px;margin-bottom:14px;box-sizing:border-box;opacity:0.35;pointer-events:none;">
           <span style="color:#f97316;font-size:0.85rem;font-family:'Share Tech Mono';font-weight:bold;white-space:nowrap;">🔁</span>
           <div style="display:flex;align-items:center;gap:8px;min-width:0;">
-            <input id="mc-limite-seq-loss" type="number" step="1" min="0" value="0"
+            <input id="mc-limite-seq-loss" type="number" step="1" min="1" value="5"
                 style="background:#0a0a12;border:1px solid rgba(249,115,22,0.6);color:#f97316;
                        font-family:'Share Tech Mono';font-size:0.88rem;padding:6px 10px;
                        border-radius:4px;width:60px;font-weight:bold;box-sizing:border-box;"
                 oninput="
-                    const v = parseInt(this.value)||0;
-                    _sec.limiteSeqLoss = Math.max(0, v);
+                    const v = Math.max(1, parseInt(this.value)||1);
+                    _sec.limiteSeqLoss = v;
                     const p = document.getElementById('mc-seq-loss-preview');
-                    if(p) p.textContent = v <= 0 ? 'desativado' : v + ' losses';
-                    try { const sc = JSON.parse(localStorage.getItem('mc_sec_config')||'{}'); sc.limiteSeqLoss = Math.max(0,v); localStorage.setItem('mc_sec_config', JSON.stringify(sc)); } catch(_){}">
+                    if(p) p.textContent = v + ' losses';
+                    try { const sc = JSON.parse(localStorage.getItem('mc_sec_config')||'{}'); sc.limiteSeqLoss = v; localStorage.setItem('mc_sec_config', JSON.stringify(sc)); } catch(_){}">
             <span style="color:#64748b;font-size:0.67rem;font-family:'Share Tech Mono';line-height:1.4;min-width:0;">
-              Gatilho: <b style="color:#f97316;"><span id="mc-seq-loss-preview">desativado</span></b><br>
-              <span style="color:#475569;">0 = desativado | ignora saldo</span>
+              Após <b style="color:#f97316;"><span id="mc-seq-loss-preview">5 losses</span></b> seguidos<br>
+              <span style="color:#475569;">→ secundária assume | ignora saldo</span>
             </span>
           </div>
         </div>
 
-        <!-- ── LIMITE DE ATIVAÇÃO POR PERDA EM $ ── -->
-        <div style="font-family:'Share Tech Mono';font-size:0.72rem;color:#fbbf24;letter-spacing:1px;margin-bottom:6px;">
-          ⚡ OU ATIVAR QUANDO PERDA DA DEMO ATINGIR
+        <!-- ── GATILHO 2: PERDA EM $ ── -->
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+          <span style="font-family:'Share Tech Mono';font-size:0.72rem;color:#fbbf24;letter-spacing:1px;">
+            ⚡ PERDA EM $ DA CONTA DEMO
+          </span>
+          <button id="mc-toggle-perda" onclick="mcToggleGatilhoPerda()"
+              style="padding:3px 10px;font-family:'Share Tech Mono';font-size:0.68rem;font-weight:bold;
+                     border-radius:4px;cursor:pointer;border:1px solid #475569;
+                     background:rgba(71,85,105,0.2);color:#64748b;transition:all .15s;">
+            OFF
+          </button>
         </div>
-        <div style="display:grid;grid-template-columns:auto 1fr;align-items:center;gap:8px;margin-bottom:14px;box-sizing:border-box;">
+        <div id="mc-gatilho-perda-body" style="display:grid;grid-template-columns:auto 1fr;align-items:center;gap:8px;margin-bottom:14px;box-sizing:border-box;opacity:0.35;pointer-events:none;">
           <span style="color:#fbbf24;font-size:0.85rem;font-family:'Share Tech Mono';font-weight:bold;white-space:nowrap;">-$</span>
           <div style="display:flex;align-items:center;gap:8px;min-width:0;">
             <input id="mc-limite-perda" type="number" step="0.5" min="0.5" value="10"
@@ -13080,6 +13099,69 @@ let _mcMgrCfgs = {};
 // ── Nome do gerenciamento sendo configurado no painel lateral ──
 let _mcNomeMgmtAtual = null;
 
+// ── Helpers visuais para os toggles de gatilho ──────────────────────────
+function _mcAtualizarToggleSeq(ativo) {
+    const btn  = document.getElementById('mc-toggle-seq');
+    const body = document.getElementById('mc-gatilho-seq-body');
+    if (!btn || !body) return;
+    if (ativo) {
+        btn.textContent       = 'ON';
+        btn.style.background  = 'rgba(249,115,22,0.2)';
+        btn.style.color       = '#f97316';
+        btn.style.borderColor = '#f97316';
+        body.style.opacity       = '1';
+        body.style.pointerEvents = 'auto';
+    } else {
+        btn.textContent       = 'OFF';
+        btn.style.background  = 'rgba(71,85,105,0.2)';
+        btn.style.color       = '#64748b';
+        btn.style.borderColor = '#475569';
+        body.style.opacity       = '0.35';
+        body.style.pointerEvents = 'none';
+    }
+}
+
+function _mcAtualizarTogglePerda(ativo) {
+    const btn  = document.getElementById('mc-toggle-perda');
+    const body = document.getElementById('mc-gatilho-perda-body');
+    if (!btn || !body) return;
+    if (ativo) {
+        btn.textContent       = 'ON';
+        btn.style.background  = 'rgba(251,191,36,0.2)';
+        btn.style.color       = '#fbbf24';
+        btn.style.borderColor = '#fbbf24';
+        body.style.opacity       = '1';
+        body.style.pointerEvents = 'auto';
+    } else {
+        btn.textContent       = 'OFF';
+        btn.style.background  = 'rgba(71,85,105,0.2)';
+        btn.style.color       = '#64748b';
+        btn.style.borderColor = '#475569';
+        body.style.opacity       = '0.35';
+        body.style.pointerEvents = 'none';
+    }
+}
+
+function mcToggleGatilhoSeq() {
+    _sec.gatilhoSeqAtivo = !_sec.gatilhoSeqAtivo;
+    _mcAtualizarToggleSeq(_sec.gatilhoSeqAtivo);
+    const msg = _sec.gatilhoSeqAtivo
+        ? `🔁 Gatilho seq. loss ATIVADO — entra na secundária após ${_sec.limiteSeqLoss} losses seguidos`
+        : '🔁 Gatilho seq. loss DESATIVADO';
+    print(msg, _sec.gatilhoSeqAtivo ? 'log-win' : 'log-info');
+    try { const sc = JSON.parse(localStorage.getItem('mc_sec_config')||'{}'); sc.gatilhoSeqAtivo = _sec.gatilhoSeqAtivo; localStorage.setItem('mc_sec_config', JSON.stringify(sc)); } catch(_){}
+}
+
+function mcToggleGatilhoPerda() {
+    _sec.gatilhoPerdaAtivo = !_sec.gatilhoPerdaAtivo;
+    _mcAtualizarTogglePerda(_sec.gatilhoPerdaAtivo);
+    const msg = _sec.gatilhoPerdaAtivo
+        ? `⚡ Gatilho perda $ ATIVADO — entra na secundária ao perder $${Math.abs(_sec.limitePerda).toFixed(2)}`
+        : '⚡ Gatilho perda $ DESATIVADO';
+    print(msg, _sec.gatilhoPerdaAtivo ? 'log-win' : 'log-info');
+    try { const sc = JSON.parse(localStorage.getItem('mc_sec_config')||'{}'); sc.gatilhoPerdaAtivo = _sec.gatilhoPerdaAtivo; localStorage.setItem('mc_sec_config', JSON.stringify(sc)); } catch(_){}
+}
+
 function mcSelecionarTipo(tipo) {
     _mcTipoSelecionado = tipo;
     const tabDemo = document.getElementById('mc-tab-demo');
@@ -13140,8 +13222,13 @@ function _mcSalvarConfigSilencioso() {
     const _limEl = document.getElementById('mc-limite-perda');
     if (_limEl && parseFloat(_limEl.value) > 0) _sec.limitePerda = -Math.abs(parseFloat(_limEl.value));
     const _seqEl = document.getElementById('mc-limite-seq-loss');
-    if (_seqEl) _sec.limiteSeqLoss = Math.max(0, parseInt(_seqEl.value) || 0);
-    const _cfgSil = Object.assign({}, _mcConfig, { limitePerda: Math.abs(_sec.limitePerda) || 10, limiteSeqLoss: _sec.limiteSeqLoss });
+    if (_seqEl) _sec.limiteSeqLoss = Math.max(1, parseInt(_seqEl.value) || 1);
+    const _cfgSil = Object.assign({}, _mcConfig, {
+        limitePerda:       Math.abs(_sec.limitePerda) || 10,
+        limiteSeqLoss:     _sec.limiteSeqLoss,
+        gatilhoSeqAtivo:   _sec.gatilhoSeqAtivo,
+        gatilhoPerdaAtivo: _sec.gatilhoPerdaAtivo
+    });
     try { localStorage.setItem('mc_sec_config', JSON.stringify(_cfgSil)); } catch (_) {}
     fetch("/contas/sec-config", {
         method: "POST",
@@ -13171,12 +13258,14 @@ function mcSalvarConfigSecundaria() {
 
     // Lê o gatilho de losses consecutivos
     const _seqEl2 = document.getElementById('mc-limite-seq-loss');
-    if (_seqEl2) _sec.limiteSeqLoss = Math.max(0, parseInt(_seqEl2.value) || 0);
+    if (_seqEl2) _sec.limiteSeqLoss = Math.max(1, parseInt(_seqEl2.value) || 1);
 
-    // Salva no localStorage e no backend (inclui limitePerda e limiteSeqLoss)
+    // Salva no localStorage e no backend
     const _cfgParaSalvar = Object.assign({}, _mcConfig, {
-        limitePerda:  Math.abs(_sec.limitePerda) || 10,
-        limiteSeqLoss: _sec.limiteSeqLoss
+        limitePerda:       Math.abs(_sec.limitePerda) || 10,
+        limiteSeqLoss:     _sec.limiteSeqLoss,
+        gatilhoSeqAtivo:   _sec.gatilhoSeqAtivo,
+        gatilhoPerdaAtivo: _sec.gatilhoPerdaAtivo
     });
     try { localStorage.setItem('mc_sec_config', JSON.stringify(_cfgParaSalvar)); } catch (_) {}
     fetch("/contas/sec-config", {
@@ -13186,13 +13275,13 @@ function mcSalvarConfigSecundaria() {
     }).catch(() => {});
 
     mcStatus('✅ Configurações salvas!', '#4ade80');
-    const _seqMsg = _sec.limiteSeqLoss > 0 ? ` | Seq Loss: ${_sec.limiteSeqLoss}x` : '';
-    print('💾 CONFIG SECUNDÁRIA: 🖥️ ' + _mcConfig.gerenciamento +
+    const _gSeq   = _sec.gatilhoSeqAtivo   ? `🔁 ${_sec.limiteSeqLoss}x ON`  : '🔁 OFF';
+    const _gPerda = _sec.gatilhoPerdaAtivo ? `⚡ $${Math.abs(_sec.limitePerda).toFixed(2)} ON` : '⚡ OFF';
+    print('💾 CONFIG SECUNDÁRIA: ' + _mcConfig.gerenciamento +
           ' | Stake: $' + _mcConfig.stake.toFixed(2) +
           ' | SW: $'    + _mcConfig.stopWin.toFixed(2) +
           ' | SL: $'    + _mcConfig.stopLoss.toFixed(2) +
-          ' | Perda Espelho: -$' + (Math.abs(_sec.limitePerda) || 10).toFixed(2) +
-          _seqMsg, 'log-info');
+          ' | ' + _gSeq + ' | ' + _gPerda, 'log-info');
 }
 
 // ── Normaliza nome do gerenciamento (garante que bate com chave do GERENCIAMENTOS) ──
@@ -13218,8 +13307,10 @@ function mcCarregarConfig() {
                 _sec.limitePerda = -Math.abs(parseFloat(data.limitePerda));
             }
             if (data.limiteSeqLoss != null) {
-                _sec.limiteSeqLoss = Math.max(0, parseInt(data.limiteSeqLoss) || 0);
+                _sec.limiteSeqLoss = Math.max(1, parseInt(data.limiteSeqLoss) || 1);
             }
+            if (data.gatilhoSeqAtivo   != null) _sec.gatilhoSeqAtivo   = !!data.gatilhoSeqAtivo;
+            if (data.gatilhoPerdaAtivo != null) _sec.gatilhoPerdaAtivo = !!data.gatilhoPerdaAtivo;
             _aplicarConfigSec();
         })
         .catch(() => {
@@ -13237,8 +13328,10 @@ function mcCarregarConfig() {
                         _sec.limitePerda = -Math.abs(parseFloat(parsed.limitePerda));
                     }
                     if (parsed.limiteSeqLoss != null) {
-                        _sec.limiteSeqLoss = Math.max(0, parseInt(parsed.limiteSeqLoss) || 0);
+                        _sec.limiteSeqLoss = Math.max(1, parseInt(parsed.limiteSeqLoss) || 1);
                     }
+                    if (parsed.gatilhoSeqAtivo   != null) _sec.gatilhoSeqAtivo   = !!parsed.gatilhoSeqAtivo;
+                    if (parsed.gatilhoPerdaAtivo != null) _sec.gatilhoPerdaAtivo = !!parsed.gatilhoPerdaAtivo;
                 }
             } catch (_) {}
             _aplicarConfigSec();
@@ -13271,11 +13364,13 @@ function _aplicarConfigSec() {
             })
             .catch(() => { swEl.value = _mcConfig.stopWin.toFixed(1); });
     }
-    // Aplica limiteSeqLoss no campo e preview
+    // Aplica limiteSeqLoss no campo, preview e toggle visual
     const seqEl  = document.getElementById('mc-limite-seq-loss');
     const seqPrv = document.getElementById('mc-seq-loss-preview');
-    if (seqEl)  seqEl.value        = _sec.limiteSeqLoss || 0;
-    if (seqPrv) seqPrv.textContent = _sec.limiteSeqLoss > 0 ? _sec.limiteSeqLoss + ' losses' : 'desativado';
+    if (seqEl)  seqEl.value        = _sec.limiteSeqLoss || 5;
+    if (seqPrv) seqPrv.textContent = (_sec.limiteSeqLoss || 5) + ' losses';
+    _mcAtualizarToggleSeq(_sec.gatilhoSeqAtivo);
+    _mcAtualizarTogglePerda(_sec.gatilhoPerdaAtivo);
     // Aplica limitePerda no campo do modal e no preview
     const limEl  = document.getElementById('mc-limite-perda');
     const prevEl = document.getElementById('mc-limite-preview');
