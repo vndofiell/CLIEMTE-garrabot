@@ -1385,7 +1385,10 @@ def login_deriv():
 def open_login():
     tipo = request.args.get('tipo', 'DEMO')
     _access_token["tipo"] = tipo.upper()
-    # Removemos o webbrowser.open(SITE_LOGIN) pois o Render não tem tela
+    # Garante que o slot da secundária NÃO está em modo aguardando
+    # Evita que o callback roube o token do login principal para a secundária
+    with _token_sec_lock:
+        _token_secundaria["aguardando"] = False
     return jsonify({"status": "opened", "url": SITE_LOGIN})
 
 # ── Estado global do login da conta secundária ──────────────────────────────
