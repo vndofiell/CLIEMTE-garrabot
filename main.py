@@ -1896,6 +1896,18 @@ def get_token():
             print(f"[Erro] {err}")
         return jsonify({"wss_url": None, "erro": err})
 
+@app.route('/clear-token', methods=['POST'])
+def clear_token():
+    """Limpa o token armazenado localmente — chamado quando o usuário inicia uma nova conexão."""
+    with _token_lock:
+        _token_recebido["access_token"] = ""
+        _token_recebido["ts"]           = 0
+        _token_recebido["_bot_confirmou"] = False
+    _render_token_cache["token"] = ""
+    _render_token_cache["ts"]    = 0
+    print("[Token] Token limpo pelo front-end (nova conexão iniciada).")
+    return jsonify({"ok": True})
+
 # ─────────────────────────────────────────────────────────
 # TELEGRAM — config (salva/lê telegram_config.json)
 # ─────────────────────────────────────────────────────────

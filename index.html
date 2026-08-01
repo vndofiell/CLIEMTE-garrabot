@@ -4650,6 +4650,9 @@ function iniciarAnimacaoHacker() {
     return intervalo;
 }
 
+// Flag para cancelar loop de polling anterior ao reconectar
+let _pollTokenId = 0;
+
 function escolherConta(tipo) {
     fecharModal('modal-conta');
     bot.tipoConta = tipo;
@@ -4659,7 +4662,14 @@ function escolherConta(tipo) {
     // 1. Inicia animação visual
     const idAnimacao = iniciarAnimacaoHacker();
 
-    // 2. Abre o login no navegador (o servidor envia a URL e o browser abre ela)
+    // 2. Cancela qualquer loop de polling anterior (evita múltiplos loops simultâneos)
+    _pollTokenId++;
+    const meuId = _pollTokenId;
+
+    // 3. Limpa token antigo no servidor para evitar retorno de sessão velha
+    fetch('/clear-token', { method: 'POST' }).catch(() => {});
+
+    // 4. Abre o login no navegador (o servidor envia a URL e o browser abre ela)
     fetch('/open-login?tipo=' + tipo)
         .then(response => response.json())
         .then(data => {
@@ -4670,9 +4680,9 @@ function escolherConta(tipo) {
         })
         .catch(() => print("ERRO AO ABRIR NAVEGADOR.", "log-loss"));
 
-    // 3. Loop de checagem do Token (substitui o pollToken antigo)
+    // 5. Loop de checagem do Token — cancelado automaticamente se nova conexão for iniciada
     (async () => {
-        while (true) {
+        while (_pollTokenId === meuId) {
             try {
                 const res  = await fetch('/get-token');
                 const data = await res.json();
@@ -4689,7 +4699,7 @@ function escolherConta(tipo) {
                     print("⚠️ " + data.erro, "log-loss");
                 }
 
-                if (data.wss_url) {
+                if (data.wss_url && _pollTokenId === meuId) {
                     // LOGIN SUCESSO — finaliza animação
                     clearInterval(idAnimacao);
                     document.getElementById('progress-bar').style.width = '100%';
@@ -5614,6 +5624,7 @@ const _sec = {
     pronto:          false,  // true = conectado e autenticado
     espelhandoAtivo: false,  // true = está espelhando trades agora
     limitePerda:     -10,    // ativa espelhamento quando bot.profit <= este valor ($)
+    limiteSeqLoss:   0,      // ativa espelhamento após N losses consecutivos na teste (0 = desativado)
     nome:            '',
     tipo:            '',
     contaId:         '',
@@ -5640,7 +5651,12 @@ function _secVerificarEspelhamento(profit_atual) {
     // Bloqueia reativação se a planilha JC sec encerrou a sessão
     if (_sec._jcMetaBatida) return;
 
-    const deveEspelhar = profit_atual <= _sec.limitePerda;
+    // Gatilho por losses consecutivos: ativo se limiteSeqLoss > 0 e sequência atingida
+    const seqAtingida = _sec.limiteSeqLoss > 0 && bot._seqLossAtual >= _sec.limiteSeqLoss;
+    // Gatilho por perda em $: sempre ativo (limitePerda é sempre negativo)
+    const perdaAtingida = profit_atual <= _sec.limitePerda;
+
+    const deveEspelhar = seqAtingida || perdaAtingida;
 
     if (deveEspelhar && !_sec.espelhandoAtivo) {
         _sec.espelhandoAtivo = true;
@@ -5688,9 +5704,11 @@ function _secVerificarEspelhamento(profit_atual) {
             );
         }
 
+        const motivo = seqAtingida
+            ? `${bot._seqLossAtual} losses consecutivos na conta teste (gatilho: ${_sec.limiteSeqLoss})`
+            : `Perda $${Math.abs(profit_atual).toFixed(2)} atingiu limite -$${Math.abs(_sec.limitePerda).toFixed(2)}`;
         print(
-            `💳 SECUNDÁRIA ATIVADA 🔴 — Perda $${Math.abs(profit_atual).toFixed(2)} atingiu limite ` +
-            `($${Math.abs(_sec.limitePerda).toFixed(2)}). Operando SOMENTE na conta secundária.`,
+            `💳 SECUNDÁRIA ATIVADA 🔴 — ${motivo}. Operando SOMENTE na conta secundária.`,
             'log-loss'
         );
         _secAtualizarBadge();
@@ -5862,7 +5880,10 @@ async function _secConectar() {
                     print(`💳 SECUNDÁRIA RECONECTADA ✅ — ${_sec.nome} (${_sec.tipo}) | Banca: ${currency} $${saldo}`, 'log-win');
                 } else {
                     print(`💳 SECUNDÁRIA CONECTADA ✅ — ${_sec.nome} (${_sec.tipo}) | Banca: ${currency} $${saldo}`, 'log-win');
-                    print(`💳 Modo STANDBY — ativará espelhamento quando perda da principal >= $${Math.abs(_sec.limitePerda).toFixed(2)} (clique no badge para mudar)`, 'log-info');
+                    const _standbyMsg = _sec.limiteSeqLoss > 0
+                        ? `💳 Modo STANDBY — ativará espelhamento após ${_sec.limiteSeqLoss} losses consecutivos na conta teste (ou perda >= $${Math.abs(_sec.limitePerda).toFixed(2)}) (clique no badge para mudar)`
+                        : `💳 Modo STANDBY — ativará espelhamento quando perda da principal >= $${Math.abs(_sec.limitePerda).toFixed(2)} (clique no badge para mudar)`;
+                    print(_standbyMsg, 'log-info');
                     // Carrega limitePerda salvo ao conectar (garante que persiste entre reinicializações)
                     mcCarregarConfig();
                 }
@@ -12777,9 +12798,33 @@ select.ia-input { cursor: pointer; }
         <!-- lista oculta — mantida para compatibilidade com código antigo -->
         <div id="mc-gerenciamento-lista" style="display:none;"></div>
 
-        <!-- ── LIMITE DE ATIVAÇÃO ── -->
+        <!-- ── GATILHO POR LOSSES CONSECUTIVOS ── -->
+        <div style="font-family:'Share Tech Mono';font-size:0.72rem;color:#f97316;letter-spacing:1px;margin-bottom:6px;">
+          🔴 ATIVAR APÓS N LOSSES CONSECUTIVOS NA CONTA TESTE
+        </div>
+        <div style="display:grid;grid-template-columns:auto 1fr;align-items:center;gap:8px;margin-bottom:14px;box-sizing:border-box;">
+          <span style="color:#f97316;font-size:0.85rem;font-family:'Share Tech Mono';font-weight:bold;white-space:nowrap;">🔁</span>
+          <div style="display:flex;align-items:center;gap:8px;min-width:0;">
+            <input id="mc-limite-seq-loss" type="number" step="1" min="0" value="0"
+                style="background:#0a0a12;border:1px solid rgba(249,115,22,0.6);color:#f97316;
+                       font-family:'Share Tech Mono';font-size:0.88rem;padding:6px 10px;
+                       border-radius:4px;width:60px;font-weight:bold;box-sizing:border-box;"
+                oninput="
+                    const v = parseInt(this.value)||0;
+                    _sec.limiteSeqLoss = Math.max(0, v);
+                    const p = document.getElementById('mc-seq-loss-preview');
+                    if(p) p.textContent = v <= 0 ? 'desativado' : v + ' losses';
+                    try { const sc = JSON.parse(localStorage.getItem('mc_sec_config')||'{}'); sc.limiteSeqLoss = Math.max(0,v); localStorage.setItem('mc_sec_config', JSON.stringify(sc)); } catch(_){}">
+            <span style="color:#64748b;font-size:0.67rem;font-family:'Share Tech Mono';line-height:1.4;min-width:0;">
+              Gatilho: <b style="color:#f97316;"><span id="mc-seq-loss-preview">desativado</span></b><br>
+              <span style="color:#475569;">0 = desativado | ignora saldo</span>
+            </span>
+          </div>
+        </div>
+
+        <!-- ── LIMITE DE ATIVAÇÃO POR PERDA EM $ ── -->
         <div style="font-family:'Share Tech Mono';font-size:0.72rem;color:#fbbf24;letter-spacing:1px;margin-bottom:6px;">
-          ⚡ ATIVAR QUANDO PERDA DA DEMO ATINGIR
+          ⚡ OU ATIVAR QUANDO PERDA DA DEMO ATINGIR
         </div>
         <div style="display:grid;grid-template-columns:auto 1fr;align-items:center;gap:8px;margin-bottom:14px;box-sizing:border-box;">
           <span style="color:#fbbf24;font-size:0.85rem;font-family:'Share Tech Mono';font-weight:bold;white-space:nowrap;">-$</span>
@@ -12846,6 +12891,10 @@ select.ia-input { cursor: pointer; }
       <div style="display:flex;gap:8px;margin-top:8px;">
         <button id="mc-btn-conectar" onclick="mcConectarSecundaria()" class="mc-btn mc-btn-azul" style="flex:1;">
           + Conectar
+        </button>
+        <button id="mc-btn-trocar" onclick="mcTrocarConta()" class="mc-btn mc-btn-amarelo"
+            style="flex:0 0 auto;width:auto;padding:8px 12px;display:none;" title="Desconectar conta atual e logar com outra">
+          🔄 Trocar
         </button>
         <button id="mc-btn-salvar-config" onclick="mcSalvarConfigSecundaria()" class="mc-btn mc-btn-verde"
             style="flex:0 0 auto;width:auto;padding:8px 12px;" title="Salvar configurações da secundária">
@@ -13039,7 +13088,9 @@ function _mcSalvarConfigSilencioso() {
     if (selEl && selEl.value) _mcConfig.gerenciamento = selEl.value;
     const _limEl = document.getElementById('mc-limite-perda');
     if (_limEl && parseFloat(_limEl.value) > 0) _sec.limitePerda = -Math.abs(parseFloat(_limEl.value));
-    const _cfgSil = Object.assign({}, _mcConfig, { limitePerda: Math.abs(_sec.limitePerda) || 10 });
+    const _seqEl = document.getElementById('mc-limite-seq-loss');
+    if (_seqEl) _sec.limiteSeqLoss = Math.max(0, parseInt(_seqEl.value) || 0);
+    const _cfgSil = Object.assign({}, _mcConfig, { limitePerda: Math.abs(_sec.limitePerda) || 10, limiteSeqLoss: _sec.limiteSeqLoss });
     try { localStorage.setItem('mc_sec_config', JSON.stringify(_cfgSil)); } catch (_) {}
     fetch("/contas/sec-config", {
         method: "POST",
@@ -13067,8 +13118,15 @@ function mcSalvarConfigSecundaria() {
         _mcConfig.gerenciamento = chaveReal;
     }
 
-    // Salva no localStorage e no backend (inclui limitePerda)
-    const _cfgParaSalvar = Object.assign({}, _mcConfig, { limitePerda: Math.abs(_sec.limitePerda) || 10 });
+    // Lê o gatilho de losses consecutivos
+    const _seqEl2 = document.getElementById('mc-limite-seq-loss');
+    if (_seqEl2) _sec.limiteSeqLoss = Math.max(0, parseInt(_seqEl2.value) || 0);
+
+    // Salva no localStorage e no backend (inclui limitePerda e limiteSeqLoss)
+    const _cfgParaSalvar = Object.assign({}, _mcConfig, {
+        limitePerda:  Math.abs(_sec.limitePerda) || 10,
+        limiteSeqLoss: _sec.limiteSeqLoss
+    });
     try { localStorage.setItem('mc_sec_config', JSON.stringify(_cfgParaSalvar)); } catch (_) {}
     fetch("/contas/sec-config", {
         method: "POST",
@@ -13077,11 +13135,13 @@ function mcSalvarConfigSecundaria() {
     }).catch(() => {});
 
     mcStatus('✅ Configurações salvas!', '#4ade80');
+    const _seqMsg = _sec.limiteSeqLoss > 0 ? ` | Seq Loss: ${_sec.limiteSeqLoss}x` : '';
     print('💾 CONFIG SECUNDÁRIA: 🖥️ ' + _mcConfig.gerenciamento +
           ' | Stake: $' + _mcConfig.stake.toFixed(2) +
           ' | SW: $'    + _mcConfig.stopWin.toFixed(2) +
           ' | SL: $'    + _mcConfig.stopLoss.toFixed(2) +
-          ' | Perda Espelho: -$' + (Math.abs(_sec.limitePerda) || 10).toFixed(2), 'log-info');
+          ' | Perda Espelho: -$' + (Math.abs(_sec.limitePerda) || 10).toFixed(2) +
+          _seqMsg, 'log-info');
 }
 
 // ── Normaliza nome do gerenciamento (garante que bate com chave do GERENCIAMENTOS) ──
@@ -13106,6 +13166,9 @@ function mcCarregarConfig() {
             if (data.limitePerda != null && parseFloat(data.limitePerda) > 0) {
                 _sec.limitePerda = -Math.abs(parseFloat(data.limitePerda));
             }
+            if (data.limiteSeqLoss != null) {
+                _sec.limiteSeqLoss = Math.max(0, parseInt(data.limiteSeqLoss) || 0);
+            }
             _aplicarConfigSec();
         })
         .catch(() => {
@@ -13121,6 +13184,9 @@ function mcCarregarConfig() {
                     if (parsed.mgrCfgs && typeof parsed.mgrCfgs === 'object') _mcMgrCfgs = parsed.mgrCfgs;
                     if (parsed.limitePerda != null && parseFloat(parsed.limitePerda) > 0) {
                         _sec.limitePerda = -Math.abs(parseFloat(parsed.limitePerda));
+                    }
+                    if (parsed.limiteSeqLoss != null) {
+                        _sec.limiteSeqLoss = Math.max(0, parseInt(parsed.limiteSeqLoss) || 0);
                     }
                 }
             } catch (_) {}
@@ -13154,6 +13220,11 @@ function _aplicarConfigSec() {
             })
             .catch(() => { swEl.value = _mcConfig.stopWin.toFixed(1); });
     }
+    // Aplica limiteSeqLoss no campo e preview
+    const seqEl  = document.getElementById('mc-limite-seq-loss');
+    const seqPrv = document.getElementById('mc-seq-loss-preview');
+    if (seqEl)  seqEl.value        = _sec.limiteSeqLoss || 0;
+    if (seqPrv) seqPrv.textContent = _sec.limiteSeqLoss > 0 ? _sec.limiteSeqLoss + ' losses' : 'desativado';
     // Aplica limitePerda no campo do modal e no preview
     const limEl  = document.getElementById('mc-limite-perda');
     const prevEl = document.getElementById('mc-limite-preview');
@@ -13555,6 +13626,51 @@ async function mcConectarSecundaria() {
 }
 
 // ── Remover conta secundária ──────────────────────────────────────────────
+// ── Trocar conta secundária (desconecta e permite logar com outra) ────────
+async function mcTrocarConta() {
+    if (!confirm('Desconectar a conta secundária atual e conectar outra?')) return;
+    const idEl = document.getElementById('mc-sec-id');
+    const id   = idEl ? idEl.textContent.trim() : '';
+
+    mcStatus('🔄 Desconectando…', '#fbbf24');
+
+    // Para o WebSocket da secundária imediatamente
+    if (_sec.ws && _sec.ws.readyState <= 1) {
+        _sec._destruido = true;
+        _sec.ws.close();
+    }
+    _sec.pronto          = false;
+    _sec.espelhandoAtivo = false;
+    _sec._destruido      = false;  // reseta para permitir reconexão futura
+    _sec._tentativas     = 0;
+    _sec._erro           = false;
+    _secAtualizarBadge();
+
+    // Remove do servidor se houver conta registrada
+    if (id && id !== '—') {
+        try {
+            await fetch('/contas/remover', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ conta_id: id })
+            });
+        } catch (_) {}
+    }
+
+    // Limpa token secundário no servidor para evitar reusar
+    try { await fetch('/clear-token', { method: 'POST' }); } catch (_) {}
+
+    mcStatus('✅ Conta desconectada. Selecione o tipo e clique em "+ Conectar".', '#4ade80');
+
+    // Atualiza UI: mostra botão conectar, esconde Trocar
+    const btnConectar = document.getElementById('mc-btn-conectar');
+    const btnTrocar   = document.getElementById('mc-btn-trocar');
+    if (btnConectar) btnConectar.style.display = '';
+    if (btnTrocar)   btnTrocar.style.display   = 'none';
+
+    mcCarregarContas();
+}
+
 async function mcRemoverSecundaria() {
     const idEl = document.getElementById('mc-sec-id');
     const id   = idEl ? idEl.textContent.trim() : '';
@@ -13693,15 +13809,23 @@ async function mcCarregarContas() {
                     }
                 }
                 if (btnConectar) btnConectar.style.display = 'none';
+                // Conta desconectada → mostra botão Trocar
+                const btnTrocar = document.getElementById('mc-btn-trocar');
+                if (btnTrocar) btnTrocar.style.display = '';
             } else {
-                // Conta ativa com WSS → oculta faixa e botão conectar
+                // Conta ativa com WSS → oculta faixa e botão conectar, mostra Trocar
                 if (faixaEl)     faixaEl.style.display    = 'none';
                 if (btnConectar) btnConectar.style.display = 'none';
+                const btnTrocar = document.getElementById('mc-btn-trocar');
+                if (btnTrocar) btnTrocar.style.display = '';
             }
         } else {
             info.style.display  = 'none';
             vazio.style.display = 'block';
             document.getElementById('mc-badge-sec').textContent = 'STANDBY';
+            // Sem conta → esconde botão Trocar
+            const btnTrocar = document.getElementById('mc-btn-trocar');
+            if (btnTrocar) btnTrocar.style.display = 'none';
 
             // Sem conta cadastrada → mostra faixa de login e botão "+ Conectar"
             const faixaEl     = document.getElementById('mc-faixa-login');
