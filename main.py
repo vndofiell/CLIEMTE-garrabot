@@ -9958,21 +9958,27 @@ def _transcrever_youtube(video_id: str, passos: list) -> str:
     except Exception:
         passos.append("⚠️ Camada 1 bloqueada pelo YouTube (IP cloud). Tentando yt-dlp...")
 
+    # Adiciona deno ao PATH se instalado (necessário para resolver JS challenge do YouTube)
+    deno_bin = os.path.expanduser("~/.deno/bin")
+    env_path = os.environ.copy()
+    if os.path.isdir(deno_bin) and deno_bin not in env_path.get("PATH", ""):
+        env_path["PATH"] = deno_bin + ":" + env_path.get("PATH", "")
+
     # ── helper: roda yt-dlp e retorna texto da primeira legenda encontrada ────
     def _ytdlp_baixar(extra_args: list) -> str:
         with tempfile.TemporaryDirectory() as tmpdir:
-            # Tenta legendas manuais/automáticas em PT e EN,
-            # incluindo variantes traduzidas automaticamente (pt-en, en-en, etc.)
             cmd_base = [
                 ytdlp_bin,
                 "--write-auto-sub", "--write-sub",
                 "--skip-download",
-                "--sub-lang", "pt.*,pt-BR.*,en.*,pt,en",
+                "--sub-lang", "pt,pt-PT,pt-orig,en",
                 "--sub-format", "vtt",
+                "--remote-components", "ejs:github",
                 "--output", f"{tmpdir}/legenda",
                 "--quiet", "--no-warnings",
             ] + extra_args + [url_video]
-            subprocess.run(cmd_base, capture_output=True, text=True, timeout=90)
+            subprocess.run(cmd_base, capture_output=True, text=True,
+                           timeout=90, env=env_path)
             arquivos = sorted(_glob.glob(f"{tmpdir}/*.vtt"))
             for arq in arquivos:
                 texto = _parsear_vtt(open(arq, encoding="utf-8", errors="ignore").read())
