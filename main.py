@@ -9906,102 +9906,177 @@ def _extrair_id_youtube(url: str) -> str:
     return ""
 
 
+# Caminho do arquivo de cookies do YouTube salvo no servidor
+_YT_COOKIES_FILE = os.path.join(_BASE_DIR, "yt_cookies.txt")
+
+
+def _parsear_vtt(vtt: str) -> str:
+    """Converte texto VTT bruto em texto limpo sem timestamps nem tags HTML."""
+    import re as _re
+    linhas = vtt.split("\n")
+    texto_linhas = []
+    for linha in linhas:
+        linha = linha.strip()
+        if not linha or linha.startswith("WEBVTT") or linha.startswith("NOTE") or linha.startswith("Kind:") or linha.startswith("Language:"):
+            continue
+        if _re.match(r'^\d{2}:\d{2}', linha) or _re.match(r'^\d+$', linha):
+            continue
+        limpa = _re.sub(r'<[^>]+>', '', linha).strip()
+        if limpa:
+            texto_linhas.append(limpa)
+    # Remove linhas duplicadas consecutivas (VTT repete linhas por overlap)
+    dedup = []
+    for l in texto_linhas:
+        if not dedup or l != dedup[-1]:
+            dedup.append(l)
+    return " ".join(dedup)
+
+
 def _transcrever_youtube(video_id: str, passos: list) -> str:
     """
-    Tenta extrair a transcrição do vídeo em 3 camadas:
-      1. youtube-transcript-api direta
-      2. Supadata API pública (contorna bloqueio de IP cloud)
-      3. yt-dlp (baixa legenda VTT e parseia)
-    Retorna o texto da transcrição ou lança Exception com mensagem amigável.
+    Extrai a transcrição em 4 camadas (da mais rápida para a mais robusta):
+      1. youtube-transcript-api com cookies (se disponível)
+      2. yt-dlp com cookies (autenticado, contorna bot-check)
+      3. yt-dlp sem cookies (tenta sem auth)
+      4. Invidious API pública (instância sem bloqueio de IP cloud)
     """
-    url_video = f"https://www.youtube.com/watch?v={video_id}"
+    import subprocess, tempfile, glob as _glob
+    url_video  = f"https://www.youtube.com/watch?v={video_id}"
+    tem_cookies = os.path.isfile(_YT_COOKIES_FILE) and os.path.getsize(_YT_COOKIES_FILE) > 100
+    venv_ytdlp  = os.path.join(_BASE_DIR, "venv", "bin", "yt-dlp")
+    ytdlp_bin   = venv_ytdlp if os.path.exists(venv_ytdlp) else "yt-dlp"
 
     # ── Camada 1: youtube-transcript-api ─────────────────────────────────────
     try:
         from youtube_transcript_api import YouTubeTranscriptApi
         yt_api = YouTubeTranscriptApi()
-        fetched = yt_api.fetch(video_id, languages=['pt', 'en', 'pt-BR'])
+        fetched = yt_api.fetch(video_id, languages=['pt', 'pt-BR', 'en'])
         texto = " ".join([t['text'] for t in fetched])
         if texto.strip():
             passos.append("✅ Transcrição obtida via youtube-transcript-api.")
             return texto
-    except Exception as e1:
-        passos.append(f"⚠️ Camada 1 bloqueada (IP cloud): tentando método alternativo...")
+    except Exception:
+        passos.append("⚠️ Camada 1 bloqueada pelo YouTube (IP cloud). Tentando yt-dlp...")
 
-    # ── Camada 2: Supadata API pública (não requer auth, ignora bloqueio cloud) ──
-    try:
-        resp = requests.get(
-            "https://api.supadata.ai/v1/youtube/transcript",
-            params={"url": url_video, "text": "true"},
-            timeout=20,
-            headers={"User-Agent": "GarraBot/1.0"}
-        )
-        if resp.status_code == 200:
-            data = resp.json()
-            # Supadata retorna {"content": "...", "lang": "pt"} ou lista de segmentos
-            if isinstance(data, dict) and data.get("content"):
-                texto = data["content"]
-            elif isinstance(data, list):
-                texto = " ".join([s.get("text", "") for s in data])
-            else:
-                texto = str(data)
-            if texto.strip():
-                passos.append("✅ Transcrição obtida via Supadata API.")
-                return texto
-        passos.append(f"⚠️ Camada 2 retornou {resp.status_code}: tentando yt-dlp...")
-    except Exception as e2:
-        passos.append(f"⚠️ Camada 2 falhou: {e2} — tentando yt-dlp...")
+    # ── Camada 2: yt-dlp COM cookies (autenticado) ───────────────────────────
+    if tem_cookies:
+        try:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                cmd = [
+                    ytdlp_bin,
+                    "--write-auto-sub", "--skip-download",
+                    "--sub-lang", "pt,pt-BR,en",
+                    "--sub-format", "vtt",
+                    "--cookies", _YT_COOKIES_FILE,
+                    "--output", f"{tmpdir}/legenda",
+                    "--quiet",
+                    url_video
+                ]
+                subprocess.run(cmd, capture_output=True, text=True, timeout=90)
+                arquivos = _glob.glob(f"{tmpdir}/*.vtt")
+                if arquivos:
+                    texto = _parsear_vtt(open(arquivos[0], encoding="utf-8", errors="ignore").read())
+                    if texto.strip():
+                        passos.append("✅ Transcrição obtida via yt-dlp (autenticado com cookies).")
+                        return texto
+        except Exception as e2:
+            passos.append(f"⚠️ Camada 2 (yt-dlp+cookies) falhou: {e2}")
+    else:
+        passos.append("⚠️ Cookies não configurados — pulando Camada 2.")
 
-    # ── Camada 3: yt-dlp (baixa legenda auto-gerada e parseia) ───────────────
+    # ── Camada 3: yt-dlp SEM cookies ─────────────────────────────────────────
     try:
-        import subprocess, tempfile, glob as _glob, re as _re
         with tempfile.TemporaryDirectory() as tmpdir:
             cmd = [
-                "yt-dlp",
+                ytdlp_bin,
                 "--write-auto-sub", "--skip-download",
-                "--sub-lang", "pt,en",
+                "--sub-lang", "pt,pt-BR,en",
                 "--sub-format", "vtt",
                 "--output", f"{tmpdir}/legenda",
+                "--quiet",
                 url_video
             ]
-            resultado = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+            subprocess.run(cmd, capture_output=True, text=True, timeout=90)
             arquivos = _glob.glob(f"{tmpdir}/*.vtt")
-            if not arquivos:
-                # tenta via venv
-                venv_ytdlp = os.path.join(os.path.dirname(os.path.abspath(__file__)), "venv", "bin", "yt-dlp")
-                if os.path.exists(venv_ytdlp):
-                    cmd[0] = venv_ytdlp
-                    resultado = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
-                    arquivos = _glob.glob(f"{tmpdir}/*.vtt")
             if arquivos:
-                with open(arquivos[0], encoding="utf-8", errors="ignore") as f:
-                    vtt = f.read()
-                # Remove cabeçalho e timestamps VTT, junta só o texto
-                linhas = vtt.split("\n")
-                texto_linhas = []
-                for linha in linhas:
-                    linha = linha.strip()
-                    if not linha or linha.startswith("WEBVTT") or linha.startswith("NOTE"):
-                        continue
-                    if _re.match(r'^\d{2}:\d{2}', linha) or _re.match(r'^\d+$', linha):
-                        continue
-                    # Remove tags HTML (<c>, </c>, <00:00:01.000>)
-                    limpa = _re.sub(r'<[^>]+>', '', linha).strip()
-                    if limpa:
-                        texto_linhas.append(limpa)
-                texto = " ".join(texto_linhas)
+                texto = _parsear_vtt(open(arquivos[0], encoding="utf-8", errors="ignore").read())
                 if texto.strip():
-                    passos.append("✅ Transcrição obtida via yt-dlp (legenda automática).")
+                    passos.append("✅ Transcrição obtida via yt-dlp (sem autenticação).")
                     return texto
+            passos.append("⚠️ Camada 3 (yt-dlp sem cookies): nenhuma legenda baixada. Tentando Invidious...")
     except Exception as e3:
         passos.append(f"⚠️ Camada 3 (yt-dlp) falhou: {e3}")
 
+    # ── Camada 4: Invidious API pública (não bloqueia IPs cloud) ─────────────
+    instancias_invidious = [
+        "https://invidious.nerdvpn.de",
+        "https://inv.nadeko.net",
+        "https://invidious.privacydev.net",
+    ]
+    for base in instancias_invidious:
+        try:
+            resp = requests.get(
+                f"{base}/api/v1/captions/{video_id}",
+                timeout=15,
+                headers={"User-Agent": "GarraBot/1.0"}
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                # Pega o primeiro caption em pt ou en
+                caption_url = None
+                for cap in data.get("captions", []):
+                    if cap.get("language_code", "").startswith(("pt", "en")):
+                        caption_url = base + cap.get("url", "")
+                        break
+                if not caption_url and data.get("captions"):
+                    caption_url = base + data["captions"][0].get("url", "")
+                if caption_url:
+                    vtt_resp = requests.get(caption_url, timeout=15)
+                    if vtt_resp.status_code == 200:
+                        texto = _parsear_vtt(vtt_resp.text)
+                        if texto.strip():
+                            passos.append(f"✅ Transcrição obtida via Invidious ({base.split('/')[2]}).")
+                            return texto
+        except Exception:
+            continue
+    passos.append("⚠️ Camada 4 (Invidious): todas as instâncias falharam.")
+
     raise Exception(
-        "Nenhum método conseguiu obter a transcrição. Motivos possíveis: "
-        "(1) vídeo sem legendas ativadas, "
-        "(2) vídeo privado/restrito por idade, "
-        "(3) IP do servidor bloqueado pelo YouTube para todos os métodos."
+        "❌ Nenhum método conseguiu obter a transcrição.\n\n"
+        "SOLUÇÃO: Configure os cookies do YouTube no painel para desbloquear o acesso.\n"
+        "Clique em '🍪 Configurar Cookies' e siga as instruções."
     )
+
+
+@app.route('/ai/youtube-cookies', methods=['GET'])
+def ai_youtube_cookies_status():
+    """Retorna se os cookies do YouTube estão configurados no servidor."""
+    tem = os.path.isfile(_YT_COOKIES_FILE) and os.path.getsize(_YT_COOKIES_FILE) > 100
+    ts  = ""
+    if tem:
+        import datetime
+        ts = datetime.datetime.fromtimestamp(os.path.getmtime(_YT_COOKIES_FILE)).strftime("%d/%m/%Y %H:%M")
+    return jsonify({"configurado": tem, "atualizado_em": ts})
+
+
+@app.route('/ai/youtube-cookies', methods=['POST'])
+def ai_youtube_cookies_salvar():
+    """
+    Recebe o conteúdo do arquivo cookies.txt (formato Netscape) e salva no servidor.
+    Isso permite que o yt-dlp autentique as requisições ao YouTube.
+    """
+    dados = request.get_json(force=True, silent=True) or {}
+    conteudo = dados.get("cookies", "").strip()
+    if not conteudo:
+        return jsonify({"erro": "Conteúdo dos cookies vazio."})
+    if "youtube.com" not in conteudo and "HTTP Cookie File" not in conteudo and "Netscape" not in conteudo:
+        return jsonify({"erro": "Formato inválido. O arquivo deve ser no formato Netscape (exportado pela extensão 'Get cookies.txt')."})
+    try:
+        with open(_YT_COOKIES_FILE, "w", encoding="utf-8") as f:
+            f.write(conteudo)
+        return jsonify({"ok": True, "mensagem": f"Cookies salvos com sucesso ({len(conteudo)} bytes). O yt-dlp usará autenticação nas próximas transcrições."})
+    except Exception as e:
+        return jsonify({"erro": f"Erro ao salvar cookies: {e}"})
 
 
 @app.route('/ai/analisar-youtube', methods=['POST'])
