@@ -11879,6 +11879,78 @@ function preverMercado()  { alert('Função "Previsão Inteligente" em desenvolv
 function abrirHistorico() { alert('Função "Histórico" em desenvolvimento.'); }
 function abrirGraficos()  { alert('Função "Gráficos" em desenvolvimento.'); }
 
+// ── Importador de Estratégia via YouTube ──────────────────────────────────────
+async function importarDoYoutube() {
+    const url    = (document.getElementById('input-youtube').value || '').trim();
+    const logEl  = document.getElementById('yt-import-log');
+    const btnEl  = document.getElementById('btn-yt-extrair');
+
+    if (!url) { alert('Cole um link válido do YouTube!'); return; }
+
+    const _log = txt => {
+        logEl.style.display = 'block';
+        logEl.innerHTML += txt + '<br>';
+        logEl.scrollTop = logEl.scrollHeight;
+    };
+
+    logEl.innerHTML = '';
+    logEl.style.display = 'block';
+    btnEl.disabled = true;
+    btnEl.textContent = '⏳ Processando...';
+
+    _log('📥 Enviando link para o servidor...');
+
+    try {
+        const { chave, modelo, provedor } = _iaGetChaveModelo();
+        const res  = await fetch('/ai/analisar-youtube', {
+            method : 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body   : JSON.stringify({ url_youtube: url, chave, modelo, provedor })
+        });
+        const resultado = await res.json();
+
+        if (resultado._passos) resultado._passos.forEach(p => _log(p));
+
+        if (resultado.erro) {
+            _log('❌ ' + resultado.erro);
+            return;
+        }
+
+        _log('✅ Estratégia <b>' + (resultado.nome || '—') + '</b> extraída com sucesso!');
+
+        // Preenche os campos do painel de edição da IA com os dados do vídeo
+        const set = (id, val) => { const el = document.getElementById(id); if (el && val !== undefined) el.value = val; };
+        set('ia-edit-nome',     resultado.nome        || '');
+        set('ia-edit-desc',     resultado.descricao   || '');
+        set('ia-edit-tipo',     resultado.tipo_contrato || '');
+        set('ia-edit-barreira', resultado.barreira    ?? '');
+        set('ia-edit-ativo',    resultado.ativo       || '');
+
+        // Tenta usar o campo de sequência/gatilho se existir no painel
+        const seqEl = document.getElementById('ia-edit-seq') || document.getElementById('ia-edit-gatilho');
+        if (seqEl && resultado.seq_gatilho !== undefined) seqEl.value = resultado.seq_gatilho;
+
+        // Guarda no objeto _ia para que os botões Ativar/Salvar funcionem normalmente
+        if (typeof _ia !== 'undefined') {
+            _ia._cardAtual = resultado;
+            _ia._youtubeResult = resultado;
+        }
+
+        // Abre a área de edição inline se existir
+        const editArea = document.getElementById('ia-edit-area');
+        if (editArea) editArea.style.display = 'block';
+
+        // Notifica via função padrão do painel se disponível
+        if (typeof iaExibirCartao === 'function') iaExibirCartao(resultado);
+
+    } catch (e) {
+        _log('❌ Erro de conexão: ' + e.message);
+    } finally {
+        btnEl.disabled = false;
+        btnEl.textContent = '▶ EXTRAIR SETUP';
+    }
+}
+
 </script>
 
 <!-- ═══════════════════════════════════════════════════
@@ -12711,6 +12783,24 @@ select.ia-input { cursor: pointer; }
             <button class="ia-btn-estatistica" id="btnEstatistica">📊 ESTATÍSTICA</button>
         </div>
     </div>
+
+    <!-- ── Importador YouTube ─────────────────────────────────────────── -->
+    <div style="margin-top:14px;border:1px dashed #00ff41;padding:13px 15px;border-radius:6px;background:rgba(0,255,65,0.02);">
+        <label style="color:#00ff41;font-size:0.82rem;display:block;margin-bottom:7px;letter-spacing:.04em;">
+            🔗 IMPORTAR ESTRATÉGIA DIRETO DO YOUTUBE
+        </label>
+        <div style="display:flex;gap:8px;">
+            <input type="text" id="input-youtube"
+                   placeholder="Cole o link do YouTube aqui (ex: https://youtu.be/...)"
+                   style="flex:1;background:#050505;border:1px solid #333;color:#fff;padding:7px 10px;border-radius:4px;font-family:monospace;font-size:0.82rem;">
+            <button id="btn-yt-extrair" onclick="importarDoYoutube()"
+                    style="background:#cc0022;color:#fff;border:none;padding:7px 14px;border-radius:4px;cursor:pointer;font-weight:bold;font-size:0.82rem;white-space:nowrap;">
+                ▶ EXTRAIR SETUP
+            </button>
+        </div>
+        <div id="yt-import-log" style="display:none;margin-top:8px;font-size:0.78rem;color:#aaa;font-family:monospace;line-height:1.6;"></div>
+    </div>
+    <!-- ── /Importador YouTube ────────────────────────────────────────── -->
 
     <!-- Status -->
     <div id="ia-status" class="ia-status"></div>

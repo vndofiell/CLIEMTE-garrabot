@@ -9887,6 +9887,117 @@ def bf5_resetar():
 # FIM DA ESTRATÉGIA BARREIRA FIXA 5
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# MÓDULO: IMPORTADOR DE ESTRATÉGIA VIA YOUTUBE (Engenharia Reversa com IA)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _extrair_id_youtube(url: str) -> str:
+    """Extrai o ID de um link do YouTube (funciona com youtu.be ou youtube.com)."""
+    padroes = [
+        r'(?:v=|\/)([0-9A-Za-z_-]{11}).*',
+        r'(?:embed\/)([0-9A-Za-z_-]{11})',
+        r'(?:watch\?v=)([0-9A-Za-z_-]{11})'
+    ]
+    for p in padroes:
+        match = re.search(p, url)
+        if match:
+            return match.group(1)
+    return ""
+
+
+@app.route('/ai/analisar-youtube', methods=['POST'])
+def ai_analisar_youtube():
+    """
+    Recebe o link do YouTube, extrai a transcrição, envia para a IA
+    analisar o setup, ticks, barreiras e retorna a estratégia pronta.
+    """
+    try:
+        from youtube_transcript_api import YouTubeTranscriptApi
+    except ImportError:
+        return jsonify({"erro": "Biblioteca youtube-transcript-api não instalada. Execute: pip install youtube-transcript-api"})
+
+    dados = request.get_json(force=True, silent=True) or {}
+    url_video = dados.get("url_youtube", "").strip()
+
+    _funcao_ia, chave, modelo, provedor = _resolver_funcao_ia(dados)
+    if not chave:
+        return jsonify({"erro": f"Chave API {provedor.upper()} não configurada"})
+    if not url_video:
+        return jsonify({"erro": "Link do YouTube vazio"})
+
+    video_id = _extrair_id_youtube(url_video)
+    if not video_id:
+        return jsonify({"erro": "Link do YouTube inválido. Use um formato como https://www.youtube.com/watch?v=..."})
+
+    passos = ["📥 Conectando ao YouTube e extraindo a transcrição do vídeo..."]
+    transcricao_texto = ""
+    try:
+        lista_transcricao = YouTubeTranscriptApi.get_transcript(video_id, languages=['pt', 'en'])
+        transcricao_texto = " ".join([t['text'] for t in lista_transcricao])
+        passos.append(f"✅ Transcrição obtida com sucesso ({len(transcricao_texto)} caracteres).")
+    except Exception as e:
+        return jsonify({
+            "erro": f"Não foi possível obter a legenda deste vídeo. O vídeo precisa ter legendas ativadas. Detalhe: {e}",
+            "_passos": passos
+        })
+
+    system_yt = (
+        "VOCÊ É O ENGENHEIRO REVERSO DE ESTRATÉGIAS DO GARRABOT.\n"
+        "Sua missão é ler a transcrição de um vídeo do YouTube de trading, "
+        "identificar exatamente qual é a estratégia que o autor está ensinando, "
+        "e convertê-la rigorosamente para o formato JSON padrão do bot.\n\n"
+        "REGRAS DE CONVERSÃO:\n"
+        "- ativo: escolha o melhor entre R_10, R_25, R_50, R_75, R_100, 1HZ10V, 1HZ25V (se o autor citar, use o dele).\n"
+        "- tipo_contrato: DIGITOVER, DIGITUNDER, DIGITODD, DIGITEVEN, DIGITDUPLA, SATURACAO, FLUXO, TOUCH, NOTOUCH.\n"
+        "- barreira: int (0-9) ou string com sinal para touch/notouch.\n"
+        "- seq_gatilho: int (quantos ticks iguais ou opostos o autor pede para esperar).\n"
+        "- gerenciamento: martingale, soros, loss_recovery, conservador, fixa.\n"
+        "- Retorne APENAS um JSON válido preenchendo os campos do bot.\n"
+    )
+
+    prompt_usuario = (
+        f"TRANSCRIÇÃO DO VÍDEO DO YOUTUBE:\n{transcricao_texto[:12000]}\n\n"
+        "Com base no texto acima, monte a estratégia exata ensinada no vídeo no formato JSON padrão:\n"
+        "{\n"
+        "  \"nome\": \"Nome dado pelo autor ou Criado do YouTube\",\n"
+        "  \"descricao\": \"Resumo de 1 frase de como funciona o setup do vídeo\",\n"
+        "  \"tipo_contrato\": \"...\",\n"
+        "  \"barreira\": 0,\n"
+        "  \"seq_gatilho\": 0,\n"
+        "  \"ativo\": \"R_100\",\n"
+        "  \"gerenciamento\": \"martingale|soros|fixa\",\n"
+        "  \"entrada_usd\": 0.35,\n"
+        "  \"take_profit_usd\": 10.0,\n"
+        "  \"stop_loss_usd\": 100.0,\n"
+        "  \"assertividade\": \"Estimativa baseada na fala do autor\"\n"
+        "}\n"
+        "Responda APENAS com o JSON puro, sem markdown."
+    )
+
+    passos.append("🧠 Analisando a lógica do trader com IA...")
+    try:
+        estrategia, _ = _funcao_ia(chave, modelo, system_yt, prompt_usuario, temperature=0.3)
+
+        erro_barreira = _validar_barreira(estrategia)
+        if erro_barreira:
+            return jsonify({
+                "erro": f"A estratégia do vídeo foi bloqueada pelas regras de segurança: {erro_barreira}",
+                "_passos": passos
+            })
+
+        estrategia["_origem_youtube"] = url_video
+        estrategia["_passos"] = passos + ["✅ Estratégia extraída do YouTube com sucesso!"]
+        return jsonify(estrategia)
+    except Exception as e:
+        return jsonify({"erro": f"Erro ao processar IA: {e}", "_passos": passos})
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# FIM DO MÓDULO IMPORTADOR YOUTUBE
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
 def start_server():
     # Oracle Cloud — porta configurável via variável de ambiente, padrão 5000
     port = int(os.environ.get("PORT", 5000))
