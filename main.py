@@ -9933,8 +9933,10 @@ def ai_analisar_youtube():
     passos = ["📥 Conectando ao YouTube e extraindo a transcrição do vídeo..."]
     transcricao_texto = ""
     try:
-        lista_transcricao = YouTubeTranscriptApi.get_transcript(video_id, languages=['pt', 'en'])
-        transcricao_texto = " ".join([t['text'] for t in lista_transcricao])
+        # v1.2+ usa instância + fetch() em vez do antigo get_transcript() de classe
+        yt_api = YouTubeTranscriptApi()
+        fetched = yt_api.fetch(video_id, languages=['pt', 'en'])
+        transcricao_texto = " ".join([t['text'] for t in fetched])
         passos.append(f"✅ Transcrição obtida com sucesso ({len(transcricao_texto)} caracteres).")
     except Exception as e:
         return jsonify({
