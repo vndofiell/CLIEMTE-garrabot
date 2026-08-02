@@ -9260,81 +9260,167 @@ def _wa_keepalive_loop():
             print(f"[KeepAlive] Self ping falhou: {e}")
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# ESTRATÉGIA GARRA DUPLA — Dupla Janela (Over/Under) com Gale Isolado por Lado
+# ESTRATÉGIA GARRA DUPLA — Dupla Janela Independente (Padrão Vídeo Time)
 # ═══════════════════════════════════════════════════════════════════════════════
 #
-# Lógica: aguarda N dígitos repetidos seguidos (exaustão/repetição) e dispara
-# simultaneamente dois contratos:
-#   • Janela Superior → DIGITOVER  barreira=4  (ganha se dígito final > 4)
-#   • Janela Inferior → DIGITUNDER barreira=5  (ganha se dígito final < 5)
-# O Martingale é independente para cada janela — um WIN num lado reseta apenas
-# aquele lado, enquanto o outro continua acumulando se ainda em perda.
+# Cada janela (Superior / Inferior) possui seu próprio histórico de ticks e
+# avalia o gatilho de repetição de forma 100% independente:
+#   • Janela Superior → DIGITOVER  barreira=4  — dispara quando ELA MESMA acumula
+#                       gatilho_repeticoes dígitos iguais consecutivos
+#   • Janela Inferior → DIGITUNDER barreira=5  — idem, histórico separado
+# O Gale também é isolado: WIN num lado reseta apenas aquela janela.
 
-_GARRA_DUPLA_BARREIRA_OVER  = 4   # DIGITOVER  > 4  (barreiras 5-9 ganham → ~50%)
-_GARRA_DUPLA_BARREIRA_UNDER = 5   # DIGITUNDER < 5  (barreiras 0-4 ganham → ~50%)
+_GARRA_DUPLA_BARREIRA_OVER  = 4   # DIGITOVER  > 4  (dígitos 5-9 ganham → ~50%)
+_GARRA_DUPLA_BARREIRA_UNDER = 5   # DIGITUNDER < 5  (dígitos 0-4 ganham → ~50%)
+_GARRA_DUPLA_HIST_LIMITE    = 5   # tamanho máximo do histórico por janela
 
+
+def _garra_dupla_processar_janela(digito_atual: int,
+                                   config_janela: dict,
+                                   tipo_contrato: str) -> dict:
+    """
+    Processa a lógica de gatilho e gestão de Gale de forma 100% independente
+    para cada janela (padrão vídeo Time).
+
+    tipo_contrato : 'SUPERIOR' → DIGITOVER 4  |  'INFERIOR' → DIGITUNDER 5
+    config_janela : dict com estado da janela:
+        stake               (float) — stake atual
+        gale_nivel          (int)   — gales acumulados
+        gatilho_repeticoes  (int)   — N repetições para disparar (padrão 2)
+        historico           (list)  — últimos dígitos desta janela (gerenciado aqui)
+
+    Retorna:
+        disparar      (bool)
+        payload_ordem (dict)  — payload pronto para API Deriv (somente se disparar=True)
+    """
+    hist = config_janela.setdefault("historico", [])
+    hist.append(int(digito_atual))
+    if len(hist) > _GARRA_DUPLA_HIST_LIMITE:
+        hist.pop(0)
+
+    qtd = int(config_janela.get("gatilho_repeticoes", 2))
+    if len(hist) < qtd:
+        return {"disparar": False, "motivo": "historico_insuficiente"}
+
+    ultimos = hist[-qtd:]
+    if not all(d == ultimos[0] for d in ultimos):
+        return {"disparar": False, "motivo": "sequencia_nao_atingida"}
+
+    # Gatilho atingido para esta janela isoladamente
+    barreira = _GARRA_DUPLA_BARREIRA_OVER  if tipo_contrato == "SUPERIOR" \
+               else _GARRA_DUPLA_BARREIRA_UNDER
+    tipo_api = "DIGITOVER"  if tipo_contrato == "SUPERIOR" else "DIGITUNDER"
+
+    return {
+        "disparar": True,
+        "digito_gatilho": int(ultimos[0]),
+        "payload_ordem": {
+            "contract_type": tipo_api,
+            "barrier":       str(barreira),
+            "amount":        round(float(config_janela.get("stake", 0.35)), 2),
+            "basis":         "stake",
+            "currency":      "USD",
+            "duration":      1,
+            "duration_unit": "t",
+        },
+    }
+
+
+def _garra_dupla_atualizar_janela(resultado: str,
+                                   config_janela: dict,
+                                   fator_gale: float = 1.4,
+                                   stake_base: float = 0.35) -> dict:
+    """
+    Atualiza stake e nível de Gale de forma isolada para a janela que encerrou.
+
+    resultado : 'WIN' | 'LOSS'
+    """
+    if resultado == "WIN":
+        config_janela["gale_nivel"] = 0
+        config_janela["stake"]      = round(stake_base, 2)
+    else:
+        config_janela["gale_nivel"] = int(config_janela.get("gale_nivel", 0)) + 1
+        config_janela["stake"]      = round(
+            float(config_janela.get("stake", stake_base)) * fator_gale, 2
+        )
+    return config_janela
+
+
+# ── Funções de compatibilidade (mantêm a API pública inalterada) ─────────────
 
 def _garra_dupla_avaliar_gatilho(ultimos_digitos: list, config_bot: dict) -> dict:
     """
-    Avalia se o gatilho de repetição foi atingido e retorna os contratos prontos
-    para envio simultâneo nas duas janelas (Superior e Inferior).
+    Wrapper de compatibilidade — usa o novo motor por-janela internamente.
+    Avalia ambas as janelas com o mesmo tick e retorna contratos para as que
+    atingiram o gatilho.
 
-    Parâmetros em config_bot:
-      stake_base     (float)  — stake inicial de cada janela
-      fator_gale     (float)  — multiplicador de gale (ex: 1.4)
-      gale_superior  (int)    — número de gales acumulados na janela superior
-      gale_inferior  (int)    — número de gales acumulados na janela inferior
-      stake_superior (float)  — stake atual da janela superior
-      stake_inferior (float)  — stake atual da janela inferior
-      qtd_gatilho    (int)    — quantos dígitos repetidos para acionar (padrão 3)
-      currency       (str)    — moeda do contrato (padrão "USD")
-      duracao        (int)    — duração em ticks (padrão 1)
-
-    Retorna dict com:
-      executar           (bool)
-      contrato_superior  (dict)  — payload DIGITOVER pronto
-      contrato_inferior  (dict)  — payload DIGITUNDER pronto
-      gatilho_digito     (int)   — dígito que disparou o gatilho
+    O config_bot agora armazena sub-dicts 'janela_superior' e 'janela_inferior'
+    com histórico e estado próprios. Campos legados (stake_superior/inferior,
+    gale_superior/inferior) são sincronizados automaticamente.
     """
-    qtd_necessaria = int(config_bot.get("qtd_gatilho", 3))
-    if len(ultimos_digitos) < qtd_necessaria:
-        return {"executar": False, "motivo": "ticks_insuficientes"}
-
-    ultimos_analisados = ultimos_digitos[-qtd_necessaria:]
-    if not all(d == ultimos_analisados[0] for d in ultimos_analisados):
-        return {"executar": False, "motivo": "gatilho_nao_atingido"}
-
     currency = str(config_bot.get("currency", "USD"))
     duracao  = int(config_bot.get("duracao",  1))
+    stake_base = float(config_bot.get("stake_base", 0.35))
+    fator      = float(config_bot.get("fator_gale", 1.4))
+    qtd        = int(config_bot.get("qtd_gatilho", 3))
 
-    contrato_superior = {
-        "contract_type": "DIGITOVER",
-        "barrier":       str(_GARRA_DUPLA_BARREIRA_OVER),
-        "amount":        round(float(config_bot.get("stake_superior",
-                               config_bot.get("stake_base", 0.35))), 2),
-        "basis":         "stake",
-        "currency":      currency,
-        "duration":      duracao,
-        "duration_unit": "t",
-    }
+    if not ultimos_digitos:
+        return {"executar": False, "motivo": "ticks_insuficientes"}
 
-    contrato_inferior = {
-        "contract_type": "DIGITUNDER",
-        "barrier":       str(_GARRA_DUPLA_BARREIRA_UNDER),
-        "amount":        round(float(config_bot.get("stake_inferior",
-                               config_bot.get("stake_base", 0.35))), 2),
-        "basis":         "stake",
-        "currency":      currency,
-        "duration":      duracao,
-        "duration_unit": "t",
-    }
+    digito_atual = int(ultimos_digitos[-1])
+
+    # Inicializa sub-dicts de janela se ainda não existirem
+    jsup = config_bot.setdefault("janela_superior", {
+        "stake": config_bot.get("stake_superior", stake_base),
+        "gale_nivel": config_bot.get("gale_superior", 0),
+        "gatilho_repeticoes": qtd,
+        "historico": [],
+    })
+    jinf = config_bot.setdefault("janela_inferior", {
+        "stake": config_bot.get("stake_inferior", stake_base),
+        "gale_nivel": config_bot.get("gale_inferior", 0),
+        "gatilho_repeticoes": qtd,
+        "historico": [],
+    })
+    # Mantém qtd_gatilho sincronizado entre as janelas
+    jsup["gatilho_repeticoes"] = qtd
+    jinf["gatilho_repeticoes"] = qtd
+
+    res_sup = _garra_dupla_processar_janela(digito_atual, jsup, "SUPERIOR")
+    res_inf = _garra_dupla_processar_janela(digito_atual, jinf, "INFERIOR")
+
+    # Sincroniza campos legados
+    config_bot["stake_superior"] = jsup["stake"]
+    config_bot["stake_inferior"] = jinf["stake"]
+    config_bot["gale_superior"]  = jsup["gale_nivel"]
+    config_bot["gale_inferior"]  = jinf["gale_nivel"]
+
+    # Monta resposta — qualquer janela que disparou gera seu contrato
+    contratos = {}
+    executar   = False
+
+    if res_sup["disparar"]:
+        executar = True
+        p = res_sup["payload_ordem"].copy()
+        p["currency"]      = currency
+        p["duration"]      = duracao
+        contratos["contrato_superior"] = p
+
+    if res_inf["disparar"]:
+        executar = True
+        p = res_inf["payload_ordem"].copy()
+        p["currency"]      = currency
+        p["duration"]      = duracao
+        contratos["contrato_inferior"] = p
+
+    if not executar:
+        return {"executar": False, "motivo": "nenhuma_janela_disparou"}
 
     return {
-        "executar":          True,
-        "contrato_superior": contrato_superior,
-        "contrato_inferior": contrato_inferior,
-        "gatilho_digito":    int(ultimos_analisados[0]),
-        "qtd_gatilho":       qtd_necessaria,
+        "executar":  True,
+        "gatilho_digito": digito_atual,
+        "qtd_gatilho":    qtd,
+        **contratos,
     }
 
 
@@ -9346,30 +9432,26 @@ def _garra_dupla_processar_resultado(resultado_janela: str,
 
     tipo_janela     : 'superior' | 'inferior'
     resultado_janela: 'WIN'      | 'LOSS'
-
-    Atualiza config_bot in-place e o retorna.
     """
-    fator = float(config_bot.get("fator_gale", 1.4))
-    base  = float(config_bot.get("stake_base",  0.35))
+    stake_base = float(config_bot.get("stake_base", 0.35))
+    fator      = float(config_bot.get("fator_gale", 1.4))
 
-    if tipo_janela == "inferior":
-        if resultado_janela == "WIN":
-            config_bot["gale_inferior"]  = 0
-            config_bot["stake_inferior"] = round(base, 2)
-        else:
-            config_bot["gale_inferior"]   = int(config_bot.get("gale_inferior", 0)) + 1
-            config_bot["stake_inferior"]  = round(
-                float(config_bot.get("stake_inferior", base)) * fator, 2
-            )
-    elif tipo_janela == "superior":
-        if resultado_janela == "WIN":
-            config_bot["gale_superior"]  = 0
-            config_bot["stake_superior"] = round(base, 2)
-        else:
-            config_bot["gale_superior"]   = int(config_bot.get("gale_superior", 0)) + 1
-            config_bot["stake_superior"]  = round(
-                float(config_bot.get("stake_superior", base)) * fator, 2
-            )
+    chave_janela = "janela_superior" if tipo_janela == "superior" else "janela_inferior"
+    janela = config_bot.setdefault(chave_janela, {
+        "stake": stake_base, "gale_nivel": 0,
+        "gatilho_repeticoes": config_bot.get("qtd_gatilho", 3),
+        "historico": [],
+    })
+
+    _garra_dupla_atualizar_janela(resultado_janela, janela, fator, stake_base)
+
+    # Sincroniza campos legados
+    if tipo_janela == "superior":
+        config_bot["stake_superior"] = janela["stake"]
+        config_bot["gale_superior"]  = janela["gale_nivel"]
+    else:
+        config_bot["stake_inferior"] = janela["stake"]
+        config_bot["gale_inferior"]  = janela["gale_nivel"]
 
     return config_bot
 
@@ -9385,6 +9467,9 @@ _garra_dupla_state: dict = {
     "gale_inferior":  0,
     "stake_superior": 0.35,
     "stake_inferior": 0.35,
+    # Sub-dicts por janela (histórico independente — padrão vídeo Time)
+    "janela_superior": {"stake": 0.35, "gale_nivel": 0, "gatilho_repeticoes": 3, "historico": []},
+    "janela_inferior": {"stake": 0.35, "gale_nivel": 0, "gatilho_repeticoes": 3, "historico": []},
 }
 _garra_dupla_lock = threading.Lock()
 
@@ -9405,33 +9490,116 @@ def garra_dupla_config():
             for c in campos_editaveis:
                 if c in dados:
                     _garra_dupla_state[c] = dados[c]
-            # Ao mudar stake_base, reseta stakes das janelas se não vieram explícitas
+            # Ao mudar stake_base: reseta stakes e históricos das duas janelas
             if "stake_base" in dados:
                 base = float(dados["stake_base"])
+                qtd  = int(_garra_dupla_state.get("qtd_gatilho", 3))
                 if "stake_superior" not in dados:
                     _garra_dupla_state["stake_superior"] = base
                 if "stake_inferior" not in dados:
                     _garra_dupla_state["stake_inferior"] = base
+                # Reinicia sub-dicts de janela com nova stake
+                _garra_dupla_state["janela_superior"] = {
+                    "stake": base, "gale_nivel": 0,
+                    "gatilho_repeticoes": qtd, "historico": []
+                }
+                _garra_dupla_state["janela_inferior"] = {
+                    "stake": base, "gale_nivel": 0,
+                    "gatilho_repeticoes": qtd, "historico": []
+                }
+            # Ao mudar qtd_gatilho: sincroniza as janelas existentes
+            if "qtd_gatilho" in dados:
+                qtd = int(dados["qtd_gatilho"])
+                _garra_dupla_state["janela_superior"]["gatilho_repeticoes"] = qtd
+                _garra_dupla_state["janela_inferior"]["gatilho_repeticoes"] = qtd
         return jsonify({"ok": True, "config": _garra_dupla_state})
     with _garra_dupla_lock:
         return jsonify({"ok": True, "config": dict(_garra_dupla_state)})
 
 
+@app.route('/garra-dupla/tick', methods=['POST'])
+def garra_dupla_tick():
+    """
+    Endpoint padrão vídeo Time — recebe UM dígito por vez e cada janela
+    avalia o gatilho de forma 100% independente.
+
+    Payload:
+      digito  (int)  — dígito atual do tick
+
+    Resposta:
+      superior  (dict)  — { disparar, payload_ordem?, digito_gatilho? }
+      inferior  (dict)  — { disparar, payload_ordem?, digito_gatilho? }
+      config_atual (dict) — estado das stakes/gales após o tick
+    """
+    global _garra_dupla_state
+    dados  = request.get_json(force=True, silent=True) or {}
+    digito = dados.get("digito")
+    if digito is None:
+        return jsonify({"erro": "digito obrigatório (int 0-9)"}), 400
+    try:
+        digito = int(digito)
+    except (TypeError, ValueError):
+        return jsonify({"erro": "digito deve ser inteiro 0-9"}), 400
+
+    with _garra_dupla_lock:
+        state = _garra_dupla_state
+        fator      = float(state.get("fator_gale", 1.4))
+        stake_base = float(state.get("stake_base", 0.35))
+        qtd        = int(state.get("qtd_gatilho", 3))
+
+        # Garante sub-dicts existentes
+        jsup = state.setdefault("janela_superior", {
+            "stake": state.get("stake_superior", stake_base),
+            "gale_nivel": state.get("gale_superior", 0),
+            "gatilho_repeticoes": qtd, "historico": []
+        })
+        jinf = state.setdefault("janela_inferior", {
+            "stake": state.get("stake_inferior", stake_base),
+            "gale_nivel": state.get("gale_inferior", 0),
+            "gatilho_repeticoes": qtd, "historico": []
+        })
+        jsup["gatilho_repeticoes"] = qtd
+        jinf["gatilho_repeticoes"] = qtd
+
+        res_sup = _garra_dupla_processar_janela(digito, jsup, "SUPERIOR")
+        res_inf = _garra_dupla_processar_janela(digito, jinf, "INFERIOR")
+
+        # Sincroniza campos legados
+        state["stake_superior"] = jsup["stake"]
+        state["stake_inferior"] = jinf["stake"]
+        state["gale_superior"]  = jsup["gale_nivel"]
+        state["gale_inferior"]  = jinf["gale_nivel"]
+
+        config_snapshot = {
+            "gale_superior":  state["gale_superior"],
+            "gale_inferior":  state["gale_inferior"],
+            "stake_superior": state["stake_superior"],
+            "stake_inferior": state["stake_inferior"],
+        }
+
+    return jsonify({
+        "superior":    res_sup,
+        "inferior":    res_inf,
+        "config_atual": config_snapshot,
+    })
+
+
 @app.route('/garra-dupla/avaliar', methods=['POST'])
 def garra_dupla_avaliar():
     """
-    Avalia o gatilho de repetição e retorna os contratos das duas janelas.
+    Avalia o gatilho em lote (lista de dígitos) — cada dígito é processado
+    sequencialmente pelas duas janelas independentes.
 
     Payload:
-      ultimos_digitos (list[int])  — últimos dígitos observados (mín. qtd_gatilho)
-      config          (dict)       — opcional; substitui o estado em memória
+      ultimos_digitos (list[int])  — sequência de dígitos a processar
+      config          (dict)       — opcional; sobrescreve campos do estado global
 
     Resposta:
-      executar           (bool)
-      contrato_superior  (dict)   — payload DIGITOVER pronto para a API Deriv
-      contrato_inferior  (dict)   — payload DIGITUNDER pronto para a API Deriv
+      executar           (bool)    — True se alguma janela disparou no último tick
+      contrato_superior  (dict)    — presente se janela superior disparou
+      contrato_inferior  (dict)    — presente se janela inferior disparou
       gatilho_digito     (int)
-      config_atual       (dict)   — estado das stakes/gales após a avaliação
+      config_atual       (dict)
     """
     dados = request.get_json(force=True, silent=True) or {}
     ultimos = dados.get("ultimos_digitos", [])
@@ -9494,16 +9662,26 @@ def garra_dupla_resultado():
 @app.route('/garra-dupla/resetar', methods=['POST'])
 def garra_dupla_resetar():
     """
-    Reseta gales e stakes das duas janelas para os valores base.
+    Reseta gales, stakes e históricos das duas janelas para os valores base.
     Útil para iniciar nova sessão de operações.
     """
     global _garra_dupla_state
     with _garra_dupla_lock:
-        base = float(_garra_dupla_state.get("stake_base", 0.35))
+        base = round(float(_garra_dupla_state.get("stake_base", 0.35)), 2)
+        qtd  = int(_garra_dupla_state.get("qtd_gatilho", 3))
         _garra_dupla_state["gale_superior"]  = 0
         _garra_dupla_state["gale_inferior"]  = 0
-        _garra_dupla_state["stake_superior"] = round(base, 2)
-        _garra_dupla_state["stake_inferior"] = round(base, 2)
+        _garra_dupla_state["stake_superior"] = base
+        _garra_dupla_state["stake_inferior"] = base
+        # Reseta também os sub-dicts de janela (limpa histórico)
+        _garra_dupla_state["janela_superior"] = {
+            "stake": base, "gale_nivel": 0,
+            "gatilho_repeticoes": qtd, "historico": []
+        }
+        _garra_dupla_state["janela_inferior"] = {
+            "stake": base, "gale_nivel": 0,
+            "gatilho_repeticoes": qtd, "historico": []
+        }
         config_snapshot = dict(_garra_dupla_state)
     return jsonify({"ok": True, "config": config_snapshot})
 
