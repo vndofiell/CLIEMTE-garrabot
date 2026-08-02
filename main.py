@@ -9958,27 +9958,36 @@ def _transcrever_youtube(video_id: str, passos: list) -> str:
     except Exception:
         passos.append("⚠️ Camada 1 bloqueada pelo YouTube (IP cloud). Tentando yt-dlp...")
 
+    # ── helper: roda yt-dlp e retorna texto da primeira legenda encontrada ────
+    def _ytdlp_baixar(extra_args: list) -> str:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Tenta legendas manuais/automáticas em PT e EN,
+            # incluindo variantes traduzidas automaticamente (pt-en, en-en, etc.)
+            cmd_base = [
+                ytdlp_bin,
+                "--write-auto-sub", "--write-sub",
+                "--skip-download",
+                "--sub-lang", "pt.*,pt-BR.*,en.*,pt,en",
+                "--sub-format", "vtt",
+                "--output", f"{tmpdir}/legenda",
+                "--quiet", "--no-warnings",
+            ] + extra_args + [url_video]
+            subprocess.run(cmd_base, capture_output=True, text=True, timeout=90)
+            arquivos = sorted(_glob.glob(f"{tmpdir}/*.vtt"))
+            for arq in arquivos:
+                texto = _parsear_vtt(open(arq, encoding="utf-8", errors="ignore").read())
+                if texto.strip():
+                    return texto
+        return ""
+
     # ── Camada 2: yt-dlp COM cookies (autenticado) ───────────────────────────
     if tem_cookies:
         try:
-            with tempfile.TemporaryDirectory() as tmpdir:
-                cmd = [
-                    ytdlp_bin,
-                    "--write-auto-sub", "--skip-download",
-                    "--sub-lang", "pt,pt-BR,en",
-                    "--sub-format", "vtt",
-                    "--cookies", _YT_COOKIES_FILE,
-                    "--output", f"{tmpdir}/legenda",
-                    "--quiet",
-                    url_video
-                ]
-                subprocess.run(cmd, capture_output=True, text=True, timeout=90)
-                arquivos = _glob.glob(f"{tmpdir}/*.vtt")
-                if arquivos:
-                    texto = _parsear_vtt(open(arquivos[0], encoding="utf-8", errors="ignore").read())
-                    if texto.strip():
-                        passos.append("✅ Transcrição obtida via yt-dlp (autenticado com cookies).")
-                        return texto
+            texto = _ytdlp_baixar(["--cookies", _YT_COOKIES_FILE])
+            if texto:
+                passos.append("✅ Transcrição obtida via yt-dlp (autenticado com cookies).")
+                return texto
+            passos.append("⚠️ Camada 2: yt-dlp autenticado não encontrou legendas. Tentando sem cookies...")
         except Exception as e2:
             passos.append(f"⚠️ Camada 2 (yt-dlp+cookies) falhou: {e2}")
     else:
@@ -9986,24 +9995,11 @@ def _transcrever_youtube(video_id: str, passos: list) -> str:
 
     # ── Camada 3: yt-dlp SEM cookies ─────────────────────────────────────────
     try:
-        with tempfile.TemporaryDirectory() as tmpdir:
-            cmd = [
-                ytdlp_bin,
-                "--write-auto-sub", "--skip-download",
-                "--sub-lang", "pt,pt-BR,en",
-                "--sub-format", "vtt",
-                "--output", f"{tmpdir}/legenda",
-                "--quiet",
-                url_video
-            ]
-            subprocess.run(cmd, capture_output=True, text=True, timeout=90)
-            arquivos = _glob.glob(f"{tmpdir}/*.vtt")
-            if arquivos:
-                texto = _parsear_vtt(open(arquivos[0], encoding="utf-8", errors="ignore").read())
-                if texto.strip():
-                    passos.append("✅ Transcrição obtida via yt-dlp (sem autenticação).")
-                    return texto
-            passos.append("⚠️ Camada 3 (yt-dlp sem cookies): nenhuma legenda baixada. Tentando Invidious...")
+        texto = _ytdlp_baixar([])
+        if texto:
+            passos.append("✅ Transcrição obtida via yt-dlp (sem autenticação).")
+            return texto
+        passos.append("⚠️ Camada 3 (yt-dlp): nenhuma legenda encontrada. Tentando Invidious...")
     except Exception as e3:
         passos.append(f"⚠️ Camada 3 (yt-dlp) falhou: {e3}")
 
