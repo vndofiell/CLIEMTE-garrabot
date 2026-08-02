@@ -2306,6 +2306,9 @@ const ESTRATEGIAS = {
     "🎯 Gatilho + Under":   { tipo: "gatilho", contract: "DIGITUNDER", gatilho: 9, barrier: 7, duracao: 1, ativo: "R_100", desc: "Espera o dígito GATILHO aparecer, então entra Under" },
     "🎯 Gatilho + Over":    { tipo: "gatilho", contract: "DIGITOVER",  gatilho: 0, barrier: 2, duracao: 1, ativo: "R_100", desc: "Espera o dígito GATILHO aparecer, então entra Over" },
     "🎯 Gatilho Duplo":     { tipo: "gatilho_duplo", gatilho: 5, rep_gatilho: 2, duracao: 1, ativo: "R_100", desc: "Aguarda dígito BARREIRA repetir N vezes → entra UNDER + OVER ao mesmo tempo" },
+    "🦾 Garra Dupla":       { tipo: "garra_dupla", qtd_gatilho: 3, duracao: 1, ativo: "R_100",
+                               stake_sup: 0, stake_inf: 0, gale_sup: 0, gale_inf: 0, fator_gale: 1.4,
+                               desc: "N dígitos repetidos → OVER 4 + UNDER 5 simultâneos | Gale isolado por janela" },
     "🔢 Digit Under":       { tipo: "digit", contract: "DIGITUNDER", barrier: 5, duracao: 1, seq_gatilho: 0, ativo: "R_100", desc: "Entra a cada tick — último dígito MENOR que a barreira" },
     "🔢 Digit Over":        { tipo: "digit", contract: "DIGITOVER",  barrier: 4, duracao: 1, seq_gatilho: 0, ativo: "R_100", desc: "Entra a cada tick — último dígito MAIOR que a barreira" },
     "🔢 Digit Par":         { tipo: "digit", contract: "DIGITEVEN",  barrier: null, duracao: 1, seq_gatilho: 0, ativo: "R_100", desc: "Entra a cada tick — último dígito PAR" },
@@ -4102,6 +4105,10 @@ function lvSimularDigito(digit) {
         // WIN se o dígito não for a barreira exata (mesmo raciocnio da dupla com barreiras iguais)
         return digit !== g;
     }
+    // Garra Dupla: Over 4 + Under 5 → perde APENAS se dígito for exatamente 4 ou 5
+    if (est.tipo === 'garra_dupla') {
+        return digit !== 4 && digit !== 5;
+    }
 
     const ct      = est.contract;
     const barrier = parseInt(est.barrier ?? 4);
@@ -4133,6 +4140,9 @@ function _histEhPerda(d, est) {
         const barO = est.barrier_over  !== undefined ? est.barrier_over  : 3;
         const barU = est.barrier_under !== undefined ? est.barrier_under : 7;
         return (d <= barO) || (d >= barU); // zona de perda dupla
+    }
+    if (est.tipo === 'garra_dupla') {
+        return d === 4 || d === 5; // Over4 perde se d<=4; Under5 perde se d>=5; perda dupla em 4 e 5
     }
     return false; // fluxo/candle: nunca bloqueia
 }
@@ -4415,6 +4425,12 @@ function _atualizarHistDigitos() {
             return { bg: 'rgba(255,68,68,0.4)', label: '#f66' }; // LOSS
         }
         // Dupla: zona entre barreiras = WIN (verde), fora = LOSS (vermelho)
+        if (tipo === 'garra_dupla') {
+            // Over 4: WIN se d > 4 (dígitos 5-9)  |  Under 5: WIN se d < 5 (dígitos 0-4)
+            // Zona de perda: d === 4 ou d === 5 (perde nos dois lados)
+            if (d === 4 || d === 5) return { bg: '#f44', label: '#f44' };          // LOSS duplo
+            return { bg: 'rgba(0,255,0,0.7)', label: '#0f0' };                      // WIN (0-3 ou 6-9)
+        }
         if ((tipo === 'dupla' || tipo === 'gatilho_duplo') && barOver !== null && barUnder !== null) {
             const bO = tipo === 'gatilho_duplo' ? gatilho : barOver;
             const bU = tipo === 'gatilho_duplo' ? gatilho : barUnder;
@@ -4906,6 +4922,13 @@ function selecionarEstrategia(nome) {
               undefined, undefined, undefined,
               ['R_10','R_25','R_50','R_75','R_100','1HZ10V','1HZ25V','1HZ50V','1HZ75V','1HZ100V']);
 
+    } else if (est.tipo === 'garra_dupla') {
+        campo('Repetições iguais para gatilhar (N dígitos)', 'cfg-qtd-gatilho', 'select',
+              est.qtd_gatilho !== undefined ? est.qtd_gatilho : 3,
+              undefined, undefined, undefined, [2, 3, 4, 5]);
+        campo('Fator de Gale por janela (ex: 1.4 = +40%)', 'cfg-fator-gale', 'number',
+              est.fator_gale !== undefined ? est.fator_gale : 1.4, 1.1, 3.0, 0.1);
+
     } else if (est.tipo === 'dupla') {
         campo('Barreira OVER (dígito acima de X)', 'cfg-barrier-over', 'select',
               est.barrier_over !== undefined ? est.barrier_over : 3,
@@ -5004,6 +5027,16 @@ function confirmarEstrategia() {
     if (pctJanela) est.pct_janela    = Math.max(10, parseInt(pctJanela.value) || 50);
     if (pctFraco)  est.pct_min_fraco = Math.max(1,  parseInt(pctFraco.value)  || 10);
     if (pctForte)  est.pct_min_forte = Math.min(99, parseInt(pctForte.value)  || 70);
+    // Campos garra_dupla
+    const qtdGatilho = document.getElementById('cfg-qtd-gatilho');
+    const fatorGale  = document.getElementById('cfg-fator-gale');
+    if (qtdGatilho) {
+        est.qtd_gatilho = Math.max(2, parseInt(qtdGatilho.value) || 3);
+        // Reseta gale isolado ao reconfigurar
+        est.gale_sup = 0; est.gale_inf = 0;
+        est.stake_sup = 0; est.stake_inf = 0;
+    }
+    if (fatorGale) est.fator_gale = Math.max(1.1, parseFloat(fatorGale.value) || 1.4);
     // Campos saturacao
     const satJanela    = document.getElementById('cfg-sat-janela');
     const satLimiar    = document.getElementById('cfg-sat-limiar');
@@ -5029,14 +5062,16 @@ function confirmarEstrategia() {
 
     // Atualiza boto do painel
     let resumo = nome;
-    if (est.tipo === 'gatilho_duplo') {
+    if (est.tipo === 'garra_dupla') {
+        resumo = `Over4+Under5 | gatilho=${est.qtd_gatilho}x | gale×${est.fator_gale}`;
+    } else if (est.tipo === 'gatilho_duplo') {
         resumo = `Barr.${est.gatilho}${est.rep_gatilho} → UNDER+OVER`;
     } else if (est.tipo === 'dupla') {
         resumo = `Over ${est.barrier_over} + Under ${est.barrier_under}`;
     } else if (est.tipo === 'digit' && barrier) {
         resumo += ` | Barreira: ${est.barrier}`;
     }
-    if (duracao && est.tipo !== 'dupla' && est.tipo !== 'gatilho_duplo')
+    if (duracao && est.tipo !== 'dupla' && est.tipo !== 'gatilho_duplo' && est.tipo !== 'garra_dupla')
         resumo += ` | ${est.duracao}${est.tipo === 'fluxo' || est.tipo === 'candle' ? 'min' : 't'}`;
     document.getElementById('btn-estrategia').innerHTML =
         `${nome}<span class="cmd-label">${resumo.replace(nome,'').substring(0,36) || est.desc.substring(0,28)}</span>`;
@@ -5044,6 +5079,9 @@ function confirmarEstrategia() {
     fecharModal('modal-cfg-estrategia');
     if (est.tipo === 'gatilho_duplo') {
         print(`🎯 GATILHO DUPLO: barreira=<b>${est.gatilho}</b> | repetições=<b>${est.rep_gatilho}</b>`
+            + (ativo ? ` | Ativo: <b>${est.ativo}</b>` : ''), "log-win");
+    } else if (est.tipo === 'garra_dupla') {
+        print(`🦾 GARRA DUPLA: gatilho=<b>${est.qtd_gatilho}x iguais</b> | Over 4 + Under 5 | fator_gale=<b>${est.fator_gale}</b>`
             + (ativo ? ` | Ativo: <b>${est.ativo}</b>` : ''), "log-win");
     } else if (est.tipo === 'dupla') {
         print(`⚡ DUPLA: <b>${nome}</b> | Over ${est.barrier_over} + Under ${est.barrier_under}`
@@ -6865,6 +6903,37 @@ function initWebSocket(wssUrl) {
                     }
                 }
 
+            } else if (est.tipo === 'garra_dupla') {
+                // ── GARRA DUPLA: aguarda N dígitos IGUAIS consecutivos ──────────
+                // Qualquer dígito que se repita N vezes seguidas dispara OVER 4 + UNDER 5
+                // Gale é gerenciado de forma isolada por janela (stake_sup / stake_inf independentes)
+                const qtdN = est.qtd_gatilho !== undefined ? est.qtd_gatilho : 3;
+
+                if (bot._garraDuplaSeq === undefined) bot._garraDuplaSeq = [];
+                const seq = bot._garraDuplaSeq;
+
+                // Acumula apenas se o dígito é igual ao último da sequência (ou seq vazia)
+                if (seq.length === 0 || seq[seq.length - 1] === digit) {
+                    seq.push(digit);
+                    const barra = '█'.repeat(seq.length) + '░'.repeat(Math.max(0, qtdN - seq.length));
+                    if (seq.length < qtdN) {
+                        _seqStatusUpdate(`🦾 GARRA DUPLA [${seq.length}/${qtdN}] ${barra} dígito=${digit} aguardando...`);
+                        return; // ainda acumulando
+                    }
+                    // Gatilho atingido!
+                    _seqStatusClear();
+                    bot._garraDuplaSeq = [];
+                    if (!lvVerificar(digit)) return;
+                    bot._buying = true;
+                    print(`🦾 GARRA DUPLA ATIVADA! Dígito <b>${digit}</b> repetiu <b>${qtdN}x</b> → OVER 4 + UNDER 5`, "log-win");
+                    _edcEntrar(() => buyGarraDupla());
+                } else {
+                    // Dígito quebrou sequência — reinicia com o novo dígito
+                    bot._garraDuplaSeq = [digit];
+                    _seqStatusUpdate(`🦾 GARRA DUPLA [1/${qtdN}] ${'█░'.charAt(0)}${'░'.repeat(qtdN - 1)} dígito=${digit} — novo início`);
+                    setTimeout(_seqStatusClear, 1200);
+                }
+
             } else if (est.tipo === 'pct_hist') {
                 // ── % Histograma — entra baseado nos percentuais da janela recente ──
                 // Precisa de pelo menos pct_janela ticks
@@ -7792,6 +7861,117 @@ function buyDupla() {
             }
             return;
         }
+        _origOnMsg(msg);
+    };
+    bot.ws.onmessage = _handler;
+}
+
+// ═══════════════════════════════════════════════════════
+// GARRA DUPLA — Buy com Gale Isolado por Janela
+// ═══════════════════════════════════════════════════════
+function buyGarraDupla() {
+    const est    = ESTRATEGIAS[bot.estrategia];
+    const ativo  = (est.ativo && typeof est.ativo === 'string' && est.ativo.trim()) ? est.ativo.trim() : 'R_100';
+    const dur    = Math.min(10, Math.max(1, parseInt(est.duracao) || 1));
+    const base   = bot.initialStake;
+    const fator  = parseFloat(est.fator_gale || 1.4);
+
+    // Inicializa stakes se zero
+    if (!est.stake_sup || est.stake_sup <= 0) est.stake_sup = base;
+    if (!est.stake_inf || est.stake_inf <= 0) est.stake_inf = base;
+
+    const stakeOver  = parseFloat(est.stake_sup.toFixed(2));
+    const stakeUnder = parseFloat(est.stake_inf.toFixed(2));
+
+    const reqOver  = Math.floor(Math.random() * 90000) + 10000;
+    const reqUnder = reqOver + 1;
+
+    bot._duplaAtiva       = true;
+    bot._duplaPendentes   = new Set();
+    bot._duplaResultados  = [];
+    bot._duplaResultados_debug = [];
+    bot._duplaReqOver     = reqOver;
+    bot._duplaReqUnder    = reqUnder;
+    // Marca que é garra_dupla para processar gale isolado no resultado
+    bot._garraAtiva = true;
+
+    // Envia proposta OVER 4
+    bot.ws.send(json({
+        proposal: 1, req_id: reqOver,
+        amount: stakeOver, basis: "stake",
+        contract_type: "DIGITOVER",
+        currency: "USD", duration: dur, duration_unit: "t",
+        underlying_symbol: ativo,
+        barrier: "4"
+    }));
+
+    // Envia proposta UNDER 5
+    bot.ws.send(json({
+        proposal: 1, req_id: reqUnder,
+        amount: stakeUnder, basis: "stake",
+        contract_type: "DIGITUNDER",
+        currency: "USD", duration: dur, duration_unit: "t",
+        underlying_symbol: ativo,
+        barrier: "5"
+    }));
+
+    print(`🦾 GARRA DUPLA enviando → OVER 4 ($${stakeOver}) + UNDER 5 ($${stakeUnder}) | gale sup=${est.gale_sup} inf=${est.gale_inf}`, "log-info");
+
+    // Intercepta proposals e compra
+    const _origOnMsg  = bot.ws.onmessage;
+    let _overComprado = false, _underComprado = false;
+    let _overWon = null, _underWon = null;
+
+    const _handler = (msg) => {
+        const d = JSON.parse(msg.data);
+
+        // Compra imediata ao receber proposal
+        if (d.msg_type === 'proposal' && (d.req_id === reqOver || d.req_id === reqUnder)) {
+            if (d.error) {
+                print("⚠️ GARRA DUPLA proposta recusada: " + d.error.message, "log-loss");
+                bot._garraAtiva = false; bot._duplaAtiva = false; bot._buying = false;
+                return;
+            }
+            const pid = d.proposal && d.proposal.id;
+            const stake = d.req_id === reqOver ? stakeOver : stakeUnder;
+            if (pid) bot.ws.send(json({ buy: pid, price: stake }));
+            if (d.req_id === reqOver)  _overComprado  = true;
+            if (d.req_id === reqUnder) _underComprado = true;
+            if (_overComprado && _underComprado) bot.ws.onmessage = _origOnMsg;
+            return;
+        }
+
+        // Resultado fechado — atualiza gale isolado por janela
+        if (d.msg_type === 'proposal_open_contract' &&
+            d.proposal_open_contract && d.proposal_open_contract.is_sold &&
+            bot._garraAtiva) {
+            const poc   = d.proposal_open_contract;
+            const lucro = parseFloat(poc.profit || 0);
+            const won   = lucro > 0;
+            const ct    = poc.contract_type || '';
+            const lado  = ct === 'DIGITOVER' ? 'sup' : 'inf';
+
+            if (lado === 'sup') {
+                _overWon = won;
+                if (won) { est.gale_sup = 0; est.stake_sup = base; }
+                else     { est.gale_sup++; est.stake_sup = parseFloat((stakeOver * fator).toFixed(2)); }
+                print(`🦾 OVER 4 ${won ? '✅ WIN' : '❌ LOSS'} $${Math.abs(lucro).toFixed(2)} | gale_sup=${est.gale_sup} próx=$${est.stake_sup}`, won ? 'log-win' : 'log-loss');
+            } else {
+                _underWon = won;
+                if (won) { est.gale_inf = 0; est.stake_inf = base; }
+                else     { est.gale_inf++; est.stake_inf = parseFloat((stakeUnder * fator).toFixed(2)); }
+                print(`🦾 UNDER 5 ${won ? '✅ WIN' : '❌ LOSS'} $${Math.abs(lucro).toFixed(2)} | gale_inf=${est.gale_inf} próx=$${est.stake_inf}`, won ? 'log-win' : 'log-loss');
+            }
+
+            // Quando os dois resultados chegaram — finaliza ciclo
+            if (_overWon !== null && _underWon !== null) {
+                bot._garraAtiva  = false;
+                bot._duplaAtiva  = false;
+                bot._buying      = false;
+            }
+            return;
+        }
+
         _origOnMsg(msg);
     };
     bot.ws.onmessage = _handler;
