@@ -3757,6 +3757,13 @@ function cfgSalvar() {
                     rep_gatilho: v.rep_gatilho,
                     pct_janela: v.pct_janela, pct_min_fraco: v.pct_min_fraco, pct_min_forte: v.pct_min_forte,
                     sat_janela: v.sat_janela, sat_limiar: v.sat_limiar, sat_smart_min: v.sat_smart_min,
+                    // Garra Dupla — campos novos (barreira fixa 5)
+                    ...(v.tipo === 'garra_dupla' ? {
+                        contract:    v.contract   || 'DIGITUNDER',
+                        qtd_gatilho: v.qtd_gatilho || 2,
+                        fator_gale:  v.fator_gale  || 1.4,
+                        nivel_gale:  v.nivel_gale  || 0,
+                    } : {}),
                 }])
             ),
             lv: {
@@ -3817,14 +3824,26 @@ function cfgCarregar() {
                         if (ct === 'DIGITEVEN' || ct === 'DIGITODD') {
                             ESTRATEGIAS[k].barrier = null;
                         }
+                        // Garra Dupla: limpa campos antigos (stake_sup/inf, gale_sup/inf, barrier:4)
+                        // e garante barreira=5 + contract correto vindos do estado atual
+                        if (ESTRATEGIAS[k].tipo === 'garra_dupla') {
+                            delete ESTRATEGIAS[k].stake_sup;
+                            delete ESTRATEGIAS[k].stake_inf;
+                            delete ESTRATEGIAS[k].gale_sup;
+                            delete ESTRATEGIAS[k].gale_inf;
+                            ESTRATEGIAS[k].barrier    = 5;
+                            ESTRATEGIAS[k].contract   = ESTRATEGIAS[k].contract || 'DIGITUNDER';
+                            ESTRATEGIAS[k].nivel_gale = 0;
+                        }
                     }
                 }
             }
-            // Atualiza boto — mostra barreiras corretas para dupla/gatilho_duplo
+            // Atualiza boto — mostra barreiras corretas para dupla/gatilho_duplo/garra_dupla
             const est = ESTRATEGIAS[cfg.estrategia];
             let lblEst = est.desc.substring(0, 28);
-            if (est.tipo === 'dupla')          lblEst = `Over ${est.barrier_over} + Under ${est.barrier_under}`;
+            if (est.tipo === 'dupla')              lblEst = `Over ${est.barrier_over} + Under ${est.barrier_under}`;
             else if (est.tipo === 'gatilho_duplo') lblEst = `Barr.${est.gatilho}${est.rep_gatilho} → UNDER+OVER`;
+            else if (est.tipo === 'garra_dupla')   lblEst = `${est.contract || 'DIGITUNDER'} barr.5 | gatilho=${est.qtd_gatilho}x`;
             document.getElementById('btn-estrategia').innerHTML =
                 `${cfg.estrategia}<span class="cmd-label">${lblEst}</span>`;
         }
