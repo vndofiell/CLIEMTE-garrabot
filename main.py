@@ -2779,6 +2779,12 @@ def _detectar_contrato(prompt_lower: str):
         "alta e baixa", "1 minuto", "um minuto", "vela", "candle",
         "sniper", "price action", "ação do preço",
     ]
+    # Garra Dupla tem prioridade máxima sobre dupla genérica
+    _garra_dupla_words = [
+        "garra dupla", "garra_dupla", "garradupla",
+        "dupla janela", "over4 under5", "over 4 under 5",
+        "janela superior inferior", "gale isolado",
+    ]
     # Dupla tem prioridade sobre over/under individuais
     _dupla_words = [
         "digitdupla", "dupla", "dois lados", "ambos os lados",
@@ -2797,6 +2803,8 @@ def _detectar_contrato(prompt_lower: str):
         return "FLUXO"
     if any(w in prompt_lower for w in _sat_words):
         return "SATURACAO"
+    if any(w in prompt_lower for w in _garra_dupla_words):
+        return "GARRA_DUPLA"
     if any(w in prompt_lower for w in _dupla_words):
         return "DIGITDUPLA"
     if any(w in prompt_lower for w in _over_words):
@@ -2982,6 +2990,8 @@ def _montar_system_prompt(perfil: str, contexto_extra: str = "") -> str:
         "    DIGITODD     = aposta que o dígito final será ÍMPAR\n"
         "    DIGITEVEN    = aposta que o dígito final será PAR\n"
         "    DIGITDUPLA   = entra OVER e UNDER ao mesmo tempo (dois lados)\n"
+        "    GARRA_DUPLA  = OVER4 + UNDER5 simultâneos com gatilho de repetição e Gale ISOLADO por janela.\n"
+        "                   Campo obrigatório: seq_gatilho ≥ 2. NÃO usa barreira_over/under — barreiras são fixas.\n"
         "    DIGITPCT     = entra baseado no percentual de dígitos numa janela recente de ticks.\n"
         "                   Campos obrigatórios: pct_janela (inteiro, ticks, ex:50), pct_min_fraco (%, 1-49, ex:10), pct_min_forte (%, 51-99, ex:70).\n"
         "    DIGITMATCH   = aposta que o dígito final será EXATAMENTE a barreira (0-9). ROI ~800%.\n"
@@ -3001,6 +3011,7 @@ def _montar_system_prompt(perfil: str, contexto_extra: str = "") -> str:
         "    - 'par', 'even', 'pares' → DIGITEVEN | 'ímpar', 'odd', 'impares' → DIGITODD\n"
         "    - 'toca', 'touch', 'atinge' → TOUCH | 'não toca', 'notouch' → NOTOUCH\n"
         "    - 'dos dois lados', 'dupla' → DIGITDUPLA\n"
+        "    - 'garra dupla', 'garra_dupla', 'dupla janela', 'gale isolado' → GARRA_DUPLA\n"
         "    - 'percentual', '% de dígitos', 'porcentagem' → DIGITPCT\n"
         "    - 'match', 'igual', 'prever dígito' → DIGITMATCH\n"
         "- barreira: inteiro (0-9) para DIGITOVER/DIGITUNDER/DIGITEVEN/DIGITODD.\n"
@@ -3339,6 +3350,7 @@ def ai_analise_vanguarda():
         "  DIGITODD    -> aposta que o último dígito é ÍMPAR (barreira=null)\n"
         "  DIGITEVEN   -> aposta que o último dígito é PAR (barreira=null)\n"
         "  DIGITDUPLA  -> abre OVER e UNDER ao mesmo tempo (barreira_over e barreira_under)\n"
+        "  GARRA_DUPLA -> OVER4+UNDER5 simultâneos, Gale isolado por janela, gatilho de repetição (seq_gatilho>=2)\n"
         "  DIGITPCT    -> histograma percentual de exaustão (pct_janela, pct_min_fraco, pct_min_forte)\n"
         "  SATURACAO   -> saturação de dígitos (sat_janela, sat_limiar, sat_smart_min)\n"
         "NUNCA use: 'Binário', 'Binary', 'UNDER9', 'OVER0', 'digit', ou qualquer outro valor.\n\n"
@@ -3361,12 +3373,13 @@ def ai_analise_vanguarda():
         pack = resultado.get("pack") or []
 
         _TIPOS_VALIDOS_V = {"DIGITOVER","DIGITUNDER","DIGITODD","DIGITEVEN",
-                             "DIGITDUPLA","DIGITPCT","SATURACAO"}
+                             "DIGITDUPLA","DIGITPCT","SATURACAO","GARRA_DUPLA"}
         _TIPO_FIX = {
             "BINARY":"DIGITUNDER","BINÁRIO":"DIGITUNDER","BINARYO":"DIGITUNDER",
             "UNDER":"DIGITUNDER","OVER":"DIGITOVER","ODD":"DIGITODD","EVEN":"DIGITEVEN",
             "DUPLA":"DIGITDUPLA","PCT":"DIGITPCT","SATURAÇÃO":"SATURACAO","SATURACÃO":"SATURACAO",
             "FLUXO":"SATURACAO","DIGIT":"DIGITUNDER",
+            "GARRADUPLA":"GARRA_DUPLA","GARRA":"GARRA_DUPLA",
         }
         for item in pack:
             item["_vanguarda"]      = True
@@ -3383,6 +3396,8 @@ def ai_analise_vanguarda():
                         tipo_corr = "DIGITUNDER"
                     elif tipo_raw.startswith("OVER") or tipo_raw.endswith("OVER"):
                         tipo_corr = "DIGITOVER"
+                    elif "GARRADUPLA" in tipo_raw or "GARRADUPLA" in tipo_raw:
+                        tipo_corr = "GARRA_DUPLA"
                     elif "DUPLA" in tipo_raw or "DUAL" in tipo_raw:
                         tipo_corr = "DIGITDUPLA"
                     elif "SAT" in tipo_raw:
@@ -3726,6 +3741,16 @@ def ai_gerar_combo():
          "_tecnica":"Inversão Over 6 — Exaustão Profunda",
          "_logica":"Aguarda 6 dígitos ≤6 consecutivos. Payout ~230%. Soros limita risco.",
          "_assertividade":"~45% | ROI 230%"},
+
+        # ── GARRA DUPLA — OVER4 + UNDER5 COM GALE ISOLADO ────────────────
+        {"tipo_contrato":"GARRA_DUPLA","ativo":"1HZ100V","gerenciamento":"martingale",
+         "barreira":0,"seq_gatilho":3,"duracao":1,
+         "barreira_over":4,"barreira_under":5,
+         "pct_janela":0,"pct_min_fraco":0,"pct_min_forte":0,
+         "sat_janela":0,"sat_limiar":0,"sat_smart_min":0,
+         "_tecnica":"Garra Dupla — Over4+Under5",
+         "_logica":"Aguarda 3 dígitos iguais consecutivos. Dispara OVER4+UNDER5 simultaneamente. Gale isolado por janela.",
+         "_assertividade":"~50% cada janela | dupla cobertura"},
 
     ]
 
@@ -6740,7 +6765,7 @@ def _monitor_executar_scan():
             _POOL_TIPOS = [
                 "DIGITUNDER", "DIGITOVER", "DIGITODD", "DIGITEVEN",
                 "DIGITDUPLA", "SATURACAO", "FLUXO", "DIGITPCT",
-                "FLUXO_1TICK",
+                "FLUXO_1TICK", "GARRA_DUPLA",
             ]
             tipos_livres = [t for t in _POOL_TIPOS if t not in proibidos]
             sugestao = tipos_livres[ciclo % len(tipos_livres)] if tipos_livres else "DIGITUNDER"
@@ -6752,6 +6777,7 @@ def _monitor_executar_scan():
                 "  DIGITODD               → dígito final ímpar (seq_gatilho≥3)\n"
                 "  DIGITEVEN              → dígito final par   (seq_gatilho≥3)\n"
                 "  DIGITDUPLA  over=X under=Y → entra nos dois lados ao mesmo tempo\n"
+                "  GARRA_DUPLA seq_gatilho=N → OVER4+UNDER5 simultâneos, Gale isolado por janela\n"
                 "  SATURACAO   sat_janela=25 sat_limiar=70 sat_smart_min=10\n"
                 "  FLUXO       velas=5 → aguarda 5 preços consecutivos na mesma direção\n"
                 "  FLUXO_1TICK velas=1 → entra imediatamente no próximo tick (sem esperar)\n"
@@ -6785,13 +6811,15 @@ def _monitor_executar_scan():
             if proposta and isinstance(proposta, dict) and proposta.get("tipo_contrato"):
                 # ── Normaliza tipo_contrato — corrige nomes inválidos da IA ────
                 _TIPOS_VALIDOS = {"DIGITOVER", "DIGITUNDER", "DIGITODD", "DIGITEVEN",
-                                  "DIGITDUPLA", "DIGITPCT", "SATURACAO", "FLUXO"}
+                                  "DIGITDUPLA", "DIGITPCT", "SATURACAO", "FLUXO",
+                                  "GARRA_DUPLA"}
                 _TIPO_ALIAS = {
                     "DIGITCALL": "FLUXO", "CALL": "FLUXO", "PUT": "FLUXO",
                     "RISE": "FLUXO", "FALL": "FLUXO", "SNIPER": "FLUXO",
                     "OVER": "DIGITOVER", "UNDER": "DIGITUNDER",
                     "ODD": "DIGITODD", "EVEN": "DIGITEVEN",
                     "DUPLA": "DIGITDUPLA", "PCT": "DIGITPCT",
+                    "GARRA DUPLA": "GARRA_DUPLA", "GARRADUPLA": "GARRA_DUPLA",
                 }
                 tipo_raw = str(proposta.get("tipo_contrato", "")).upper().strip()
                 if tipo_raw not in _TIPOS_VALIDOS:
@@ -7619,7 +7647,7 @@ Responda APENAS com JSON válido contendo:
     "auto_critica": "1-2 frases sobre o que você questionou e ajustou",
     "confianca_justificada": "por que esta confiança é real"
   },
-  "tipo_contrato": "DIGITOVER|DIGITUNDER|DIGITODD|DIGITEVEN|DIGITDUPLA|DIGITPCT|SATURACAO|DIGITMATCH|TOUCH|NOTOUCH|FLUXO",
+  "tipo_contrato": "DIGITOVER|DIGITUNDER|DIGITODD|DIGITEVEN|DIGITDUPLA|GARRA_DUPLA|DIGITPCT|SATURACAO|DIGITMATCH|TOUCH|NOTOUCH|FLUXO",
   "barreira": "int (0-9) ou string com sinal para TOUCH/NOTOUCH",
   "barreira_over": "int (apenas DIGITDUPLA)",
   "barreira_under": "int (apenas DIGITDUPLA)",
@@ -8054,7 +8082,7 @@ Responda APENAS com JSON válido:
     "debate": "1-2 frases resolvendo conflitos entre personas",
     "decisao_final": "1-2 frases explicando POR QUE esta estratégia"
   }},
-  "tipo_contrato": "DIGITOVER|DIGITUNDER|DIGITODD|DIGITEVEN|DIGITDUPLA|DIGITPCT|SATURACAO|DIGITMATCH|TOUCH|NOTOUCH|FLUXO",
+  "tipo_contrato": "DIGITOVER|DIGITUNDER|DIGITODD|DIGITEVEN|DIGITDUPLA|GARRA_DUPLA|DIGITPCT|SATURACAO|DIGITMATCH|TOUCH|NOTOUCH|FLUXO",
   "barreira": 5,
   "barreira_over": 3,
   "barreira_under": 7,
@@ -9230,6 +9258,259 @@ def _wa_keepalive_loop():
             print(f"[KeepAlive] Self ping OK ({self_url}).")
         except Exception as e:
             print(f"[KeepAlive] Self ping falhou: {e}")
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# ESTRATÉGIA GARRA DUPLA — Dupla Janela (Over/Under) com Gale Isolado por Lado
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# Lógica: aguarda N dígitos repetidos seguidos (exaustão/repetição) e dispara
+# simultaneamente dois contratos:
+#   • Janela Superior → DIGITOVER  barreira=4  (ganha se dígito final > 4)
+#   • Janela Inferior → DIGITUNDER barreira=5  (ganha se dígito final < 5)
+# O Martingale é independente para cada janela — um WIN num lado reseta apenas
+# aquele lado, enquanto o outro continua acumulando se ainda em perda.
+
+_GARRA_DUPLA_BARREIRA_OVER  = 4   # DIGITOVER  > 4  (barreiras 5-9 ganham → ~50%)
+_GARRA_DUPLA_BARREIRA_UNDER = 5   # DIGITUNDER < 5  (barreiras 0-4 ganham → ~50%)
+
+
+def _garra_dupla_avaliar_gatilho(ultimos_digitos: list, config_bot: dict) -> dict:
+    """
+    Avalia se o gatilho de repetição foi atingido e retorna os contratos prontos
+    para envio simultâneo nas duas janelas (Superior e Inferior).
+
+    Parâmetros em config_bot:
+      stake_base     (float)  — stake inicial de cada janela
+      fator_gale     (float)  — multiplicador de gale (ex: 1.4)
+      gale_superior  (int)    — número de gales acumulados na janela superior
+      gale_inferior  (int)    — número de gales acumulados na janela inferior
+      stake_superior (float)  — stake atual da janela superior
+      stake_inferior (float)  — stake atual da janela inferior
+      qtd_gatilho    (int)    — quantos dígitos repetidos para acionar (padrão 3)
+      currency       (str)    — moeda do contrato (padrão "USD")
+      duracao        (int)    — duração em ticks (padrão 1)
+
+    Retorna dict com:
+      executar           (bool)
+      contrato_superior  (dict)  — payload DIGITOVER pronto
+      contrato_inferior  (dict)  — payload DIGITUNDER pronto
+      gatilho_digito     (int)   — dígito que disparou o gatilho
+    """
+    qtd_necessaria = int(config_bot.get("qtd_gatilho", 3))
+    if len(ultimos_digitos) < qtd_necessaria:
+        return {"executar": False, "motivo": "ticks_insuficientes"}
+
+    ultimos_analisados = ultimos_digitos[-qtd_necessaria:]
+    if not all(d == ultimos_analisados[0] for d in ultimos_analisados):
+        return {"executar": False, "motivo": "gatilho_nao_atingido"}
+
+    currency = str(config_bot.get("currency", "USD"))
+    duracao  = int(config_bot.get("duracao",  1))
+
+    contrato_superior = {
+        "contract_type": "DIGITOVER",
+        "barrier":       str(_GARRA_DUPLA_BARREIRA_OVER),
+        "amount":        round(float(config_bot.get("stake_superior",
+                               config_bot.get("stake_base", 0.35))), 2),
+        "basis":         "stake",
+        "currency":      currency,
+        "duration":      duracao,
+        "duration_unit": "t",
+    }
+
+    contrato_inferior = {
+        "contract_type": "DIGITUNDER",
+        "barrier":       str(_GARRA_DUPLA_BARREIRA_UNDER),
+        "amount":        round(float(config_bot.get("stake_inferior",
+                               config_bot.get("stake_base", 0.35))), 2),
+        "basis":         "stake",
+        "currency":      currency,
+        "duration":      duracao,
+        "duration_unit": "t",
+    }
+
+    return {
+        "executar":          True,
+        "contrato_superior": contrato_superior,
+        "contrato_inferior": contrato_inferior,
+        "gatilho_digito":    int(ultimos_analisados[0]),
+        "qtd_gatilho":       qtd_necessaria,
+    }
+
+
+def _garra_dupla_processar_resultado(resultado_janela: str,
+                                     tipo_janela: str,
+                                     config_bot: dict) -> dict:
+    """
+    Processa WIN ou LOSS de forma isolada para cada janela e recalcula o Gale.
+
+    tipo_janela     : 'superior' | 'inferior'
+    resultado_janela: 'WIN'      | 'LOSS'
+
+    Atualiza config_bot in-place e o retorna.
+    """
+    fator = float(config_bot.get("fator_gale", 1.4))
+    base  = float(config_bot.get("stake_base",  0.35))
+
+    if tipo_janela == "inferior":
+        if resultado_janela == "WIN":
+            config_bot["gale_inferior"]  = 0
+            config_bot["stake_inferior"] = round(base, 2)
+        else:
+            config_bot["gale_inferior"]   = int(config_bot.get("gale_inferior", 0)) + 1
+            config_bot["stake_inferior"]  = round(
+                float(config_bot.get("stake_inferior", base)) * fator, 2
+            )
+    elif tipo_janela == "superior":
+        if resultado_janela == "WIN":
+            config_bot["gale_superior"]  = 0
+            config_bot["stake_superior"] = round(base, 2)
+        else:
+            config_bot["gale_superior"]   = int(config_bot.get("gale_superior", 0)) + 1
+            config_bot["stake_superior"]  = round(
+                float(config_bot.get("stake_superior", base)) * fator, 2
+            )
+
+    return config_bot
+
+
+# ── Estado em memória da Garra Dupla (por sessão) ───────────────────────────
+_garra_dupla_state: dict = {
+    "stake_base":     0.35,
+    "fator_gale":     1.4,
+    "qtd_gatilho":    3,
+    "currency":       "USD",
+    "duracao":        1,
+    "gale_superior":  0,
+    "gale_inferior":  0,
+    "stake_superior": 0.35,
+    "stake_inferior": 0.35,
+}
+_garra_dupla_lock = threading.Lock()
+
+
+@app.route('/garra-dupla/config', methods=['GET', 'POST'])
+def garra_dupla_config():
+    """
+    GET  → retorna configuração atual da Garra Dupla.
+    POST → atualiza campos: stake_base, fator_gale, qtd_gatilho, currency, duracao.
+    """
+    global _garra_dupla_state
+    if request.method == 'POST':
+        dados = request.get_json(force=True, silent=True) or {}
+        campos_editaveis = (
+            "stake_base", "fator_gale", "qtd_gatilho", "currency", "duracao"
+        )
+        with _garra_dupla_lock:
+            for c in campos_editaveis:
+                if c in dados:
+                    _garra_dupla_state[c] = dados[c]
+            # Ao mudar stake_base, reseta stakes das janelas se não vieram explícitas
+            if "stake_base" in dados:
+                base = float(dados["stake_base"])
+                if "stake_superior" not in dados:
+                    _garra_dupla_state["stake_superior"] = base
+                if "stake_inferior" not in dados:
+                    _garra_dupla_state["stake_inferior"] = base
+        return jsonify({"ok": True, "config": _garra_dupla_state})
+    with _garra_dupla_lock:
+        return jsonify({"ok": True, "config": dict(_garra_dupla_state)})
+
+
+@app.route('/garra-dupla/avaliar', methods=['POST'])
+def garra_dupla_avaliar():
+    """
+    Avalia o gatilho de repetição e retorna os contratos das duas janelas.
+
+    Payload:
+      ultimos_digitos (list[int])  — últimos dígitos observados (mín. qtd_gatilho)
+      config          (dict)       — opcional; substitui o estado em memória
+
+    Resposta:
+      executar           (bool)
+      contrato_superior  (dict)   — payload DIGITOVER pronto para a API Deriv
+      contrato_inferior  (dict)   — payload DIGITUNDER pronto para a API Deriv
+      gatilho_digito     (int)
+      config_atual       (dict)   — estado das stakes/gales após a avaliação
+    """
+    dados = request.get_json(force=True, silent=True) or {}
+    ultimos = dados.get("ultimos_digitos", [])
+    if not isinstance(ultimos, list) or len(ultimos) == 0:
+        return jsonify({"erro": "ultimos_digitos obrigatório (list)"}), 400
+
+    with _garra_dupla_lock:
+        cfg = dict(_garra_dupla_state)
+        # Permite sobrescrever campos pontualmente sem alterar estado global
+        for k, v in (dados.get("config") or {}).items():
+            cfg[k] = v
+
+    resultado = _garra_dupla_avaliar_gatilho(ultimos, cfg)
+    resultado["config_atual"] = {
+        "gale_superior":  cfg.get("gale_superior",  0),
+        "gale_inferior":  cfg.get("gale_inferior",  0),
+        "stake_superior": cfg.get("stake_superior", cfg.get("stake_base", 0.35)),
+        "stake_inferior": cfg.get("stake_inferior", cfg.get("stake_base", 0.35)),
+    }
+    return jsonify(resultado)
+
+
+@app.route('/garra-dupla/resultado', methods=['POST'])
+def garra_dupla_resultado():
+    """
+    Processa o resultado (WIN/LOSS) de uma janela e atualiza o Gale isolado.
+
+    Payload:
+      tipo_janela      (str)  — 'superior' | 'inferior'
+      resultado_janela (str)  — 'WIN' | 'LOSS'
+
+    Resposta:
+      ok          (bool)
+      config_atual (dict)  — estado atualizado das stakes/gales
+    """
+    global _garra_dupla_state
+    dados = request.get_json(force=True, silent=True) or {}
+    tipo     = str(dados.get("tipo_janela",      "")).lower()
+    resultado = str(dados.get("resultado_janela", "")).upper()
+
+    if tipo not in ("superior", "inferior"):
+        return jsonify({"erro": "tipo_janela deve ser 'superior' ou 'inferior'"}), 400
+    if resultado not in ("WIN", "LOSS"):
+        return jsonify({"erro": "resultado_janela deve ser 'WIN' ou 'LOSS'"}), 400
+
+    with _garra_dupla_lock:
+        _garra_dupla_state = _garra_dupla_processar_resultado(
+            resultado, tipo, dict(_garra_dupla_state)
+        )
+        config_snapshot = {
+            "gale_superior":  _garra_dupla_state["gale_superior"],
+            "gale_inferior":  _garra_dupla_state["gale_inferior"],
+            "stake_superior": _garra_dupla_state["stake_superior"],
+            "stake_inferior": _garra_dupla_state["stake_inferior"],
+        }
+
+    return jsonify({"ok": True, "config_atual": config_snapshot})
+
+
+@app.route('/garra-dupla/resetar', methods=['POST'])
+def garra_dupla_resetar():
+    """
+    Reseta gales e stakes das duas janelas para os valores base.
+    Útil para iniciar nova sessão de operações.
+    """
+    global _garra_dupla_state
+    with _garra_dupla_lock:
+        base = float(_garra_dupla_state.get("stake_base", 0.35))
+        _garra_dupla_state["gale_superior"]  = 0
+        _garra_dupla_state["gale_inferior"]  = 0
+        _garra_dupla_state["stake_superior"] = round(base, 2)
+        _garra_dupla_state["stake_inferior"] = round(base, 2)
+        config_snapshot = dict(_garra_dupla_state)
+    return jsonify({"ok": True, "config": config_snapshot})
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# FIM DA ESTRATÉGIA GARRA DUPLA
+# ═══════════════════════════════════════════════════════════════════════════════
 
 def start_server():
     # Oracle Cloud — porta configurável via variável de ambiente, padrão 5000
