@@ -9690,6 +9690,203 @@ def garra_dupla_resetar():
 # FIM DA ESTRATÉGIA GARRA DUPLA
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# ESTRATÉGIA BARREIRA FIXA 5 — Gatilho de Repetição + Martingale Simples
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# Barreira sempre = 5, fixa:
+#   DIGITUNDER → ganha se dígito final < 5  (dígitos 0-4, ~50%)
+#   DIGITOVER  → ganha se dígito final > 5  (dígitos 6-9, ~40%)
+# Gatilho: N dígitos iguais consecutivos antes de disparar.
+# Gale: Martingale simples com fator configurável.
+
+_BF5_BARREIRA = "5"
+
+
+def _bf5_avaliar_gatilho(ultimos_digitos: list, config_bot: dict) -> dict:
+    """
+    Avalia o gatilho de repetição e retorna o payload com barreira fixa = 5.
+
+    Parâmetros em config_bot:
+      stake          (float) — stake atual
+      qtd_gatilho    (int)   — repetições necessárias (padrão 2)
+      tipo_contrato  (str)   — 'DIGITUNDER' | 'DIGITOVER' (padrão 'DIGITUNDER')
+      currency       (str)   — moeda (padrão 'USD')
+      duracao        (int)   — duração em ticks (padrão 1)
+
+    Retorna:
+      executar      (bool)
+      payload_ordem (dict)  — payload pronto para API Deriv
+      gatilho_digito (int)  — dígito que disparou
+    """
+    qtd = int(config_bot.get("qtd_gatilho", 2))
+    if len(ultimos_digitos) < qtd:
+        return {"executar": False, "motivo": "ticks_insuficientes"}
+
+    ultimos = ultimos_digitos[-qtd:]
+    if not all(d == ultimos[0] for d in ultimos):
+        return {"executar": False, "motivo": "gatilho_nao_atingido"}
+
+    tipo      = str(config_bot.get("tipo_contrato", "DIGITUNDER")).upper()
+    currency  = str(config_bot.get("currency", "USD"))
+    duracao   = int(config_bot.get("duracao",  1))
+
+    return {
+        "executar": True,
+        "gatilho_digito": int(ultimos[0]),
+        "payload_ordem": {
+            "contract_type": tipo,
+            "barrier":       _BF5_BARREIRA,
+            "amount":        round(float(config_bot.get("stake", 0.35)), 2),
+            "basis":         "stake",
+            "currency":      currency,
+            "duration":      duracao,
+            "duration_unit": "t",
+        },
+    }
+
+
+def _bf5_atualizar_gale(resultado: str, config_bot: dict) -> dict:
+    """
+    Atualiza stake e nível de Gale (Martingale) após resultado do trade.
+
+    resultado : 'WIN' | 'LOSS'
+    """
+    fator = float(config_bot.get("fator_gale",  1.4))
+    base  = float(config_bot.get("stake_base",  0.35))
+
+    if resultado == "WIN":
+        config_bot["nivel_gale"] = 0
+        config_bot["stake"]      = round(base, 2)
+    else:
+        config_bot["nivel_gale"] = int(config_bot.get("nivel_gale", 0)) + 1
+        config_bot["stake"]      = round(float(config_bot.get("stake", base)) * fator, 2)
+
+    return config_bot
+
+
+# ── Estado em memória da Barreira Fixa 5 (por sessão) ───────────────────────
+_bf5_state: dict = {
+    "stake_base":     0.35,
+    "stake":          0.35,
+    "fator_gale":     1.4,
+    "nivel_gale":     0,
+    "qtd_gatilho":    2,
+    "tipo_contrato":  "DIGITUNDER",
+    "currency":       "USD",
+    "duracao":        1,
+}
+_bf5_lock = threading.Lock()
+
+
+@app.route('/bf5/config', methods=['GET', 'POST'])
+def bf5_config():
+    """
+    GET  → retorna configuração atual da Barreira Fixa 5.
+    POST → atualiza campos: stake_base, fator_gale, qtd_gatilho,
+                            tipo_contrato, currency, duracao.
+    """
+    global _bf5_state
+    if request.method == 'POST':
+        dados = request.get_json(force=True, silent=True) or {}
+        campos_editaveis = (
+            "stake_base", "fator_gale", "qtd_gatilho",
+            "tipo_contrato", "currency", "duracao"
+        )
+        with _bf5_lock:
+            for c in campos_editaveis:
+                if c in dados:
+                    _bf5_state[c] = dados[c]
+            # Ao mudar stake_base reseta a stake atual e o nível de gale
+            if "stake_base" in dados:
+                _bf5_state["stake"]      = round(float(dados["stake_base"]), 2)
+                _bf5_state["nivel_gale"] = 0
+        return jsonify({"ok": True, "config": dict(_bf5_state)})
+    with _bf5_lock:
+        return jsonify({"ok": True, "config": dict(_bf5_state)})
+
+
+@app.route('/bf5/avaliar', methods=['POST'])
+def bf5_avaliar():
+    """
+    Avalia o gatilho e retorna o payload pronto para a API Deriv.
+
+    Payload:
+      ultimos_digitos (list[int]) — últimos dígitos observados
+      config          (dict)      — opcional; sobrescreve campos do estado global
+
+    Resposta:
+      executar       (bool)
+      payload_ordem  (dict)   — presente se executar=True
+      gatilho_digito (int)    — dígito que disparou
+      config_atual   (dict)   — estado após avaliação
+    """
+    dados   = request.get_json(force=True, silent=True) or {}
+    ultimos = dados.get("ultimos_digitos", [])
+    if not isinstance(ultimos, list) or len(ultimos) == 0:
+        return jsonify({"erro": "ultimos_digitos obrigatório (list)"}), 400
+
+    with _bf5_lock:
+        cfg = dict(_bf5_state)
+    for k, v in (dados.get("config") or {}).items():
+        cfg[k] = v
+
+    resultado = _bf5_avaliar_gatilho(ultimos, cfg)
+    resultado["config_atual"] = {
+        "stake":      cfg.get("stake",      cfg.get("stake_base", 0.35)),
+        "nivel_gale": cfg.get("nivel_gale", 0),
+    }
+    return jsonify(resultado)
+
+
+@app.route('/bf5/resultado', methods=['POST'])
+def bf5_resultado():
+    """
+    Processa WIN ou LOSS e atualiza o Martingale.
+
+    Payload:
+      resultado (str) — 'WIN' | 'LOSS'
+
+    Resposta:
+      ok          (bool)
+      config_atual (dict) — stake e nivel_gale atualizados
+    """
+    global _bf5_state
+    dados     = request.get_json(force=True, silent=True) or {}
+    resultado = str(dados.get("resultado", "")).upper()
+
+    if resultado not in ("WIN", "LOSS"):
+        return jsonify({"erro": "resultado deve ser 'WIN' ou 'LOSS'"}), 400
+
+    with _bf5_lock:
+        _bf5_state = _bf5_atualizar_gale(resultado, dict(_bf5_state))
+        config_snapshot = {
+            "stake":      _bf5_state["stake"],
+            "nivel_gale": _bf5_state["nivel_gale"],
+        }
+
+    return jsonify({"ok": True, "config_atual": config_snapshot})
+
+
+@app.route('/bf5/resetar', methods=['POST'])
+def bf5_resetar():
+    """
+    Reseta stake e nível de Gale para os valores base.
+    """
+    global _bf5_state
+    with _bf5_lock:
+        base = round(float(_bf5_state.get("stake_base", 0.35)), 2)
+        _bf5_state["stake"]      = base
+        _bf5_state["nivel_gale"] = 0
+        config_snapshot = dict(_bf5_state)
+    return jsonify({"ok": True, "config": config_snapshot})
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# FIM DA ESTRATÉGIA BARREIRA FIXA 5
+# ═══════════════════════════════════════════════════════════════════════════════
+
 def start_server():
     # Oracle Cloud — porta configurável via variável de ambiente, padrão 5000
     port = int(os.environ.get("PORT", 5000))
