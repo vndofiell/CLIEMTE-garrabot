@@ -9906,17 +9906,110 @@ def _extrair_id_youtube(url: str) -> str:
     return ""
 
 
+def _transcrever_youtube(video_id: str, passos: list) -> str:
+    """
+    Tenta extrair a transcrição do vídeo em 3 camadas:
+      1. youtube-transcript-api direta
+      2. Supadata API pública (contorna bloqueio de IP cloud)
+      3. yt-dlp (baixa legenda VTT e parseia)
+    Retorna o texto da transcrição ou lança Exception com mensagem amigável.
+    """
+    url_video = f"https://www.youtube.com/watch?v={video_id}"
+
+    # ── Camada 1: youtube-transcript-api ─────────────────────────────────────
+    try:
+        from youtube_transcript_api import YouTubeTranscriptApi
+        yt_api = YouTubeTranscriptApi()
+        fetched = yt_api.fetch(video_id, languages=['pt', 'en', 'pt-BR'])
+        texto = " ".join([t['text'] for t in fetched])
+        if texto.strip():
+            passos.append("✅ Transcrição obtida via youtube-transcript-api.")
+            return texto
+    except Exception as e1:
+        passos.append(f"⚠️ Camada 1 bloqueada (IP cloud): tentando método alternativo...")
+
+    # ── Camada 2: Supadata API pública (não requer auth, ignora bloqueio cloud) ──
+    try:
+        resp = requests.get(
+            "https://api.supadata.ai/v1/youtube/transcript",
+            params={"url": url_video, "text": "true"},
+            timeout=20,
+            headers={"User-Agent": "GarraBot/1.0"}
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            # Supadata retorna {"content": "...", "lang": "pt"} ou lista de segmentos
+            if isinstance(data, dict) and data.get("content"):
+                texto = data["content"]
+            elif isinstance(data, list):
+                texto = " ".join([s.get("text", "") for s in data])
+            else:
+                texto = str(data)
+            if texto.strip():
+                passos.append("✅ Transcrição obtida via Supadata API.")
+                return texto
+        passos.append(f"⚠️ Camada 2 retornou {resp.status_code}: tentando yt-dlp...")
+    except Exception as e2:
+        passos.append(f"⚠️ Camada 2 falhou: {e2} — tentando yt-dlp...")
+
+    # ── Camada 3: yt-dlp (baixa legenda auto-gerada e parseia) ───────────────
+    try:
+        import subprocess, tempfile, glob as _glob, re as _re
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cmd = [
+                "yt-dlp",
+                "--write-auto-sub", "--skip-download",
+                "--sub-lang", "pt,en",
+                "--sub-format", "vtt",
+                "--output", f"{tmpdir}/legenda",
+                url_video
+            ]
+            resultado = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+            arquivos = _glob.glob(f"{tmpdir}/*.vtt")
+            if not arquivos:
+                # tenta via venv
+                venv_ytdlp = os.path.join(os.path.dirname(os.path.abspath(__file__)), "venv", "bin", "yt-dlp")
+                if os.path.exists(venv_ytdlp):
+                    cmd[0] = venv_ytdlp
+                    resultado = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+                    arquivos = _glob.glob(f"{tmpdir}/*.vtt")
+            if arquivos:
+                with open(arquivos[0], encoding="utf-8", errors="ignore") as f:
+                    vtt = f.read()
+                # Remove cabeçalho e timestamps VTT, junta só o texto
+                linhas = vtt.split("\n")
+                texto_linhas = []
+                for linha in linhas:
+                    linha = linha.strip()
+                    if not linha or linha.startswith("WEBVTT") or linha.startswith("NOTE"):
+                        continue
+                    if _re.match(r'^\d{2}:\d{2}', linha) or _re.match(r'^\d+$', linha):
+                        continue
+                    # Remove tags HTML (<c>, </c>, <00:00:01.000>)
+                    limpa = _re.sub(r'<[^>]+>', '', linha).strip()
+                    if limpa:
+                        texto_linhas.append(limpa)
+                texto = " ".join(texto_linhas)
+                if texto.strip():
+                    passos.append("✅ Transcrição obtida via yt-dlp (legenda automática).")
+                    return texto
+    except Exception as e3:
+        passos.append(f"⚠️ Camada 3 (yt-dlp) falhou: {e3}")
+
+    raise Exception(
+        "Nenhum método conseguiu obter a transcrição. Motivos possíveis: "
+        "(1) vídeo sem legendas ativadas, "
+        "(2) vídeo privado/restrito por idade, "
+        "(3) IP do servidor bloqueado pelo YouTube para todos os métodos."
+    )
+
+
 @app.route('/ai/analisar-youtube', methods=['POST'])
 def ai_analisar_youtube():
     """
-    Recebe o link do YouTube, extrai a transcrição, envia para a IA
-    analisar o setup, ticks, barreiras e retorna a estratégia pronta.
+    Recebe o link do YouTube, extrai a transcrição com fallback em 3 camadas,
+    envia para a IA analisar o setup e retorna a estratégia pronta.
     """
-    try:
-        from youtube_transcript_api import YouTubeTranscriptApi
-    except ImportError:
-        return jsonify({"erro": "Biblioteca youtube-transcript-api não instalada. Execute: pip install youtube-transcript-api"})
-
     dados = request.get_json(force=True, silent=True) or {}
     url_video = dados.get("url_youtube", "").strip()
 
@@ -9931,18 +10024,11 @@ def ai_analisar_youtube():
         return jsonify({"erro": "Link do YouTube inválido. Use um formato como https://www.youtube.com/watch?v=..."})
 
     passos = ["📥 Conectando ao YouTube e extraindo a transcrição do vídeo..."]
-    transcricao_texto = ""
     try:
-        # v1.2+ usa instância + fetch() em vez do antigo get_transcript() de classe
-        yt_api = YouTubeTranscriptApi()
-        fetched = yt_api.fetch(video_id, languages=['pt', 'en'])
-        transcricao_texto = " ".join([t['text'] for t in fetched])
-        passos.append(f"✅ Transcrição obtida com sucesso ({len(transcricao_texto)} caracteres).")
+        transcricao_texto = _transcrever_youtube(video_id, passos)
+        passos.append(f"📄 {len(transcricao_texto)} caracteres extraídos.")
     except Exception as e:
-        return jsonify({
-            "erro": f"Não foi possível obter a legenda deste vídeo. O vídeo precisa ter legendas ativadas. Detalhe: {e}",
-            "_passos": passos
-        })
+        return jsonify({"erro": str(e), "_passos": passos})
 
     system_yt = (
         "VOCÊ É O ENGENHEIRO REVERSO DE ESTRATÉGIAS DO GARRABOT.\n"
