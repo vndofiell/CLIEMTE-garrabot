@@ -7340,8 +7340,8 @@ function initWebSocket(wssUrl) {
                     return;
                 }
 
-                // ── FASE 1: aguarda velas suficientes (mín. 210 para EMA200) ─
-                const _tpHistMin  = Math.max(50, Math.min(210, est.tp_hist || 210));
+                // ── FASE 1: aguarda velas suficientes (mín. 60 para EMA50) ──
+                const _tpHistMin  = Math.max(50, Math.min(210, est.tp_hist || 60));
                 const _tpMinTicks = _tpJanela * _tpHistMin;
                 if (bot._candleBuffer.length < _tpMinTicks) {
                     const _tpVelasN = Math.floor(bot._candleBuffer.length / _tpJanela);
@@ -7476,9 +7476,9 @@ function initWebSocket(wssUrl) {
                 const ind   = _tpIndic;
                 const velas20 = _tpVelas.slice(-20);
 
-                // M1 — Tendência principal (EMA20 > EMA50 > EMA200)
-                const _tpTendAlta  = ind.ema20 > ind.ema50 && ind.ema50 > ind.ema200;
-                const _tpTendBaixa = ind.ema20 < ind.ema50 && ind.ema50 < ind.ema200;
+                // M1 — Tendência principal (EMA20 > EMA50; EMA200 relaxada se não há dados)
+                const _tpTendAlta  = ind.ema20 > ind.ema50 && (isNaN(ind.ema200) || ind.ema50 > ind.ema200);
+                const _tpTendBaixa = ind.ema20 < ind.ema50 && (isNaN(ind.ema200) || ind.ema50 < ind.ema200);
                 const _tpM1ok      = _tpTendAlta || _tpTendBaixa;
                 const _tpPts1      = _tpM1ok ? 15 : 0;
 
@@ -7523,9 +7523,9 @@ function initWebSocket(wssUrl) {
                 const _tpPts7 = 5;
 
                 // M8 — Mercado lateral (usa distância relativa entre EMAs + ADX proxy)
-                // Limiar ADX reduzido para mercados de ticks (R_10/R_100 têm ADX proxy ~5-30)
+                // Limiar ADX flexível para mercados de ticks Deriv (R_100 fica entre 1-15)
                 const _tpEmaDistPct = Math.abs(ind.ema20 - ind.ema50) / _tpPrecoRef;
-                const _tpLateral    = ind.adx < 5 || _tpEmaDistPct < 0.00001;
+                const _tpLateral    = ind.adx < 2 && _tpEmaDistPct < 0.000005;
                 const _tpM8ok       = !_tpLateral;
                 const _tpPts8       = _tpLateral ? -100 : 10;
 
@@ -7534,11 +7534,11 @@ function initWebSocket(wssUrl) {
                                        _tpPts5 + _tpPts6 + _tpPts7 + _tpPts8 + 10;
 
                 // Filtro Anti-Loss
-                const _tpScoreMin2 = est.score_min || 92;
-                const _tpAprovado  = _tpM1ok && _tpM2ok && _tpM6ok && _tpM8ok &&
-                                     _tpScoreTotal >= _tpScoreMin2;
-
-                const _tpDirecao = _tpTendAlta ? 'CALL' : (_tpTendBaixa ? 'PUT' : 'NEUTRO');
+                const _tpScoreMin2 = est.score_min || 60;
+                const _tpDirecao   = _tpTendAlta ? 'CALL' : 'PUT';
+                const _tpAprovado  = _tpM1ok && _tpM8ok &&
+                                     _tpScoreTotal >= _tpScoreMin2 &&
+                                     _tpDirecao !== 'NEUTRO';
 
                 if (!_tpAprovado) {
                     _seqStatusUpdate(
@@ -7559,8 +7559,8 @@ function initWebSocket(wssUrl) {
                     `RSI:${ind.rsi.toFixed(0)}`,
                 ].join(' ');
 
-                bot._tpSinalPendente = { dir: _tpDirFinal, score: _tpScoreTotal, resumo: _tpResumo };
-                _seqStatusUpdate(`🏛️ TREND PRO V2.0 ${_tpDirFinal} | score ${_tpScoreTotal} | ⏳ aguardando virada para entrar...`);
+                bot._tpSinalPendente = { dir: _tpDirecao, score: _tpScoreTotal, resumo: _tpResumo };
+                _seqStatusUpdate(`🏛️ TREND PRO V2.0 ${_tpDirecao} | score ${_tpScoreTotal} | ⏳ aguardando virada para entrar...`);
             }
         }
 
