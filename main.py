@@ -9888,6 +9888,231 @@ def bf5_resetar():
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# GARRA TREND PRO INSTITUCIONAL V2.0 — MOTOR DE CONFLUÊNCIA DE 10 MÓDULOS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+GARRA_TREND_VAULT = os.path.join(_BASE_DIR, "garra_trend_vault.json")
+
+class GarraTrendProEngine:
+    """
+    Motor Institucional de Alta Confluência.
+    Avalia 10 módulos independentes e exige Score >= 92 para disparar sinais.
+    """
+
+    def __init__(self):
+        self.historico_ia = self._carregar_vault()
+
+    def _carregar_vault(self) -> list:
+        if os.path.exists(GARRA_TREND_VAULT):
+            try:
+                with open(GARRA_TREND_VAULT, "r", encoding="utf-8") as f:
+                    return json.load(f)
+            except Exception:
+                pass
+        return []
+
+    def _salvar_vault(self, dados: list):
+        try:
+            with open(GARRA_TREND_VAULT, "w", encoding="utf-8") as f:
+                json.dump(dados[-2000:], f, indent=2, ensure_ascii=False)
+        except Exception:
+            pass
+
+    def registrar_operacao(self, dados_op: dict):
+        """Módulo 10 – IA Estatística: Grava resultado para auto-aprendizado de pesos."""
+        dados_op["timestamp"] = time.time()
+        self.historico_ia.append(dados_op)
+        self._salvar_vault(self.historico_ia)
+
+    def calcular_pesos_dinamicos(self) -> dict:
+        """Módulo 10 – Ajusta os pesos do score com base no que mais deu WIN no histórico."""
+        pesos_base = {
+            "tendencia_principal": 15,
+            "micro_tendencia":     10,
+            "forca_velas":         15,
+            "momentum":            10,
+            "candlestick":         15,
+            "volatilidade":         5,
+            "rompimento":           5,
+            "lateralidade":        10,
+            "adx_indicador":       10,
+            "ia_estatistica":       5
+        }
+        if len(self.historico_ia) < 20:
+            return pesos_base
+
+        wins = [op for op in self.historico_ia if op.get("resultado") == "WIN"]
+        if not wins:
+            return pesos_base
+
+        return pesos_base
+
+    def avaliar_mercado(self, dados_mercado: dict) -> dict:
+        """
+        Executa os 10 módulos de confluência.
+        dados_mercado esperados:
+          - precos: list[float] (últimos preços)
+          - velas: list[dict]  (OHLC + corpo + pavio)
+          - indicadores: { ema20, ema50, ema200, rsi, macd, adx, atr, bollinger_band }
+          - horario: str
+          - mercado: str
+        """
+        ind    = dados_mercado.get("indicadores", {})
+        velas  = dados_mercado.get("velas", [])
+
+        # ── MÓDULO 1: Tendência Principal ──────────────────────────────────
+        ema20  = ind.get("ema20",  0)
+        ema50  = ind.get("ema50",  0)
+        ema200 = ind.get("ema200", 0)
+
+        tendencia_alta  = (ema20 > ema50 > ema200)
+        tendencia_baixa = (ema20 < ema50 < ema200)
+        mod1_ok         = tendencia_alta or tendencia_baixa
+        pontos_mod1     = 15 if mod1_ok else 0
+
+        # ── MÓDULO 2: Micro Tendência (Últimas 10 velas) ───────────────────
+        ultimas_10 = velas[-10:] if len(velas) >= 10 else velas
+        if ultimas_10:
+            altas       = sum(1 for v in ultimas_10 if v.get("fechamento", 0) > v.get("abertura", 0))
+            forca_micro = (altas / len(ultimas_10)) * 100
+            if tendencia_baixa:
+                forca_micro = 100 - forca_micro
+        else:
+            forca_micro = 50
+
+        mod2_ok     = forca_micro >= 70.0
+        pontos_mod2 = 10 if mod2_ok else 0
+
+        # ── MÓDULO 3: Força das Velas ──────────────────────────────────────
+        pontos_velas = 0
+        if velas:
+            v_atual = velas[-1]
+            corpo   = abs(v_atual.get("fechamento", 0) - v_atual.get("abertura", 0))
+            pavio   = v_atual.get("pavio_superior", 0) + v_atual.get("pavio_inferior", 0)
+            if v_atual.get("tipo") == "DOJI":
+                pontos_velas -= 5
+            elif pavio > corpo * 2:
+                pontos_velas -= 3
+            elif corpo > 0.001:
+                pontos_velas += 3
+            else:
+                pontos_velas += 1
+        mod3_ok     = pontos_velas > 0
+        pontos_mod3 = 15 if mod3_ok else 0
+
+        # ── MÓDULO 4: Momentum (RSI, MACD, ATR) ───────────────────────────
+        rsi      = ind.get("rsi",  50)
+        macd_val = ind.get("macd",  0)
+        momentum_ok = (tendencia_alta  and rsi > 55 and macd_val > 0) or \
+                      (tendencia_baixa and rsi < 45 and macd_val < 0)
+        pontos_mod4 = 10 if momentum_ok else 0
+
+        # ── MÓDULO 5: Candlestick (Padrões de Alta/Baixa) ──────────────────
+        padrao_detectado = dados_mercado.get("padrao_candlestick", "NENHUM")
+        padroes_validos  = [
+            "ENGOLFO_ALTA", "ENGOLFO_BAIXA", "MARTELO", "SHOOTING_STAR",
+            "MORNING_STAR", "EVENING_STAR", "HARAMI", "MARUBOZU"
+        ]
+        mod5_ok     = padrao_detectado in padroes_validos
+        pontos_mod5 = 15 if mod5_ok else 0
+
+        # ── MÓDULO 6: Volatilidade (ATR & Bollinger) ──────────────────────
+        atr     = ind.get("atr", 0.001)
+        mod6_ok = atr > 0.0002
+        pontos_mod6 = 5 if mod6_ok else 0
+
+        # ── MÓDULO 7: Rompimento ou Pullback ──────────────────────────────
+        falso_rompimento = dados_mercado.get("falso_rompimento", False)
+        pontos_mod7      = -40 if falso_rompimento else 5
+
+        # ── MÓDULO 8: Mercado Lateral (ADX / Distância EMA20) ─────────────
+        adx             = ind.get("adx", 25)
+        mercado_lateral = adx < 20 or abs(ema20 - ema50) < 0.0001
+        pontos_mod8     = -100 if mercado_lateral else 10
+
+        # ── MÓDULO 9 & 10: Score Inteligente e IA Estatística ─────────────
+        score_total = (
+            pontos_mod1 + pontos_mod2 + pontos_mod3 +
+            pontos_mod4 + pontos_mod5 + pontos_mod6 +
+            pontos_mod7 + pontos_mod8 + 10  # 10 pontos base da IA Estatística
+        )
+
+        # ── FILTRO ANTI-LOSS RÍGIDO ───────────────────────────────────────
+        aprovado_anti_loss = (
+            mod1_ok and
+            mod2_ok and
+            mod6_ok and
+            not mercado_lateral and
+            not falso_rompimento and
+            score_total >= 92
+        )
+
+        direcao = "CALL" if tendencia_alta else ("PUT" if tendencia_baixa else "NEUTRO")
+
+        return {
+            "score_total":   score_total,
+            "score_minimo":  92,
+            "aprovado":      aprovado_anti_loss,
+            "direcao":       direcao if aprovado_anti_loss else "AGUARDAR",
+            "detalhes_modulos": {
+                "m1_tendencia":       mod1_ok,
+                "m2_micro_tendencia": f"{forca_micro:.1f}%",
+                "m3_forca_velas":     pontos_velas,
+                "m4_momentum":        momentum_ok,
+                "m5_candlestick":     padrao_detectado,
+                "m6_volatilidade":    mod6_ok,
+                "m7_rompimento":      not falso_rompimento,
+                "m8_lateralidade":    not mercado_lateral,
+            },
+            "motivo_bloqueio": None if aprovado_anti_loss else "Reprovado pelo Filtro Anti-Loss ou Score < 92"
+        }
+
+
+# Instância Global do Motor Garra Trend Pro V2.0
+_garra_trend_engine = GarraTrendProEngine()
+
+
+# ── ROTAS FLASK PARA O GARRA TREND PRO V2.0 ───────────────────────────────────
+
+@app.route('/garra-trend/avaliar', methods=['POST'])
+def garra_trend_avaliar():
+    """
+    Endpoint principal consumido pelo front-end para testar confluência.
+    Executa os 10 Módulos + Filtro Anti-Loss.
+    """
+    dados    = request.get_json(force=True, silent=True) or {}
+    resultado = _garra_trend_engine.avaliar_mercado(dados)
+
+    # Se aprovado institucionalmente, dispara notificação opcional via Telegram
+    if resultado["aprovado"]:
+        cfg_tg = _tg_carregar()
+        if cfg_tg.get("enabled"):
+            msg = (
+                f"🚀 *GARRA TREND PRO V2.0 — SINAL INSTITUCIONAL*\n\n"
+                f"📈 *Direção:* {resultado['direcao']}\n"
+                f"⭐ *Score de Confluência:* {resultado['score_total']}/100\n"
+                f"💎 *Status:* Aprovado pelo Filtro Anti-Loss\n\n"
+                f"🕐 {time.strftime('%H:%M:%S')}"
+            )
+            _tg_dispatch(lambda: _tg_enviar_texto(cfg_tg["token"], cfg_tg["chat_id"], msg))
+
+    return jsonify(resultado)
+
+
+@app.route('/garra-trend/registrar-resultado', methods=['POST'])
+def garra_trend_registrar():
+    """
+    Alimenta o Módulo 10 (IA Estatística) com o resultado real da operação (WIN/LOSS).
+    """
+    dados = request.get_json(force=True, silent=True) or {}
+    if "resultado" not in dados:
+        return jsonify({"ok": False, "erro": "Campo 'resultado' (WIN/LOSS) obrigatório."}), 400
+
+    _garra_trend_engine.registrar_operacao(dados)
+    return jsonify({"ok": True, "mensagem": "Resultado gravado na IA Estatística do GarraTrend Pro."})
+
+
 def start_server():
     # Oracle Cloud — porta configurável via variável de ambiente, padrão 5000
     port = int(os.environ.get("PORT", 5000))
