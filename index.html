@@ -5086,8 +5086,9 @@ function confirmarEstrategia() {
     bot._seqContador = 0;
     _seqStatusClear();
 
-    bot.estrategia = nome;
-    bot._precos    = []; // reseta histórico de preços
+    bot.estrategia    = nome;
+    bot._precos       = []; // reseta histórico de preços
+    bot._candleBuffer = []; // reseta buffer da Lógica do preço
 
     // Re-subscreve ticks se o ativo mudou e jhconexo WS ativa
     const novoAtivo = _resolverAtivo(est.ativo);
@@ -5654,6 +5655,7 @@ function processCommand(cmd) {
         bot.running        = false;
         bot._buying        = false;
         bot._metaEncerrada = false;
+        bot._candleBuffer  = []; // reseta buffer da Lógica do preço
         _seqStatusClear();
         // Para conta secundária se estiver operando
         if (typeof _sec !== 'undefined' && _sec.espelhandoAtivo) {
@@ -7139,8 +7141,83 @@ function initWebSocket(wssUrl) {
                         }
                     }
                 }
+            } else if (est.tipo === 'candle') {
+                // ══════════════════════════════════════════════════════════════
+                // LÓGICA DO PREÇO — mini-candles via ticks
+                // Agrupa ticks em janelas de N preços (tf × 10 ticks/min aprox.)
+                // Calcula: abertura, fechamento, máxima, mínima
+                // Pavio superior grande  → rejeição de alta → PUT
+                // Pavio inferior grande  → rejeição de baixa → CALL
+                // Corpo direcional forte → segue a direção (CALL se subiu, PUT se caiu)
+                // ══════════════════════════════════════════════════════════════
+                if (!bot._candleBuffer)   bot._candleBuffer = [];
+                if (!bot._candleDirReady) bot._candleDirReady = false;
+
+                bot._candleBuffer.push(preco);
+
+                const tf         = est.tf || 1;            // timeframe em minutos
+                const tamJanela  = Math.max(6, tf * 8);    // ~8 ticks por minuto
+                const statusEl   = document.getElementById('seq-status');
+
+                if (bot._candleBuffer.length < tamJanela) {
+                    const pct = Math.round((bot._candleBuffer.length / tamJanela) * 100);
+                    _seqStatusUpdate(`📊 CANDLE [${bot._candleBuffer.length}/${tamJanela}] coletando ticks... ${pct}%`);
+                    return;
+                }
+
+                // Candle completo — calcula OHLC
+                const slice = bot._candleBuffer.slice(-tamJanela);
+                const open  = slice[0];
+                const close = slice[slice.length - 1];
+                const high  = Math.max(...slice);
+                const low   = Math.min(...slice);
+                const corpo = Math.abs(close - open);
+                const range = high - low;
+
+                // Pavios
+                const pavioSup = high  - Math.max(open, close);
+                const pavioInf = Math.min(open, close) - low;
+
+                // Decide direção
+                let dir = null;
+                let motivo = '';
+
+                if (range > 0) {
+                    const pctPavioSup = pavioSup / range;
+                    const pctPavioInf = pavioInf / range;
+                    const pctCorpo    = corpo    / range;
+
+                    if (pctPavioSup >= 0.45 && pctPavioSup > pctPavioInf) {
+                        // Pavio superior dominante → rejeição de alta → PUT
+                        dir    = 'PUT';
+                        motivo = `pavio↑${(pctPavioSup*100).toFixed(0)}% > pavio↓${(pctPavioInf*100).toFixed(0)}%`;
+                    } else if (pctPavioInf >= 0.45 && pctPavioInf > pctPavioSup) {
+                        // Pavio inferior dominante → rejeição de baixa → CALL
+                        dir    = 'CALL';
+                        motivo = `pavio↓${(pctPavioInf*100).toFixed(0)}% > pavio↑${(pctPavioSup*100).toFixed(0)}%`;
+                    } else if (pctCorpo >= 0.55) {
+                        // Corpo forte sem pavio dominante → reversão direcional
+                        dir    = close > open ? 'PUT' : 'CALL';
+                        motivo = `corpo${(pctCorpo*100).toFixed(0)}% ${close > open ? 'alta→PUT' : 'queda→CALL'}`;
+                    }
+                }
+
+                if (!dir) {
+                    // Sem sinal claro — descarta esse candle e aguarda o próximo
+                    bot._candleBuffer = [];
+                    _seqStatusUpdate(`📊 CANDLE sem sinal (range=${range.toFixed(5)}) — aguardando próximo...`);
+                    return;
+                }
+
+                // Sinal confirmado — reseta buffer e entra
+                bot._candleBuffer = [];
+                _seqStatusClear();
+                if (!lvVerificar(digit)) return;
+                bot._canaleDir = dir;
+                bot._buying    = true;
+                print(`📊 LÓGICA PREÇO ${dir} | ${motivo} | O=${open.toFixed(4)} H=${high.toFixed(4)} L=${low.toFixed(4)} C=${close.toFixed(4)}`, 'log-win');
+                _edcEntrar(() => buy());
             }
-            // Lógica do preço: precisa de candles (requer WS separado — entra via anlise de ticks)
         }
 
         // Proposta recebida → compra
