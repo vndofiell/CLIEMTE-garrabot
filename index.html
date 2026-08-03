@@ -7495,17 +7495,22 @@ function initWebSocket(wssUrl) {
                                     'MORNING_STAR','EVENING_STAR','HARAMI','MARUBOZU'].includes(_tpPadrao);
                 const _tpPts5   = _tpPadrOk ? 15 : 0;
 
-                // M6 — Volatilidade (ATR)
-                const _tpM6ok = ind.atr > 0.0002;
+                // M6 — Volatilidade (ATR relativo ao preço — funciona para qualquer ativo)
+                // ATR/preço > 0.00005% = mercado ativo (substitui limiar absoluto de Forex)
+                const _tpPrecoRef = ind.ema20 || 1;
+                const _tpAtrPct   = ind.atr / _tpPrecoRef;
+                const _tpM6ok = _tpAtrPct > 0.000005;
                 const _tpPts6 = _tpM6ok ? 5 : 0;
 
                 // M7 — Sem falso rompimento (+5 sempre, pois não temos detecção externa)
                 const _tpPts7 = 5;
 
-                // M8 — Mercado lateral (ADX proxy)
-                const _tpLateral = ind.adx < 20 || Math.abs(ind.ema20 - ind.ema50) < 0.0001;
-                const _tpM8ok    = !_tpLateral;
-                const _tpPts8    = _tpLateral ? -100 : 10;
+                // M8 — Mercado lateral (usa distância relativa entre EMAs + ADX proxy)
+                // Limiar ADX reduzido para mercados de ticks (R_10/R_100 têm ADX proxy ~5-30)
+                const _tpEmaDistPct = Math.abs(ind.ema20 - ind.ema50) / _tpPrecoRef;
+                const _tpLateral    = ind.adx < 5 || _tpEmaDistPct < 0.00001;
+                const _tpM8ok       = !_tpLateral;
+                const _tpPts8       = _tpLateral ? -100 : 10;
 
                 // Score total + 10 pts base IA
                 const _tpScoreTotal = _tpPts1 + _tpPts2 + _tpPts3 + _tpPts4 +
