@@ -5086,9 +5086,10 @@ function confirmarEstrategia() {
     bot._seqContador = 0;
     _seqStatusClear();
 
-    bot.estrategia    = nome;
-    bot._precos       = []; // reseta histórico de preços
-    bot._candleBuffer = []; // reseta buffer da Lógica do preço
+    bot.estrategia           = nome;
+    bot._precos              = []; // reseta histórico de preços
+    bot._candleBuffer        = []; // reseta buffer da Lógica do preço
+    bot._candleSinalPendente = null; // cancela sinal pendente de virada
 
     // Re-subscreve ticks se o ativo mudou e jhconexo WS ativa
     const novoAtivo = _resolverAtivo(est.ativo);
@@ -5653,9 +5654,10 @@ function processCommand(cmd) {
 
     } else if (command === 'parar') {
         bot.running        = false;
-        bot._buying        = false;
-        bot._metaEncerrada = false;
-        bot._candleBuffer  = []; // reseta buffer da Lógica do preço
+        bot._buying               = false;
+        bot._metaEncerrada        = false;
+        bot._candleBuffer         = []; // reseta buffer da Lógica do preço
+        bot._candleSinalPendente  = null; // cancela sinal pendente de virada
         _seqStatusClear();
         // Para conta secundária se estiver operando
         if (typeof _sec !== 'undefined' && _sec.espelhandoAtivo) {
@@ -7143,29 +7145,49 @@ function initWebSocket(wssUrl) {
                 }
             } else if (est.tipo === 'candle') {
                 // ══════════════════════════════════════════════════════════════
-                // LÓGICA DO PREÇO — mini-candles via ticks
-                // Agrupa ticks em janelas de N preços (tf × 10 ticks/min aprox.)
-                // Calcula: abertura, fechamento, máxima, mínima
-                // Pavio superior grande  → rejeição de alta → PUT
-                // Pavio inferior grande  → rejeição de baixa → CALL
-                // Corpo direcional forte → segue a direção (CALL se subiu, PUT se caiu)
+                // LÓGICA DO PREÇO — mini-candles via ticks, entrada na VIRADA
+                //
+                // Fluxo em 2 fases:
+                //   FASE 1 (análise): acumula tamJanela ticks → forma o candle,
+                //                     analisa pavios/corpo → guarda sinal pendente
+                //                     → reseta buffer para iniciar a próxima vela
+                //   FASE 2 (virada):  o 1º tick do novo candle É a virada da vela
+                //                     → entra imediatamente com o sinal guardado
+                //
+                // Nunca entra no meio de uma vela em andamento.
                 // ══════════════════════════════════════════════════════════════
-                if (!bot._candleBuffer)   bot._candleBuffer = [];
-                if (!bot._candleDirReady) bot._candleDirReady = false;
+                if (!bot._candleBuffer)        bot._candleBuffer       = [];
+                if (bot._candleSinalPendente === undefined) bot._candleSinalPendente = null;
 
-                bot._candleBuffer.push(preco);
+                const tf        = est.tf || 1;           // timeframe em minutos
+                const tamJanela = Math.max(6, tf * 8);   // ~8 ticks por minuto
 
-                const tf         = est.tf || 1;            // timeframe em minutos
-                const tamJanela  = Math.max(6, tf * 8);    // ~8 ticks por minuto
-                const statusEl   = document.getElementById('seq-status');
-
-                if (bot._candleBuffer.length < tamJanela) {
-                    const pct = Math.round((bot._candleBuffer.length / tamJanela) * 100);
-                    _seqStatusUpdate(`📊 CANDLE [${bot._candleBuffer.length}/${tamJanela}] coletando ticks... ${pct}%`);
+                // ── FASE 2: sinal pendente + primeiro tick da nova vela ───────
+                if (bot._candleSinalPendente) {
+                    const sinal = bot._candleSinalPendente;
+                    bot._candleSinalPendente = null;  // consome o sinal
+                    // Começa o novo buffer com este tick (abertura da nova vela)
+                    bot._candleBuffer = [preco];
+                    _seqStatusClear();
+                    if (!lvVerificar(digit)) return;
+                    bot._canaleDir = sinal.dir;
+                    bot._buying    = true;
+                    print(`📊 LÓGICA PREÇO ${sinal.dir} | ${sinal.motivo} | ENTRADA NA VIRADA ✅`, 'log-win');
+                    print(`   Vela fechada → O=${sinal.open.toFixed(4)} H=${sinal.high.toFixed(4)} L=${sinal.low.toFixed(4)} C=${sinal.close.toFixed(4)}`, 'log-info');
+                    _edcEntrar(() => buy());
                     return;
                 }
 
-                // Candle completo — calcula OHLC
+                // ── FASE 1: acumula ticks para formar o candle ────────────────
+                bot._candleBuffer.push(preco);
+
+                if (bot._candleBuffer.length < tamJanela) {
+                    const pct = Math.round((bot._candleBuffer.length / tamJanela) * 100);
+                    _seqStatusUpdate(`📊 CANDLE [${bot._candleBuffer.length}/${tamJanela}] analisando vela... ${pct}%`);
+                    return;
+                }
+
+                // Vela completa — calcula OHLC
                 const slice = bot._candleBuffer.slice(-tamJanela);
                 const open  = slice[0];
                 const close = slice[slice.length - 1];
@@ -7179,7 +7201,7 @@ function initWebSocket(wssUrl) {
                 const pavioInf = Math.min(open, close) - low;
 
                 // Decide direção
-                let dir = null;
+                let dir    = null;
                 let motivo = '';
 
                 if (range > 0) {
@@ -7188,35 +7210,29 @@ function initWebSocket(wssUrl) {
                     const pctCorpo    = corpo    / range;
 
                     if (pctPavioSup >= 0.45 && pctPavioSup > pctPavioInf) {
-                        // Pavio superior dominante → rejeição de alta → PUT
                         dir    = 'PUT';
                         motivo = `pavio↑${(pctPavioSup*100).toFixed(0)}% > pavio↓${(pctPavioInf*100).toFixed(0)}%`;
                     } else if (pctPavioInf >= 0.45 && pctPavioInf > pctPavioSup) {
-                        // Pavio inferior dominante → rejeição de baixa → CALL
                         dir    = 'CALL';
                         motivo = `pavio↓${(pctPavioInf*100).toFixed(0)}% > pavio↑${(pctPavioSup*100).toFixed(0)}%`;
                     } else if (pctCorpo >= 0.55) {
-                        // Corpo forte sem pavio dominante → reversão direcional
                         dir    = close > open ? 'PUT' : 'CALL';
                         motivo = `corpo${(pctCorpo*100).toFixed(0)}% ${close > open ? 'alta→PUT' : 'queda→CALL'}`;
                     }
                 }
 
+                // Reseta buffer — próximos ticks formam a NOVA vela
+                bot._candleBuffer = [];
+
                 if (!dir) {
-                    // Sem sinal claro — descarta esse candle e aguarda o próximo
-                    bot._candleBuffer = [];
-                    _seqStatusUpdate(`📊 CANDLE sem sinal (range=${range.toFixed(5)}) — aguardando próximo...`);
+                    // Sem sinal — descarta e aguarda a próxima vela completa
+                    _seqStatusUpdate(`📊 CANDLE sem sinal — aguardando próxima vela...`);
                     return;
                 }
 
-                // Sinal confirmado — reseta buffer e entra
-                bot._candleBuffer = [];
-                _seqStatusClear();
-                if (!lvVerificar(digit)) return;
-                bot._canaleDir = dir;
-                bot._buying    = true;
-                print(`📊 LÓGICA PREÇO ${dir} | ${motivo} | O=${open.toFixed(4)} H=${high.toFixed(4)} L=${low.toFixed(4)} C=${close.toFixed(4)}`, 'log-win');
-                _edcEntrar(() => buy());
+                // Guarda sinal: entrada só no PRIMEIRO tick da próxima vela (virada)
+                bot._candleSinalPendente = { dir, motivo, open, high, low, close };
+                _seqStatusUpdate(`📊 VELA FECHOU ${dir} | ${motivo} | ⏳ aguardando virada para entrar...`);
             }
         }
 
