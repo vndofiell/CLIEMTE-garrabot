@@ -7543,8 +7543,8 @@ function initWebSocket(wssUrl) {
                     `RSI:${ind.rsi.toFixed(0)}`,
                 ].join(' ');
 
-                bot._tpSinalPendente = { dir: _tpDirecao, score: _tpScoreTotal, resumo: _tpResumo };
-                _seqStatusUpdate(`🏛️ TREND PRO V2.0 ${_tpDirecao} | score ${_tpScoreTotal}/100 | ⏳ aguardando virada para entrar...`);
+                bot._tpSinalPendente = { dir: _tpDirFinal, score: _tpScoreTotal, resumo: _tpResumo };
+                _seqStatusUpdate(`🏛️ TREND PRO V2.0 ${_tpDirFinal} | score ${_tpScoreTotal} | ⏳ aguardando virada para entrar...`);
             }
         }
 
