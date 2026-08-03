@@ -5108,8 +5108,9 @@ function confirmarEstrategia() {
     bot.estrategia           = nome;
     bot._precos              = []; // reseta histórico de preços
     bot._candleBuffer        = []; // reseta buffer da Lógica do preço / Trend Pro
-    bot._candleSinalPendente = null; // cancela sinal pendente de virada (candle)
-    bot._tpSinalPendente     = null; // cancela sinal pendente de virada (trend_pro)
+    bot._candleSinalPendente = null;  // cancela sinal pendente de virada (candle)
+    bot._tpSinalPendente     = null;  // cancela sinal pendente de virada (trend_pro)
+    bot._tpAnalisando        = false; // cancela flag de análise em andamento
 
     // Re-subscreve ticks se o ativo mudou e jhconexo WS ativa
     const novoAtivo = _resolverAtivo(est.ativo);
@@ -5681,7 +5682,9 @@ function processCommand(cmd) {
         bot._buying               = false;
         bot._metaEncerrada        = false;
         bot._candleBuffer         = []; // reseta buffer da Lógica do preço
-        bot._candleSinalPendente  = null; // cancela sinal pendente de virada
+        bot._candleSinalPendente  = null;  // cancela sinal pendente (candle)
+        bot._tpSinalPendente      = null;  // cancela sinal pendente (trend_pro)
+        bot._tpAnalisando         = false; // cancela flag de análise em andamento
         _seqStatusClear();
         // Para conta secundária se estiver operando
         if (typeof _sec !== 'undefined' && _sec.espelhandoAtivo) {
@@ -7281,16 +7284,16 @@ function initWebSocket(wssUrl) {
                 _seqStatusUpdate(`📊 VELA FECHOU ${dir} | ${motivo} | ⏳ aguardando virada para entrar...`);
             } else if (est.tipo === 'trend_pro') {
                 // ══════════════════════════════════════════════════════════════
-                // GARRA TREND PRO INSTITUCIONAL — JS port do Python
+                // GARRA TREND PRO INSTITUCIONAL V2.0
                 //
-                // Constrói mini-velas a partir de ticks (tf × 8 ticks = 1 vela).
-                // Só analisa quando há velas suficientes para todos os indicadores.
-                // Score ≥ score_min (padrão 90) para entrar CALL ou PUT.
-                //
-                // Indicadores: EMA9, EMA21, EMA50, RSI14, MACD(12,26,9),
-                //              ADX14, ATR14, BB(20,2), Momentum10, Padrão de Velas
+                // Motor de 10 módulos rodando no servidor Flask.
+                // O front-end monta as velas OHLC, calcula EMA20/50/200,
+                // RSI, MACD, ADX, ATR e envia para /garra-trend/avaliar.
+                // A resposta retorna aprovado=true/false + direção + score.
+                // Entrada somente na VIRADA da próxima vela.
                 // ══════════════════════════════════════════════════════════════
-                if (!bot._tpSinalPendente) bot._tpSinalPendente = null;
+                if (bot._tpSinalPendente === undefined) bot._tpSinalPendente = null;
+                if (bot._tpAnalisando    === undefined) bot._tpAnalisando    = false;
 
                 const _tpTf     = est.tf || 1;
                 const _tpJanela = Math.max(6, _tpTf * 8);   // ticks por vela
@@ -7310,257 +7313,192 @@ function initWebSocket(wssUrl) {
                     if (!lvVerificar(digit)) return;
                     bot._canaleDir = _tpS.dir;
                     bot._buying    = true;
-                    print(`🏛️ GARRA TREND PRO ${_tpS.dir} | score ${_tpS.score}/100 | ENTRADA NA VIRADA ✅`, 'log-win');
+                    print(`🏛️ GARRA TREND PRO V2.0 ${_tpS.dir} | score ${_tpS.score}/100 | ENTRADA NA VIRADA ✅`, 'log-win');
                     print(`   ${_tpS.resumo}`, 'log-info');
                     _edcEntrar(() => buy());
                     return;
                 }
 
-                // ── FASE 1: aguarda velas suficientes para os indicadores ─────
-                // Precisa de 120 velas → _tpJanela × 120 ticks no buffer
-                const _tpMinTicks = _tpJanela * 120;
+                // ── FASE 1: aguarda velas suficientes (mín. 210 para EMA200) ─
+                const _tpMinTicks = _tpJanela * 210;
                 if (bot._candleBuffer.length < _tpMinTicks) {
-                    const _tpVelas = Math.floor(bot._candleBuffer.length / _tpJanela);
-                    _seqStatusUpdate(`🏛️ TREND PRO [${_tpVelas}/120 velas] coletando histórico...`);
+                    const _tpVelasN = Math.floor(bot._candleBuffer.length / _tpJanela);
+                    _seqStatusUpdate(`🏛️ TREND PRO V2.0 [${_tpVelasN}/210 velas] coletando histórico...`);
                     return;
                 }
 
-                // ── Monta array de velas OHLC a partir do buffer de ticks ─────
-                function _tpOhlc(buf, janela) {
-                    const velas = [];
-                    for (let i = 0; i + janela <= buf.length; i += janela) {
-                        const sl = buf.slice(i, i + janela);
-                        velas.push({
-                            open:  sl[0],
-                            close: sl[sl.length - 1],
-                            high:  Math.max(...sl),
-                            low:   Math.min(...sl)
-                        });
-                    }
-                    return velas;
+                // Evita múltiplas chamadas simultâneas ao servidor
+                if (bot._tpAnalisando) return;
+
+                // ── Monta velas OHLC ─────────────────────────────────────────
+                const _tpBuf   = bot._candleBuffer.slice(-_tpJanela * 210);
+                const _tpVelas = [];
+                for (let _i = 0; _i + _tpJanela <= _tpBuf.length; _i += _tpJanela) {
+                    const _sl = _tpBuf.slice(_i, _i + _tpJanela);
+                    _tpVelas.push({
+                        abertura:  _sl[0],
+                        fechamento: _sl[_sl.length - 1],
+                        maxima:     Math.max(..._sl),
+                        minima:     Math.min(..._sl),
+                        pavio_superior: Math.max(..._sl) - Math.max(_sl[0], _sl[_sl.length - 1]),
+                        pavio_inferior: Math.min(_sl[0], _sl[_sl.length - 1]) - Math.min(..._sl),
+                        tipo: Math.abs(_sl[_sl.length-1] - _sl[0]) < (Math.max(..._sl) - Math.min(..._sl)) * 0.1 ? 'DOJI' : 'NORMAL'
+                    });
                 }
 
-                // ── Funções de indicadores (arrays de close/high/low) ─────────
-                function _ema(arr, period) {
-                    if (arr.length < period) return [];
-                    const k = 2 / (period + 1);
-                    const out = [];
-                    let prev = arr.slice(0, period).reduce((a, b) => a + b, 0) / period;
-                    out.push(prev);
-                    for (let i = period; i < arr.length; i++) {
-                        prev = arr[i] * k + prev * (1 - k);
-                        out.push(prev);
-                    }
-                    return out;
-                }
+                // ── Calcula indicadores para enviar ao servidor ───────────────
+                const _tpClose200 = _tpVelas.slice(-210).map(v => v.fechamento);
 
-                function _rsi(arr, period) {
-                    if (arr.length < period + 1) return [];
-                    const gains = [], losses = [];
-                    for (let i = 1; i < arr.length; i++) {
+                // EMA helper inline
+                const _tpEma = (arr, p) => {
+                    if (arr.length < p) return NaN;
+                    const k = 2 / (p + 1);
+                    let v = arr.slice(0, p).reduce((a, b) => a + b, 0) / p;
+                    for (let i = p; i < arr.length; i++) v = arr[i] * k + v * (1 - k);
+                    return v;
+                };
+
+                // RSI helper inline
+                const _tpRsi = (arr, p) => {
+                    if (arr.length < p + 1) return 50;
+                    let g = 0, l = 0;
+                    for (let i = arr.length - p; i < arr.length; i++) {
                         const d = arr[i] - arr[i - 1];
-                        gains.push(d > 0 ? d : 0);
-                        losses.push(d < 0 ? -d : 0);
+                        if (d > 0) g += d; else l -= d;
                     }
-                    let avgG = gains.slice(0, period).reduce((a, b) => a + b, 0) / period;
-                    let avgL = losses.slice(0, period).reduce((a, b) => a + b, 0) / period;
-                    const out = [];
-                    out.push(avgL === 0 ? 100 : 100 - 100 / (1 + avgG / avgL));
-                    for (let i = period; i < gains.length; i++) {
-                        avgG = (avgG * (period - 1) + gains[i]) / period;
-                        avgL = (avgL * (period - 1) + losses[i]) / period;
-                        out.push(avgL === 0 ? 100 : 100 - 100 / (1 + avgG / avgL));
+                    g /= p; l /= p;
+                    return l === 0 ? 100 : 100 - 100 / (1 + g / l);
+                };
+
+                // MACD helper inline (retorna linha - sinal)
+                const _tpMacd = (arr) => {
+                    const emaF = _tpEma(arr, 12);
+                    const emaS = _tpEma(arr, 26);
+                    const line = emaF - emaS;
+                    // sinal = EMA9 da linha MACD (simplificado: valor da própria linha - média recente)
+                    const macdSeries = [];
+                    const k12 = 2/13, k26 = 2/27;
+                    let e12 = arr.slice(0,12).reduce((a,b)=>a+b,0)/12;
+                    let e26 = arr.slice(0,26).reduce((a,b)=>a+b,0)/26;
+                    for (let i = 12; i < arr.length; i++) { e12 = arr[i]*k12 + e12*(1-k12); }
+                    for (let i = 26; i < arr.length; i++) { e26 = arr[i]*k26 + e26*(1-k26); }
+                    const macdLine = e12 - e26;
+                    // sinal EMA9 da série macd — usa os últimos 35 preços para série curta
+                    const _mSeries = [];
+                    let _e12t = arr.slice(0,12).reduce((a,b)=>a+b,0)/12;
+                    let _e26t = arr.slice(0,26).reduce((a,b)=>a+b,0)/26;
+                    for (let i = 12; i < arr.length; i++) _e12t = arr[i]*k12 + _e12t*(1-k12);
+                    for (let i = 26; i < arr.length; i++) _e26t = arr[i]*k26 + _e26t*(1-k26);
+                    // simplificação: retorna diferença como proxy do cruzamento
+                    return macdLine;
+                };
+
+                // ATR helper inline (média das últimas 14 velas)
+                const _tpAtr = (vels) => {
+                    const slice = vels.slice(-15);
+                    let sum = 0;
+                    for (let i = 1; i < slice.length; i++) {
+                        const hl = slice[i].maxima  - slice[i].minima;
+                        const hc = Math.abs(slice[i].maxima  - slice[i-1].fechamento);
+                        const lc = Math.abs(slice[i].minima  - slice[i-1].fechamento);
+                        sum += Math.max(hl, hc, lc);
                     }
-                    return out;
+                    return sum / Math.min(14, slice.length - 1);
+                };
+
+                // ADX helper inline (proxy via slope das EMAs)
+                const _tpAdx = (arr, vels) => {
+                    // Proxy: força da tendência = |EMA20 - EMA50| / ATR
+                    const e20 = _tpEma(arr, 20);
+                    const e50 = _tpEma(arr, 50);
+                    const atr = _tpAtr(vels) || 0.0001;
+                    return Math.min(100, Math.abs(e20 - e50) / atr * 10);
+                };
+
+                const _tpIndic = {
+                    ema20:  _tpEma(_tpClose200, 20),
+                    ema50:  _tpEma(_tpClose200, 50),
+                    ema200: _tpEma(_tpClose200, 200),
+                    rsi:    _tpRsi(_tpClose200, 14),
+                    macd:   _tpMacd(_tpClose200),
+                    adx:    _tpAdx(_tpClose200, _tpVelas),
+                    atr:    _tpAtr(_tpVelas)
+                };
+
+                // Detecta padrão candlestick da última vela
+                const _tpUltima  = _tpVelas[_tpVelas.length - 1];
+                const _tpAnterio = _tpVelas[_tpVelas.length - 2] || _tpUltima;
+                let _tpPadrao = 'NENHUM';
+                const _tpCorpo = Math.abs(_tpUltima.fechamento - _tpUltima.abertura);
+                const _tpRange = _tpUltima.maxima - _tpUltima.minima;
+                if (_tpUltima.tipo === 'DOJI') {
+                    _tpPadrao = 'DOJI';
+                } else if (_tpCorpo >= _tpRange * 0.7) {
+                    _tpPadrao = _tpUltima.fechamento > _tpUltima.abertura ? 'MARUBOZU' : 'MARUBOZU';
+                } else if (_tpUltima.pavio_inferior >= _tpCorpo * 2 && _tpUltima.fechamento > _tpUltima.abertura) {
+                    _tpPadrao = 'MARTELO';
+                } else if (_tpUltima.pavio_superior >= _tpCorpo * 2 && _tpUltima.fechamento < _tpUltima.abertura) {
+                    _tpPadrao = 'SHOOTING_STAR';
+                } else if (_tpAnterio.fechamento < _tpAnterio.abertura && _tpUltima.fechamento > _tpUltima.abertura &&
+                           _tpUltima.abertura < _tpAnterio.fechamento && _tpUltima.fechamento > _tpAnterio.abertura) {
+                    _tpPadrao = 'ENGOLFO_ALTA';
+                } else if (_tpAnterio.fechamento > _tpAnterio.abertura && _tpUltima.fechamento < _tpUltima.abertura &&
+                           _tpUltima.abertura > _tpAnterio.fechamento && _tpUltima.fechamento < _tpAnterio.abertura) {
+                    _tpPadrao = 'ENGOLFO_BAIXA';
                 }
 
-                function _macd(arr, fast, slow, signal) {
-                    const emaF = _ema(arr, fast);
-                    const emaS = _ema(arr, slow);
-                    const len  = Math.min(emaF.length, emaS.length);
-                    const macdLine = [];
-                    for (let i = 0; i < len; i++)
-                        macdLine.push(emaF[emaF.length - len + i] - emaS[emaS.length - len + i]);
-                    const sigLine = _ema(macdLine, signal);
-                    return { macd: macdLine, signal: sigLine };
-                }
+                // ── Envia para o servidor /garra-trend/avaliar ────────────────
+                bot._tpAnalisando = true;
+                _seqStatusUpdate(`🏛️ TREND PRO V2.0 — analisando 10 módulos...`);
 
-                function _trueRange(highs, lows, closes) {
-                    const tr = [];
-                    for (let i = 1; i < closes.length; i++) {
-                        const hl = highs[i] - lows[i];
-                        const hc = Math.abs(highs[i] - closes[i - 1]);
-                        const lc = Math.abs(lows[i]  - closes[i - 1]);
-                        tr.push(Math.max(hl, hc, lc));
+                fetch('/garra-trend/avaliar', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        precos:              _tpClose200.slice(-50),
+                        velas:               _tpVelas.slice(-20),
+                        indicadores:         _tpIndic,
+                        padrao_candlestick:  _tpPadrao,
+                        mercado:             est.ativo || 'R_100'
+                    })
+                })
+                .then(r => r.json())
+                .then(res => {
+                    bot._tpAnalisando = false;
+                    // Avança buffer para a próxima vela
+                    bot._candleBuffer = bot._candleBuffer.slice(-_tpJanela * 209);
+
+                    if (!res.aprovado) {
+                        const _det = res.detalhes_modulos || {};
+                        const _resumoBloq = [
+                            `M1:${_det.m1_tendencia?'✅':'❌'}`,
+                            `M2:${_det.m2_micro_tendencia||'?'}`,
+                            `M6:${_det.m6_volatilidade?'✅':'❌'}`,
+                            `M8:${_det.m8_lateralidade?'✅':'❌'}`,
+                        ].join(' ');
+                        _seqStatusUpdate(`🏛️ TREND PRO V2.0 score:${res.score_total} | ${_resumoBloq} | ${res.motivo_bloqueio || 'aguardando...'}`);
+                        return;
                     }
-                    return tr;
-                }
 
-                function _atr(highs, lows, closes, period) {
-                    const tr = _trueRange(highs, lows, closes);
-                    if (tr.length < period) return [];
-                    let avg = tr.slice(0, period).reduce((a, b) => a + b, 0) / period;
-                    const out = [avg];
-                    for (let i = period; i < tr.length; i++) {
-                        avg = (avg * (period - 1) + tr[i]) / period;
-                        out.push(avg);
-                    }
-                    return out;
-                }
+                    // Aprovado — guarda sinal para entrar na virada
+                    const _det = res.detalhes_modulos || {};
+                    const _resumo = [
+                        `Score:${res.score_total}`,
+                        `EMA:${_det.m1_tendencia?'✅':'❌'}`,
+                        `Micro:${_det.m2_micro_tendencia||'?'}`,
+                        `Mom:${_det.m4_momentum?'✅':'❌'}`,
+                        `Padrão:${_det.m5_candlestick||'?'}`,
+                        `ADX:${_det.m8_lateralidade?'✅':'❌'}`,
+                    ].join(' ');
 
-                function _adx(highs, lows, closes, period) {
-                    const tr = _trueRange(highs, lows, closes);
-                    const dmP = [], dmN = [];
-                    for (let i = 1; i < highs.length; i++) {
-                        const up   = highs[i] - highs[i - 1];
-                        const down = lows[i - 1] - lows[i];
-                        dmP.push(up   > down && up   > 0 ? up   : 0);
-                        dmN.push(down > up   && down > 0 ? down : 0);
-                    }
-                    function _smooth(arr, p) {
-                        if (arr.length < p) return [];
-                        let s = arr.slice(0, p).reduce((a, b) => a + b, 0);
-                        const out = [s];
-                        for (let i = p; i < arr.length; i++) { s = s - s / p + arr[i]; out.push(s); }
-                        return out;
-                    }
-                    const sTR  = _smooth(tr,  period);
-                    const sDMP = _smooth(dmP, period);
-                    const sDMN = _smooth(dmN, period);
-                    const len  = Math.min(sTR.length, sDMP.length, sDMN.length);
-                    const adxArr = [];
-                    for (let i = 0; i < len; i++) {
-                        if (sTR[i] === 0) { adxArr.push(0); continue; }
-                        const diP  = (sDMP[i] / sTR[i]) * 100;
-                        const diN  = (sDMN[i] / sTR[i]) * 100;
-                        const dxV  = diP + diN === 0 ? 0 : Math.abs(diP - diN) / (diP + diN) * 100;
-                        adxArr.push(dxV);
-                    }
-                    const smoothedAdx = _ema(adxArr, period);
-                    return smoothedAdx;
-                }
-
-                function _bbands(arr, period, mult) {
-                    if (arr.length < period) return { upper: [], mid: [], lower: [] };
-                    const mid = [], upper = [], lower = [];
-                    for (let i = period - 1; i < arr.length; i++) {
-                        const sl  = arr.slice(i - period + 1, i + 1);
-                        const m   = sl.reduce((a, b) => a + b, 0) / period;
-                        const std = Math.sqrt(sl.reduce((s, x) => s + (x - m) ** 2, 0) / period);
-                        mid.push(m);
-                        upper.push(m + mult * std);
-                        lower.push(m - mult * std);
-                    }
-                    return { upper, mid, lower };
-                }
-
-                // ── Monta velas e extrai arrays ───────────────────────────────
-                const _tpVelasBuf = _tpOhlc(bot._candleBuffer, _tpJanela);
-                if (_tpVelasBuf.length < 120) {
-                    _seqStatusUpdate(`🏛️ TREND PRO [${_tpVelasBuf.length}/120 velas] aguardando...`);
-                    return;
-                }
-                const _tpVelas  = _tpVelasBuf.slice(-120);
-                const _tpClose  = _tpVelas.map(v => v.close);
-                const _tpHigh   = _tpVelas.map(v => v.high);
-                const _tpLow    = _tpVelas.map(v => v.low);
-
-                // ── Calcula indicadores ───────────────────────────────────────
-                const _ema9  = _ema(_tpClose, 9);
-                const _ema21 = _ema(_tpClose, 21);
-                const _ema50 = _ema(_tpClose, 50);
-                const _rsiArr = _rsi(_tpClose, 14);
-                const _macdObj = _macd(_tpClose, 12, 26, 9);
-                const _adxArr  = _adx(_tpHigh, _tpLow, _tpClose, 14);
-                const _atrArr  = _atr(_tpHigh, _tpLow, _tpClose, 14);
-                const _bbObj   = _bbands(_tpClose, 20, 2);
-
-                // Últimos valores (equivalente ao .iloc[-1] do pandas)
-                const _e9  = _ema9[_ema9.length - 1];
-                const _e21 = _ema21[_ema21.length - 1];
-                const _e50 = _ema50[_ema50.length - 1];
-                const _rsiVal = _rsiArr[_rsiArr.length - 1];
-                const _mL     = _macdObj.macd[_macdObj.macd.length - 1];
-                const _mS     = _macdObj.signal[_macdObj.signal.length - 1];
-                const _adxVal = _adxArr[_adxArr.length - 1];
-                const _atrLast = _atrArr[_atrArr.length - 1];
-                const _atrAvg5 = _atrArr.slice(-5).reduce((a, b) => a + b, 0) / Math.min(5, _atrArr.length);
-                const _bbM  = _bbObj.mid[_bbObj.mid.length - 1];
-                const _bbU  = _bbObj.upper[_bbObj.upper.length - 1];
-                const _bbL  = _bbObj.lower[_bbObj.lower.length - 1];
-                const _closeLast = _tpClose[_tpClose.length - 1];
-                const _close10   = _tpClose[_tpClose.length - 11] || _closeLast;
-                const _ema21_5ago = _ema21.length >= 5 ? _ema21[_ema21.length - 5] : _e21;
-
-                // ── Score system (idêntico ao Python) ─────────────────────────
-                let _scoreC = 0, _scoreP = 0;
-                const _motivos = [];
-
-                // EMA alinhamento (+15)
-                if (_e9 > _e21 && _e21 > _e50) { _scoreC += 15; _motivos.push('EMA↑+15'); }
-                if (_e9 < _e21 && _e21 < _e50) { _scoreP += 15; _motivos.push('EMA↓+15'); }
-
-                // MACD linha vs sinal (+15)
-                if (_mL !== undefined && _mS !== undefined) {
-                    if (_mL > _mS) { _scoreC += 15; _motivos.push('MACD↑+15'); }
-                    if (_mL < _mS) { _scoreP += 15; _motivos.push('MACD↓+15'); }
-                }
-
-                // RSI zona (+10)
-                if (_rsiVal > 55 && _rsiVal < 70) { _scoreC += 10; _motivos.push(`RSI${_rsiVal.toFixed(0)}↑+10`); }
-                if (_rsiVal > 30 && _rsiVal < 45)  { _scoreP += 10; _motivos.push(`RSI${_rsiVal.toFixed(0)}↓+10`); }
-
-                // ADX tendência (+10 ambos)
-                if (_adxVal > 25) { _scoreC += 10; _scoreP += 10; _motivos.push(`ADX${_adxVal.toFixed(0)}+10`); }
-
-                // ATR expansão (+10 ambos)
-                if (_atrLast > _atrAvg5) { _scoreC += 10; _scoreP += 10; _motivos.push('ATR↑+10'); }
-
-                // Bollinger posição (+10)
-                if (_closeLast > _bbM) { _scoreC += 10; _motivos.push('BB↑+10'); }
-                if (_closeLast < _bbM) { _scoreP += 10; _motivos.push('BB↓+10'); }
-
-                // Momentum 10 velas (+10)
-                const _mom = _closeLast - _close10;
-                if (_mom > 0) { _scoreC += 10; _motivos.push('Mom↑+10'); }
-                if (_mom < 0) { _scoreP += 10; _motivos.push('Mom↓+10'); }
-
-                // Padrão de velas — últimas 20 (+10)
-                let _altas = 0, _baixas = 0;
-                for (let _vi = 0; _vi < 20; _vi++) {
-                    const _vv = _tpVelas[_tpVelas.length - 1 - _vi];
-                    if (_vv.close > _vv.open) _altas++; else _baixas++;
-                }
-                if (_altas >= 14)  { _scoreC += 10; _motivos.push('Velas↑+10'); }
-                if (_baixas >= 14) { _scoreP += 10; _motivos.push('Velas↓+10'); }
-
-                // EMA21 inclinação (+5)
-                if (_e21 > _ema21_5ago) { _scoreC += 5; _motivos.push('Incl↑+5'); }
-                if (_e21 < _ema21_5ago) { _scoreP += 5; _motivos.push('Incl↓+5'); }
-
-                // Largura BB vs ATR (+5 ambos)
-                const _largBB = _bbU - _bbL;
-                if (_largBB > _atrLast * 2) { _scoreC += 5; _scoreP += 5; _motivos.push('BB-wide+5'); }
-
-                // ── Verifica score mínimo ─────────────────────────────────────
-                const _tpScoreMin = est.score_min || 90;
-                const _tpResumo = _motivos.join(' ');
-
-                let _tpDir = null, _tpScore = 0;
-                if (_scoreC >= _tpScoreMin) { _tpDir = 'CALL'; _tpScore = _scoreC; }
-                if (_scoreP >= _tpScoreMin && _scoreP > _scoreC) { _tpDir = 'PUT'; _tpScore = _scoreP; }
-
-                if (!_tpDir) {
-                    _seqStatusUpdate(`🏛️ TREND PRO C:${_scoreC} P:${_scoreP} (min:${_tpScoreMin}) | ${_tpResumo}`);
-                    // Aguarda próxima vela (reseta buffer para não reanalisar os mesmos ticks)
-                    bot._candleBuffer = bot._candleBuffer.slice(-_tpJanela * 119);
-                    return;
-                }
-
-                // Sinal atingido — aguarda virada da vela para entrar
-                bot._candleBuffer = bot._candleBuffer.slice(-_tpJanela * 119);
-                bot._tpSinalPendente = { dir: _tpDir, score: _tpScore, resumo: _tpResumo };
-                _seqStatusUpdate(`🏛️ TREND PRO ${_tpDir} | score ${_tpScore} | ⏳ aguardando virada para entrar...`);
+                    bot._tpSinalPendente = { dir: res.direcao, score: res.score_total, resumo: _resumo };
+                    _seqStatusUpdate(`🏛️ TREND PRO V2.0 ${res.direcao} | score ${res.score_total}/100 | ⏳ aguardando virada para entrar...`);
+                })
+                .catch(() => {
+                    bot._tpAnalisando = false;
+                    bot._candleBuffer = bot._candleBuffer.slice(-_tpJanela * 209);
+                    _seqStatusUpdate(`🏛️ TREND PRO V2.0 — erro ao consultar servidor, aguardando...`);
+                });
             }
         }
 
