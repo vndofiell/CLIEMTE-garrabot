@@ -7453,58 +7453,92 @@ function initWebSocket(wssUrl) {
                     _tpPadrao = 'ENGOLFO_BAIXA';
                 }
 
-                // ── Envia para o servidor /garra-trend/avaliar ────────────────
-                bot._tpAnalisando = true;
-                _seqStatusUpdate(`🏛️ TREND PRO V2.0 — analisando 10 módulos...`);
+                // ── Avalia 10 módulos localmente (sem fetch — 100% offline) ──
+                bot._candleBuffer = bot._candleBuffer.slice(-_tpJanela * (_tpHistMin - 1));
 
-                fetch('/garra-trend/avaliar', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        precos:              _tpClose200.slice(-50),
-                        velas:               _tpVelas.slice(-20),
-                        indicadores:         _tpIndic,
-                        padrao_candlestick:  _tpPadrao,
-                        mercado:             est.ativo || 'R_100'
-                    })
-                })
-                .then(r => r.json())
-                .then(res => {
-                    bot._tpAnalisando = false;
-                    // Avança buffer para a próxima vela
-                    bot._candleBuffer = bot._candleBuffer.slice(-_tpJanela * 209);
+                const ind   = _tpIndic;
+                const velas20 = _tpVelas.slice(-20);
 
-                    if (!res.aprovado) {
-                        const _det = res.detalhes_modulos || {};
-                        const _resumoBloq = [
-                            `M1:${_det.m1_tendencia?'✅':'❌'}`,
-                            `M2:${_det.m2_micro_tendencia||'?'}`,
-                            `M6:${_det.m6_volatilidade?'✅':'❌'}`,
-                            `M8:${_det.m8_lateralidade?'✅':'❌'}`,
-                        ].join(' ');
-                        _seqStatusUpdate(`🏛️ TREND PRO V2.0 score:${res.score_total} | ${_resumoBloq} | ${res.motivo_bloqueio || 'aguardando...'}`);
-                        return;
-                    }
+                // M1 — Tendência principal (EMA20 > EMA50 > EMA200)
+                const _tpTendAlta  = ind.ema20 > ind.ema50 && ind.ema50 > ind.ema200;
+                const _tpTendBaixa = ind.ema20 < ind.ema50 && ind.ema50 < ind.ema200;
+                const _tpM1ok      = _tpTendAlta || _tpTendBaixa;
+                const _tpPts1      = _tpM1ok ? 15 : 0;
 
-                    // Aprovado — guarda sinal para entrar na virada
-                    const _det = res.detalhes_modulos || {};
-                    const _resumo = [
-                        `Score:${res.score_total}`,
-                        `EMA:${_det.m1_tendencia?'✅':'❌'}`,
-                        `Micro:${_det.m2_micro_tendencia||'?'}`,
-                        `Mom:${_det.m4_momentum?'✅':'❌'}`,
-                        `Padrão:${_det.m5_candlestick||'?'}`,
-                        `ADX:${_det.m8_lateralidade?'✅':'❌'}`,
-                    ].join(' ');
+                // M2 — Micro tendência (últimas 10 velas)
+                const _tpUlt10   = _tpVelas.slice(-10);
+                let   _tpAltas10 = _tpUlt10.filter(v => v.fechamento > v.abertura).length;
+                let   _tpForca   = (_tpAltas10 / _tpUlt10.length) * 100;
+                if (_tpTendBaixa) _tpForca = 100 - _tpForca;
+                const _tpM2ok    = _tpForca >= 70;
+                const _tpPts2    = _tpM2ok ? 10 : 0;
 
-                    bot._tpSinalPendente = { dir: res.direcao, score: res.score_total, resumo: _resumo };
-                    _seqStatusUpdate(`🏛️ TREND PRO V2.0 ${res.direcao} | score ${res.score_total}/100 | ⏳ aguardando virada para entrar...`);
-                })
-                .catch(() => {
-                    bot._tpAnalisando = false;
-                    bot._candleBuffer = bot._candleBuffer.slice(-_tpJanela * 209);
-                    _seqStatusUpdate(`🏛️ TREND PRO V2.0 — erro ao consultar servidor, aguardando...`);
-                });
+                // M3 — Força da vela atual
+                const _tpVAtual = _tpVelas[_tpVelas.length - 1];
+                const _tpCrp    = Math.abs(_tpVAtual.fechamento - _tpVAtual.abertura);
+                const _tpPv     = _tpVAtual.pavio_superior + _tpVAtual.pavio_inferior;
+                let   _tpPts3v  = 0;
+                if (_tpVAtual.tipo === 'DOJI')     _tpPts3v = -5;
+                else if (_tpPv > _tpCrp * 2)       _tpPts3v = -3;
+                else if (_tpCrp > 0.001)            _tpPts3v = 3;
+                else                                _tpPts3v = 1;
+                const _tpM3ok   = _tpPts3v > 0;
+                const _tpPts3   = _tpM3ok ? 15 : 0;
+
+                // M4 — Momentum (RSI + MACD alinhados)
+                const _tpMomOk = (_tpTendAlta  && ind.rsi > 55 && ind.macd > 0) ||
+                                  (_tpTendBaixa && ind.rsi < 45 && ind.macd < 0);
+                const _tpPts4  = _tpMomOk ? 10 : 0;
+
+                // M5 — Padrão candlestick
+                const _tpPadrOk = ['ENGOLFO_ALTA','ENGOLFO_BAIXA','MARTELO','SHOOTING_STAR',
+                                    'MORNING_STAR','EVENING_STAR','HARAMI','MARUBOZU'].includes(_tpPadrao);
+                const _tpPts5   = _tpPadrOk ? 15 : 0;
+
+                // M6 — Volatilidade (ATR)
+                const _tpM6ok = ind.atr > 0.0002;
+                const _tpPts6 = _tpM6ok ? 5 : 0;
+
+                // M7 — Sem falso rompimento (+5 sempre, pois não temos detecção externa)
+                const _tpPts7 = 5;
+
+                // M8 — Mercado lateral (ADX proxy)
+                const _tpLateral = ind.adx < 20 || Math.abs(ind.ema20 - ind.ema50) < 0.0001;
+                const _tpM8ok    = !_tpLateral;
+                const _tpPts8    = _tpLateral ? -100 : 10;
+
+                // Score total + 10 pts base IA
+                const _tpScoreTotal = _tpPts1 + _tpPts2 + _tpPts3 + _tpPts4 +
+                                       _tpPts5 + _tpPts6 + _tpPts7 + _tpPts8 + 10;
+
+                // Filtro Anti-Loss
+                const _tpScoreMin2 = est.score_min || 92;
+                const _tpAprovado  = _tpM1ok && _tpM2ok && _tpM6ok && _tpM8ok &&
+                                     _tpScoreTotal >= _tpScoreMin2;
+
+                const _tpDirecao = _tpTendAlta ? 'CALL' : (_tpTendBaixa ? 'PUT' : 'NEUTRO');
+
+                if (!_tpAprovado) {
+                    _seqStatusUpdate(
+                        `🏛️ TREND PRO V2.0 score:${_tpScoreTotal} | ` +
+                        `M1:${_tpM1ok?'✅':'❌'} M2:${_tpForca.toFixed(0)}% ` +
+                        `M6:${_tpM6ok?'✅':'❌'} M8:${_tpM8ok?'✅':'❌'} ` +
+                        `RSI:${ind.rsi.toFixed(0)} ADX:${ind.adx.toFixed(0)}`
+                    );
+                    return;
+                }
+
+                // Aprovado — guarda sinal para entrar na virada
+                const _tpResumo = [
+                    `Score:${_tpScoreTotal}`,
+                    `EMA:✅`, `Micro:${_tpForca.toFixed(0)}%`,
+                    `Mom:${_tpMomOk?'✅':'❌'}`,
+                    `Padrão:${_tpPadrao}`,
+                    `RSI:${ind.rsi.toFixed(0)}`,
+                ].join(' ');
+
+                bot._tpSinalPendente = { dir: _tpDirecao, score: _tpScoreTotal, resumo: _tpResumo };
+                _seqStatusUpdate(`🏛️ TREND PRO V2.0 ${_tpDirecao} | score ${_tpScoreTotal}/100 | ⏳ aguardando virada para entrar...`);
             }
         }
 
