@@ -7479,10 +7479,10 @@ function initWebSocket(wssUrl) {
                 const _e9  = _ema9[_ema9.length - 1];
                 const _e21 = _ema21[_ema21.length - 1];
                 const _e50 = _ema50[_ema50.length - 1];
-                const _rsi = _rsiArr[_rsiArr.length - 1];
-                const _mL  = _macdObj.macd[_macdObj.macd.length - 1];
-                const _mS  = _macdObj.signal[_macdObj.signal.length - 1];
-                const _adx = _adxArr[_adxArr.length - 1];
+                const _rsiVal = _rsiArr[_rsiArr.length - 1];
+                const _mL     = _macdObj.macd[_macdObj.macd.length - 1];
+                const _mS     = _macdObj.signal[_macdObj.signal.length - 1];
+                const _adxVal = _adxArr[_adxArr.length - 1];
                 const _atrLast = _atrArr[_atrArr.length - 1];
                 const _atrAvg5 = _atrArr.slice(-5).reduce((a, b) => a + b, 0) / Math.min(5, _atrArr.length);
                 const _bbM  = _bbObj.mid[_bbObj.mid.length - 1];
@@ -7507,11 +7507,11 @@ function initWebSocket(wssUrl) {
                 }
 
                 // RSI zona (+10)
-                if (_rsi > 55 && _rsi < 70) { _scoreC += 10; _motivos.push(`RSI${_rsi.toFixed(0)}↑+10`); }
-                if (_rsi > 30 && _rsi < 45)  { _scoreP += 10; _motivos.push(`RSI${_rsi.toFixed(0)}↓+10`); }
+                if (_rsiVal > 55 && _rsiVal < 70) { _scoreC += 10; _motivos.push(`RSI${_rsiVal.toFixed(0)}↑+10`); }
+                if (_rsiVal > 30 && _rsiVal < 45)  { _scoreP += 10; _motivos.push(`RSI${_rsiVal.toFixed(0)}↓+10`); }
 
                 // ADX tendência (+10 ambos)
-                if (_adx > 25) { _scoreC += 10; _scoreP += 10; _motivos.push(`ADX${_adx.toFixed(0)}+10`); }
+                if (_adxVal > 25) { _scoreC += 10; _scoreP += 10; _motivos.push(`ADX${_adxVal.toFixed(0)}+10`); }
 
                 // ATR expansão (+10 ambos)
                 if (_atrLast > _atrAvg5) { _scoreC += 10; _scoreP += 10; _motivos.push('ATR↑+10'); }
