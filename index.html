@@ -6638,14 +6638,25 @@ function initWebSocket(wssUrl) {
 
     bot.ws.onopen = () => {
         print("🔒 CONECTADO! BUSCANDO SALDO...", "log-win");
-        bot._loginid = undefined; // reseta para nova conexão
-        bot.ws.send(json({ authorize: 1 }));  // identifica a conta antes de operar
+        bot._loginid  = undefined; // reseta para nova conexão
+        bot._buying   = false;     // libera flag de compra travado
+        bot.ws.send(json({ authorize: 1 }));
         bot.ws.send(json({ balance: 1, subscribe: 1 }));
-        // Garante ativo válido — never undefined/null/empty/object
         const _estAtivo = ESTRATEGIAS[bot.estrategia] && ESTRATEGIAS[bot.estrategia].ativo;
         const ativo = _resolverAtivo(_estAtivo);
         bot._tickAtivo = ativo;
         bot.ws.send(json({ ticks: ativo, subscribe: 1 }));
+        // Mostra estado do buffer ao reconectar (trend_pro / candle)
+        const _estRec = ESTRATEGIAS[bot.estrategia];
+        if (_estRec && (_estRec.tipo === 'trend_pro' || _estRec.tipo === 'candle') && bot._candleBuffer) {
+            const _tfR   = _estRec.tf || 1;
+            const _janR  = Math.max(6, _tfR * 8);
+            const _histR = _estRec.tp_hist || (_estRec.tipo === 'trend_pro' ? 210 : 10);
+            const _velR  = Math.floor(bot._candleBuffer.length / _janR);
+            if (_velR > 0) {
+                print(`📡 Reconectado — buffer preservado: ${_velR}/${_histR} velas`, 'log-info');
+            }
+        }
     };
 
     bot.ws.onmessage = (msg) => {
