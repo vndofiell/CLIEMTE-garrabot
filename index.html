@@ -7454,7 +7454,8 @@ function initWebSocket(wssUrl) {
                 }
 
                 // ── Avalia 10 módulos localmente (sem fetch — 100% offline) ──
-                bot._candleBuffer = bot._candleBuffer.slice(-_tpJanela * (_tpHistMin - 1));
+                // Descarta só a vela mais antiga para dar espaço à próxima vela
+                bot._candleBuffer = bot._candleBuffer.slice(-_tpJanela * _tpHistMin + 1);
 
                 const ind   = _tpIndic;
                 const velas20 = _tpVelas.slice(-20);
