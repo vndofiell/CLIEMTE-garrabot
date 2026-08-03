@@ -6689,6 +6689,19 @@ function initWebSocket(wssUrl) {
                 _volFiltroAtualizarBtn();   // atualiza label WIN/ADV em tempo real
                 _rotacaoAtualizarBtn();     // atualiza ativo atual da rotação
 
+                // ── Lógica do Preço: acumula buffer em todo tick (inclusive durante operação) ──
+                // A análise e entrada ficam bloqueadas por bot._buying, mas o buffer
+                // continua crescendo para que a vela não perca ticks durante operações.
+                const _estCdl = bot.running && ESTRATEGIAS[bot.estrategia];
+                if (_estCdl && _estCdl.tipo === 'candle') {
+                    if (!bot._candleBuffer) bot._candleBuffer = [];
+                    const _tfCdl  = _estCdl.tf || 1;
+                    const _tamCdl = Math.max(6, _tfCdl * 8);
+                    bot._candleBuffer.push(parseFloat(_dQuote));
+                    // Mantém no máximo 2 janelas para não crescer infinitamente
+                    if (bot._candleBuffer.length > _tamCdl * 2) bot._candleBuffer.shift();
+                }
+
                 // ── Fluxo direcional contínuo — atualiza bot._fluxoDir em todo tick ──
                 // Calcula slope dos últimos 20 preços para todos os tipos de estratégia
                 if (!bot._tickPrices) bot._tickPrices = [];
@@ -7163,7 +7176,16 @@ function initWebSocket(wssUrl) {
                 const tamJanela = Math.max(6, tf * 8);   // ~8 ticks por minuto
 
                 // ── FASE 2: sinal pendente + primeiro tick da nova vela ───────
+                // bot._buying é checado aqui também: se ainda estiver em operação,
+                // descarta o sinal — nunca abre duas entradas simultâneas
                 if (bot._candleSinalPendente) {
+                    if (bot._buying) {
+                        // Ainda em operação — descarta sinal e começa nova vela limpa
+                        bot._candleSinalPendente = null;
+                        bot._candleBuffer = [preco];
+                        _seqStatusUpdate(`📊 LÓGICA PREÇO — operação em andamento, sinal descartado, aguardando...`);
+                        return;
+                    }
                     const sinal = bot._candleSinalPendente;
                     bot._candleSinalPendente = null;  // consome o sinal
                     // Começa o novo buffer com este tick (abertura da nova vela)
@@ -7178,9 +7200,8 @@ function initWebSocket(wssUrl) {
                     return;
                 }
 
-                // ── FASE 1: acumula ticks para formar o candle ────────────────
-                bot._candleBuffer.push(preco);
-
+                // ── FASE 1: verifica progresso da vela atual ──────────────────
+                // (push já feito no bloco sempre-ativo acima, fora do guard _buying)
                 if (bot._candleBuffer.length < tamJanela) {
                     const pct = Math.round((bot._candleBuffer.length / tamJanela) * 100);
                     _seqStatusUpdate(`📊 CANDLE [${bot._candleBuffer.length}/${tamJanela}] analisando vela... ${pct}%`);
