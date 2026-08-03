@@ -5033,7 +5033,8 @@ function selecionarEstrategia(nome) {
     } else if (est.tipo === 'trend_pro') {
         campo('Timeframe (min por vela de análise)', 'cfg-tf', 'select', est.tf || 1,
               undefined, undefined, undefined, [1,2,5,15]);
-        campo('Score mínimo para entrar (0-100)', 'cfg-score-min', 'number', est.score_min || 90, 50, 100, 5);
+        campo('Histórico mínimo (velas) — min 50, max 210', 'cfg-tp-hist', 'number', est.tp_hist || 210, 50, 210, 10);
+        campo('Score mínimo para entrar (0-100)', 'cfg-score-min', 'number', est.score_min || 92, 50, 100, 5);
         campo('Unidade do contrato (m=minutos / t=ticks)', 'cfg-duracao-unit', 'select', est.duracao_unit || 't',
               undefined, undefined, undefined, ['m','t']);
         campo('Duração do contrato', 'cfg-duracao', 'select', est.duracao || 1,
@@ -5075,6 +5076,10 @@ function confirmarEstrategia() {
     if (tf)           est.tf            = parseInt(tf.value);
     const duracaoUnit = document.getElementById('cfg-duracao-unit');
     if (duracaoUnit)  est.duracao_unit  = duracaoUnit.value;
+    const tpHist  = document.getElementById('cfg-tp-hist');
+    if (tpHist)       est.tp_hist   = Math.max(50, Math.min(210, parseInt(tpHist.value)  || 210));
+    const scoreMin = document.getElementById('cfg-score-min');
+    if (scoreMin)     est.score_min = Math.max(50, Math.min(100, parseInt(scoreMin.value) || 92));
     if (seqGat)       est.seq_gatilho   = Math.max(0, parseInt(seqGat.value) || 0);
     // Campos pct_hist
     const pctJanela = document.getElementById('cfg-pct-janela');
@@ -7320,10 +7325,11 @@ function initWebSocket(wssUrl) {
                 }
 
                 // ── FASE 1: aguarda velas suficientes (mín. 210 para EMA200) ─
-                const _tpMinTicks = _tpJanela * 210;
+                const _tpHistMin  = Math.max(50, Math.min(210, est.tp_hist || 210));
+                const _tpMinTicks = _tpJanela * _tpHistMin;
                 if (bot._candleBuffer.length < _tpMinTicks) {
                     const _tpVelasN = Math.floor(bot._candleBuffer.length / _tpJanela);
-                    _seqStatusUpdate(`🏛️ TREND PRO V2.0 [${_tpVelasN}/210 velas] coletando histórico...`);
+                    _seqStatusUpdate(`🏛️ TREND PRO V2.0 [${_tpVelasN}/${_tpHistMin} velas] coletando histórico...`);
                     return;
                 }
 
