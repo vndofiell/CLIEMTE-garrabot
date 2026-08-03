@@ -2328,8 +2328,8 @@ const ESTRATEGIAS = {
     "📊 Lógica do preço":   { tipo: "candle", desc: "Analisa pavios e rejeições nos candles (CALL/PUT)" },
     "📈 Fluxo Direcional":  { tipo: "fluxo",  velas: 3, desc: "3 preços consecutivos subindo→CALL / descendo→PUT" },
     "🏛️ Garra Trend Pro":   { tipo: "trend_pro", tf: 1, duracao: 1, duracao_unit: "t", ativo: "R_100",
-                               score_min: 90,
-                               desc: "EMA+MACD+RSI+ADX+ATR+BB+Momentum — score ≥90 para entrar (CALL/PUT)" },
+                               score_min: 92,
+                               desc: "10 módulos institucionais — Filtro Anti-Loss — score ≥92 (CALL/PUT)" },
     // ── Slot dinâmico ECT — sobrescrito a cada ciclo do monitor ──────────────
     "🤖 ECT Dinâmica":      { tipo: "digit", contract: "DIGITUNDER", barrier: 7, duracao: 1,
                                seq_gatilho: 0, ativo: "R_100", desc: "Estratégia criada ao vivo pela IA ECT" },
