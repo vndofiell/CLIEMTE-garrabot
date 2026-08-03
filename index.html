@@ -7274,15 +7274,20 @@ function initWebSocket(wssUrl) {
                     const pctPavioInf = pavioInf / range;
                     const pctCorpo    = corpo    / range;
 
-                    if (pctPavioSup >= 0.45 && pctPavioSup > pctPavioInf) {
+                    // Pavio superior dominante (≥30% do range e maior que inferior)
+                    // → preço rejeitou alta → PUT (reversão)
+                    if (pctPavioSup >= 0.30 && pctPavioSup > pctPavioInf * 1.3) {
                         dir    = 'PUT';
-                        motivo = `pavio↑${(pctPavioSup*100).toFixed(0)}% > pavio↓${(pctPavioInf*100).toFixed(0)}%`;
-                    } else if (pctPavioInf >= 0.45 && pctPavioInf > pctPavioSup) {
+                        motivo = `pavio↑${(pctPavioSup*100).toFixed(0)}% rejeição alta→PUT`;
+                    // Pavio inferior dominante (≥30% do range e maior que superior)
+                    // → preço rejeitou baixa → CALL (reversão)
+                    } else if (pctPavioInf >= 0.30 && pctPavioInf > pctPavioSup * 1.3) {
                         dir    = 'CALL';
-                        motivo = `pavio↓${(pctPavioInf*100).toFixed(0)}% > pavio↑${(pctPavioSup*100).toFixed(0)}%`;
+                        motivo = `pavio↓${(pctPavioInf*100).toFixed(0)}% rejeição baixa→CALL`;
+                    // Corpo forte sem pavio dominante → segue o momentum
                     } else if (pctCorpo >= 0.55) {
-                        dir    = close > open ? 'PUT' : 'CALL';
-                        motivo = `corpo${(pctCorpo*100).toFixed(0)}% ${close > open ? 'alta→PUT' : 'queda→CALL'}`;
+                        dir    = close > open ? 'CALL' : 'PUT';
+                        motivo = `corpo${(pctCorpo*100).toFixed(0)}% ${close > open ? 'momentum alta→CALL' : 'momentum baixa→PUT'}`;
                     }
                 }
 
@@ -7291,7 +7296,7 @@ function initWebSocket(wssUrl) {
 
                 if (!dir) {
                     // Sem sinal — descarta e aguarda a próxima vela completa
-                    _seqStatusUpdate(`📊 CANDLE sem sinal — aguardando próxima vela...`);
+                    _seqStatusUpdate(`📊 CANDLE sem sinal (pav↑${range>0?(pavioSup/range*100).toFixed(0):0}% pav↓${range>0?(pavioInf/range*100).toFixed(0):0}% corpo${range>0?(corpo/range*100).toFixed(0):0}%) — aguardando próxima vela...`);
                     return;
                 }
 
@@ -7465,8 +7470,8 @@ function initWebSocket(wssUrl) {
                 }
 
                 // ── Avalia 10 módulos localmente (sem fetch — 100% offline) ──
-                // Descarta só a vela mais antiga para dar espaço à próxima vela
-                bot._candleBuffer = bot._candleBuffer.slice(-_tpJanela * _tpHistMin + 1);
+                // Descarta exatamente 1 vela completa — próxima vela completa dispara nova análise
+                bot._candleBuffer = bot._candleBuffer.slice(-_tpJanela * (_tpHistMin - 1));
 
                 const ind   = _tpIndic;
                 const velas20 = _tpVelas.slice(-20);
