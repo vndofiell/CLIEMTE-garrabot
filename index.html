@@ -5017,11 +5017,13 @@ function selecionarEstrategia(nome) {
               ['R_10','R_25','R_50','R_75','R_100','1HZ10V','1HZ25V','1HZ50V','1HZ75V','1HZ100V']);
 
     } else if (est.tipo === 'candle') {
-        campo('Timeframe (min por vela)', 'cfg-tf', 'select', 1,
+        campo('Timeframe (min por vela)', 'cfg-tf', 'select', est.tf || 1,
               undefined, undefined, undefined, [1,2,5,15]);
-        campo('Duração do contrato (min)', 'cfg-duracao', 'select', 1,
-              undefined, undefined, undefined, [1,2,5]);
-        campo('Ativo (mercado)', 'cfg-ativo', 'select', 'R_100',
+        campo('Unidade do contrato (m=minutos / t=ticks)', 'cfg-duracao-unit', 'select', est.duracao_unit || 'm',
+              undefined, undefined, undefined, ['m','t']);
+        campo('Duração do contrato', 'cfg-duracao', 'select', est.duracao || 1,
+              undefined, undefined, undefined, [1,2,3,4,5,7,10,15]);
+        campo('Ativo (mercado)', 'cfg-ativo', 'select', est.ativo || 'R_100',
               undefined, undefined, undefined,
               ['R_10','R_25','R_50','R_75','R_100','1HZ10V','1HZ25V','1HZ50V','1HZ75V','1HZ100V']);
     }
@@ -5056,6 +5058,8 @@ function confirmarEstrategia() {
     if (ativo)        est.ativo         = ativo.value;
     if (velas)        est.velas         = parseInt(velas.value);
     if (tf)           est.tf            = parseInt(tf.value);
+    const duracaoUnit = document.getElementById('cfg-duracao-unit');
+    if (duracaoUnit)  est.duracao_unit  = duracaoUnit.value;
     if (seqGat)       est.seq_gatilho   = Math.max(0, parseInt(seqGat.value) || 0);
     // Campos pct_hist
     const pctJanela = document.getElementById('cfg-pct-janela');
@@ -5111,8 +5115,12 @@ function confirmarEstrategia() {
     } else if (est.tipo === 'digit' && barrier) {
         resumo += ` | Barreira: ${est.barrier}`;
     }
-    if (duracao && est.tipo !== 'dupla' && est.tipo !== 'gatilho_duplo' && est.tipo !== 'garra_dupla')
-        resumo += ` | ${est.duracao}${est.tipo === 'fluxo' || est.tipo === 'candle' ? 'min' : 't'}`;
+    if (duracao && est.tipo !== 'dupla' && est.tipo !== 'gatilho_duplo' && est.tipo !== 'garra_dupla') {
+        let _unitLabel = 't';
+        if (est.tipo === 'fluxo') _unitLabel = 'min';
+        else if (est.tipo === 'candle') _unitLabel = est.duracao_unit === 't' ? 't' : 'min';
+        resumo += ` | ${est.duracao}${_unitLabel}`;
+    }
     document.getElementById('btn-estrategia').innerHTML =
         `${nome}<span class="cmd-label">${resumo.replace(nome,'').substring(0,36) || est.desc.substring(0,28)}</span>`;
 
@@ -7917,10 +7925,13 @@ function buy() {
         delete payload.barrier;
 
     } else if (est.tipo === 'candle') {
-        const dir = bot._canaleDir || 'CALL';
+        const dir   = bot._canaleDir || 'CALL';
+        const dUnit = est.duracao_unit || 'm';          // 'm' = minutos, 't' = ticks
+        const dMax  = dUnit === 't' ? 10 : 5;           // ticks: máx 10 | minutos: máx 5
+        const dMin  = 1;
         payload.contract_type = dir.toUpperCase();
-        payload.duration_unit = "m";
-        payload.duration      = est.duracao || 1;
+        payload.duration_unit = dUnit;
+        payload.duration      = Math.min(dMax, Math.max(dMin, parseInt(est.duracao) || 1));
         delete payload.barrier;
     }
 
