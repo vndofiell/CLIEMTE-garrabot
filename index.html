@@ -2327,6 +2327,9 @@ const ESTRATEGIAS = {
                                desc: "Entra EVEN quando ímpares saturam >70% e o dígito mais ausente é PAR (e vice-versa)" },
     "📊 Lógica do preço":   { tipo: "candle", desc: "Analisa pavios e rejeições nos candles (CALL/PUT)" },
     "📈 Fluxo Direcional":  { tipo: "fluxo",  velas: 3, desc: "3 preços consecutivos subindo→CALL / descendo→PUT" },
+    "🏛️ Garra Trend Pro":   { tipo: "trend_pro", tf: 1, duracao: 1, duracao_unit: "t", ativo: "R_100",
+                               score_min: 90,
+                               desc: "EMA+MACD+RSI+ADX+ATR+BB+Momentum — score ≥90 para entrar (CALL/PUT)" },
     // ── Slot dinâmico ECT — sobrescrito a cada ciclo do monitor ──────────────
     "🤖 ECT Dinâmica":      { tipo: "digit", contract: "DIGITUNDER", barrier: 7, duracao: 1,
                                seq_gatilho: 0, ativo: "R_100", desc: "Estratégia criada ao vivo pela IA ECT" },
@@ -5026,6 +5029,18 @@ function selecionarEstrategia(nome) {
         campo('Ativo (mercado)', 'cfg-ativo', 'select', est.ativo || 'R_100',
               undefined, undefined, undefined,
               ['R_10','R_25','R_50','R_75','R_100','1HZ10V','1HZ25V','1HZ50V','1HZ75V','1HZ100V']);
+
+    } else if (est.tipo === 'trend_pro') {
+        campo('Timeframe (min por vela de análise)', 'cfg-tf', 'select', est.tf || 1,
+              undefined, undefined, undefined, [1,2,5,15]);
+        campo('Score mínimo para entrar (0-100)', 'cfg-score-min', 'number', est.score_min || 90, 50, 100, 5);
+        campo('Unidade do contrato (m=minutos / t=ticks)', 'cfg-duracao-unit', 'select', est.duracao_unit || 't',
+              undefined, undefined, undefined, ['m','t']);
+        campo('Duração do contrato', 'cfg-duracao', 'select', est.duracao || 1,
+              undefined, undefined, undefined, [1,2,3,4,5,7,10,15]);
+        campo('Ativo (mercado)', 'cfg-ativo', 'select', est.ativo || 'R_100',
+              undefined, undefined, undefined,
+              ['R_10','R_25','R_50','R_75','R_100','1HZ10V','1HZ25V','1HZ50V','1HZ75V','1HZ100V']);
     }
 
     fecharModal('modal-estrategia');
@@ -5092,8 +5107,9 @@ function confirmarEstrategia() {
 
     bot.estrategia           = nome;
     bot._precos              = []; // reseta histórico de preços
-    bot._candleBuffer        = []; // reseta buffer da Lógica do preço
-    bot._candleSinalPendente = null; // cancela sinal pendente de virada
+    bot._candleBuffer        = []; // reseta buffer da Lógica do preço / Trend Pro
+    bot._candleSinalPendente = null; // cancela sinal pendente de virada (candle)
+    bot._tpSinalPendente     = null; // cancela sinal pendente de virada (trend_pro)
 
     // Re-subscreve ticks se o ativo mudou e jhconexo WS ativa
     const novoAtivo = _resolverAtivo(est.ativo);
@@ -6697,17 +6713,18 @@ function initWebSocket(wssUrl) {
                 _volFiltroAtualizarBtn();   // atualiza label WIN/ADV em tempo real
                 _rotacaoAtualizarBtn();     // atualiza ativo atual da rotação
 
-                // ── Lógica do Preço: acumula buffer em todo tick (inclusive durante operação) ──
+                // ── Lógica do Preço / Trend Pro: acumula buffer em todo tick (inclusive durante operação) ──
                 // A análise e entrada ficam bloqueadas por bot._buying, mas o buffer
                 // continua crescendo para que a vela não perca ticks durante operações.
                 const _estCdl = bot.running && ESTRATEGIAS[bot.estrategia];
-                if (_estCdl && _estCdl.tipo === 'candle') {
+                if (_estCdl && (_estCdl.tipo === 'candle' || _estCdl.tipo === 'trend_pro')) {
                     if (!bot._candleBuffer) bot._candleBuffer = [];
                     const _tfCdl  = _estCdl.tf || 1;
                     const _tamCdl = Math.max(6, _tfCdl * 8);
                     bot._candleBuffer.push(parseFloat(_dQuote));
-                    // Mantém no máximo 2 janelas para não crescer infinitamente
-                    if (bot._candleBuffer.length > _tamCdl * 2) bot._candleBuffer.shift();
+                    // Mantém 150 velas de histórico para indicadores (EMA50 precisa de 50 velas mínimo)
+                    const _maxBuf = _tamCdl * 150;
+                    if (bot._candleBuffer.length > _maxBuf) bot._candleBuffer.shift();
                 }
 
                 // ── Fluxo direcional contínuo — atualiza bot._fluxoDir em todo tick ──
@@ -7262,6 +7279,288 @@ function initWebSocket(wssUrl) {
                 // Guarda sinal: entrada só no PRIMEIRO tick da próxima vela (virada)
                 bot._candleSinalPendente = { dir, motivo, open, high, low, close };
                 _seqStatusUpdate(`📊 VELA FECHOU ${dir} | ${motivo} | ⏳ aguardando virada para entrar...`);
+            } else if (est.tipo === 'trend_pro') {
+                // ══════════════════════════════════════════════════════════════
+                // GARRA TREND PRO INSTITUCIONAL — JS port do Python
+                //
+                // Constrói mini-velas a partir de ticks (tf × 8 ticks = 1 vela).
+                // Só analisa quando há velas suficientes para todos os indicadores.
+                // Score ≥ score_min (padrão 90) para entrar CALL ou PUT.
+                //
+                // Indicadores: EMA9, EMA21, EMA50, RSI14, MACD(12,26,9),
+                //              ADX14, ATR14, BB(20,2), Momentum10, Padrão de Velas
+                // ══════════════════════════════════════════════════════════════
+                if (!bot._tpSinalPendente) bot._tpSinalPendente = null;
+
+                const _tpTf     = est.tf || 1;
+                const _tpJanela = Math.max(6, _tpTf * 8);   // ticks por vela
+
+                // ── FASE 2: sinal pendente → entra na virada ──────────────────
+                if (bot._tpSinalPendente) {
+                    if (bot._buying) {
+                        bot._tpSinalPendente = null;
+                        bot._candleBuffer = [preco];
+                        _seqStatusUpdate(`🏛️ TREND PRO — operação em andamento, sinal descartado...`);
+                        return;
+                    }
+                    const _tpS = bot._tpSinalPendente;
+                    bot._tpSinalPendente = null;
+                    bot._candleBuffer = [preco];
+                    _seqStatusClear();
+                    if (!lvVerificar(digit)) return;
+                    bot._canaleDir = _tpS.dir;
+                    bot._buying    = true;
+                    print(`🏛️ GARRA TREND PRO ${_tpS.dir} | score ${_tpS.score}/100 | ENTRADA NA VIRADA ✅`, 'log-win');
+                    print(`   ${_tpS.resumo}`, 'log-info');
+                    _edcEntrar(() => buy());
+                    return;
+                }
+
+                // ── FASE 1: aguarda velas suficientes para os indicadores ─────
+                // Precisa de 120 velas → _tpJanela × 120 ticks no buffer
+                const _tpMinTicks = _tpJanela * 120;
+                if (bot._candleBuffer.length < _tpMinTicks) {
+                    const _tpVelas = Math.floor(bot._candleBuffer.length / _tpJanela);
+                    _seqStatusUpdate(`🏛️ TREND PRO [${_tpVelas}/120 velas] coletando histórico...`);
+                    return;
+                }
+
+                // ── Monta array de velas OHLC a partir do buffer de ticks ─────
+                function _tpOhlc(buf, janela) {
+                    const velas = [];
+                    for (let i = 0; i + janela <= buf.length; i += janela) {
+                        const sl = buf.slice(i, i + janela);
+                        velas.push({
+                            open:  sl[0],
+                            close: sl[sl.length - 1],
+                            high:  Math.max(...sl),
+                            low:   Math.min(...sl)
+                        });
+                    }
+                    return velas;
+                }
+
+                // ── Funções de indicadores (arrays de close/high/low) ─────────
+                function _ema(arr, period) {
+                    if (arr.length < period) return [];
+                    const k = 2 / (period + 1);
+                    const out = [];
+                    let prev = arr.slice(0, period).reduce((a, b) => a + b, 0) / period;
+                    out.push(prev);
+                    for (let i = period; i < arr.length; i++) {
+                        prev = arr[i] * k + prev * (1 - k);
+                        out.push(prev);
+                    }
+                    return out;
+                }
+
+                function _rsi(arr, period) {
+                    if (arr.length < period + 1) return [];
+                    const gains = [], losses = [];
+                    for (let i = 1; i < arr.length; i++) {
+                        const d = arr[i] - arr[i - 1];
+                        gains.push(d > 0 ? d : 0);
+                        losses.push(d < 0 ? -d : 0);
+                    }
+                    let avgG = gains.slice(0, period).reduce((a, b) => a + b, 0) / period;
+                    let avgL = losses.slice(0, period).reduce((a, b) => a + b, 0) / period;
+                    const out = [];
+                    out.push(avgL === 0 ? 100 : 100 - 100 / (1 + avgG / avgL));
+                    for (let i = period; i < gains.length; i++) {
+                        avgG = (avgG * (period - 1) + gains[i]) / period;
+                        avgL = (avgL * (period - 1) + losses[i]) / period;
+                        out.push(avgL === 0 ? 100 : 100 - 100 / (1 + avgG / avgL));
+                    }
+                    return out;
+                }
+
+                function _macd(arr, fast, slow, signal) {
+                    const emaF = _ema(arr, fast);
+                    const emaS = _ema(arr, slow);
+                    const len  = Math.min(emaF.length, emaS.length);
+                    const macdLine = [];
+                    for (let i = 0; i < len; i++)
+                        macdLine.push(emaF[emaF.length - len + i] - emaS[emaS.length - len + i]);
+                    const sigLine = _ema(macdLine, signal);
+                    return { macd: macdLine, signal: sigLine };
+                }
+
+                function _trueRange(highs, lows, closes) {
+                    const tr = [];
+                    for (let i = 1; i < closes.length; i++) {
+                        const hl = highs[i] - lows[i];
+                        const hc = Math.abs(highs[i] - closes[i - 1]);
+                        const lc = Math.abs(lows[i]  - closes[i - 1]);
+                        tr.push(Math.max(hl, hc, lc));
+                    }
+                    return tr;
+                }
+
+                function _atr(highs, lows, closes, period) {
+                    const tr = _trueRange(highs, lows, closes);
+                    if (tr.length < period) return [];
+                    let avg = tr.slice(0, period).reduce((a, b) => a + b, 0) / period;
+                    const out = [avg];
+                    for (let i = period; i < tr.length; i++) {
+                        avg = (avg * (period - 1) + tr[i]) / period;
+                        out.push(avg);
+                    }
+                    return out;
+                }
+
+                function _adx(highs, lows, closes, period) {
+                    const tr = _trueRange(highs, lows, closes);
+                    const dmP = [], dmN = [];
+                    for (let i = 1; i < highs.length; i++) {
+                        const up   = highs[i] - highs[i - 1];
+                        const down = lows[i - 1] - lows[i];
+                        dmP.push(up   > down && up   > 0 ? up   : 0);
+                        dmN.push(down > up   && down > 0 ? down : 0);
+                    }
+                    function _smooth(arr, p) {
+                        if (arr.length < p) return [];
+                        let s = arr.slice(0, p).reduce((a, b) => a + b, 0);
+                        const out = [s];
+                        for (let i = p; i < arr.length; i++) { s = s - s / p + arr[i]; out.push(s); }
+                        return out;
+                    }
+                    const sTR  = _smooth(tr,  period);
+                    const sDMP = _smooth(dmP, period);
+                    const sDMN = _smooth(dmN, period);
+                    const len  = Math.min(sTR.length, sDMP.length, sDMN.length);
+                    const adxArr = [];
+                    for (let i = 0; i < len; i++) {
+                        if (sTR[i] === 0) { adxArr.push(0); continue; }
+                        const diP  = (sDMP[i] / sTR[i]) * 100;
+                        const diN  = (sDMN[i] / sTR[i]) * 100;
+                        const dxV  = diP + diN === 0 ? 0 : Math.abs(diP - diN) / (diP + diN) * 100;
+                        adxArr.push(dxV);
+                    }
+                    const smoothedAdx = _ema(adxArr, period);
+                    return smoothedAdx;
+                }
+
+                function _bbands(arr, period, mult) {
+                    if (arr.length < period) return { upper: [], mid: [], lower: [] };
+                    const mid = [], upper = [], lower = [];
+                    for (let i = period - 1; i < arr.length; i++) {
+                        const sl  = arr.slice(i - period + 1, i + 1);
+                        const m   = sl.reduce((a, b) => a + b, 0) / period;
+                        const std = Math.sqrt(sl.reduce((s, x) => s + (x - m) ** 2, 0) / period);
+                        mid.push(m);
+                        upper.push(m + mult * std);
+                        lower.push(m - mult * std);
+                    }
+                    return { upper, mid, lower };
+                }
+
+                // ── Monta velas e extrai arrays ───────────────────────────────
+                const _tpVelasBuf = _tpOhlc(bot._candleBuffer, _tpJanela);
+                if (_tpVelasBuf.length < 120) {
+                    _seqStatusUpdate(`🏛️ TREND PRO [${_tpVelasBuf.length}/120 velas] aguardando...`);
+                    return;
+                }
+                const _tpVelas  = _tpVelasBuf.slice(-120);
+                const _tpClose  = _tpVelas.map(v => v.close);
+                const _tpHigh   = _tpVelas.map(v => v.high);
+                const _tpLow    = _tpVelas.map(v => v.low);
+
+                // ── Calcula indicadores ───────────────────────────────────────
+                const _ema9  = _ema(_tpClose, 9);
+                const _ema21 = _ema(_tpClose, 21);
+                const _ema50 = _ema(_tpClose, 50);
+                const _rsiArr = _rsi(_tpClose, 14);
+                const _macdObj = _macd(_tpClose, 12, 26, 9);
+                const _adxArr  = _adx(_tpHigh, _tpLow, _tpClose, 14);
+                const _atrArr  = _atr(_tpHigh, _tpLow, _tpClose, 14);
+                const _bbObj   = _bbands(_tpClose, 20, 2);
+
+                // Últimos valores (equivalente ao .iloc[-1] do pandas)
+                const _e9  = _ema9[_ema9.length - 1];
+                const _e21 = _ema21[_ema21.length - 1];
+                const _e50 = _ema50[_ema50.length - 1];
+                const _rsi = _rsiArr[_rsiArr.length - 1];
+                const _mL  = _macdObj.macd[_macdObj.macd.length - 1];
+                const _mS  = _macdObj.signal[_macdObj.signal.length - 1];
+                const _adx = _adxArr[_adxArr.length - 1];
+                const _atrLast = _atrArr[_atrArr.length - 1];
+                const _atrAvg5 = _atrArr.slice(-5).reduce((a, b) => a + b, 0) / Math.min(5, _atrArr.length);
+                const _bbM  = _bbObj.mid[_bbObj.mid.length - 1];
+                const _bbU  = _bbObj.upper[_bbObj.upper.length - 1];
+                const _bbL  = _bbObj.lower[_bbObj.lower.length - 1];
+                const _closeLast = _tpClose[_tpClose.length - 1];
+                const _close10   = _tpClose[_tpClose.length - 11] || _closeLast;
+                const _ema21_5ago = _ema21.length >= 5 ? _ema21[_ema21.length - 5] : _e21;
+
+                // ── Score system (idêntico ao Python) ─────────────────────────
+                let _scoreC = 0, _scoreP = 0;
+                const _motivos = [];
+
+                // EMA alinhamento (+15)
+                if (_e9 > _e21 && _e21 > _e50) { _scoreC += 15; _motivos.push('EMA↑+15'); }
+                if (_e9 < _e21 && _e21 < _e50) { _scoreP += 15; _motivos.push('EMA↓+15'); }
+
+                // MACD linha vs sinal (+15)
+                if (_mL !== undefined && _mS !== undefined) {
+                    if (_mL > _mS) { _scoreC += 15; _motivos.push('MACD↑+15'); }
+                    if (_mL < _mS) { _scoreP += 15; _motivos.push('MACD↓+15'); }
+                }
+
+                // RSI zona (+10)
+                if (_rsi > 55 && _rsi < 70) { _scoreC += 10; _motivos.push(`RSI${_rsi.toFixed(0)}↑+10`); }
+                if (_rsi > 30 && _rsi < 45)  { _scoreP += 10; _motivos.push(`RSI${_rsi.toFixed(0)}↓+10`); }
+
+                // ADX tendência (+10 ambos)
+                if (_adx > 25) { _scoreC += 10; _scoreP += 10; _motivos.push(`ADX${_adx.toFixed(0)}+10`); }
+
+                // ATR expansão (+10 ambos)
+                if (_atrLast > _atrAvg5) { _scoreC += 10; _scoreP += 10; _motivos.push('ATR↑+10'); }
+
+                // Bollinger posição (+10)
+                if (_closeLast > _bbM) { _scoreC += 10; _motivos.push('BB↑+10'); }
+                if (_closeLast < _bbM) { _scoreP += 10; _motivos.push('BB↓+10'); }
+
+                // Momentum 10 velas (+10)
+                const _mom = _closeLast - _close10;
+                if (_mom > 0) { _scoreC += 10; _motivos.push('Mom↑+10'); }
+                if (_mom < 0) { _scoreP += 10; _motivos.push('Mom↓+10'); }
+
+                // Padrão de velas — últimas 20 (+10)
+                let _altas = 0, _baixas = 0;
+                for (let _vi = 0; _vi < 20; _vi++) {
+                    const _vv = _tpVelas[_tpVelas.length - 1 - _vi];
+                    if (_vv.close > _vv.open) _altas++; else _baixas++;
+                }
+                if (_altas >= 14)  { _scoreC += 10; _motivos.push('Velas↑+10'); }
+                if (_baixas >= 14) { _scoreP += 10; _motivos.push('Velas↓+10'); }
+
+                // EMA21 inclinação (+5)
+                if (_e21 > _ema21_5ago) { _scoreC += 5; _motivos.push('Incl↑+5'); }
+                if (_e21 < _ema21_5ago) { _scoreP += 5; _motivos.push('Incl↓+5'); }
+
+                // Largura BB vs ATR (+5 ambos)
+                const _largBB = _bbU - _bbL;
+                if (_largBB > _atrLast * 2) { _scoreC += 5; _scoreP += 5; _motivos.push('BB-wide+5'); }
+
+                // ── Verifica score mínimo ─────────────────────────────────────
+                const _tpScoreMin = est.score_min || 90;
+                const _tpResumo = _motivos.join(' ');
+
+                let _tpDir = null, _tpScore = 0;
+                if (_scoreC >= _tpScoreMin) { _tpDir = 'CALL'; _tpScore = _scoreC; }
+                if (_scoreP >= _tpScoreMin && _scoreP > _scoreC) { _tpDir = 'PUT'; _tpScore = _scoreP; }
+
+                if (!_tpDir) {
+                    _seqStatusUpdate(`🏛️ TREND PRO C:${_scoreC} P:${_scoreP} (min:${_tpScoreMin}) | ${_tpResumo}`);
+                    // Aguarda próxima vela (reseta buffer para não reanalisar os mesmos ticks)
+                    bot._candleBuffer = bot._candleBuffer.slice(-_tpJanela * 119);
+                    return;
+                }
+
+                // Sinal atingido — aguarda virada da vela para entrar
+                bot._candleBuffer = bot._candleBuffer.slice(-_tpJanela * 119);
+                bot._tpSinalPendente = { dir: _tpDir, score: _tpScore, resumo: _tpResumo };
+                _seqStatusUpdate(`🏛️ TREND PRO ${_tpDir} | score ${_tpScore} | ⏳ aguardando virada para entrar...`);
             }
         }
 
@@ -7924,10 +8223,10 @@ function buy() {
         payload.duration      = Math.min(10, Math.max(1, parseInt(est.duracao) || 1));
         delete payload.barrier;
 
-    } else if (est.tipo === 'candle') {
+    } else if (est.tipo === 'candle' || est.tipo === 'trend_pro') {
         const dir   = bot._canaleDir || 'CALL';
-        const dUnit = est.duracao_unit || 'm';          // 'm' = minutos, 't' = ticks
-        const dMax  = dUnit === 't' ? 10 : 5;           // ticks: máx 10 | minutos: máx 5
+        const dUnit = est.duracao_unit || (est.tipo === 'trend_pro' ? 't' : 'm');
+        const dMax  = dUnit === 't' ? 10 : 5;
         const dMin  = 1;
         payload.contract_type = dir.toUpperCase();
         payload.duration_unit = dUnit;
