@@ -603,7 +603,7 @@ tr:hover td { background:rgba(0,255,65,0.03); }
                 </div>
                 <div id="digit-array-container" class="digit-grid">
                     <div class="digit-box" data-index="0">6</div>
-                    <div class="digit-box" data-index="1">10</div>
+                    <div class="digit-box" data-index="1">3</div>
                     <div class="digit-box" data-index="2">1</div>
                     <div class="digit-box" data-index="3">5</div>
                     <div class="digit-box" data-index="4">7</div>
@@ -611,7 +611,7 @@ tr:hover td { background:rgba(0,255,65,0.03); }
                     <div class="digit-box" data-index="6">8</div>
                     <div class="digit-box" data-index="7">9</div>
                     <div class="digit-box" data-index="8">4</div>
-                    <div class="digit-box" data-index="9">3</div>
+                    <div class="digit-box" data-index="9">0</div>
                 </div>
                 <div id="algo-status" class="algo-status-box">AGUARDANDO DADOS DO MERCADO...</div>
                 <button class="btn-executar" onclick="executarAnimacaoQuickSort()">▶ EXECUTAR ANÁLISE VISUAL</button>
@@ -1743,7 +1743,7 @@ async function executarAnimacaoQuickSort() {
         const res = await fetch('/ia/quick-sort-simulacao', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ lista: [6, 10, 1, 5, 7, 2, 8, 9, 4, 3] })
+            body: JSON.stringify({ lista: [6, 3, 1, 5, 7, 2, 8, 9, 4, 0] })
         });
         const data = await res.json();
         if (!data.ok) return;

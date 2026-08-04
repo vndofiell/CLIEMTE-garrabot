@@ -10116,7 +10116,7 @@ def garra_trend_registrar():
 @app.route('/ia/quick-sort-simulacao', methods=['POST'])
 def quick_sort_simulacao():
     dados = request.get_json(force=True, silent=True) or {}
-    arr = dados.get("lista", [6, 10, 1, 5, 7, 2, 8, 9, 4, 3])
+    arr = dados.get("lista", [6, 3, 1, 5, 7, 2, 8, 9, 4, 0])
 
     passos = []
 

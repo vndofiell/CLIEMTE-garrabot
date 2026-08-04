@@ -15650,7 +15650,7 @@ function abrirModalCyberSort() {
     _csBotaoOperar(false);
     _csAtualizarToggle();
     m.style.display = 'flex';
-    _csRenderGrid([6,10,1,5,7,2,8,9,4,3], 'AGUARDANDO DADOS DO MERCADO...');
+    _csRenderGrid([6,3,1,5,7,2,8,9,4,0], 'AGUARDANDO DADOS DO MERCADO...');
 }
 
 function csToggleAuto() {
@@ -15698,7 +15698,7 @@ async function csExecutar() {
     if (btnAn) { btnAn.disabled = true; btnAn.textContent = '⏳ ANALISANDO...'; }
 
     try {
-        const listaOriginal = [6, 10, 1, 5, 7, 2, 8, 9, 4, 3];
+        const listaOriginal = [6, 3, 1, 5, 7, 2, 8, 9, 4, 0];
         const res  = await fetch('/ia/quick-sort-simulacao', {
             method: 'POST',
             headers: {'Content-Type':'application/json'},
