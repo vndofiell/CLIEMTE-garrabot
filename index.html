@@ -6548,9 +6548,13 @@ function _secVerificarRetorno() {
         _sec._profitAoAtivar    = undefined;
         _sec._testeEstavRodando = false;
 
-        // Retoma a conta TESTE
-        bot.running = true;
-        bot._buying = false;
+        // Retoma a conta TESTE com stake base configurada (não a stake calculada de gale)
+        bot.running      = true;
+        bot._buying      = false;
+        bot.stake        = bot.initialStake;
+        bot.mgr          = new GerenciadorUnificado(bot.gerenciamento,
+            Object.assign({ stake: bot.initialStake }, (bot._mgrCfgs && bot._mgrCfgs[bot.gerenciamento]) || {}));
+        bot._seqLossAtual = 0;
 
         print(
             `💳 SECUNDÁRIA ✅ — Recuperação concluída! ` +
@@ -6558,7 +6562,7 @@ function _secVerificarRetorno() {
             `Conta secundária pausada.`,
             'log-win'
         );
-        print(`▶ CONTA TESTE RETOMADA — secundária está no lucro.`, 'log-win');
+        print(`▶ CONTA TESTE RETOMADA — stake reiniciada em $${bot.initialStake.toFixed(2)}.`, 'log-win');
         _secAtualizarBadge();
     }
 }
@@ -6605,10 +6609,14 @@ function _secVerificarPlanilhaJC() {
                     _sec._profitAoAtivar    = undefined;
                     _sec._buying            = false;
                     _sec._testeEstavRodando = false;
-                    bot.running = true;
-                    bot._buying = false;
+                    bot.running      = true;
+                    bot._buying      = false;
+                    bot.stake        = bot.initialStake;
+                    bot.mgr          = new GerenciadorUnificado(bot.gerenciamento,
+                        Object.assign({ stake: bot.initialStake }, (bot._mgrCfgs && bot._mgrCfgs[bot.gerenciamento]) || {}));
+                    bot._seqLossAtual = 0;
                     print(`🏁 STOP WIN SECUNDÁRIA | Lucro: +$${lucroSecJC.toFixed(2)} | Limite: +$${swReal.toFixed(2)}`, 'log-win');
-                    print(`▶ CONTA TESTE RETOMADA — stop win da secundária atingido.`, 'log-win');
+                    print(`▶ CONTA TESTE RETOMADA — stake reiniciada em $${bot.initialStake.toFixed(2)}.`, 'log-win');
                     _secAtualizarBadge();
                     return;
                 }
@@ -6658,15 +6666,19 @@ function _secVerificarPlanilhaJC() {
                 _sec._profitAoAtivar    = undefined;
                 _sec._buying            = false;
                 _sec._testeEstavRodando = false;
-                bot.running = true;
-                bot._buying = false;
+                bot.running      = true;
+                bot._buying      = false;
+                bot.stake        = bot.initialStake;
+                bot.mgr          = new GerenciadorUnificado(bot.gerenciamento,
+                    Object.assign({ stake: bot.initialStake }, (bot._mgrCfgs && bot._mgrCfgs[bot.gerenciamento]) || {}));
+                bot._seqLossAtual = 0;
                 print(
                     `💳 SECUNDÁRIA ✅ — Recuperação concluída! ` +
                     `Lucro da recuperação: +$${lucroRecuperado} | Profit total sec: $${lucroSec.toFixed(2)}. ` +
                     `Conta secundária pausada.`,
                     'log-win'
                 );
-                print(`▶ CONTA TESTE RETOMADA — secundária está no lucro.`, 'log-win');
+                print(`▶ CONTA TESTE RETOMADA — stake reiniciada em $${bot.initialStake.toFixed(2)}.`, 'log-win');
                 _secAtualizarBadge();
             }
         })
