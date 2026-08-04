@@ -15724,10 +15724,12 @@ function csOperar() {
 
     // Intercepta a resposta da proposta para fazer o buy
     const _origMsg = bot.ws.onmessage;
+    let _csCid = null;   // contract_id gerado pelo buy
+
     bot.ws.onmessage = (msg) => {
         const d = JSON.parse(msg.data);
 
-        // Proposta recebida → compra
+        // 1) Proposta recebida → compra imediata
         if (d.msg_type === 'proposal' && d.req_id === reqId) {
             if (d.error) {
                 _csLogOp('⚠️ Proposta recusada: ' + d.error.message, '#ff4444');
@@ -15737,14 +15739,14 @@ function csOperar() {
             }
             const pid = d.proposal && d.proposal.id;
             if (pid) {
-                _csLogOp(`✅ Proposta aceita — comprando contrato...`, '#00ff41');
+                _csLogOp('✅ Proposta aceita — comprando contrato...', '#00ff41');
                 bot.ws.send(JSON.stringify({ buy: pid, price: stake }));
             }
             return;
         }
 
-        // Compra confirmada → assina resultado
-        if (d.msg_type === 'buy' && d.echo_req && d.echo_req.req_id === undefined) {
+        // 2) Compra confirmada → guarda cid e subscreve resultado
+        if (d.msg_type === 'buy') {
             if (d.error) {
                 _csLogOp('⚠️ Compra recusada: ' + d.error.message, '#ff4444');
                 bot.ws.onmessage = _origMsg;
@@ -15753,26 +15755,33 @@ function csOperar() {
             }
             const cid = d.buy && d.buy.contract_id;
             if (cid) {
+                _csCid = cid;
                 _csLogOp(`🎯 Contrato aberto: <b>#${cid}</b> — aguardando resultado...`, '#ffbd2e');
                 bot.ws.send(JSON.stringify({ proposal_open_contract: 1, contract_id: cid, subscribe: 1 }));
             }
-            bot.ws.onmessage = _origMsg;
-            return;
+            return;   // NÃO devolve _origMsg ainda — precisa capturar o resultado
         }
 
-        // Resultado do contrato CS (monitorado separadamente)
-        if (d.msg_type === 'proposal_open_contract' && d.proposal_open_contract && d.proposal_open_contract.is_sold) {
-            const poc    = d.proposal_open_contract;
+        // 3) Resultado do contrato — filtra pelo cid que abriu
+        if (d.msg_type === 'proposal_open_contract' && d.proposal_open_contract) {
+            const poc = d.proposal_open_contract;
+            if (_csCid && poc.contract_id !== _csCid) {
+                _origMsg(msg);   // outro contrato do bot normal — deixa passar
+                return;
+            }
+            if (!poc.is_sold) {
+                _origMsg(msg);   // contrato ainda aberto — deixa passar
+                return;
+            }
+            // Contrato fechado — mostra resultado
             const profit = parseFloat(poc.profit);
-            const won    = profit > 0;
-            if (won) {
+            if (profit > 0) {
                 _csLogOp(`🏆 RESULTADO: <b style="color:#00ff41">WIN +$${profit.toFixed(2)}</b>`, '#00ff41');
                 _csBip(1000, 0.4);
             } else {
                 _csLogOp(`💔 RESULTADO: <b style="color:#ff4444">LOSS -$${Math.abs(profit).toFixed(2)}</b>`, '#ff4444');
                 _csBip(200, 0.2);
             }
-            // Devolve o onmessage original e habilita nova operação
             bot.ws.onmessage = _origMsg;
             _csBotaoOperar(true);
             return;
