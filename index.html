@@ -1825,6 +1825,28 @@
           </div>
         </div>
 
+        <!-- Toggle Auto-Operar -->
+        <div onclick="csToggleAuto()" id="cs-auto-row" style="
+            display:flex; align-items:center; justify-content:space-between;
+            background:rgba(0,0,0,0.3); border:1px solid #30363d;
+            border-radius:6px; padding:10px 14px; margin-bottom:12px;
+            cursor:pointer; user-select:none; transition:border-color 0.2s;">
+          <div>
+            <div style="font-size:0.78rem;color:#c9d1d9;letter-spacing:1px;">🤖 AUTO-OPERAR APÓS ANÁLISE</div>
+            <div style="font-size:0.6rem;color:#57606a;margin-top:2px;">Quando ativo, opera automaticamente ao fim da ordenação</div>
+          </div>
+          <div id="cs-auto-pill" style="
+              min-width:42px; height:22px; border-radius:11px;
+              background:#1a1a1a; border:1px solid #444;
+              display:flex; align-items:center; padding:0 3px;
+              transition:all 0.25s; position:relative;">
+            <div id="cs-auto-knob" style="
+                width:16px; height:16px; border-radius:50%;
+                background:#444; transition:all 0.25s;
+                transform:translateX(0px);"></div>
+          </div>
+        </div>
+
         <!-- Botões de ação -->
         <div style="display:flex;gap:8px;flex-direction:column;">
           <button id="cs-btn-analisar" onclick="csExecutar()" style="
@@ -15544,7 +15566,8 @@ function _iniciarMatrixApk() {
 // CYBER SORT — Animação Quick Sort + Operação Real na Deriv
 // ══════════════════════════════════════════════════════════════════════════════
 const _csAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
-let _csSinalAtual = null;   // { contract_type, barrier, conf, desc } gerado após análise
+let _csSinalAtual  = null;   // { contract_type, barrier, conf, desc } gerado após análise
+let _csAutoOperar  = false;  // toggle de auto-operação
 
 function _csBip(freq, dur) {
     try {
@@ -15619,14 +15642,40 @@ function abrirModalCyberSort() {
     if (ativoEl && typeof bot !== 'undefined' && bot._tickAtivo) {
         for (const opt of ativoEl.options) { if (opt.value === bot._tickAtivo) { opt.selected = true; break; } }
     }
-    // Reseta estado
+    // Reseta estado (mantém o toggle de auto)
     _csSinalAtual = null;
     document.getElementById('cs-sinal-box').style.display = 'none';
     document.getElementById('cs-op-log').style.display = 'none';
     document.getElementById('cs-op-log').innerHTML = '';
     _csBotaoOperar(false);
+    _csAtualizarToggle();
     m.style.display = 'flex';
     _csRenderGrid([6,10,1,5,7,2,8,9,4,3], 'AGUARDANDO DADOS DO MERCADO...');
+}
+
+function csToggleAuto() {
+    _csAutoOperar = !_csAutoOperar;
+    _csAtualizarToggle();
+}
+
+function _csAtualizarToggle() {
+    const pill = document.getElementById('cs-auto-pill');
+    const knob = document.getElementById('cs-auto-knob');
+    const row  = document.getElementById('cs-auto-row');
+    if (!pill || !knob) return;
+    if (_csAutoOperar) {
+        pill.style.background   = 'rgba(0,255,65,0.25)';
+        pill.style.borderColor  = '#00ff41';
+        knob.style.background   = '#00ff41';
+        knob.style.transform    = 'translateX(20px)';
+        row.style.borderColor   = 'rgba(0,255,65,0.5)';
+    } else {
+        pill.style.background   = '#1a1a1a';
+        pill.style.borderColor  = '#444';
+        knob.style.background   = '#444';
+        knob.style.transform    = 'translateX(0px)';
+        row.style.borderColor   = '#30363d';
+    }
 }
 
 function _csBotaoOperar(ativo) {
@@ -15684,8 +15733,13 @@ async function csExecutar() {
         document.getElementById('cs-sinal-desc').textContent     = _csSinalAtual.desc;
         document.getElementById('cs-sinal-box').style.display    = 'block';
 
-        // Habilita o botão de operar
-        _csBotaoOperar(true);
+        // Auto-operar ou habilita botão manual
+        if (_csAutoOperar) {
+            _csLogOp('🤖 AUTO-OPERAR ativado — disparando operação...', '#00ffff');
+            setTimeout(() => csOperar(), 300);
+        } else {
+            _csBotaoOperar(true);
+        }
 
     } catch(e) {
         console.error('CyberSort erro:', e);
