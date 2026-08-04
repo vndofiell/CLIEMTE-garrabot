@@ -15737,6 +15737,8 @@ let _csLucro       = 0;
 let _csMgr         = null;   // instância de GerenciadorUnificado ativo (conta principal)
 let _csSecMgr      = null;   // instância de GerenciadorUnificado separada (conta secundária)
 let _csMatrixRAF   = null;   // requestAnimationFrame do matrix CS
+let _csStopWin     = 999;    // sincronizado com bot.stopWin (ou meta JC) ao abrir
+let _csStopLoss    = 999;    // sincronizado com bot.stopLoss ao abrir
 
 // ── Espelho automático (igual ao bot principal) ─────────────────────────────
 let _csEspLossSeq  = 0;      // losses consecutivos na conta principal nesta sessão
@@ -16100,6 +16102,35 @@ function abrirModalCyberSort() {
     _csEspWins     = 0;
     _csEspLosses   = 0;
     _csEspLucro    = 0;
+
+    // ── Sincroniza Stop Win / Stop Loss com o bot principal ──────────────────
+    _csStopWin  = (typeof bot !== 'undefined' && bot.stopWin  < 999) ? bot.stopWin  : 999;
+    _csStopLoss = (typeof bot !== 'undefined' && bot.stopLoss < 999) ? bot.stopLoss : 999;
+    // Se JC ativo no servidor → usa a meta do dia como Stop Win
+    fetch('/jc-meta').then(r => r.json()).then(m => {
+        if (m.ativo && m.meta_hoje && m.meta_hoje > 0) {
+            _csStopWin = parseFloat(m.meta_hoje.toFixed(2));
+            _csLogAnalise(
+                `💹 JC ATIVO — Stop Win = meta do dia <b>$${_csStopWin.toFixed(2)}</b>` +
+                ` | Stop Loss = <b>$${_csStopLoss < 999 ? _csStopLoss.toFixed(2) : '—'}</b>`,
+                '#00ff41'
+            );
+        } else if (_csStopWin < 999 || _csStopLoss < 999) {
+            _csLogAnalise(
+                `⚙ Stop Win: <b>$${_csStopWin < 999 ? _csStopWin.toFixed(2) : '—'}</b>` +
+                ` | Stop Loss: <b>$${_csStopLoss < 999 ? _csStopLoss.toFixed(2) : '—'}</b>`,
+                '#6b7280'
+            );
+        }
+    }).catch(() => {
+        if (_csStopWin < 999 || _csStopLoss < 999) {
+            _csLogAnalise(
+                `⚙ Stop Win: <b>$${_csStopWin < 999 ? _csStopWin.toFixed(2) : '—'}</b>` +
+                ` | Stop Loss: <b>$${_csStopLoss < 999 ? _csStopLoss.toFixed(2) : '—'}</b>`,
+                '#6b7280'
+            );
+        }
+    });
     document.getElementById('cs-sinal-box').style.display  = 'none';
     document.getElementById('cs-log-analise').innerHTML    = '';
     document.getElementById('cs-op-log').innerHTML         = '';
@@ -16406,6 +16437,35 @@ function csOperar() {
             _csNotificar(won, profit, ct, barr, ativo);
 
             wsUsar.onmessage = _origMsg;
+
+            // ── Stop Win / Stop Loss sincronizados com o bot ─────────────────
+            const _lucroTotal = _csLucro + _csEspLucro;
+            if (_csStopWin < 999 && _lucroTotal >= _csStopWin) {
+                _csAtivo = false;
+                _csAutoOperar = false;
+                _csBotaoOperar(true);
+                fetch('/jc-meta').then(r => r.json()).then(m2 => {
+                    if (m2.ativo && m2.meta_hoje > 0) {
+                        _csLogOp(`🏆 <b style="color:#ffd700">META JC ATINGIDA!</b> Lucro: +$${_lucroTotal.toFixed(2)} | Meta: $${_csStopWin.toFixed(2)} — sessão encerrada`, '#ffd700');
+                        _csBip(1200, 0.6);
+                    } else {
+                        _csLogOp(`🏆 <b style="color:#ffd700">STOP WIN ATINGIDO!</b> Lucro: +$${_lucroTotal.toFixed(2)} | Limite: $${_csStopWin.toFixed(2)} — sessão encerrada`, '#ffd700');
+                        _csBip(1200, 0.6);
+                    }
+                }).catch(() => {
+                    _csLogOp(`🏆 <b style="color:#ffd700">STOP WIN ATINGIDO!</b> Lucro: +$${_lucroTotal.toFixed(2)} — sessão encerrada`, '#ffd700');
+                    _csBip(1200, 0.6);
+                });
+                return;
+            }
+            if (_csStopLoss < 999 && _lucroTotal <= -_csStopLoss) {
+                _csAtivo = false;
+                _csAutoOperar = false;
+                _csBotaoOperar(true);
+                _csLogOp(`🛑 <b style="color:#ff4444">STOP LOSS ATINGIDO!</b> Perda: -$${Math.abs(_lucroTotal).toFixed(2)} | Limite: $${_csStopLoss.toFixed(2)} — sessão encerrada`, '#ff4444');
+                _csBip(200, 0.5);
+                return;
+            }
 
             // Loop automático
             if (_csAutoOperar && _csAtivo) {
