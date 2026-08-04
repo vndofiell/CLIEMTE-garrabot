@@ -5755,13 +5755,13 @@ async function testarTelegram() {
     }
 }
 
-function tgEnviarResultado(win, lucro, prox_stake) {
+function tgEnviarResultado(win, lucro, prox_stake, _origemSec) {
     const _modoEspelhoAtivo = (typeof _sec !== 'undefined' && _sec.pronto && _sec.espelhandoAtivo);
     const _lvVirtual        = bot.lv && bot.lv.ativo && !bot.lv.emRecuperacao;
 
-    // ── Cyber Sort ativo: bloqueia notificações da conta TESTE (principal) ──
-    // Só a conta secundária envia via _csNotificar quando _csUsandoSec=true
-    if (typeof _csAtivo !== 'undefined' && _csAtivo && !_modoEspelhoAtivo) return;
+    // ── Cyber Sort ativo: bloqueia apenas a conta TESTE (principal) ──
+    // Se _origemSec=true (chamado da SEC autônoma), deixa passar sempre
+    if (typeof _csAtivo !== 'undefined' && _csAtivo && !_modoEspelhoAtivo && !_origemSec) return;
 
     // ── Modo Virtual (LV acumulando losses virtuais) ──────────────────────
     // Bot está "analisando" — não há operação real — envia notificação informativa
@@ -6469,7 +6469,7 @@ async function _secConectar() {
             if (_sec.mgr) _sec.mgr.updateResult(won);
 
             // ── Notificação Telegram/WhatsApp com dados da conta SECUNDÁRIA ──
-            tgEnviarResultado(won, p, (_sec.mgr ? _sec.mgr.getStake() : _mcConfig.stake || 0));
+            tgEnviarResultado(won, p, (_sec.mgr ? _sec.mgr.getStake() : _mcConfig.stake || 0), true);
 
             // Libera flag de anti-duplicata (modo autônomo)
             _sec._buying = false;
