@@ -5759,6 +5759,10 @@ function tgEnviarResultado(win, lucro, prox_stake) {
     const _modoEspelhoAtivo = (typeof _sec !== 'undefined' && _sec.pronto && _sec.espelhandoAtivo);
     const _lvVirtual        = bot.lv && bot.lv.ativo && !bot.lv.emRecuperacao;
 
+    // ── Cyber Sort ativo: bloqueia notificações da conta TESTE (principal) ──
+    // Só a conta secundária envia via _csNotificar quando _csUsandoSec=true
+    if (typeof _csAtivo !== 'undefined' && _csAtivo && !_modoEspelhoAtivo) return;
+
     // ── Modo Virtual (LV acumulando losses virtuais) ──────────────────────
     // Bot está "analisando" — não há operação real — envia notificação informativa
     if (_lvVirtual) {
