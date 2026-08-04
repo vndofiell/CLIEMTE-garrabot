@@ -1785,9 +1785,14 @@
 
         <!-- ── PAINEL DE STATS (6 cards) ── -->
         <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:6px;margin-bottom:14px;">
+          <!-- BANCA: principal + secundária quando espelho ativo -->
           <div style="background:#0a0a0a;border:1px solid rgba(0,255,255,0.3);border-radius:5px;padding:7px 4px;text-align:center;">
-            <div style="font-size:0.5rem;color:#6b7280;letter-spacing:1px;margin-bottom:3px;">BANCA</div>
+            <div style="font-size:0.5rem;color:#6b7280;letter-spacing:1px;margin-bottom:2px;">BANCA</div>
             <div id="cs-stat-banca" style="font-size:0.78rem;font-weight:bold;color:#00ffff;">--</div>
+            <div id="cs-stat-banca-sec-row" style="display:none;margin-top:2px;">
+              <div style="font-size:0.42rem;color:#60a5fa;letter-spacing:1px;">SEC</div>
+              <div id="cs-stat-banca-sec" style="font-size:0.72rem;font-weight:bold;color:#60a5fa;">--</div>
+            </div>
           </div>
           <div style="background:#0a0a0a;border:1px solid rgba(0,255,65,0.3);border-radius:5px;padding:7px 4px;text-align:center;">
             <div style="font-size:0.5rem;color:#6b7280;letter-spacing:1px;margin-bottom:1px;">LUCRO USD</div>
@@ -1921,18 +1926,34 @@
             </div>
           </div>
 
-          <!-- Modo Espelho -->
+          <!-- Modo Espelho — igual ao bot principal -->
           <div id="cs-espelho-box" style="background:rgba(96,165,250,0.05);border:1px solid rgba(96,165,250,0.25);border-radius:6px;padding:10px 12px;">
-            <div style="font-size:0.68rem;color:#60a5fa;letter-spacing:1px;margin-bottom:6px;">💳 MODO ESPELHO</div>
-            <div id="cs-espelho-status" style="font-size:0.65rem;color:#555;line-height:1.6;">
-              Conta secundária não conectada
-            </div>
-            <div style="display:flex;align-items:center;gap:6px;margin-top:8px;">
-              <input type="checkbox" id="cs-espelho-ativo" style="accent-color:#60a5fa;width:14px;height:14px;"
-                  onchange="csAtualizarEspelho()">
-              <label for="cs-espelho-ativo" style="font-size:0.65rem;color:#c9d1d9;cursor:pointer;">
-                Usar conta secundária
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+              <span style="font-size:0.68rem;color:#60a5fa;letter-spacing:1px;">💳 MODO ESPELHO</span>
+              <label style="display:flex;align-items:center;gap:5px;cursor:pointer;">
+                <input type="checkbox" id="cs-espelho-ativo" style="accent-color:#60a5fa;width:13px;height:13px;"
+                    onchange="csAtualizarEspelho()">
+                <span id="cs-espelho-badge" style="font-size:0.6rem;color:#555;">OFF</span>
               </label>
+            </div>
+            <!-- Trigger: N losses consecutivos -->
+            <div id="cs-espelho-campos" style="display:none;flex-direction:column;gap:5px;margin-bottom:6px;">
+              <div style="display:flex;align-items:center;gap:5px;">
+                <label style="font-size:0.57rem;color:#6b7280;min-width:90px;">Losses p/ ativar</label>
+                <input id="cs-esp-losses" type="number" value="3" min="1" max="50"
+                    style="flex:1;background:#0a0a12;border:1px solid rgba(96,165,250,0.35);color:#60a5fa;
+                           font-family:'Share Tech Mono';font-size:0.75rem;padding:3px 5px;border-radius:3px;">
+              </div>
+              <div style="display:flex;align-items:center;gap:5px;">
+                <label style="font-size:0.57rem;color:#6b7280;min-width:90px;">Perda p/ ativar ($)</label>
+                <input id="cs-esp-perda" type="number" value="5" min="0.1" step="0.5"
+                    style="flex:1;background:#0a0a12;border:1px solid rgba(96,165,250,0.35);color:#60a5fa;
+                           font-family:'Share Tech Mono';font-size:0.75rem;padding:3px 5px;border-radius:3px;">
+              </div>
+            </div>
+            <!-- Status dinâmico -->
+            <div id="cs-espelho-status" style="font-size:0.62rem;color:#555;line-height:1.5;">
+              Conta secundária não conectada
             </div>
           </div>
         </div>
@@ -15674,6 +15695,11 @@ let _csLucro       = 0;
 let _csMgr         = null;   // instância de GerenciadorUnificado ativo
 let _csMatrixRAF   = null;   // requestAnimationFrame do matrix CS
 
+// ── Espelho automático (igual ao bot principal) ─────────────────────────────
+let _csEspLossSeq  = 0;      // losses consecutivos na conta principal nesta sessão
+let _csEspPerdaAc  = 0;      // perda acumulada na conta principal nesta sessão
+let _csUsandoSec   = false;  // true = próximas entradas vão para a conta secundária
+
 // ── Matrix de fundo caindo de cima ─────────────────────────────────────────
 function _csIniciarMatrix() {
     const canvas = document.getElementById('cs-matrix-canvas');
@@ -15755,17 +15781,26 @@ function _csLogOp(msg, cor) {
 
 // ── Stats ───────────────────────────────────────────────────────────────────
 function _csAtualizarStats(proxStake) {
-    const bancaEl = document.getElementById('cs-stat-banca');
-    if (bancaEl) {
-        // Mostra o saldo da conta que vai operar:
-        // - se espelho ativo e conta secundária conectada → saldo da secundária
-        // - caso contrário → saldo da conta principal (hd-balance)
-        const espAtivo  = document.getElementById('cs-espelho-ativo')?.checked;
-        const secPronto = (typeof _sec !== 'undefined') && _sec.pronto;
+    const bancaEl    = document.getElementById('cs-stat-banca');
+    const secRow     = document.getElementById('cs-stat-banca-sec-row');
+    const secBancaEl = document.getElementById('cs-stat-banca-sec');
+    const espAtivo   = document.getElementById('cs-espelho-ativo')?.checked;
+    const secPronto  = (typeof _sec !== 'undefined') && _sec.pronto;
+
+    // Banca principal — sempre mostra a conta principal
+    if (bancaEl) bancaEl.textContent = document.getElementById('hd-balance')?.textContent || '--';
+
+    // Banca secundária — aparece abaixo quando espelho está ativo e conta conectada
+    if (secRow && secBancaEl) {
         if (espAtivo && secPronto && _sec.saldo !== undefined) {
-            bancaEl.textContent = '$' + parseFloat(_sec.saldo).toFixed(2);
+            secRow.style.display  = 'block';
+            secBancaEl.textContent = '$' + parseFloat(_sec.saldo).toFixed(2);
+            // Destaca qual conta está sendo usada agora
+            if (bancaEl) bancaEl.style.opacity  = _csUsandoSec ? '0.5' : '1';
+            secBancaEl.style.opacity = _csUsandoSec ? '1' : '0.5';
         } else {
-            bancaEl.textContent = document.getElementById('hd-balance')?.textContent || '--';
+            secRow.style.display  = 'none';
+            if (bancaEl) bancaEl.style.opacity = '1';
         }
     }
 
@@ -15880,29 +15915,74 @@ function _csLvBadge(ativo) {
 }
 
 // ── Modo Espelho ─────────────────────────────────────────────────────────────
-// Detecta se conta secundária está pronta e atualiza o painel
+// Igual ao bot principal: opera na principal até atingir N losses ou valor de perda,
+// depois as entradas passam para a conta secundária automaticamente.
 function csAtualizarEspelho() {
-    const ativo  = document.getElementById('cs-espelho-ativo')?.checked;
-    const status = document.getElementById('cs-espelho-status');
-    const box    = document.getElementById('cs-espelho-box');
-
+    const ativo   = document.getElementById('cs-espelho-ativo')?.checked;
+    const badge   = document.getElementById('cs-espelho-badge');
+    const campos  = document.getElementById('cs-espelho-campos');
+    const status  = document.getElementById('cs-espelho-status');
+    const box     = document.getElementById('cs-espelho-box');
     const secPronto = (typeof _sec !== 'undefined') && _sec.pronto;
+
+    // Badge ON/OFF
+    if (badge) { badge.textContent = ativo ? 'ON' : 'OFF'; badge.style.color = ativo ? '#60a5fa' : '#555'; }
+
+    if (!ativo) {
+        // Desativado: reseta tudo, volta para conta principal
+        if (campos) campos.style.display = 'none';
+        _csUsandoSec   = false;
+        _csEspLossSeq  = 0;
+        _csEspPerdaAc  = 0;
+        if (status) status.textContent = secPronto
+            ? `Conta sec. conectada — espelho desligado`
+            : 'Conta secundária não conectada';
+        if (box) box.style.borderColor = 'rgba(96,165,250,0.25)';
+        _csAtualizarStats();
+        return;
+    }
 
     if (!secPronto) {
         // Força desligar se conta não conectada
         const chk = document.getElementById('cs-espelho-ativo');
         if (chk) chk.checked = false;
-        if (status) status.textContent = 'Conta secundária não conectada';
+        if (badge) { badge.textContent = 'OFF'; badge.style.color = '#555'; }
+        if (campos) campos.style.display = 'none';
+        if (status) status.textContent = '⚠️ Conta secundária não conectada';
         if (box) box.style.borderColor = 'rgba(96,165,250,0.25)';
         return;
     }
 
-    if (status) {
-        status.innerHTML = ativo
-            ? `<span style="color:#60a5fa">✔ Espelhando em:</span><br><span style="color:#c9d1d9;font-size:0.6rem">${_sec.token ? _sec.token.slice(0,8)+'…' : 'conta sec.'}</span>`
-            : `Conta secundária conectada<br><span style="color:#00ff41;font-size:0.58rem">saldo: $${parseFloat(_sec.saldo||0).toFixed(2)}</span>`;
+    // Ativo + conta pronta: mostra campos de trigger
+    if (campos) campos.style.display = 'flex';
+    if (box) box.style.borderColor = '#60a5fa';
+
+    _csAtualizarStatusEspelho();
+    _csAtualizarStats();
+}
+
+// Atualiza apenas o texto de status do espelho (chamado após cada resultado)
+function _csAtualizarStatusEspelho() {
+    const status    = document.getElementById('cs-espelho-status');
+    if (!status) return;
+    const secPronto = (typeof _sec !== 'undefined') && _sec.pronto;
+    const espAtivo  = document.getElementById('cs-espelho-ativo')?.checked;
+    if (!espAtivo || !secPronto) return;
+
+    const nLosses  = parseInt(document.getElementById('cs-esp-losses')?.value || 3, 10);
+    const limPerda = parseFloat(document.getElementById('cs-esp-perda')?.value || 5);
+
+    if (_csUsandoSec) {
+        status.innerHTML =
+            `<span style="color:#60a5fa;font-weight:bold">▶ OPERANDO NA SEC</span>` +
+            `<br><span style="color:#c9d1d9;font-size:0.58rem">saldo sec: $${parseFloat(_sec.saldo||0).toFixed(2)}</span>`;
+    } else {
+        status.innerHTML =
+            `<span style="color:#00ff41">▶ CONTA PRINCIPAL</span>` +
+            `<br><span style="color:#6b7280;font-size:0.58rem">` +
+            `losses: ${_csEspLossSeq}/${nLosses} | perda: $${_csEspPerdaAc.toFixed(2)}/$${limPerda.toFixed(2)}` +
+            `</span>`;
     }
-    if (box) box.style.borderColor = ativo ? '#60a5fa' : 'rgba(96,165,250,0.25)';
 }
 
 // ── Abrir / Fechar ──────────────────────────────────────────────────────────
@@ -15924,9 +16004,12 @@ function abrirModalCyberSort() {
         for (const opt of ativoEl.options) { if (opt.value === bot._tickAtivo) { opt.selected = true; break; } }
     }
 
-    _csSinalAtual = null;
-    _csMgr        = null;
-    window._csLvContador = window._csLvContador || 0;
+    _csSinalAtual  = null;
+    _csMgr         = null;
+    window._csLvContador = 0;
+    _csEspLossSeq  = 0;
+    _csEspPerdaAc  = 0;
+    _csUsandoSec   = false;
     document.getElementById('cs-sinal-box').style.display  = 'none';
     document.getElementById('cs-log-analise').innerHTML    = '';
     document.getElementById('cs-op-log').innerHTML         = '';
@@ -16046,45 +16129,45 @@ function csOperar() {
     // ── Loss Virtual: acumula "rodadas virtuais" antes de operar de verdade ──
     const lvAtivo = document.getElementById('cs-lv-ativo')?.checked;
     if (lvAtivo) {
-        const lvQtd   = parseInt(document.getElementById('cs-lv-qtd')?.value || 3, 10);
-        const lvQdo   = document.getElementById('cs-lv-quando')?.value || 'sempre';
+        const lvQtd = parseInt(document.getElementById('cs-lv-qtd')?.value || 3, 10);
         window._csLvContador = (window._csLvContador || 0);
-
         if (window._csLvContador < lvQtd) {
             window._csLvContador++;
-            const status = document.getElementById('cs-lv-status');
-            if (status) status.textContent = `Loss virtual ${window._csLvContador}/${lvQtd} — ainda aguardando...`;
+            const stEl = document.getElementById('cs-lv-status');
+            if (stEl) stEl.textContent = `Loss virtual ${window._csLvContador}/${lvQtd} — ainda aguardando...`;
             _csLogOp(`🛡️ <b style="color:#0f0">Loss Virtual</b> ${window._csLvContador}/${lvQtd} — sem operação real`, '#0f0');
-
-            // No modo "após loss" só bloqueia se o último resultado foi loss
-            // (reutiliza lógica simples: quando chegou ao limite, libera)
-            if (_csAutoOperar && _csAtivo) {
-                setTimeout(() => { if (_csAtivo) csExecutar(); }, 1200);
-            } else {
-                _csBotaoOperar(true);
-            }
+            if (_csAutoOperar && _csAtivo) setTimeout(() => { if (_csAtivo) csExecutar(); }, 1200);
+            else _csBotaoOperar(true);
             return;
         }
-        // Chegou ao limite — reseta e opera de verdade
         window._csLvContador = 0;
-        const status = document.getElementById('cs-lv-status');
-        if (status) status.textContent = `Limite atingido — operando real!`;
+        const stEl = document.getElementById('cs-lv-status');
+        if (stEl) stEl.textContent = 'Limite atingido — operando real!';
         _csLogOp(`🛡️ <b style="color:#ffbd2e">Loss Virtual completo</b> — operando real agora`, '#ffbd2e');
     }
 
-    // ── Decide qual WebSocket usar (primário ou espelho) ──────────────────────
-    const espelhoAtivo = document.getElementById('cs-espelho-ativo')?.checked;
-    const secPronto    = (typeof _sec !== 'undefined') && _sec.pronto && _sec.ws && _sec.ws.readyState === WebSocket.OPEN;
-    const wsUsar       = (espelhoAtivo && secPronto) ? _sec.ws : bot.ws;
-
+    // ── Verifica conexão principal ────────────────────────────────────────────
     if (typeof bot === 'undefined' || !bot.ws || bot.ws.readyState !== WebSocket.OPEN) {
         _csLogOp('⚠️ Bot não conectado à Deriv.', '#ff4444');
         return;
     }
-    if (espelhoAtivo && !secPronto) {
-        _csLogOp('⚠️ Espelho ativo mas conta secundária não está pronta — usando conta principal.', '#ffbd2e');
-    } else if (espelhoAtivo && secPronto) {
-        _csLogOp('💳 <b style="color:#60a5fa">Conta secundária</b> selecionada para esta operação.', '#60a5fa');
+
+    // ── Modo Espelho: decide qual WebSocket usar ───────────────────────────────
+    // Igual ao bot principal: começa na conta principal, muda para secundária
+    // automaticamente ao atingir N losses consecutivos OU valor de perda acumulada.
+    const espAtivo  = document.getElementById('cs-espelho-ativo')?.checked;
+    const secPronto = (typeof _sec !== 'undefined') && _sec.pronto && _sec.ws && _sec.ws.readyState === WebSocket.OPEN;
+    const wsUsar    = (espAtivo && secPronto && _csUsandoSec) ? _sec.ws : bot.ws;
+
+    if (espAtivo && secPronto) {
+        if (_csUsandoSec) {
+            _csLogOp(`💳 <b style="color:#60a5fa">Conta secundária</b> ativa — operando na SEC`, '#60a5fa');
+        } else {
+            _csLogOp(`🏦 <b style="color:#00ffff">Conta principal</b> — monitorando trigger`, '#00ffff');
+        }
+    }
+    if (espAtivo && !secPronto) {
+        _csLogOp('⚠️ Espelho ativo mas conta secundária não conectada — usando principal.', '#ffbd2e');
     }
 
     // Stake via gerenciamento ou campo direto
@@ -16148,23 +16231,46 @@ function csOperar() {
             if (_csMgr) _csMgr.updateResult(won);
             const proxStake = _csMgr ? _csMgr.getStake() : baseStake;
 
-            // Atualiza stats
-            if (won) { _csWins++;  _csLucro += profit; }
+            // Atualiza stats globais
+            if (won) { _csWins++; _csLucro += profit; }
             else     { _csLosses++; _csLucro += profit; }
-            _csAtualizarStats(proxStake);
 
-            // Atualiza saldo exibido do espelho (se estava operando na sec)
-            if (espelhoAtivo && secPronto && typeof _sec !== 'undefined') {
-                _sec.saldo = parseFloat(_sec.saldo || 0) + profit;
-                csAtualizarEspelho();
+            // ── Lógica de trigger do espelho (igual ao bot principal) ──────────
+            if (espAtivo && secPronto) {
+                if (!_csUsandoSec) {
+                    // Ainda na conta principal — monitora losses e perda
+                    if (!won) {
+                        _csEspLossSeq++;
+                        _csEspPerdaAc += Math.abs(profit);
+                    } else {
+                        _csEspLossSeq = 0; // win reseta losses consecutivos
+                    }
+                    const nLosses  = parseInt(document.getElementById('cs-esp-losses')?.value || 3, 10);
+                    const limPerda = parseFloat(document.getElementById('cs-esp-perda')?.value || 5);
+                    const trigLoss  = _csEspLossSeq  >= nLosses;
+                    const trigPerda = _csEspPerdaAc  >= limPerda;
+                    if (trigLoss || trigPerda) {
+                        _csUsandoSec = true;
+                        const motivo = trigLoss ? `${_csEspLossSeq} losses consecutivos` : `perda $${_csEspPerdaAc.toFixed(2)}`;
+                        _csLogOp(`🔀 <b style="color:#60a5fa">TRIGGER ATIVADO</b> (${motivo}) — próximas entradas na SEC`, '#60a5fa');
+                        _csBip(600, 0.2);
+                    }
+                } else {
+                    // Já na conta secundária — atualiza saldo dela
+                    _sec.saldo = parseFloat(_sec.saldo || 0) + profit;
+                }
+                _csAtualizarStatusEspelho();
             }
 
+            _csAtualizarStats(proxStake);
+
             // Log resultado
+            const conta = (_csUsandoSec && espAtivo && secPronto) ? ' <span style="color:#60a5fa">[SEC]</span>' : '';
             if (won) {
-                _csLogOp(`🏆 <b style="color:#00ff41">WIN +$${profit.toFixed(2)}</b>  próx $${proxStake.toFixed(2)}`, '#00ff41');
+                _csLogOp(`🏆 <b style="color:#00ff41">WIN +$${profit.toFixed(2)}</b>${conta}  próx $${proxStake.toFixed(2)}`, '#00ff41');
                 _csBip(1000, 0.4);
             } else {
-                _csLogOp(`💔 <b style="color:#ff4444">LOSS -$${Math.abs(profit).toFixed(2)}</b>  próx $${proxStake.toFixed(2)}`, '#ff4444');
+                _csLogOp(`💔 <b style="color:#ff4444">LOSS -$${Math.abs(profit).toFixed(2)}</b>${conta}  próx $${proxStake.toFixed(2)}`, '#ff4444');
                 _csBip(200, 0.2);
             }
 
