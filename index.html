@@ -1772,7 +1772,7 @@
           border-radius:8px; padding:18px 18px 20px;
           box-shadow:0 0 28px rgba(0,255,65,0.18);
           font-family:'Share Tech Mono',monospace;
-          width:100%; max-width:900px;
+          width:100%; max-width:1100px;
           color:#fff; margin:0 auto;">
 
         <!-- ── CABEÇALHO ── -->
@@ -15635,23 +15635,26 @@ function _csIniciarMatrix() {
     const tam   = 14;
     const cols  = Math.floor(canvas.width / tam);
     const drops = Array(cols).fill(0);  // começa no TOPO (0)
+    let _csLastFrame = 0;
+    const _csFrameInterval = 80;  // ms entre frames — maior = mais devagar
 
-    function draw() {
-        ctx.fillStyle = 'rgba(0,0,0,0.05)';
+    function draw(ts) {
+        _csMatrixRAF = requestAnimationFrame(draw);
+        if (ts - _csLastFrame < _csFrameInterval) return;
+        _csLastFrame = ts;
+        ctx.fillStyle = 'rgba(0,0,0,0.04)';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.font = tam + 'px "Share Tech Mono",monospace';
         for (let i = 0; i < drops.length; i++) {
             const ch = chars[Math.floor(Math.random() * chars.length)];
             ctx.fillStyle = Math.random() > 0.96 ? '#ffffff' : '#00ff41';
             ctx.fillText(ch, i * tam, drops[i] * tam);
-            // Reinicia do topo aleatoriamente
             if (drops[i] * tam > canvas.height && Math.random() > 0.975) drops[i] = 0;
             drops[i]++;
         }
-        _csMatrixRAF = requestAnimationFrame(draw);
     }
     if (_csMatrixRAF) cancelAnimationFrame(_csMatrixRAF);
-    draw();
+    _csMatrixRAF = requestAnimationFrame(draw);
 }
 
 function _csPararMatrix() {
@@ -15748,20 +15751,19 @@ function _csNotificar(won, profit, ct, barr, ativo) {
         `🎯 Taxa: ${taxa} (${_csWins}W / ${_csLosses}L)\n` +
         `💱 1 USD = R$ ${cot.toFixed(2)}`;
 
-    const _tgCfg = typeof _tgCarregarConfig === 'function' ? _tgCarregarConfig() :
-        (JSON.parse(localStorage.getItem('tg_config') || '{}'));
-    const _waAtivo = typeof _waNotifAtivo !== 'undefined' ? _waNotifAtivo : false;
-
-    if (_tgCfg?.enabled && _tgCfg?.resultados && _tgCfg?.token && _tgCfg?.chat_id) {
+    // Telegram — usa a variável global _tgCfg já carregada pelo bot
+    // virtual:true + texto → rota de texto livre no servidor
+    if (typeof _tgCfg !== 'undefined' && _tgCfg.enabled && _tgCfg.resultados && _tgCfg.token && _tgCfg.chat_id) {
         fetch('/tg-send', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ token: _tgCfg.token, chat_id: _tgCfg.chat_id, texto })
+            body: JSON.stringify({ token: _tgCfg.token, chat_id: _tgCfg.chat_id, virtual: true, texto })
         }).catch(() => {});
     }
-    if (_waAtivo) {
+    // WhatsApp — virtual:true + texto → rota de texto livre no servidor
+    if (typeof _waNotifAtivo !== 'undefined' && _waNotifAtivo) {
         fetch('/wa-send', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ texto })
+            body: JSON.stringify({ virtual: true, texto })
         }).catch(() => {});
     }
 }
