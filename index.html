@@ -1760,12 +1760,19 @@
         background:rgba(0,0,0,0.92); z-index:1200;
         justify-content:center; align-items:flex-start;
         padding:20px 8px 40px; overflow-y:auto;">
+
+      <!-- Canvas Matrix de fundo -->
+      <canvas id="cs-matrix-canvas" style="
+          position:fixed;top:0;left:0;width:100%;height:100%;
+          z-index:0;pointer-events:none;opacity:0.18;"></canvas>
+
       <div style="
-          background:#0d0f12; border:1px solid #00ff41;
+          position:relative;z-index:1;
+          background:rgba(13,15,18,0.97); border:1px solid #00ff41;
           border-radius:8px; padding:18px 18px 20px;
           box-shadow:0 0 28px rgba(0,255,65,0.18);
           font-family:'Share Tech Mono',monospace;
-          width:100%; max-width:860px;
+          width:100%; max-width:900px;
           color:#fff; margin:0 auto;">
 
         <!-- ── CABEÇALHO ── -->
@@ -1776,27 +1783,32 @@
         </div>
         <p style="color:#6b7280;font-size:0.62rem;text-align:center;margin-bottom:12px;">TIME: O(n log n) &nbsp;|&nbsp; SPACE: O(log n)</p>
 
-        <!-- ── PAINEL DE STATS ── -->
-        <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:14px;">
-          <div style="background:#0a0a0a;border:1px solid rgba(0,255,255,0.3);border-radius:5px;padding:7px 6px;text-align:center;">
-            <div style="font-size:0.55rem;color:#6b7280;letter-spacing:1px;margin-bottom:3px;">BANCA</div>
-            <div id="cs-stat-banca" style="font-size:0.85rem;font-weight:bold;color:#00ffff;">--</div>
+        <!-- ── PAINEL DE STATS (6 cards) ── -->
+        <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:6px;margin-bottom:14px;">
+          <div style="background:#0a0a0a;border:1px solid rgba(0,255,255,0.3);border-radius:5px;padding:7px 4px;text-align:center;">
+            <div style="font-size:0.5rem;color:#6b7280;letter-spacing:1px;margin-bottom:3px;">BANCA</div>
+            <div id="cs-stat-banca" style="font-size:0.78rem;font-weight:bold;color:#00ffff;">--</div>
           </div>
-          <div style="background:#0a0a0a;border:1px solid rgba(0,255,65,0.3);border-radius:5px;padding:7px 6px;text-align:center;">
-            <div style="font-size:0.55rem;color:#6b7280;letter-spacing:1px;margin-bottom:3px;">LUCRO</div>
-            <div id="cs-stat-lucro" style="font-size:0.85rem;font-weight:bold;color:#00ff41;">+$0.00</div>
+          <div style="background:#0a0a0a;border:1px solid rgba(0,255,65,0.3);border-radius:5px;padding:7px 4px;text-align:center;">
+            <div style="font-size:0.5rem;color:#6b7280;letter-spacing:1px;margin-bottom:1px;">LUCRO USD</div>
+            <div id="cs-stat-lucro" style="font-size:0.78rem;font-weight:bold;color:#00ff41;">+$0.00</div>
+            <div id="cs-stat-lucro-brl" style="font-size:0.55rem;color:#57606a;margin-top:1px;">R$0,00</div>
           </div>
-          <div style="background:#0a0a0a;border:1px solid rgba(0,255,65,0.3);border-radius:5px;padding:7px 6px;text-align:center;">
-            <div style="font-size:0.55rem;color:#6b7280;letter-spacing:1px;margin-bottom:3px;">✅ WINS</div>
-            <div id="cs-stat-wins" style="font-size:0.85rem;font-weight:bold;color:#00ff41;">0</div>
+          <div style="background:#0a0a0a;border:1px solid rgba(0,255,65,0.3);border-radius:5px;padding:7px 4px;text-align:center;">
+            <div style="font-size:0.5rem;color:#6b7280;letter-spacing:1px;margin-bottom:3px;">✅ WINS</div>
+            <div id="cs-stat-wins" style="font-size:0.78rem;font-weight:bold;color:#00ff41;">0</div>
           </div>
-          <div style="background:#0a0a0a;border:1px solid rgba(255,68,68,0.3);border-radius:5px;padding:7px 6px;text-align:center;">
-            <div style="font-size:0.55rem;color:#6b7280;letter-spacing:1px;margin-bottom:3px;">🔁 LOSS</div>
-            <div id="cs-stat-loss" style="font-size:0.85rem;font-weight:bold;color:#ff4444;">0</div>
+          <div style="background:#0a0a0a;border:1px solid rgba(255,68,68,0.3);border-radius:5px;padding:7px 4px;text-align:center;">
+            <div style="font-size:0.5rem;color:#6b7280;letter-spacing:1px;margin-bottom:3px;">🔁 LOSS</div>
+            <div id="cs-stat-loss" style="font-size:0.78rem;font-weight:bold;color:#ff4444;">0</div>
           </div>
-          <div style="background:#0a0a0a;border:1px solid rgba(255,189,46,0.3);border-radius:5px;padding:7px 6px;text-align:center;">
-            <div style="font-size:0.55rem;color:#6b7280;letter-spacing:1px;margin-bottom:3px;">🎯 TAXA</div>
-            <div id="cs-stat-taxa" style="font-size:0.85rem;font-weight:bold;color:#ffbd2e;">--%</div>
+          <div style="background:#0a0a0a;border:1px solid rgba(255,189,46,0.3);border-radius:5px;padding:7px 4px;text-align:center;">
+            <div style="font-size:0.5rem;color:#6b7280;letter-spacing:1px;margin-bottom:3px;">🎯 TAXA</div>
+            <div id="cs-stat-taxa" style="font-size:0.78rem;font-weight:bold;color:#ffbd2e;">--%</div>
+          </div>
+          <div style="background:#0a0a0a;border:1px solid rgba(168,85,247,0.3);border-radius:5px;padding:7px 4px;text-align:center;">
+            <div style="font-size:0.5rem;color:#6b7280;letter-spacing:1px;margin-bottom:3px;">PRÓX STAKE</div>
+            <div id="cs-stat-prox" style="font-size:0.78rem;font-weight:bold;color:#c084fc;">$--</div>
           </div>
         </div>
 
@@ -1822,8 +1834,8 @@
           <div style="margin-top:6px;color:#6b7280;font-size:0.62rem;" id="cs-sinal-desc">—</div>
         </div>
 
-        <!-- ── CONFIGS + TOGGLE em linha ── -->
-        <div style="display:grid;grid-template-columns:1fr 1fr 2fr;gap:8px;margin-bottom:12px;align-items:end;">
+        <!-- ── CONFIGS: 4 colunas ── -->
+        <div style="display:grid;grid-template-columns:1.2fr 1fr 1.8fr 1.8fr;gap:8px;margin-bottom:12px;align-items:end;">
           <div>
             <label style="font-size:0.58rem;color:#00ffff;letter-spacing:1px;display:block;margin-bottom:3px;">ATIVO</label>
             <select id="cs-ativo" style="width:100%;background:#161b22;border:1px solid rgba(0,255,65,0.4);
@@ -1843,6 +1855,24 @@
                 width:100%;background:#161b22;border:1px solid rgba(0,255,65,0.4);
                 color:#c9d1d9;font-family:'Share Tech Mono',monospace;font-size:0.72rem;
                 padding:6px 7px;border-radius:4px;outline:none;">
+          </div>
+          <div>
+            <label style="font-size:0.58rem;color:#00ffff;letter-spacing:1px;display:block;margin-bottom:3px;">GERENCIAMENTO</label>
+            <select id="cs-mgr" onchange="csOnMgrChange()" style="width:100%;background:#161b22;border:1px solid rgba(168,85,247,0.5);
+                color:#c084fc;font-family:'Share Tech Mono',monospace;font-size:0.68rem;
+                padding:6px 7px;border-radius:4px;cursor:pointer;">
+              <option value="flat">💰 Stake Fixa (sem gerenc.)</option>
+              <option value="🔄 Martingale">🔄 Martingale</option>
+              <option value="⚡ SorosGale">⚡ SorosGale</option>
+              <option value="📉 Loss Recovery">📉 Loss Recovery</option>
+              <option value="🛡️ Recovery Conservador">🛡️ Recovery Conservador</option>
+              <option value="📐 QSR">📐 QSR</option>
+              <option value="📊 Masaniello">📊 Masaniello</option>
+              <option value="🎯 Ciclos">🎯 Ciclos</option>
+              <option value="🔰 SafeShield">🔰 SafeShield</option>
+              <option value="🤖 Recovery Adaptativo">🤖 Recovery Adaptativo</option>
+              <option value="🪜 Recovery Escada">🪜 Recovery Escada</option>
+            </select>
           </div>
           <div onclick="csToggleAuto()" id="cs-auto-row" style="
               display:flex;align-items:center;justify-content:space-between;
@@ -1875,7 +1905,6 @@
 
         <!-- ── DOIS LOGS LADO A LADO ── -->
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-          <!-- Log esquerdo: análise / animação -->
           <div>
             <div style="font-size:0.58rem;color:#6b7280;letter-spacing:1px;margin-bottom:4px;">▸ LOG DE ANÁLISE</div>
             <div id="cs-log-analise" style="
@@ -1883,7 +1912,6 @@
                 border-radius:4px;padding:8px;font-size:0.68rem;color:#888;
                 height:130px;overflow-y:auto;line-height:1.6;"></div>
           </div>
-          <!-- Log direito: operações / resultados -->
           <div>
             <div style="font-size:0.58rem;color:#6b7280;letter-spacing:1px;margin-bottom:4px;">▸ LOG DE OPERAÇÕES</div>
             <div id="cs-op-log" style="
@@ -15584,16 +15612,55 @@ function _iniciarMatrixApk() {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// CYBER SORT — Animação Quick Sort + Operação Real na Deriv
+// CYBER SORT — Quick Sort + Gerenciamento + TG/WA + Matrix + Stats BRL
 // ══════════════════════════════════════════════════════════════════════════════
-const _csAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
-let _csSinalAtual  = null;    // sinal gerado após análise
-let _csAutoOperar  = false;   // toggle de auto-loop
-let _csAtivo       = false;   // modal está aberto
-let _csWins        = 0;       // wins da sessão do CS
-let _csLosses      = 0;       // losses da sessão do CS
-let _csLucro       = 0;       // lucro acumulado da sessão do CS
+const _csAudioCtx  = new (window.AudioContext || window.webkitAudioContext)();
+let _csSinalAtual  = null;
+let _csAutoOperar  = false;
+let _csAtivo       = false;
+let _csWins        = 0;
+let _csLosses      = 0;
+let _csLucro       = 0;
+let _csMgr         = null;   // instância de GerenciadorUnificado ativo
+let _csMatrixRAF   = null;   // requestAnimationFrame do matrix CS
 
+// ── Matrix de fundo caindo de cima ─────────────────────────────────────────
+function _csIniciarMatrix() {
+    const canvas = document.getElementById('cs-matrix-canvas');
+    if (!canvas) return;
+    canvas.width  = window.innerWidth;
+    canvas.height = window.innerHeight;
+    const ctx   = canvas.getContext('2d');
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%&*⚡⚙▶✅🔁';
+    const tam   = 14;
+    const cols  = Math.floor(canvas.width / tam);
+    const drops = Array(cols).fill(0);  // começa no TOPO (0)
+
+    function draw() {
+        ctx.fillStyle = 'rgba(0,0,0,0.05)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.font = tam + 'px "Share Tech Mono",monospace';
+        for (let i = 0; i < drops.length; i++) {
+            const ch = chars[Math.floor(Math.random() * chars.length)];
+            ctx.fillStyle = Math.random() > 0.96 ? '#ffffff' : '#00ff41';
+            ctx.fillText(ch, i * tam, drops[i] * tam);
+            // Reinicia do topo aleatoriamente
+            if (drops[i] * tam > canvas.height && Math.random() > 0.975) drops[i] = 0;
+            drops[i]++;
+        }
+        _csMatrixRAF = requestAnimationFrame(draw);
+    }
+    if (_csMatrixRAF) cancelAnimationFrame(_csMatrixRAF);
+    draw();
+}
+
+function _csPararMatrix() {
+    if (_csMatrixRAF) { cancelAnimationFrame(_csMatrixRAF); _csMatrixRAF = null; }
+    const canvas = document.getElementById('cs-matrix-canvas');
+    if (canvas) canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+}
+
+// ── Áudio ──────────────────────────────────────────────────────────────────
 function _csBip(freq, dur) {
     try {
         const o = _csAudioCtx.createOscillator();
@@ -15606,6 +15673,7 @@ function _csBip(freq, dur) {
     } catch(e) {}
 }
 
+// ── Grid de dígitos ────────────────────────────────────────────────────────
 function _csRenderGrid(arr, statusTxt) {
     const grid = document.getElementById('cs-digit-grid');
     const stat = document.getElementById('cs-status');
@@ -15618,7 +15686,7 @@ function _csRenderGrid(arr, statusTxt) {
     if (stat && statusTxt) stat.textContent = statusTxt;
 }
 
-// Log de ANÁLISE (esquerdo)
+// ── Logs separados ──────────────────────────────────────────────────────────
 function _csLogAnalise(msg, cor) {
     const el = document.getElementById('cs-log-analise');
     if (!el) return;
@@ -15627,7 +15695,6 @@ function _csLogAnalise(msg, cor) {
     el.scrollTop = el.scrollHeight;
 }
 
-// Log de OPERAÇÕES (direito)
 function _csLogOp(msg, cor) {
     const el = document.getElementById('cs-op-log');
     if (!el) return;
@@ -15636,35 +15703,89 @@ function _csLogOp(msg, cor) {
     el.scrollTop = el.scrollHeight;
 }
 
-// Atualiza painel de stats
-function _csAtualizarStats() {
-    // Banca do bot principal
-    const bancaTxt = document.getElementById('hd-balance')?.textContent || '--';
-    const bancaEl  = document.getElementById('cs-stat-banca');
-    if (bancaEl) bancaEl.textContent = bancaTxt;
+// ── Stats ───────────────────────────────────────────────────────────────────
+function _csAtualizarStats(proxStake) {
+    const bancaEl = document.getElementById('cs-stat-banca');
+    if (bancaEl) bancaEl.textContent = document.getElementById('hd-balance')?.textContent || '--';
 
-    // Lucro da sessão CS
+    const cot     = parseFloat(window._cotacaoBRL) || 5.85;
     const lucroEl = document.getElementById('cs-stat-lucro');
+    const lucroBrlEl = document.getElementById('cs-stat-lucro-brl');
     if (lucroEl) {
-        lucroEl.textContent  = (_csLucro >= 0 ? '+' : '') + '$' + _csLucro.toFixed(2);
-        lucroEl.style.color  = _csLucro >= 0 ? '#00ff41' : '#ff4444';
+        lucroEl.textContent = (_csLucro >= 0 ? '+' : '') + '$' + _csLucro.toFixed(2);
+        lucroEl.style.color = _csLucro >= 0 ? '#00ff41' : '#ff4444';
+    }
+    if (lucroBrlEl) {
+        const brl = (_csLucro * cot);
+        lucroBrlEl.textContent = (brl >= 0 ? '+' : '') + 'R$' + Math.abs(brl).toFixed(2).replace('.', ',');
+        lucroBrlEl.style.color = brl >= 0 ? '#4ade80' : '#f87171';
     }
 
     const wEl = document.getElementById('cs-stat-wins');
     const lEl = document.getElementById('cs-stat-loss');
     const tEl = document.getElementById('cs-stat-taxa');
+    const pEl = document.getElementById('cs-stat-prox');
     if (wEl) wEl.textContent = _csWins;
     if (lEl) lEl.textContent = _csLosses;
     const total = _csWins + _csLosses;
     if (tEl) tEl.textContent = total > 0 ? ((_csWins / total) * 100).toFixed(1) + '%' : '--%';
+    if (pEl && proxStake !== undefined) pEl.textContent = '$' + parseFloat(proxStake).toFixed(2);
 }
 
+// ── Notificações TG + WA ────────────────────────────────────────────────────
+function _csNotificar(won, profit, ct, barr, ativo) {
+    const cot      = parseFloat(window._cotacaoBRL) || 5.85;
+    const profBRL  = (Math.abs(profit) * cot).toFixed(2).replace('.', ',');
+    const sinal    = won ? `✅ WIN +$${profit.toFixed(2)} (+R$${profBRL})` : `❌ LOSS -$${Math.abs(profit).toFixed(2)} (-R$${profBRL})`;
+    const banca    = document.getElementById('hd-balance')?.textContent || '--';
+    const taxa     = (_csWins + _csLosses) > 0 ? ((_csWins / (_csWins + _csLosses)) * 100).toFixed(1) + '%' : '--%';
+    const lucBRL   = (_csLucro * cot).toFixed(2).replace('.', ',');
+
+    const texto = `⚙ CYBER SORT\n${sinal}\n\n` +
+        `📊 ${ct} barr=${barr} | ${ativo}\n` +
+        `💰 Banca: ${banca}\n` +
+        `📈 Lucro sessão: ${_csLucro >= 0 ? '+' : ''}$${_csLucro.toFixed(2)} (R$${lucBRL})\n` +
+        `🎯 Taxa: ${taxa} (${_csWins}W / ${_csLosses}L)\n` +
+        `💱 1 USD = R$ ${cot.toFixed(2)}`;
+
+    const _tgCfg = typeof _tgCarregarConfig === 'function' ? _tgCarregarConfig() :
+        (JSON.parse(localStorage.getItem('tg_config') || '{}'));
+    const _waAtivo = typeof _waNotifAtivo !== 'undefined' ? _waNotifAtivo : false;
+
+    if (_tgCfg?.enabled && _tgCfg?.resultados && _tgCfg?.token && _tgCfg?.chat_id) {
+        fetch('/tg-send', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token: _tgCfg.token, chat_id: _tgCfg.chat_id, texto })
+        }).catch(() => {});
+    }
+    if (_waAtivo) {
+        fetch('/wa-send', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ texto })
+        }).catch(() => {});
+    }
+}
+
+// ── Gerenciamento ───────────────────────────────────────────────────────────
+function csOnMgrChange() {
+    const nome  = document.getElementById('cs-mgr')?.value;
+    const stake = parseFloat(document.getElementById('cs-stake')?.value) || 0.35;
+    if (!nome || nome === 'flat' || typeof GerenciadorUnificado === 'undefined') {
+        _csMgr = null;
+        return;
+    }
+    _csMgr = new GerenciadorUnificado(nome, { stake });
+    _csLogAnalise(`⚙ Gerenciamento: <b style="color:#c084fc">${nome}</b>`, '#c084fc');
+    _csAtualizarStats(_csMgr.getStake());
+}
+
+// ── Sinal ───────────────────────────────────────────────────────────────────
 function _csGerarSinal(original) {
-    const metade  = Math.floor(original.length / 2);
-    const grandes = original.slice(0, metade).filter(v => v > 4).length;
+    const metade   = Math.floor(original.length / 2);
+    const grandes  = original.slice(0, metade).filter(v => v > 4).length;
     const pequenos = metade - grandes;
-    const diff = Math.abs(grandes - pequenos);
-    const conf = Math.round(50 + (diff / metade) * 50);
+    const diff     = Math.abs(grandes - pequenos);
+    const conf     = Math.round(50 + (diff / metade) * 50);
     if (grandes >= pequenos) {
         return { contract_type: 'DIGITUNDER', barrier: '5', conf,
             desc: `${grandes} dígitos grandes na 1ª metade → Under<5` };
@@ -15674,8 +15795,10 @@ function _csGerarSinal(original) {
     }
 }
 
+// ── Abrir / Fechar ──────────────────────────────────────────────────────────
 function csFechar() {
     _csAtivo = false;
+    _csPararMatrix();
     document.getElementById('cyber-sort-modal').style.display = 'none';
 }
 
@@ -15684,7 +15807,6 @@ function abrirModalCyberSort() {
     if (!m) return;
     _csAtivo = true;
 
-    // Pré-preenche stake e ativo com os do bot
     const stakeEl = document.getElementById('cs-stake');
     if (stakeEl && typeof bot !== 'undefined' && bot.stake) stakeEl.value = bot.stake;
     const ativoEl = document.getElementById('cs-ativo');
@@ -15692,16 +15814,18 @@ function abrirModalCyberSort() {
         for (const opt of ativoEl.options) { if (opt.value === bot._tickAtivo) { opt.selected = true; break; } }
     }
 
-    // Reseta logs e estado (mantém toggle e stats da sessão)
     _csSinalAtual = null;
-    document.getElementById('cs-sinal-box').style.display = 'none';
-    document.getElementById('cs-log-analise').innerHTML   = '';
-    document.getElementById('cs-op-log').innerHTML        = '';
+    _csMgr        = null;
+    document.getElementById('cs-sinal-box').style.display  = 'none';
+    document.getElementById('cs-log-analise').innerHTML    = '';
+    document.getElementById('cs-op-log').innerHTML         = '';
+    document.getElementById('cs-mgr').value                = 'flat';
     _csBotaoOperar(false);
     _csAtualizarToggle();
     _csAtualizarStats();
     m.style.display = 'flex';
     _csRenderGrid([6,3,1,5,7,2,8,9,4,0], 'AGUARDANDO DADOS DO MERCADO...');
+    _csIniciarMatrix();
 }
 
 function csToggleAuto() {
@@ -15739,8 +15863,9 @@ function _csBotaoOperar(ativo) {
     btn.style.cursor      = ativo ? 'pointer'  : 'not-allowed';
 }
 
+// ── Análise / Animação ──────────────────────────────────────────────────────
 async function csExecutar() {
-    if (!_csAtivo) return;  // modal foi fechado, cancela loop
+    if (!_csAtivo) return;
     _csBotaoOperar(false);
     _csSinalAtual = null;
     document.getElementById('cs-sinal-box').style.display = 'none';
@@ -15753,21 +15878,19 @@ async function csExecutar() {
         _csLogAnalise('▶ Iniciando Quick Sort...', '#00ff41');
 
         const res  = await fetch('/ia/quick-sort-simulacao', {
-            method: 'POST',
-            headers: {'Content-Type':'application/json'},
+            method: 'POST', headers: {'Content-Type':'application/json'},
             body: JSON.stringify({ lista: listaOriginal })
         });
         const data = await res.json();
         if (!data.ok) return;
 
-        // ── Animação passo a passo ──
         let swaps = 0, comparacoes = 0;
         for (const passo of data.passos) {
-            if (!_csAtivo) return;  // modal fechado durante animação
+            if (!_csAtivo) return;
             _csRenderGrid(passo.arr, `${passo.acao.toUpperCase()} | PIVOT: ${passo.pivot ?? '—'}`);
             const boxes = document.querySelectorAll('#cs-digit-grid .cs-box');
-            const clrC = 'border-color:#ffbd2e;background:rgba(255,189,46,0.15);color:#ffbd2e;transform:translateY(-4px)';
-            const clrS = 'border-color:#ff4444;background:rgba(255,68,68,0.2);color:#ff4444;transform:scale(1.1)';
+            const clrC  = 'border-color:#ffbd2e;background:rgba(255,189,46,0.15);color:#ffbd2e;transform:translateY(-4px)';
+            const clrS  = 'border-color:#ff4444;background:rgba(255,68,68,0.2);color:#ff4444;transform:scale(1.1)';
             if (passo.i >= 0 && boxes[passo.i]) boxes[passo.i].style.cssText += ';' + clrC;
             if (passo.j >= 0 && boxes[passo.j]) boxes[passo.j].style.cssText += ';' + (passo.acao === 'swap' ? clrS : clrC);
             if (passo.acao === 'swap') swaps++; else comparacoes++;
@@ -15777,49 +15900,50 @@ async function csExecutar() {
         if (!_csAtivo) return;
 
         document.getElementById('cs-status').textContent = 'ORDENAÇÃO CONCLUÍDA ✅';
-        _csLogAnalise(`✅ Concluído: ${swaps} trocas, ${comparacoes} comparações`, '#00ff41');
+        _csLogAnalise(`✅ ${swaps} trocas · ${comparacoes} comparações`, '#00ff41');
         _csBip(1000, 0.3);
 
-        // ── Gera sinal ──
         _csSinalAtual = _csGerarSinal(listaOriginal);
         document.getElementById('cs-sinal-contrato').textContent = _csSinalAtual.contract_type;
         document.getElementById('cs-sinal-barreira').textContent = _csSinalAtual.barrier;
         document.getElementById('cs-sinal-conf').textContent     = _csSinalAtual.conf + '%';
         document.getElementById('cs-sinal-desc').textContent     = _csSinalAtual.desc;
         document.getElementById('cs-sinal-box').style.display    = 'block';
-        _csLogAnalise(`📡 Sinal: <b style="color:#00ffff">${_csSinalAtual.contract_type}</b> barr=<b style="color:#ffbd2e">${_csSinalAtual.barrier}</b> conf=${_csSinalAtual.conf}%`, '#ccc');
+        _csLogAnalise(`📡 <b style="color:#00ffff">${_csSinalAtual.contract_type}</b> barr=<b style="color:#ffbd2e">${_csSinalAtual.barrier}</b> conf=${_csSinalAtual.conf}%`, '#ccc');
 
         if (_csAutoOperar) {
-            _csLogOp('🤖 AUTO-LOOP — disparando operação...', '#00ffff');
+            _csLogOp('🤖 AUTO-LOOP — disparando...', '#00ffff');
             setTimeout(() => csOperar(), 300);
         } else {
             _csBotaoOperar(true);
         }
 
     } catch(e) {
-        _csLogAnalise('⚠️ Erro na análise: ' + e.message, '#ff4444');
-        console.error('CyberSort erro:', e);
+        _csLogAnalise('⚠️ Erro: ' + e.message, '#ff4444');
     } finally {
         if (btnAn) { btnAn.disabled = false; btnAn.textContent = '▶ ANALISAR'; }
     }
 }
 
+// ── Operação real ────────────────────────────────────────────────────────────
 function csOperar() {
-    if (!_csSinalAtual) { _csLogOp('⚠️ Execute a análise primeiro.', '#ff4444'); return; }
-    if (!_csAtivo) return;
+    if (!_csSinalAtual || !_csAtivo) return;
 
     if (typeof bot === 'undefined' || !bot.ws || bot.ws.readyState !== WebSocket.OPEN) {
         _csLogOp('⚠️ Bot não conectado à Deriv.', '#ff4444');
         return;
     }
 
-    const stake = parseFloat(document.getElementById('cs-stake').value) || 0.35;
-    const ativo = document.getElementById('cs-ativo').value || 'R_100';
-    const ct    = _csSinalAtual.contract_type;
-    const barr  = _csSinalAtual.barrier;
-    const reqId = Math.floor(Math.random() * 90000) + 10000;
+    // Stake via gerenciamento ou campo direto
+    const baseStake = parseFloat(document.getElementById('cs-stake').value) || 0.35;
+    const stake     = _csMgr ? _csMgr.getStake() : baseStake;
+    const ativo     = document.getElementById('cs-ativo').value || 'R_100';
+    const ct        = _csSinalAtual.contract_type;
+    const barr      = _csSinalAtual.barrier;
+    const reqId     = Math.floor(Math.random() * 90000) + 10000;
 
-    _csLogOp(`🚀 <b style="color:#00ffff">${ct}</b> barr=<b style="color:#ffbd2e">${barr}</b> stake=$${stake} | ${ativo}`, '#ccc');
+    _csLogOp(`🚀 <b style="color:#00ffff">${ct}</b> barr=<b style="color:#ffbd2e">${barr}</b> $${stake.toFixed(2)} | ${ativo}`, '#ccc');
+    if (_csMgr) _csLogOp(`⚙ Mgr: <b style="color:#c084fc">${_csMgr.modo}</b>`, '#c084fc');
 
     const payload = {
         proposal: 1, req_id: reqId,
@@ -15838,29 +15962,22 @@ function csOperar() {
         if (d.msg_type === 'proposal' && d.req_id === reqId) {
             if (d.error) {
                 _csLogOp('⚠️ Proposta recusada: ' + d.error.message, '#ff4444');
-                bot.ws.onmessage = _origMsg;
-                _csBotaoOperar(true);
-                return;
+                bot.ws.onmessage = _origMsg; _csBotaoOperar(true); return;
             }
             const pid = d.proposal?.id;
-            if (pid) {
-                _csLogOp('✅ Proposta aceita — comprando...', '#00ff41');
-                bot.ws.send(JSON.stringify({ buy: pid, price: stake }));
-            }
+            if (pid) { _csLogOp('✅ Aceita — comprando...', '#00ff41'); bot.ws.send(JSON.stringify({ buy: pid, price: stake })); }
             return;
         }
 
         if (d.msg_type === 'buy') {
             if (d.error) {
                 _csLogOp('⚠️ Compra recusada: ' + d.error.message, '#ff4444');
-                bot.ws.onmessage = _origMsg;
-                _csBotaoOperar(true);
-                return;
+                bot.ws.onmessage = _origMsg; _csBotaoOperar(true); return;
             }
             const cid = d.buy?.contract_id;
             if (cid) {
                 _csCid = cid;
-                _csLogOp(`🎯 Contrato <b>#${cid}</b> — aguardando...`, '#ffbd2e');
+                _csLogOp(`🎯 <b>#${cid}</b> — aguardando...`, '#ffbd2e');
                 bot.ws.send(JSON.stringify({ proposal_open_contract: 1, contract_id: cid, subscribe: 1 }));
             }
             return;
@@ -15874,26 +15991,33 @@ function csOperar() {
             const profit = parseFloat(poc.profit);
             const won    = profit > 0;
 
-            // Atualiza stats da sessão CS
+            // Atualiza gerenciamento
+            if (_csMgr) _csMgr.updateResult(won);
+            const proxStake = _csMgr ? _csMgr.getStake() : baseStake;
+
+            // Atualiza stats
             if (won) { _csWins++;  _csLucro += profit; }
             else     { _csLosses++; _csLucro += profit; }
-            _csAtualizarStats();
+            _csAtualizarStats(proxStake);
 
+            // Log resultado
             if (won) {
-                _csLogOp(`🏆 <b style="color:#00ff41">WIN +$${profit.toFixed(2)}</b>`, '#00ff41');
+                _csLogOp(`🏆 <b style="color:#00ff41">WIN +$${profit.toFixed(2)}</b>  próx $${proxStake.toFixed(2)}`, '#00ff41');
                 _csBip(1000, 0.4);
             } else {
-                _csLogOp(`💔 <b style="color:#ff4444">LOSS -$${Math.abs(profit).toFixed(2)}</b>`, '#ff4444');
+                _csLogOp(`💔 <b style="color:#ff4444">LOSS -$${Math.abs(profit).toFixed(2)}</b>  próx $${proxStake.toFixed(2)}`, '#ff4444');
                 _csBip(200, 0.2);
             }
 
+            // Notifica TG + WA
+            _csNotificar(won, profit, ct, barr, ativo);
+
             bot.ws.onmessage = _origMsg;
 
-            // ── LOOP AUTOMÁTICO: após resultado, reanalisar e operar de novo ──
+            // Loop automático
             if (_csAutoOperar && _csAtivo) {
-                const delay = 1200;  // pausa de 1.2s antes de reanalisar
-                _csLogAnalise(`🔄 Auto-loop: reiniciando análise em ${delay/1000}s...`, '#6b7280');
-                setTimeout(() => { if (_csAtivo) csExecutar(); }, delay);
+                _csLogAnalise(`🔄 Reiniciando em 1.2s...`, '#6b7280');
+                setTimeout(() => { if (_csAtivo) csExecutar(); }, 1200);
             } else {
                 _csBotaoOperar(true);
             }
