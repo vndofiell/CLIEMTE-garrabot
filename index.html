@@ -15734,7 +15734,8 @@ let _csAtivo       = false;
 let _csWins        = 0;
 let _csLosses      = 0;
 let _csLucro       = 0;
-let _csMgr         = null;   // instância de GerenciadorUnificado ativo
+let _csMgr         = null;   // instância de GerenciadorUnificado ativo (conta principal)
+let _csSecMgr      = null;   // instância de GerenciadorUnificado separada (conta secundária)
 let _csMatrixRAF   = null;   // requestAnimationFrame do matrix CS
 
 // ── Espelho automático (igual ao bot principal) ─────────────────────────────
@@ -16091,6 +16092,7 @@ function abrirModalCyberSort() {
 
     _csSinalAtual  = null;
     _csMgr         = null;
+    _csSecMgr      = null;
     window._csLvContador = 0;
     _csEspLossSeq  = 0;
     _csEspPerdaAc  = 0;
@@ -16260,7 +16262,9 @@ function csOperar() {
 
     // Stake via gerenciamento ou campo direto
     const baseStake = parseFloat(document.getElementById('cs-stake').value) || 0.35;
-    const stake     = _csMgr ? _csMgr.getStake() : baseStake;
+    // Quando na conta secundária usa gerenciador próprio (sempre começa em baseStake)
+    const stake     = (_csUsandoSec && _csSecMgr) ? _csSecMgr.getStake()
+                    : (_csMgr ? _csMgr.getStake() : baseStake);
     const ativo     = document.getElementById('cs-ativo').value || 'R_100';
     const ct        = _csSinalAtual.contract_type;
     const barr      = _csSinalAtual.barrier;
@@ -16315,9 +16319,14 @@ function csOperar() {
             const profit = parseFloat(poc.profit);
             const won    = profit > 0;
 
-            // Atualiza gerenciamento
-            if (_csMgr) _csMgr.updateResult(won);
-            const proxStake = _csMgr ? _csMgr.getStake() : baseStake;
+            // Atualiza gerenciamento — conta certa conforme onde está operando
+            if (_csUsandoSec && _csSecMgr) {
+                _csSecMgr.updateResult(won);
+            } else if (_csMgr) {
+                _csMgr.updateResult(won);
+            }
+            const proxStake = (_csUsandoSec && _csSecMgr) ? _csSecMgr.getStake()
+                            : (_csMgr ? _csMgr.getStake() : baseStake);
 
             // ── Contabiliza stats: principal ou espelho ─────────────────────────
             if (espAtivo && secPronto && _csUsandoSec) {
@@ -16347,11 +16356,35 @@ function csOperar() {
                     const trigPerda = _sec.gatilhoPerdaAtivo && _csEspPerdaAc >= Math.abs(_sec.limitePerda || 0);
                     if (trigLoss || trigPerda) {
                         _csUsandoSec = true;
+                        // Cria gerenciador próprio da SEC sempre começando do zero (baseStake)
+                        const _csMgrNome = document.getElementById('cs-mgr')?.value;
+                        if (_csMgrNome && _csMgrNome !== 'flat' && typeof GerenciadorUnificado !== 'undefined') {
+                            _csSecMgr = new GerenciadorUnificado(_csMgrNome, { stake: baseStake });
+                        } else {
+                            _csSecMgr = null;
+                        }
                         const motivo = trigLoss
                             ? `${_csEspLossSeq} losses consecutivos (gatilho: ${_sec.limiteSeqLoss})`
                             : `perda $${_csEspPerdaAc.toFixed(2)} atingiu $${Math.abs(_sec.limitePerda).toFixed(2)}`;
-                        _csLogOp(`🔀 <b style="color:#60a5fa">TRIGGER ATIVADO</b> (${motivo}) — operando na SEC`, '#60a5fa');
+                        _csLogOp(`🔀 <b style="color:#60a5fa">TRIGGER ATIVADO</b> (${motivo}) — operando na SEC | stake base: $${baseStake.toFixed(2)}`, '#60a5fa');
                         _csBip(600, 0.2);
+                    }
+                } else {
+                    // Está na conta secundária — verifica se ganhou para voltar à principal
+                    if (won) {
+                        _csUsandoSec   = false;
+                        _csSecMgr      = null;
+                        _csEspLossSeq  = 0;
+                        _csEspPerdaAc  = 0;
+                        // Reseta gerenciador da conta principal para stake base
+                        if (_csMgr) {
+                            const _csMgrNome2 = document.getElementById('cs-mgr')?.value;
+                            if (_csMgrNome2 && _csMgrNome2 !== 'flat') {
+                                _csMgr = new GerenciadorUnificado(_csMgrNome2, { stake: baseStake });
+                            }
+                        }
+                        _csLogOp(`✅ <b style="color:#00ff41">SEC GANHOU</b> — retomando conta principal | stake reiniciada $${baseStake.toFixed(2)}`, '#00ff41');
+                        _csBip(1000, 0.4);
                     }
                 }
                 _csAtualizarStatusEspelho();
