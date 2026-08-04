@@ -10113,6 +10113,36 @@ def garra_trend_registrar():
     return jsonify({"ok": True, "mensagem": "Resultado gravado na IA Estatística do GarraTrend Pro."})
 
 
+@app.route('/ia/quick-sort-simulacao', methods=['POST'])
+def quick_sort_simulacao():
+    dados = request.get_json(force=True, silent=True) or {}
+    arr = dados.get("lista", [6, 10, 1, 5, 7, 2, 8, 9, 4, 3])
+
+    passos = []
+
+    def partition(a, low, high):
+        pivot = a[high]
+        i = low - 1
+        for j in range(low, high):
+            passos.append({"acao": "compare", "i": i+1, "j": j, "pivot": pivot, "arr": list(a)})
+            if a[j] <= pivot:
+                i += 1
+                a[i], a[j] = a[j], a[i]
+                passos.append({"acao": "swap", "i": i, "j": j, "arr": list(a)})
+        a[i + 1], a[high] = a[high], a[i + 1]
+        passos.append({"acao": "swap", "i": i + 1, "j": high, "arr": list(a)})
+        return i + 1
+
+    def quick_sort(a, low, high):
+        if low < high:
+            pi = partition(a, low, high)
+            quick_sort(a, low, pi - 1)
+            quick_sort(a, pi + 1, high)
+
+    quick_sort(list(arr), 0, len(arr) - 1)
+    return jsonify({"ok": True, "passos": passos})
+
+
 def start_server():
     # Oracle Cloud — porta configurável via variável de ambiente, padrão 5000
     port = int(os.environ.get("PORT", 5000))

@@ -340,6 +340,7 @@ tr:hover td { background:rgba(0,255,65,0.03); }
         <button class="adm-tab"        onclick="trocarAba('email')">CONFIG E-MAIL</button>
         <button class="adm-tab"        onclick="trocarAba('senha-adm')">ALTERAR SENHA</button>
         <button class="adm-tab"        onclick="trocarAba('avisos')" style="color:#ffbd2e;border-bottom-color:transparent;" id="tab-avisos">📢 AVISOS</button>
+        <button class="adm-tab"        onclick="trocarAba('cyber-sort')" style="color:#00ffff;border-bottom-color:transparent;">⚙ CYBER SORT</button>
     </div>
 
     <div class="adm-content">
@@ -590,6 +591,122 @@ tr:hover td { background:rgba(0,255,65,0.03); }
 
             </div><!-- /aviso-grid -->
         </div><!-- /aba-avisos -->
+
+        <!-- ── ABA: CYBER SORT ── -->
+        <div class="adm-section" id="aba-cyber-sort">
+            <div class="adm-section-title">▸ CYBER SORT / DIGIT PATTERN SCANNER</div>
+
+            <div class="algo-container">
+                <div class="algo-header">
+                    <h2>CYBER SORT / DIGIT PATTERN SCANNER</h2>
+                    <p class="algo-sub">TIME: O(n log n) &nbsp;&nbsp;|&nbsp;&nbsp; SPACE: O(log n)</p>
+                </div>
+                <div id="digit-array-container" class="digit-grid">
+                    <div class="digit-box" data-index="0">6</div>
+                    <div class="digit-box" data-index="1">10</div>
+                    <div class="digit-box" data-index="2">1</div>
+                    <div class="digit-box" data-index="3">5</div>
+                    <div class="digit-box" data-index="4">7</div>
+                    <div class="digit-box" data-index="5">2</div>
+                    <div class="digit-box" data-index="6">8</div>
+                    <div class="digit-box" data-index="7">9</div>
+                    <div class="digit-box" data-index="8">4</div>
+                    <div class="digit-box" data-index="9">3</div>
+                </div>
+                <div id="algo-status" class="algo-status-box">AGUARDANDO DADOS DO MERCADO...</div>
+                <button class="btn-executar" onclick="executarAnimacaoQuickSort()">▶ EXECUTAR ANÁLISE VISUAL</button>
+            </div>
+
+            <style>
+            .algo-container {
+                background: #0d0f12;
+                border: 1px solid #00ff41;
+                border-radius: 8px;
+                padding: 20px;
+                font-family: 'Courier New', Courier, monospace;
+                color: #fff;
+                max-width: 650px;
+                margin: 20px auto;
+                box-shadow: 0 0 20px rgba(0, 255, 65, 0.15);
+            }
+            .algo-header h2 {
+                font-size: 1.1rem;
+                color: #00ff41;
+                letter-spacing: 2px;
+                margin: 0 0 5px 0;
+                text-align: center;
+            }
+            .algo-sub {
+                font-size: 0.7rem;
+                color: #6b7280;
+                text-align: center;
+                margin-bottom: 20px;
+            }
+            .digit-grid {
+                display: flex;
+                gap: 8px;
+                justify-content: center;
+                margin-bottom: 20px;
+                flex-wrap: wrap;
+            }
+            .digit-box {
+                width: 45px;
+                height: 55px;
+                background: #161b22;
+                border: 1px solid #30363d;
+                border-radius: 6px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 1.2rem;
+                font-weight: bold;
+                color: #c9d1d9;
+                transition: all 0.15s ease;
+            }
+            .digit-box.compare {
+                border-color: #ffbd2e;
+                background: rgba(255, 189, 46, 0.15);
+                color: #ffbd2e;
+                transform: translateY(-4px);
+            }
+            .digit-box.swap {
+                border-color: #ff4444;
+                background: rgba(255, 68, 68, 0.2);
+                color: #ff4444;
+                transform: scale(1.1);
+            }
+            .digit-box.pivot {
+                border: 2px dashed #00ffff;
+            }
+            .algo-status-box {
+                background: rgba(0, 255, 65, 0.05);
+                border: 1px solid #00ff41;
+                padding: 12px;
+                text-align: center;
+                font-size: 0.85rem;
+                color: #00ff41;
+                letter-spacing: 1px;
+                border-radius: 4px;
+                margin-bottom: 15px;
+            }
+            .btn-executar {
+                width: 100%;
+                padding: 12px;
+                background: rgba(0, 255, 65, 0.1);
+                border: 1px solid #00ff41;
+                color: #00ff41;
+                font-family: 'Courier New', monospace;
+                font-weight: bold;
+                letter-spacing: 2px;
+                cursor: pointer;
+                border-radius: 4px;
+                transition: background 0.2s;
+            }
+            .btn-executar:hover {
+                background: rgba(0, 255, 65, 0.25);
+            }
+            </style>
+        </div><!-- /aba-cyber-sort -->
 
     </div><!-- /adm-content -->
 </div><!-- /screen-painel -->
@@ -1589,6 +1706,67 @@ function pcDescartarPendente(username, pc_id) {
         body: JSON.stringify(db_dummy)
     }).finally(() => carregarPCs(username));
 }
+
+// ── CYBER SORT — Web Audio API + Animação Quick Sort ──────────────────────────
+const _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+function tocarSomBip(freq, duracao) {
+    try {
+        const osc  = _audioCtx.createOscillator();
+        const gain = _audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(_audioCtx.destination);
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0.03, _audioCtx.currentTime);
+        gain.gain.linearRampToValueAtTime(0.01, _audioCtx.currentTime + duracao);
+        osc.start();
+        osc.stop(_audioCtx.currentTime + duracao);
+    } catch(e) {}
+}
+
+function renderizarArrayVisual(arr, statusTexto) {
+    const container = document.getElementById('digit-array-container');
+    const statusBox = document.getElementById('algo-status');
+    if (!container) return;
+    container.innerHTML = '';
+    arr.forEach(val => {
+        const box = document.createElement('div');
+        box.className = 'digit-box';
+        box.textContent = val;
+        container.appendChild(box);
+    });
+    if (statusBox && statusTexto) statusBox.textContent = statusTexto;
+}
+
+async function executarAnimacaoQuickSort() {
+    try {
+        const res = await fetch('/ia/quick-sort-simulacao', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ lista: [6, 10, 1, 5, 7, 2, 8, 9, 4, 3] })
+        });
+        const data = await res.json();
+        if (!data.ok) return;
+
+        for (let passo of data.passos) {
+            renderizarArrayVisual(passo.arr, `AÇÃO: ${passo.acao.toUpperCase()} | PIVOT: ${passo.pivot ?? '—'}`);
+            const boxes = document.querySelectorAll('#digit-array-container .digit-box');
+            boxes.forEach(b => b.className = 'digit-box');
+            if (passo.i >= 0 && boxes[passo.i]) boxes[passo.i].classList.add('compare');
+            if (passo.j >= 0 && boxes[passo.j]) boxes[passo.j].classList.add(passo.acao === 'swap' ? 'swap' : 'compare');
+            tocarSomBip(passo.acao === 'swap' ? 700 : 450, 0.08);
+            await new Promise(r => setTimeout(r, 400));
+        }
+
+        const statusFinal = document.getElementById('algo-status');
+        if (statusFinal) statusFinal.textContent = 'ORDENAÇÃO CONCLUÍDA COM SUCESSO ✅';
+        tocarSomBip(1000, 0.3);
+
+    } catch(err) {
+        console.error('Erro na simulação:', err);
+    }
+}
+// ── FIM CYBER SORT ─────────────────────────────────────────────────────────────
 
 </script>
 </body>
