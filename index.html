@@ -7317,19 +7317,21 @@ function initWebSocket(wssUrl) {
                 if (bot._tpAnalisando    === undefined) bot._tpAnalisando    = false;
 
                 const _tpTf     = est.tf || 1;
-                const _tpJanela = Math.max(6, _tpTf * 8);   // ticks por vela
+                const _tpJanela = Math.max(3, _tpTf * 3);   // 3 ticks por vela — análise rápida
 
                 // ── FASE 2: sinal pendente → entra na virada ──────────────────
                 if (bot._tpSinalPendente) {
                     if (bot._buying) {
                         bot._tpSinalPendente = null;
-                        bot._candleBuffer = [preco];
-                        _seqStatusUpdate(`🏛️ TREND PRO — operação em andamento, sinal descartado...`);
+                        // mantém o buffer — não zera, apenas descarta 1 vela para reanalisar logo
+                        bot._candleBuffer = bot._candleBuffer.slice(-_tpJanela * 59);
+                        _seqStatusUpdate(`🏛️ TREND PRO — operação em andamento, aguardando resultado...`);
                         return;
                     }
                     const _tpS = bot._tpSinalPendente;
                     bot._tpSinalPendente = null;
-                    bot._candleBuffer = [preco];
+                    // mantém o buffer — não zera, bot reanalisará imediatamente após o resultado
+                    bot._candleBuffer = bot._candleBuffer.slice(-_tpJanela * 59);
                     _seqStatusClear();
                     if (!lvVerificar(digit)) return;
                     bot._canaleDir = _tpS.dir;
@@ -7470,8 +7472,8 @@ function initWebSocket(wssUrl) {
                 }
 
                 // ── Avalia 10 módulos localmente (sem fetch — 100% offline) ──
-                // Descarta exatamente 1 vela completa — próxima vela completa dispara nova análise
-                bot._candleBuffer = bot._candleBuffer.slice(-_tpJanela * (_tpHistMin - 1));
+                // Descarta 1 vela — mantém o histórico quente para reanalisar rápido após cada entrada
+                bot._candleBuffer = bot._candleBuffer.slice(-_tpJanela * 59);
 
                 const ind   = _tpIndic;
                 const velas20 = _tpVelas.slice(-20);
