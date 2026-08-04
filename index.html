@@ -1772,8 +1772,8 @@
           border-radius:8px; padding:18px 18px 20px;
           box-shadow:0 0 28px rgba(0,255,65,0.18);
           font-family:'Share Tech Mono',monospace;
-          width:100%; max-width:1100px;
-          color:#fff; margin:0 auto;">
+          width:100%; max-width:1100px; min-width:0;
+          color:#fff; margin:0 auto; overflow-x:hidden;">
 
         <!-- ── CABEÇALHO ── -->
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;">
@@ -1783,56 +1783,56 @@
         </div>
         <p style="color:#6b7280;font-size:0.62rem;text-align:center;margin-bottom:12px;">TIME: O(n log n) &nbsp;|&nbsp; SPACE: O(log n)</p>
 
-        <!-- ── LINHA PRINCIPAL (igual ao header do bot) ── -->
-        <div style="display:flex;align-items:center;gap:5px;flex-wrap:nowrap;margin-bottom:5px;padding:5px 6px;
-                    background:#0a0a0a;border:1px solid rgba(0,255,65,0.3);border-radius:5px;">
-          <div style="font-size:0.55rem;color:rgba(0,255,65,0.7);white-space:nowrap;letter-spacing:1px;min-width:28px;">MAIN</div>
-          <div style="border:1px solid rgba(0,255,255,0.4);border-radius:4px;padding:2px 6px;font-size:0.72rem;font-weight:bold;color:#00ffff;white-space:nowrap;">
+        <!-- ── LINHA PRINCIPAL ── -->
+        <div id="cs-linha-main" style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin-bottom:5px;padding:5px 8px;
+                    background:#0a0a0a;border:1px solid rgba(0,255,65,0.3);border-radius:5px;overflow:hidden;">
+          <div style="font-size:0.55rem;color:rgba(0,255,65,0.7);white-space:nowrap;letter-spacing:1px;width:32px;flex-shrink:0;">MAIN</div>
+          <div style="border:1px solid rgba(0,255,255,0.4);border-radius:4px;padding:2px 7px;font-size:0.72rem;font-weight:bold;color:#00ffff;white-space:nowrap;flex-shrink:0;">
             💰 <span id="cs-stat-banca">--</span>
           </div>
-          <div style="border:1px solid rgba(0,255,65,0.35);border-radius:4px;padding:2px 6px;font-size:0.7rem;color:#00ff41;white-space:nowrap;">
+          <div style="border:1px solid rgba(0,255,65,0.35);border-radius:4px;padding:2px 7px;font-size:0.7rem;color:#00ff41;white-space:nowrap;flex-shrink:0;">
             📈 <span id="cs-stat-lucro">+$0.00</span> <span id="cs-stat-lucro-brl" style="font-size:0.6rem;color:#57606a;">(R$0,00)</span>
           </div>
-          <div style="border:1px solid rgba(0,255,65,0.3);border-radius:4px;padding:2px 6px;font-size:0.7rem;color:#00ff41;white-space:nowrap;">
+          <div style="border:1px solid rgba(0,255,65,0.3);border-radius:4px;padding:2px 7px;font-size:0.7rem;color:#00ff41;white-space:nowrap;flex-shrink:0;">
             ✅ <span id="cs-stat-wins">0</span>
           </div>
-          <div style="border:1px solid rgba(255,68,68,0.3);border-radius:4px;padding:2px 6px;font-size:0.7rem;color:#ff4444;white-space:nowrap;">
+          <div style="border:1px solid rgba(255,68,68,0.3);border-radius:4px;padding:2px 7px;font-size:0.7rem;color:#ff4444;white-space:nowrap;flex-shrink:0;">
             🔁 <span id="cs-stat-loss">0</span>
           </div>
-          <div style="border:1px solid rgba(255,189,46,0.35);border-radius:4px;padding:2px 6px;font-size:0.7rem;white-space:nowrap;">
+          <div style="border:1px solid rgba(255,189,46,0.35);border-radius:4px;padding:2px 7px;font-size:0.7rem;white-space:nowrap;flex-shrink:0;">
             🎯 <span id="cs-stat-taxa" style="color:#ffbd2e;font-weight:bold;">--%</span>
           </div>
-          <div style="border:1px solid rgba(0,255,255,0.3);border-radius:4px;padding:2px 6px;font-size:0.7rem;white-space:nowrap;">
+          <div style="border:1px solid rgba(0,255,255,0.3);border-radius:4px;padding:2px 7px;font-size:0.7rem;white-space:nowrap;flex-shrink:0;">
             ⚡ <span id="cs-stat-prox" style="color:#0ff;font-weight:bold;">$--</span>
           </div>
-          <div style="border:1px solid rgba(200,200,200,0.2);border-radius:4px;padding:2px 6px;font-size:0.68rem;color:#c9d1d9;white-space:nowrap;">
+          <div style="border:1px solid rgba(200,200,200,0.2);border-radius:4px;padding:2px 7px;font-size:0.68rem;color:#c9d1d9;white-space:nowrap;flex-shrink:0;">
             ⚙ <span id="cs-stat-mgmt">--</span>
           </div>
         </div>
 
-        <!-- ── LINHA ESPELHO (igual ao header do bot — aparece só quando sec ativa) ── -->
-        <div id="cs-linha-espelho" style="display:none;align-items:center;gap:5px;flex-wrap:nowrap;margin-bottom:10px;padding:5px 6px;
-                    background:#0a0a0a;border:1px solid rgba(255,189,46,0.35);border-radius:5px;">
-          <div style="font-size:0.55rem;color:rgba(255,189,46,0.8);white-space:nowrap;letter-spacing:1px;min-width:46px;">ESPELHO</div>
-          <div style="border:1px solid rgba(255,189,46,0.4);border-radius:4px;padding:2px 6px;font-size:0.72rem;font-weight:bold;color:#fbbf24;white-space:nowrap;">
+        <!-- ── LINHA ESPELHO (mesma estrutura da MAIN, borda amarela, aparece só quando sec ativa) ── -->
+        <div id="cs-linha-espelho" style="display:none;align-items:center;gap:4px;flex-wrap:wrap;margin-bottom:10px;padding:5px 8px;
+                    background:#0a0a0a;border:1px solid rgba(255,189,46,0.35);border-radius:5px;overflow:hidden;">
+          <div style="font-size:0.55rem;color:rgba(255,189,46,0.8);white-space:nowrap;letter-spacing:1px;width:52px;flex-shrink:0;">ESPELHO</div>
+          <div style="border:1px solid rgba(255,189,46,0.5);border-radius:4px;padding:2px 7px;font-size:0.72rem;font-weight:bold;color:#fbbf24;white-space:nowrap;flex-shrink:0;">
             💰 <span id="cs-esp-banca">--</span>
           </div>
-          <div style="border:1px solid rgba(0,255,65,0.3);border-radius:4px;padding:2px 6px;font-size:0.7rem;color:#00ff41;white-space:nowrap;">
+          <div style="border:1px solid rgba(0,255,65,0.35);border-radius:4px;padding:2px 7px;font-size:0.7rem;color:#00ff41;white-space:nowrap;flex-shrink:0;">
             📈 <span id="cs-esp-lucro">+$0.00</span> <span id="cs-esp-lucro-brl" style="font-size:0.6rem;color:#57606a;">(R$0,00)</span>
           </div>
-          <div style="border:1px solid rgba(0,255,65,0.3);border-radius:4px;padding:2px 6px;font-size:0.7rem;color:#00ff41;white-space:nowrap;">
+          <div style="border:1px solid rgba(0,255,65,0.3);border-radius:4px;padding:2px 7px;font-size:0.7rem;color:#00ff41;white-space:nowrap;flex-shrink:0;">
             ✅ <span id="cs-esp-wins">0</span>
           </div>
-          <div style="border:1px solid rgba(255,68,68,0.3);border-radius:4px;padding:2px 6px;font-size:0.7rem;color:#ff4444;white-space:nowrap;">
+          <div style="border:1px solid rgba(255,68,68,0.3);border-radius:4px;padding:2px 7px;font-size:0.7rem;color:#ff4444;white-space:nowrap;flex-shrink:0;">
             🔁 <span id="cs-esp-loss">0</span>
           </div>
-          <div style="border:1px solid rgba(255,189,46,0.35);border-radius:4px;padding:2px 6px;font-size:0.7rem;white-space:nowrap;">
+          <div style="border:1px solid rgba(255,189,46,0.35);border-radius:4px;padding:2px 7px;font-size:0.7rem;white-space:nowrap;flex-shrink:0;">
             🎯 <span id="cs-esp-taxa" style="color:#ffbd2e;font-weight:bold;">--%</span>
           </div>
-          <div style="border:1px solid rgba(0,255,255,0.3);border-radius:4px;padding:2px 6px;font-size:0.7rem;white-space:nowrap;">
+          <div style="border:1px solid rgba(0,255,255,0.3);border-radius:4px;padding:2px 7px;font-size:0.7rem;white-space:nowrap;flex-shrink:0;">
             ⚡ <span id="cs-esp-prox" style="color:#0ff;font-weight:bold;">$--</span>
           </div>
-          <div style="border:1px solid rgba(200,200,200,0.2);border-radius:4px;padding:2px 6px;font-size:0.68rem;color:#c9d1d9;white-space:nowrap;">
+          <div style="border:1px solid rgba(200,200,200,0.2);border-radius:4px;padding:2px 7px;font-size:0.68rem;color:#c9d1d9;white-space:nowrap;flex-shrink:0;">
             ⚙ <span id="cs-esp-mgmt">--</span>
           </div>
         </div>
@@ -15849,8 +15849,8 @@ function _csAtualizarStats(proxStake) {
     }
     if (linhaEsp) linhaEsp.style.display = 'flex';
 
-    // Opacidade: conta ativa = 1.0, inativa = 0.5
-    const mainLine = document.querySelector('#cs-linha-espelho')?.previousElementSibling;
+    // Opacidade: conta ativa = 1.0, inativa = 0.55
+    const mainLine = document.getElementById('cs-linha-main');
     if (mainLine) mainLine.style.opacity = _csUsandoSec ? '0.55' : '1';
     if (linhaEsp)  linhaEsp.style.opacity = _csUsandoSec ? '1' : '0.55';
 
