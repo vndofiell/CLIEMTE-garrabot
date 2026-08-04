@@ -1783,37 +1783,57 @@
         </div>
         <p style="color:#6b7280;font-size:0.62rem;text-align:center;margin-bottom:12px;">TIME: O(n log n) &nbsp;|&nbsp; SPACE: O(log n)</p>
 
-        <!-- ── PAINEL DE STATS (6 cards) ── -->
-        <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:6px;margin-bottom:14px;">
-          <!-- BANCA: principal + secundária quando espelho ativo -->
-          <div style="background:#0a0a0a;border:1px solid rgba(0,255,255,0.3);border-radius:5px;padding:7px 4px;text-align:center;">
-            <div style="font-size:0.5rem;color:#6b7280;letter-spacing:1px;margin-bottom:2px;">BANCA</div>
-            <div id="cs-stat-banca" style="font-size:0.78rem;font-weight:bold;color:#00ffff;">--</div>
-            <div id="cs-stat-banca-sec-row" style="display:none;margin-top:2px;">
-              <div style="font-size:0.42rem;color:#60a5fa;letter-spacing:1px;">SEC</div>
-              <div id="cs-stat-banca-sec" style="font-size:0.72rem;font-weight:bold;color:#60a5fa;">--</div>
-            </div>
+        <!-- ── LINHA PRINCIPAL (igual ao header do bot) ── -->
+        <div style="display:flex;align-items:center;gap:5px;flex-wrap:nowrap;margin-bottom:5px;padding:5px 6px;
+                    background:#0a0a0a;border:1px solid rgba(0,255,65,0.3);border-radius:5px;">
+          <div style="font-size:0.55rem;color:rgba(0,255,65,0.7);white-space:nowrap;letter-spacing:1px;min-width:28px;">MAIN</div>
+          <div style="border:1px solid rgba(0,255,255,0.4);border-radius:4px;padding:2px 6px;font-size:0.72rem;font-weight:bold;color:#00ffff;white-space:nowrap;">
+            💰 <span id="cs-stat-banca">--</span>
           </div>
-          <div style="background:#0a0a0a;border:1px solid rgba(0,255,65,0.3);border-radius:5px;padding:7px 4px;text-align:center;">
-            <div style="font-size:0.5rem;color:#6b7280;letter-spacing:1px;margin-bottom:1px;">LUCRO USD</div>
-            <div id="cs-stat-lucro" style="font-size:0.78rem;font-weight:bold;color:#00ff41;">+$0.00</div>
-            <div id="cs-stat-lucro-brl" style="font-size:0.55rem;color:#57606a;margin-top:1px;">R$0,00</div>
+          <div style="border:1px solid rgba(0,255,65,0.35);border-radius:4px;padding:2px 6px;font-size:0.7rem;color:#00ff41;white-space:nowrap;">
+            📈 <span id="cs-stat-lucro">+$0.00</span> <span id="cs-stat-lucro-brl" style="font-size:0.6rem;color:#57606a;">(R$0,00)</span>
           </div>
-          <div style="background:#0a0a0a;border:1px solid rgba(0,255,65,0.3);border-radius:5px;padding:7px 4px;text-align:center;">
-            <div style="font-size:0.5rem;color:#6b7280;letter-spacing:1px;margin-bottom:3px;">✅ WINS</div>
-            <div id="cs-stat-wins" style="font-size:0.78rem;font-weight:bold;color:#00ff41;">0</div>
+          <div style="border:1px solid rgba(0,255,65,0.3);border-radius:4px;padding:2px 6px;font-size:0.7rem;color:#00ff41;white-space:nowrap;">
+            ✅ <span id="cs-stat-wins">0</span>
           </div>
-          <div style="background:#0a0a0a;border:1px solid rgba(255,68,68,0.3);border-radius:5px;padding:7px 4px;text-align:center;">
-            <div style="font-size:0.5rem;color:#6b7280;letter-spacing:1px;margin-bottom:3px;">🔁 LOSS</div>
-            <div id="cs-stat-loss" style="font-size:0.78rem;font-weight:bold;color:#ff4444;">0</div>
+          <div style="border:1px solid rgba(255,68,68,0.3);border-radius:4px;padding:2px 6px;font-size:0.7rem;color:#ff4444;white-space:nowrap;">
+            🔁 <span id="cs-stat-loss">0</span>
           </div>
-          <div style="background:#0a0a0a;border:1px solid rgba(255,189,46,0.3);border-radius:5px;padding:7px 4px;text-align:center;">
-            <div style="font-size:0.5rem;color:#6b7280;letter-spacing:1px;margin-bottom:3px;">🎯 TAXA</div>
-            <div id="cs-stat-taxa" style="font-size:0.78rem;font-weight:bold;color:#ffbd2e;">--%</div>
+          <div style="border:1px solid rgba(255,189,46,0.35);border-radius:4px;padding:2px 6px;font-size:0.7rem;white-space:nowrap;">
+            🎯 <span id="cs-stat-taxa" style="color:#ffbd2e;font-weight:bold;">--%</span>
           </div>
-          <div style="background:#0a0a0a;border:1px solid rgba(168,85,247,0.3);border-radius:5px;padding:7px 4px;text-align:center;">
-            <div style="font-size:0.5rem;color:#6b7280;letter-spacing:1px;margin-bottom:3px;">PRÓX STAKE</div>
-            <div id="cs-stat-prox" style="font-size:0.78rem;font-weight:bold;color:#c084fc;">$--</div>
+          <div style="border:1px solid rgba(0,255,255,0.3);border-radius:4px;padding:2px 6px;font-size:0.7rem;white-space:nowrap;">
+            ⚡ <span id="cs-stat-prox" style="color:#0ff;font-weight:bold;">$--</span>
+          </div>
+          <div style="border:1px solid rgba(200,200,200,0.2);border-radius:4px;padding:2px 6px;font-size:0.68rem;color:#c9d1d9;white-space:nowrap;">
+            ⚙ <span id="cs-stat-mgmt">--</span>
+          </div>
+        </div>
+
+        <!-- ── LINHA ESPELHO (igual ao header do bot — aparece só quando sec ativa) ── -->
+        <div id="cs-linha-espelho" style="display:none;align-items:center;gap:5px;flex-wrap:nowrap;margin-bottom:10px;padding:5px 6px;
+                    background:#0a0a0a;border:1px solid rgba(255,189,46,0.35);border-radius:5px;">
+          <div style="font-size:0.55rem;color:rgba(255,189,46,0.8);white-space:nowrap;letter-spacing:1px;min-width:46px;">ESPELHO</div>
+          <div style="border:1px solid rgba(255,189,46,0.4);border-radius:4px;padding:2px 6px;font-size:0.72rem;font-weight:bold;color:#fbbf24;white-space:nowrap;">
+            💰 <span id="cs-esp-banca">--</span>
+          </div>
+          <div style="border:1px solid rgba(0,255,65,0.3);border-radius:4px;padding:2px 6px;font-size:0.7rem;color:#00ff41;white-space:nowrap;">
+            📈 <span id="cs-esp-lucro">+$0.00</span> <span id="cs-esp-lucro-brl" style="font-size:0.6rem;color:#57606a;">(R$0,00)</span>
+          </div>
+          <div style="border:1px solid rgba(0,255,65,0.3);border-radius:4px;padding:2px 6px;font-size:0.7rem;color:#00ff41;white-space:nowrap;">
+            ✅ <span id="cs-esp-wins">0</span>
+          </div>
+          <div style="border:1px solid rgba(255,68,68,0.3);border-radius:4px;padding:2px 6px;font-size:0.7rem;color:#ff4444;white-space:nowrap;">
+            🔁 <span id="cs-esp-loss">0</span>
+          </div>
+          <div style="border:1px solid rgba(255,189,46,0.35);border-radius:4px;padding:2px 6px;font-size:0.7rem;white-space:nowrap;">
+            🎯 <span id="cs-esp-taxa" style="color:#ffbd2e;font-weight:bold;">--%</span>
+          </div>
+          <div style="border:1px solid rgba(0,255,255,0.3);border-radius:4px;padding:2px 6px;font-size:0.7rem;white-space:nowrap;">
+            ⚡ <span id="cs-esp-prox" style="color:#0ff;font-weight:bold;">$--</span>
+          </div>
+          <div style="border:1px solid rgba(200,200,200,0.2);border-radius:4px;padding:2px 6px;font-size:0.68rem;color:#c9d1d9;white-space:nowrap;">
+            ⚙ <span id="cs-esp-mgmt">--</span>
           </div>
         </div>
 
@@ -1926,9 +1946,9 @@
             </div>
           </div>
 
-          <!-- Modo Espelho — igual ao bot principal -->
+          <!-- Modo Espelho — lê configuração real da conta secundária -->
           <div id="cs-espelho-box" style="background:rgba(96,165,250,0.05);border:1px solid rgba(96,165,250,0.25);border-radius:6px;padding:10px 12px;">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
               <span style="font-size:0.68rem;color:#60a5fa;letter-spacing:1px;">💳 MODO ESPELHO</span>
               <label style="display:flex;align-items:center;gap:5px;cursor:pointer;">
                 <input type="checkbox" id="cs-espelho-ativo" style="accent-color:#60a5fa;width:13px;height:13px;"
@@ -1936,20 +1956,30 @@
                 <span id="cs-espelho-badge" style="font-size:0.6rem;color:#555;">OFF</span>
               </label>
             </div>
-            <!-- Trigger: N losses consecutivos -->
-            <div id="cs-espelho-campos" style="display:none;flex-direction:column;gap:5px;margin-bottom:6px;">
-              <div style="display:flex;align-items:center;gap:5px;">
-                <label style="font-size:0.57rem;color:#6b7280;min-width:90px;">Losses p/ ativar</label>
-                <input id="cs-esp-losses" type="number" value="3" min="1" max="50"
-                    style="flex:1;background:#0a0a12;border:1px solid rgba(96,165,250,0.35);color:#60a5fa;
-                           font-family:'Share Tech Mono';font-size:0.75rem;padding:3px 5px;border-radius:3px;">
+            <!-- Configuração atual da conta secundária (somente leitura — editar em Conta Secundária) -->
+            <div id="cs-espelho-cfg" style="display:none;margin-bottom:8px;">
+              <div style="display:flex;gap:6px;margin-bottom:5px;">
+                <!-- Gatilho Losses -->
+                <div style="flex:1;background:rgba(0,0,0,0.3);border:1px solid rgba(96,165,250,0.2);border-radius:4px;padding:4px 7px;">
+                  <div style="font-size:0.5rem;color:#6b7280;letter-spacing:1px;margin-bottom:2px;">LOSSES P/ ATIVAR</div>
+                  <div style="display:flex;align-items:center;justify-content:space-between;">
+                    <span id="cs-cfg-seq-val" style="font-size:0.82rem;font-weight:bold;color:#60a5fa;">--</span>
+                    <span id="cs-cfg-seq-badge" style="font-size:0.55rem;padding:1px 4px;border-radius:3px;background:rgba(100,100,100,0.3);color:#555;">OFF</span>
+                  </div>
+                </div>
+                <!-- Gatilho Perda -->
+                <div style="flex:1;background:rgba(0,0,0,0.3);border:1px solid rgba(96,165,250,0.2);border-radius:4px;padding:4px 7px;">
+                  <div style="font-size:0.5rem;color:#6b7280;letter-spacing:1px;margin-bottom:2px;">PERDA P/ ATIVAR</div>
+                  <div style="display:flex;align-items:center;justify-content:space-between;">
+                    <span id="cs-cfg-perda-val" style="font-size:0.82rem;font-weight:bold;color:#60a5fa;">--</span>
+                    <span id="cs-cfg-perda-badge" style="font-size:0.55rem;padding:1px 4px;border-radius:3px;background:rgba(100,100,100,0.3);color:#555;">OFF</span>
+                  </div>
+                </div>
               </div>
-              <div style="display:flex;align-items:center;gap:5px;">
-                <label style="font-size:0.57rem;color:#6b7280;min-width:90px;">Perda p/ ativar ($)</label>
-                <input id="cs-esp-perda" type="number" value="5" min="0.1" step="0.5"
-                    style="flex:1;background:#0a0a12;border:1px solid rgba(96,165,250,0.35);color:#60a5fa;
-                           font-family:'Share Tech Mono';font-size:0.75rem;padding:3px 5px;border-radius:3px;">
-              </div>
+              <button onclick="abrirModalMultiContas()" style="width:100%;padding:4px;background:rgba(96,165,250,0.08);border:1px solid rgba(96,165,250,0.3);
+                  color:#60a5fa;font-family:'Share Tech Mono',monospace;font-size:0.6rem;letter-spacing:1px;cursor:pointer;border-radius:3px;">
+                ⚙ CONFIGURAR CONTA SECUNDÁRIA
+              </button>
             </div>
             <!-- Status dinâmico -->
             <div id="cs-espelho-status" style="font-size:0.62rem;color:#555;line-height:1.5;">
@@ -15780,52 +15810,72 @@ function _csLogOp(msg, cor) {
 }
 
 // ── Stats ───────────────────────────────────────────────────────────────────
+// Variáveis de stats da conta secundária no Cyber Sort
+let _csEspWins   = 0;
+let _csEspLosses = 0;
+let _csEspLucro  = 0;
+
 function _csAtualizarStats(proxStake) {
-    const bancaEl    = document.getElementById('cs-stat-banca');
-    const secRow     = document.getElementById('cs-stat-banca-sec-row');
-    const secBancaEl = document.getElementById('cs-stat-banca-sec');
-    const espAtivo   = document.getElementById('cs-espelho-ativo')?.checked;
-    const secPronto  = (typeof _sec !== 'undefined') && _sec.pronto;
+    const cot    = parseFloat(_cotacaoBRL) || 5.85;
+    const espAtivo  = document.getElementById('cs-espelho-ativo')?.checked;
+    const secPronto = (typeof _sec !== 'undefined') && _sec.pronto;
 
-    // Banca principal — sempre mostra a conta principal
-    if (bancaEl) bancaEl.textContent = document.getElementById('hd-balance')?.textContent || '--';
+    // ── Linha PRINCIPAL ──────────────────────────────────────────────────────
+    const bEl = document.getElementById('cs-stat-banca');
+    if (bEl) bEl.textContent = document.getElementById('hd-balance')?.textContent || '--';
 
-    // Banca secundária — aparece abaixo quando espelho está ativo e conta conectada
-    if (secRow && secBancaEl) {
-        if (espAtivo && secPronto && _sec.saldo !== undefined) {
-            secRow.style.display  = 'block';
-            secBancaEl.textContent = '$' + parseFloat(_sec.saldo).toFixed(2);
-            // Destaca qual conta está sendo usada agora
-            if (bancaEl) bancaEl.style.opacity  = _csUsandoSec ? '0.5' : '1';
-            secBancaEl.style.opacity = _csUsandoSec ? '1' : '0.5';
-        } else {
-            secRow.style.display  = 'none';
-            if (bancaEl) bancaEl.style.opacity = '1';
-        }
-    }
-
-    const cot     = parseFloat(window._cotacaoBRL) || 5.85;
-    const lucroEl = document.getElementById('cs-stat-lucro');
-    const lucroBrlEl = document.getElementById('cs-stat-lucro-brl');
-    if (lucroEl) {
-        lucroEl.textContent = (_csLucro >= 0 ? '+' : '') + '$' + _csLucro.toFixed(2);
-        lucroEl.style.color = _csLucro >= 0 ? '#00ff41' : '#ff4444';
-    }
-    if (lucroBrlEl) {
-        const brl = (_csLucro * cot);
-        lucroBrlEl.textContent = (brl >= 0 ? '+' : '') + 'R$' + Math.abs(brl).toFixed(2).replace('.', ',');
-        lucroBrlEl.style.color = brl >= 0 ? '#4ade80' : '#f87171';
-    }
+    const lEl = document.getElementById('cs-stat-lucro');
+    const lBEl = document.getElementById('cs-stat-lucro-brl');
+    if (lEl) { lEl.textContent = (_csLucro >= 0 ? '+' : '') + '$' + _csLucro.toFixed(2); lEl.style.color = _csLucro >= 0 ? '#00ff41' : '#ff4444'; }
+    if (lBEl) { const b = _csLucro * cot; lBEl.textContent = (b >= 0 ? '+' : '') + 'R$' + Math.abs(b).toFixed(2).replace('.', ','); lBEl.style.color = b >= 0 ? '#4ade80' : '#f87171'; }
 
     const wEl = document.getElementById('cs-stat-wins');
-    const lEl = document.getElementById('cs-stat-loss');
+    const lsEl = document.getElementById('cs-stat-loss');
     const tEl = document.getElementById('cs-stat-taxa');
     const pEl = document.getElementById('cs-stat-prox');
+    const mEl = document.getElementById('cs-stat-mgmt');
     if (wEl) wEl.textContent = _csWins;
-    if (lEl) lEl.textContent = _csLosses;
-    const total = _csWins + _csLosses;
-    if (tEl) tEl.textContent = total > 0 ? ((_csWins / total) * 100).toFixed(1) + '%' : '--%';
+    if (lsEl) lsEl.textContent = _csLosses;
+    const tot = _csWins + _csLosses;
+    if (tEl) { const tx = tot > 0 ? ((_csWins / tot) * 100).toFixed(1) + '%' : '--%'; tEl.textContent = tx; tEl.style.color = tot > 0 && (_csWins / tot) >= 0.6 ? '#0f0' : (tot > 0 && (_csWins / tot) >= 0.45 ? '#ffbd2e' : '#ff4444'); }
     if (pEl && proxStake !== undefined) pEl.textContent = '$' + parseFloat(proxStake).toFixed(2);
+    if (mEl) mEl.textContent = _csMgr ? _csMgr.modo.replace(/[^\w\s]/gu,'').trim() : (document.getElementById('cs-mgr')?.value || '--');
+
+    // ── Linha ESPELHO ─────────────────────────────────────────────────────────
+    const linhaEsp = document.getElementById('cs-linha-espelho');
+    if (!espAtivo || !secPronto) {
+        if (linhaEsp) linhaEsp.style.display = 'none';
+        return;
+    }
+    if (linhaEsp) linhaEsp.style.display = 'flex';
+
+    // Opacidade: conta ativa = 1.0, inativa = 0.5
+    const mainLine = document.querySelector('#cs-linha-espelho')?.previousElementSibling;
+    if (mainLine) mainLine.style.opacity = _csUsandoSec ? '0.55' : '1';
+    if (linhaEsp)  linhaEsp.style.opacity = _csUsandoSec ? '1' : '0.55';
+
+    const eBEl  = document.getElementById('cs-esp-banca');
+    const eLEl  = document.getElementById('cs-esp-lucro');
+    const eLBEl = document.getElementById('cs-esp-lucro-brl');
+    const eWEl  = document.getElementById('cs-esp-wins');
+    const eLsEl = document.getElementById('cs-esp-loss');
+    const eTEl  = document.getElementById('cs-esp-taxa');
+    const ePEl  = document.getElementById('cs-esp-prox');
+    const eMEl  = document.getElementById('cs-esp-mgmt');
+
+    if (eBEl) eBEl.textContent = _sec.saldo !== undefined ? '$' + parseFloat(_sec.saldo).toFixed(2) : '--';
+    if (eLEl) { eLEl.textContent = (_csEspLucro >= 0 ? '+' : '') + '$' + _csEspLucro.toFixed(2); eLEl.style.color = _csEspLucro >= 0 ? '#00ff41' : '#ff4444'; }
+    if (eLBEl) { const b2 = _csEspLucro * cot; eLBEl.textContent = (b2 >= 0 ? '+' : '') + 'R$' + Math.abs(b2).toFixed(2).replace('.', ','); }
+    if (eWEl)  eWEl.textContent  = _csEspWins;
+    if (eLsEl) eLsEl.textContent = _csEspLosses;
+    const etot = _csEspWins + _csEspLosses;
+    if (eTEl)  { const etx = etot > 0 ? ((_csEspWins / etot) * 100).toFixed(1) + '%' : '--%'; eTEl.textContent = etx; eTEl.style.color = etot > 0 && (_csEspWins / etot) >= 0.6 ? '#0f0' : (etot > 0 && (_csEspWins / etot) >= 0.45 ? '#ffbd2e' : '#ff4444'); }
+    if (ePEl && proxStake !== undefined) ePEl.textContent = '$' + parseFloat(proxStake).toFixed(2);
+    // Gerenciamento da secundária
+    const mgmtSec = (typeof _mcConfig !== 'undefined' && _mcConfig.gerenciamento)
+        ? _mcConfig.gerenciamento.replace(/[^\w\s]/gu,'').trim()
+        : '--';
+    if (eMEl) eMEl.textContent = 'SEC-' + mgmtSec;
 }
 
 // ── Notificações TG + WA ────────────────────────────────────────────────────
@@ -15915,53 +15965,74 @@ function _csLvBadge(ativo) {
 }
 
 // ── Modo Espelho ─────────────────────────────────────────────────────────────
-// Igual ao bot principal: opera na principal até atingir N losses ou valor de perda,
-// depois as entradas passam para a conta secundária automaticamente.
+// Usa exatamente as mesmas configurações da conta secundária (_sec.limiteSeqLoss,
+// _sec.gatilhoSeqAtivo, _sec.limitePerda, _sec.gatilhoPerdaAtivo) — não duplica config.
 function csAtualizarEspelho() {
-    const ativo   = document.getElementById('cs-espelho-ativo')?.checked;
-    const badge   = document.getElementById('cs-espelho-badge');
-    const campos  = document.getElementById('cs-espelho-campos');
-    const status  = document.getElementById('cs-espelho-status');
-    const box     = document.getElementById('cs-espelho-box');
+    const ativo     = document.getElementById('cs-espelho-ativo')?.checked;
+    const badge     = document.getElementById('cs-espelho-badge');
+    const cfg       = document.getElementById('cs-espelho-cfg');
+    const status    = document.getElementById('cs-espelho-status');
+    const box       = document.getElementById('cs-espelho-box');
     const secPronto = (typeof _sec !== 'undefined') && _sec.pronto;
 
-    // Badge ON/OFF
     if (badge) { badge.textContent = ativo ? 'ON' : 'OFF'; badge.style.color = ativo ? '#60a5fa' : '#555'; }
 
     if (!ativo) {
-        // Desativado: reseta tudo, volta para conta principal
-        if (campos) campos.style.display = 'none';
-        _csUsandoSec   = false;
-        _csEspLossSeq  = 0;
-        _csEspPerdaAc  = 0;
-        if (status) status.textContent = secPronto
-            ? `Conta sec. conectada — espelho desligado`
-            : 'Conta secundária não conectada';
+        if (cfg) cfg.style.display = 'none';
+        _csUsandoSec  = false;
+        _csEspLossSeq = 0;
+        _csEspPerdaAc = 0;
+        if (status) status.textContent = secPronto ? 'Conta sec. conectada — espelho desligado' : 'Conta secundária não conectada';
         if (box) box.style.borderColor = 'rgba(96,165,250,0.25)';
         _csAtualizarStats();
         return;
     }
 
     if (!secPronto) {
-        // Força desligar se conta não conectada
         const chk = document.getElementById('cs-espelho-ativo');
         if (chk) chk.checked = false;
         if (badge) { badge.textContent = 'OFF'; badge.style.color = '#555'; }
-        if (campos) campos.style.display = 'none';
+        if (cfg) cfg.style.display = 'none';
         if (status) status.textContent = '⚠️ Conta secundária não conectada';
         if (box) box.style.borderColor = 'rgba(96,165,250,0.25)';
         return;
     }
 
-    // Ativo + conta pronta: mostra campos de trigger
-    if (campos) campos.style.display = 'flex';
+    // Ativo + conta pronta: mostra painel de configuração (somente leitura)
+    if (cfg) cfg.style.display = 'block';
     if (box) box.style.borderColor = '#60a5fa';
 
+    // Sincroniza os badges de configuração com os valores reais da conta secundária
+    _csAtualizarCfgBadges();
     _csAtualizarStatusEspelho();
     _csAtualizarStats();
 }
 
-// Atualiza apenas o texto de status do espelho (chamado após cada resultado)
+// Atualiza os mini-cards de configuração lidos de _sec
+function _csAtualizarCfgBadges() {
+    const seqVal   = document.getElementById('cs-cfg-seq-val');
+    const seqBadge = document.getElementById('cs-cfg-seq-badge');
+    const pVal     = document.getElementById('cs-cfg-perda-val');
+    const pBadge   = document.getElementById('cs-cfg-perda-badge');
+    if (!seqVal) return;
+
+    const seqAtivo  = (typeof _sec !== 'undefined') && _sec.gatilhoSeqAtivo;
+    const perdaAtivo= (typeof _sec !== 'undefined') && _sec.gatilhoPerdaAtivo;
+    const nLoss     = (typeof _sec !== 'undefined') ? (_sec.limiteSeqLoss || '--') : '--';
+    const nPerda    = (typeof _sec !== 'undefined') ? Math.abs(_sec.limitePerda || 0).toFixed(2) : '--';
+
+    seqVal.textContent   = nLoss + ' losses';
+    seqBadge.textContent = seqAtivo ? 'ON' : 'OFF';
+    seqBadge.style.background = seqAtivo ? 'rgba(0,255,65,0.15)' : 'rgba(100,100,100,0.3)';
+    seqBadge.style.color      = seqAtivo ? '#00ff41' : '#555';
+
+    pVal.textContent   = '$' + nPerda;
+    pBadge.textContent = perdaAtivo ? 'ON' : 'OFF';
+    pBadge.style.background = perdaAtivo ? 'rgba(255,68,68,0.15)' : 'rgba(100,100,100,0.3)';
+    pBadge.style.color      = perdaAtivo ? '#ff4444' : '#555';
+}
+
+// Atualiza texto de status do espelho após cada resultado
 function _csAtualizarStatusEspelho() {
     const status    = document.getElementById('cs-espelho-status');
     if (!status) return;
@@ -15969,19 +16040,21 @@ function _csAtualizarStatusEspelho() {
     const espAtivo  = document.getElementById('cs-espelho-ativo')?.checked;
     if (!espAtivo || !secPronto) return;
 
-    const nLosses  = parseInt(document.getElementById('cs-esp-losses')?.value || 3, 10);
-    const limPerda = parseFloat(document.getElementById('cs-esp-perda')?.value || 5);
+    const nLosses  = (typeof _sec !== 'undefined') && _sec.gatilhoSeqAtivo   ? _sec.limiteSeqLoss          : null;
+    const limPerda = (typeof _sec !== 'undefined') && _sec.gatilhoPerdaAtivo ? Math.abs(_sec.limitePerda)   : null;
 
     if (_csUsandoSec) {
         status.innerHTML =
             `<span style="color:#60a5fa;font-weight:bold">▶ OPERANDO NA SEC</span>` +
             `<br><span style="color:#c9d1d9;font-size:0.58rem">saldo sec: $${parseFloat(_sec.saldo||0).toFixed(2)}</span>`;
     } else {
+        let prog = '';
+        if (nLosses !== null) prog += `losses: ${_csEspLossSeq}/${nLosses}`;
+        if (nLosses !== null && limPerda !== null) prog += ' | ';
+        if (limPerda !== null) prog += `perda: $${_csEspPerdaAc.toFixed(2)}/$${limPerda.toFixed(2)}`;
         status.innerHTML =
             `<span style="color:#00ff41">▶ CONTA PRINCIPAL</span>` +
-            `<br><span style="color:#6b7280;font-size:0.58rem">` +
-            `losses: ${_csEspLossSeq}/${nLosses} | perda: $${_csEspPerdaAc.toFixed(2)}/$${limPerda.toFixed(2)}` +
-            `</span>`;
+            (prog ? `<br><span style="color:#6b7280;font-size:0.58rem">${prog}</span>` : '');
     }
 }
 
@@ -16010,6 +16083,9 @@ function abrirModalCyberSort() {
     _csEspLossSeq  = 0;
     _csEspPerdaAc  = 0;
     _csUsandoSec   = false;
+    _csEspWins     = 0;
+    _csEspLosses   = 0;
+    _csEspLucro    = 0;
     document.getElementById('cs-sinal-box').style.display  = 'none';
     document.getElementById('cs-log-analise').innerHTML    = '';
     document.getElementById('cs-op-log').innerHTML         = '';
@@ -16231,11 +16307,20 @@ function csOperar() {
             if (_csMgr) _csMgr.updateResult(won);
             const proxStake = _csMgr ? _csMgr.getStake() : baseStake;
 
-            // Atualiza stats globais
-            if (won) { _csWins++; _csLucro += profit; }
-            else     { _csLosses++; _csLucro += profit; }
+            // ── Contabiliza stats: principal ou espelho ─────────────────────────
+            if (espAtivo && secPronto && _csUsandoSec) {
+                // Operando na conta secundária — stats vão para a linha ESPELHO
+                if (won) { _csEspWins++;  _csEspLucro += profit; }
+                else     { _csEspLosses++; _csEspLucro += profit; }
+                // Atualiza saldo real da secundária
+                _sec.saldo = parseFloat(_sec.saldo || 0) + profit;
+            } else {
+                // Operando na conta principal
+                if (won) { _csWins++; _csLucro += profit; }
+                else     { _csLosses++; _csLucro += profit; }
+            }
 
-            // ── Lógica de trigger do espelho (igual ao bot principal) ──────────
+            // ── Lógica de trigger do espelho — usa config real de _sec ──────────
             if (espAtivo && secPronto) {
                 if (!_csUsandoSec) {
                     // Ainda na conta principal — monitora losses e perda
@@ -16243,21 +16328,19 @@ function csOperar() {
                         _csEspLossSeq++;
                         _csEspPerdaAc += Math.abs(profit);
                     } else {
-                        _csEspLossSeq = 0; // win reseta losses consecutivos
+                        _csEspLossSeq = 0; // win reseta losses consecutivos (igual ao bot principal)
                     }
-                    const nLosses  = parseInt(document.getElementById('cs-esp-losses')?.value || 3, 10);
-                    const limPerda = parseFloat(document.getElementById('cs-esp-perda')?.value || 5);
-                    const trigLoss  = _csEspLossSeq  >= nLosses;
-                    const trigPerda = _csEspPerdaAc  >= limPerda;
+                    // Usa exatamente os mesmos gatilhos da config da conta secundária
+                    const trigLoss  = _sec.gatilhoSeqAtivo   && _sec.limiteSeqLoss > 0 && _csEspLossSeq >= _sec.limiteSeqLoss;
+                    const trigPerda = _sec.gatilhoPerdaAtivo && _csEspPerdaAc >= Math.abs(_sec.limitePerda || 0);
                     if (trigLoss || trigPerda) {
                         _csUsandoSec = true;
-                        const motivo = trigLoss ? `${_csEspLossSeq} losses consecutivos` : `perda $${_csEspPerdaAc.toFixed(2)}`;
-                        _csLogOp(`🔀 <b style="color:#60a5fa">TRIGGER ATIVADO</b> (${motivo}) — próximas entradas na SEC`, '#60a5fa');
+                        const motivo = trigLoss
+                            ? `${_csEspLossSeq} losses consecutivos (gatilho: ${_sec.limiteSeqLoss})`
+                            : `perda $${_csEspPerdaAc.toFixed(2)} atingiu $${Math.abs(_sec.limitePerda).toFixed(2)}`;
+                        _csLogOp(`🔀 <b style="color:#60a5fa">TRIGGER ATIVADO</b> (${motivo}) — operando na SEC`, '#60a5fa');
                         _csBip(600, 0.2);
                     }
-                } else {
-                    // Já na conta secundária — atualiza saldo dela
-                    _sec.saldo = parseFloat(_sec.saldo || 0) + profit;
                 }
                 _csAtualizarStatusEspelho();
             }
