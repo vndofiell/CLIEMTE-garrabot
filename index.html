@@ -16375,6 +16375,9 @@ function csOperar() {
                 else     { _csLosses++; _csLucro += profit; }
             }
 
+            // ── Captura se estava na SEC antes de qualquer mudança de estado ────
+            const _eraSecAntes = _csUsandoSec;
+
             // ── Lógica de trigger do espelho — usa config real de _sec ──────────
             if (espAtivo && secPronto) {
                 if (!_csUsandoSec) {
@@ -16437,7 +16440,8 @@ function csOperar() {
             }
 
             // Notifica TG + WA — somente quando operando na conta SECUNDÁRIA
-            if (_csUsandoSec && espAtivo && secPronto) {
+            // usa _eraSecAntes pois _csUsandoSec pode já ter sido resetado acima (WIN da SEC)
+            if (_eraSecAntes && espAtivo && secPronto) {
                 _csNotificar(won, profit, ct, barr, ativo);
             }
 
