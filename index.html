@@ -1887,6 +1887,56 @@
           </div>
         </div>
 
+        <!-- ── LOSS VIRTUAL + MODO ESPELHO ── -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
+
+          <!-- Loss Virtual -->
+          <div style="background:rgba(0,255,0,0.04);border:1px solid rgba(0,255,0,0.2);border-radius:6px;padding:10px 12px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+              <span style="font-size:0.68rem;color:#0f0;letter-spacing:1px;">🛡️ LOSS VIRTUAL</span>
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+                <input type="checkbox" id="cs-lv-ativo" style="accent-color:#0f0;width:14px;height:14px;"
+                    onchange="csAtualizarLV()">
+                <span id="cs-lv-badge" style="font-size:0.6rem;color:#555;">OFF</span>
+              </label>
+            </div>
+            <div id="cs-lv-campos" style="display:none;flex-direction:column;gap:6px;">
+              <div style="display:flex;align-items:center;gap:6px;">
+                <label style="font-size:0.58rem;color:#6b7280;min-width:80px;">Losses (N)</label>
+                <input id="cs-lv-qtd" type="number" value="3" min="1" max="20"
+                    style="flex:1;background:#0a0a12;border:1px solid rgba(0,255,0,0.3);color:#0f0;
+                           font-family:'Share Tech Mono';font-size:0.75rem;padding:4px 6px;border-radius:3px;">
+              </div>
+              <div style="display:flex;align-items:center;gap:6px;">
+                <label style="font-size:0.58rem;color:#6b7280;min-width:80px;">Quando</label>
+                <select id="cs-lv-quando" style="flex:1;background:#0a0a12;border:1px solid rgba(0,255,0,0.3);
+                    color:#0f0;font-family:'Share Tech Mono';font-size:0.65rem;padding:4px 6px;border-radius:3px;">
+                  <option value="sempre">sempre</option>
+                  <option value="apos_loss">após loss</option>
+                </select>
+              </div>
+            </div>
+            <div id="cs-lv-status" style="font-size:0.6rem;color:#555;margin-top:4px;">
+              Aguarda N resultados virtuais antes de operar
+            </div>
+          </div>
+
+          <!-- Modo Espelho -->
+          <div id="cs-espelho-box" style="background:rgba(96,165,250,0.05);border:1px solid rgba(96,165,250,0.25);border-radius:6px;padding:10px 12px;">
+            <div style="font-size:0.68rem;color:#60a5fa;letter-spacing:1px;margin-bottom:6px;">💳 MODO ESPELHO</div>
+            <div id="cs-espelho-status" style="font-size:0.65rem;color:#555;line-height:1.6;">
+              Conta secundária não conectada
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;margin-top:8px;">
+              <input type="checkbox" id="cs-espelho-ativo" style="accent-color:#60a5fa;width:14px;height:14px;"
+                  onchange="csAtualizarEspelho()">
+              <label for="cs-espelho-ativo" style="font-size:0.65rem;color:#c9d1d9;cursor:pointer;">
+                Usar conta secundária
+              </label>
+            </div>
+          </div>
+        </div>
+
         <!-- ── BOTÕES ── -->
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;">
           <button id="cs-btn-analisar" onclick="csExecutar()" style="
@@ -15794,6 +15844,56 @@ function _csGerarSinal(original) {
     }
 }
 
+// ── Loss Virtual ────────────────────────────────────────────────────────────
+// Controla visibilidade dos campos e estado do badge
+function csAtualizarLV() {
+    const ativo   = document.getElementById('cs-lv-ativo')?.checked;
+    const campos  = document.getElementById('cs-lv-campos');
+    const badge   = document.getElementById('cs-lv-badge');
+    const status  = document.getElementById('cs-lv-status');
+    if (campos) campos.style.display = ativo ? 'flex' : 'none';
+    if (badge)  { badge.textContent = ativo ? 'ON' : 'OFF'; badge.style.color = ativo ? '#00ff41' : '#555'; }
+    if (status) status.textContent  = ativo
+        ? `Aguardando ${document.getElementById('cs-lv-qtd')?.value || 3} resultados virtuais`
+        : 'Aguarda N resultados virtuais antes de operar';
+    // Inicializa / zera contador virtual quando ativado/desativado
+    if (ativo) { window._csLvContador = 0; }
+}
+
+// Corrige badge (o "if" em JS não aceita string — reescreve)
+function _csLvBadge(ativo) {
+    const badge = document.getElementById('cs-lv-badge');
+    if (!badge) return;
+    badge.textContent = ativo ? 'ON' : 'OFF';
+    badge.style.color = ativo ? '#00ff41' : '#555';
+}
+
+// ── Modo Espelho ─────────────────────────────────────────────────────────────
+// Detecta se conta secundária está pronta e atualiza o painel
+function csAtualizarEspelho() {
+    const ativo  = document.getElementById('cs-espelho-ativo')?.checked;
+    const status = document.getElementById('cs-espelho-status');
+    const box    = document.getElementById('cs-espelho-box');
+
+    const secPronto = (typeof _sec !== 'undefined') && _sec.pronto;
+
+    if (!secPronto) {
+        // Força desligar se conta não conectada
+        const chk = document.getElementById('cs-espelho-ativo');
+        if (chk) chk.checked = false;
+        if (status) status.textContent = 'Conta secundária não conectada';
+        if (box) box.style.borderColor = 'rgba(96,165,250,0.25)';
+        return;
+    }
+
+    if (status) {
+        status.innerHTML = ativo
+            ? `<span style="color:#60a5fa">✔ Espelhando em:</span><br><span style="color:#c9d1d9;font-size:0.6rem">${_sec.token ? _sec.token.slice(0,8)+'…' : 'conta sec.'}</span>`
+            : `Conta secundária conectada<br><span style="color:#00ff41;font-size:0.58rem">saldo: $${parseFloat(_sec.saldo||0).toFixed(2)}</span>`;
+    }
+    if (box) box.style.borderColor = ativo ? '#60a5fa' : 'rgba(96,165,250,0.25)';
+}
+
 // ── Abrir / Fechar ──────────────────────────────────────────────────────────
 function csFechar() {
     _csAtivo = false;
@@ -15815,6 +15915,7 @@ function abrirModalCyberSort() {
 
     _csSinalAtual = null;
     _csMgr        = null;
+    window._csLvContador = window._csLvContador || 0;
     document.getElementById('cs-sinal-box').style.display  = 'none';
     document.getElementById('cs-log-analise').innerHTML    = '';
     document.getElementById('cs-op-log').innerHTML         = '';
@@ -15822,6 +15923,9 @@ function abrirModalCyberSort() {
     _csBotaoOperar(false);
     _csAtualizarToggle();
     _csAtualizarStats();
+    // Sincroniza estado de LV e Espelho ao abrir modal
+    csAtualizarLV();
+    csAtualizarEspelho();
     m.style.display = 'flex';
     _csRenderGrid([6,3,1,5,7,2,8,9,4,0], 'AGUARDANDO DADOS DO MERCADO...');
     _csIniciarMatrix();
@@ -15928,9 +16032,48 @@ async function csExecutar() {
 function csOperar() {
     if (!_csSinalAtual || !_csAtivo) return;
 
+    // ── Loss Virtual: acumula "rodadas virtuais" antes de operar de verdade ──
+    const lvAtivo = document.getElementById('cs-lv-ativo')?.checked;
+    if (lvAtivo) {
+        const lvQtd   = parseInt(document.getElementById('cs-lv-qtd')?.value || 3, 10);
+        const lvQdo   = document.getElementById('cs-lv-quando')?.value || 'sempre';
+        window._csLvContador = (window._csLvContador || 0);
+
+        if (window._csLvContador < lvQtd) {
+            window._csLvContador++;
+            const status = document.getElementById('cs-lv-status');
+            if (status) status.textContent = `Loss virtual ${window._csLvContador}/${lvQtd} — ainda aguardando...`;
+            _csLogOp(`🛡️ <b style="color:#0f0">Loss Virtual</b> ${window._csLvContador}/${lvQtd} — sem operação real`, '#0f0');
+
+            // No modo "após loss" só bloqueia se o último resultado foi loss
+            // (reutiliza lógica simples: quando chegou ao limite, libera)
+            if (_csAutoOperar && _csAtivo) {
+                setTimeout(() => { if (_csAtivo) csExecutar(); }, 1200);
+            } else {
+                _csBotaoOperar(true);
+            }
+            return;
+        }
+        // Chegou ao limite — reseta e opera de verdade
+        window._csLvContador = 0;
+        const status = document.getElementById('cs-lv-status');
+        if (status) status.textContent = `Limite atingido — operando real!`;
+        _csLogOp(`🛡️ <b style="color:#ffbd2e">Loss Virtual completo</b> — operando real agora`, '#ffbd2e');
+    }
+
+    // ── Decide qual WebSocket usar (primário ou espelho) ──────────────────────
+    const espelhoAtivo = document.getElementById('cs-espelho-ativo')?.checked;
+    const secPronto    = (typeof _sec !== 'undefined') && _sec.pronto && _sec.ws && _sec.ws.readyState === WebSocket.OPEN;
+    const wsUsar       = (espelhoAtivo && secPronto) ? _sec.ws : bot.ws;
+
     if (typeof bot === 'undefined' || !bot.ws || bot.ws.readyState !== WebSocket.OPEN) {
         _csLogOp('⚠️ Bot não conectado à Deriv.', '#ff4444');
         return;
+    }
+    if (espelhoAtivo && !secPronto) {
+        _csLogOp('⚠️ Espelho ativo mas conta secundária não está pronta — usando conta principal.', '#ffbd2e');
+    } else if (espelhoAtivo && secPronto) {
+        _csLogOp('💳 <b style="color:#60a5fa">Conta secundária</b> selecionada para esta operação.', '#60a5fa');
     }
 
     // Stake via gerenciamento ou campo direto
@@ -15952,32 +16095,32 @@ function csOperar() {
         underlying_symbol: ativo, barrier: barr
     };
 
-    const _origMsg = bot.ws.onmessage;
+    const _origMsg = wsUsar.onmessage;
     let _csCid = null;
 
-    bot.ws.onmessage = (msg) => {
+    wsUsar.onmessage = (msg) => {
         const d = JSON.parse(msg.data);
 
         if (d.msg_type === 'proposal' && d.req_id === reqId) {
             if (d.error) {
                 _csLogOp('⚠️ Proposta recusada: ' + d.error.message, '#ff4444');
-                bot.ws.onmessage = _origMsg; _csBotaoOperar(true); return;
+                wsUsar.onmessage = _origMsg; _csBotaoOperar(true); return;
             }
             const pid = d.proposal?.id;
-            if (pid) { _csLogOp('✅ Aceita — comprando...', '#00ff41'); bot.ws.send(JSON.stringify({ buy: pid, price: stake })); }
+            if (pid) { _csLogOp('✅ Aceita — comprando...', '#00ff41'); wsUsar.send(JSON.stringify({ buy: pid, price: stake })); }
             return;
         }
 
         if (d.msg_type === 'buy') {
             if (d.error) {
                 _csLogOp('⚠️ Compra recusada: ' + d.error.message, '#ff4444');
-                bot.ws.onmessage = _origMsg; _csBotaoOperar(true); return;
+                wsUsar.onmessage = _origMsg; _csBotaoOperar(true); return;
             }
             const cid = d.buy?.contract_id;
             if (cid) {
                 _csCid = cid;
                 _csLogOp(`🎯 <b>#${cid}</b> — aguardando...`, '#ffbd2e');
-                bot.ws.send(JSON.stringify({ proposal_open_contract: 1, contract_id: cid, subscribe: 1 }));
+                wsUsar.send(JSON.stringify({ proposal_open_contract: 1, contract_id: cid, subscribe: 1 }));
             }
             return;
         }
@@ -15999,6 +16142,12 @@ function csOperar() {
             else     { _csLosses++; _csLucro += profit; }
             _csAtualizarStats(proxStake);
 
+            // Atualiza saldo exibido do espelho (se estava operando na sec)
+            if (espelhoAtivo && secPronto && typeof _sec !== 'undefined') {
+                _sec.saldo = parseFloat(_sec.saldo || 0) + profit;
+                csAtualizarEspelho();
+            }
+
             // Log resultado
             if (won) {
                 _csLogOp(`🏆 <b style="color:#00ff41">WIN +$${profit.toFixed(2)}</b>  próx $${proxStake.toFixed(2)}`, '#00ff41');
@@ -16011,7 +16160,7 @@ function csOperar() {
             // Notifica TG + WA
             _csNotificar(won, profit, ct, barr, ativo);
 
-            bot.ws.onmessage = _origMsg;
+            wsUsar.onmessage = _origMsg;
 
             // Loop automático
             if (_csAutoOperar && _csAtivo) {
@@ -16027,7 +16176,7 @@ function csOperar() {
     };
 
     _csBotaoOperar(false);
-    bot.ws.send(JSON.stringify(payload));
+    wsUsar.send(JSON.stringify(payload));
 }
 // ── FIM CYBER SORT ─────────────────────────────────────────────────────────────
 </script>
