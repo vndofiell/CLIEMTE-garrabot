@@ -15756,7 +15756,18 @@ function _csLogOp(msg, cor) {
 // ── Stats ───────────────────────────────────────────────────────────────────
 function _csAtualizarStats(proxStake) {
     const bancaEl = document.getElementById('cs-stat-banca');
-    if (bancaEl) bancaEl.textContent = document.getElementById('hd-balance')?.textContent || '--';
+    if (bancaEl) {
+        // Mostra o saldo da conta que vai operar:
+        // - se espelho ativo e conta secundária conectada → saldo da secundária
+        // - caso contrário → saldo da conta principal (hd-balance)
+        const espAtivo  = document.getElementById('cs-espelho-ativo')?.checked;
+        const secPronto = (typeof _sec !== 'undefined') && _sec.pronto;
+        if (espAtivo && secPronto && _sec.saldo !== undefined) {
+            bancaEl.textContent = '$' + parseFloat(_sec.saldo).toFixed(2);
+        } else {
+            bancaEl.textContent = document.getElementById('hd-balance')?.textContent || '--';
+        }
+    }
 
     const cot     = parseFloat(window._cotacaoBRL) || 5.85;
     const lucroEl = document.getElementById('cs-stat-lucro');
