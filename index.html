@@ -153,10 +153,10 @@
         display: flex;
         flex-direction: column;
         gap: 0;
-        overflow: visible;
+        overflow: hidden;
     }
 
-    /* ── Barra do topo: ⚙ + título + meta + semáforo ── */
+    /* ── Barra do topo: ⚙ + título + TIME/SPACE + ✕ ── */
     .header-top {
         display: flex;
         align-items: center;
@@ -164,23 +164,22 @@
         padding: 7px 14px 6px;
         border-bottom: 1px solid rgba(0,255,65,0.15);
         background: rgba(0,12,0,0.6);
-        width: 100%;
         box-sizing: border-box;
     }
 
     /* ⚙ ícone esquerdo */
     .header-top .hdr-icon {
         color: #00ff41;
-        font-size: 0.95rem;
+        font-size: 0.9rem;
         flex-shrink: 0;
         text-shadow: 0 0 8px #00ff41;
     }
 
-    /* título principal */
+    /* título: ocupa todo espaço disponível */
     .header-title {
         color: #00ff41;
         font-family: 'Share Tech Mono', monospace;
-        font-size: 0.85rem;
+        font-size: 0.82rem;
         font-weight: bold;
         letter-spacing: 3px;
         text-shadow: 0 0 8px rgba(0,255,65,0.55);
@@ -191,37 +190,37 @@
         text-overflow: ellipsis;
     }
 
-    /* meta direita — TIME: O(n log n) | SPACE: O(log n) */
+    /* TIME: O(n log n) | SPACE: O(log n) — centro-direita */
     .header-top .hdr-meta {
         font-family: 'Share Tech Mono', monospace;
-        font-size: 0.58rem;
-        color: rgba(0,255,65,0.35);
+        font-size: 0.57rem;
+        color: rgba(0,255,65,0.32);
         letter-spacing: 1px;
         white-space: nowrap;
         flex-shrink: 0;
     }
 
-    /* semáforo */
-    .buttons { display: flex; gap: 6px; align-items: center; }
-    .btn { width: 11px; height: 11px; border-radius: 50%; }
+    /* semáforo / fechar */
+    .buttons { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
+    .btn { width: 11px; height: 11px; border-radius: 50%; flex-shrink: 0; }
     .red { background: #ff5f56; }
     .yellow { background: #ffbd2e; }
     .green { background: #27c93f; }
 
-    /* ── Wrapper das linhas MAIN / ESPELHO — padding lateral ── */
+    /* ── Wrapper das linhas MAIN / ESPELHO ── */
     .hdr-rows-wrap {
         display: flex;
         flex-direction: column;
         gap: 5px;
         padding: 6px 10px 7px;
         background: rgba(0,6,0,0.55);
+        box-sizing: border-box;
     }
 
-    /* ── Cada linha (MAIN ou ESPELHO) — borda envolvendo tudo ── */
+    /* ── Linha MAIN / ESPELHO — borda envolvendo tudo, fields preenchendo 100% ── */
     .header-stats {
         display: flex;
-        align-items: center;
-        gap: 0;
+        align-items: stretch;          /* cells have equal height */
         flex-wrap: nowrap;
         width: 100%;
         box-sizing: border-box;
@@ -245,12 +244,11 @@
         border-right: 1px solid rgba(0,255,65,0.3);
         color: #00ff41;
         white-space: nowrap;
-        align-self: stretch;
         display: flex;
         align-items: center;
         background: rgba(0,255,65,0.07);
         flex-shrink: 0;
-        min-width: 62px;
+        width: 58px;
         text-shadow: 0 0 6px rgba(0,255,65,0.6);
     }
     .hdr-row-label.espelho {
@@ -260,34 +258,34 @@
         text-shadow: 0 0 6px rgba(0,200,255,0.5);
     }
 
-    /* cada célula de stat */
+    /* cada célula de stat — flex:1 garante preenchimento igual */
     .stat-box {
         font-family: 'Share Tech Mono', monospace;
         font-size: 0.72rem;
-        padding: 4px 8px;
-        border-right: 1px solid rgba(0,255,65,0.1);
+        padding: 4px 6px;
+        border-right: 1px solid rgba(0,255,65,0.12);
         background: transparent;
         color: #c8d4c8;
         white-space: nowrap;
         text-align: center;
-        flex: 1;
+        flex: 1 1 0%;           /* <-- expande igualmente, sem mínimo fixo */
         min-width: 0;
-        align-self: stretch;
         display: flex;
         align-items: center;
         justify-content: center;
         gap: 4px;
+        overflow: hidden;
     }
     .stat-box:last-child { border-right: none; }
     .espelho-row .stat-box { border-right-color: rgba(0,200,255,0.1); }
-    .stat-box span { font-weight: bold; }
+    .stat-box span { font-weight: bold; white-space: nowrap; }
 
     /* banca — amarelo dourado */
-    .stat-box.balance span { color: #f5c842; font-size: 0.8rem; }
+    .stat-box.balance span { color: #f5c842; }
 
     /* lucro */
     #hd-profit-box { background: rgba(0,255,65,0.04); }
-    #hd-profit-box #hd-profit  { color: #00ff41; font-size: 0.8rem; }
+    #hd-profit-box #hd-profit  { color: #00ff41; }
     #hd-profit-box #hd-profit-brl { font-size: 0.62rem; color: rgba(0,255,65,0.5); }
 
     .stat-box.profit-pos span { color: #00ff41; }
