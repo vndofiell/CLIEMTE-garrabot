@@ -156,14 +156,14 @@
         overflow: visible;
     }
 
-    /* ── Barra do topo: ícone + título + meta + X ── */
+    /* ── Barra do topo: ⚙ + título + meta + semáforo ── */
     .header-top {
         display: flex;
         align-items: center;
         gap: 10px;
-        padding: 6px 14px 5px;
-        border-bottom: 1px solid rgba(0,255,65,0.18);
-        background: rgba(0,12,0,0.55);
+        padding: 7px 14px 6px;
+        border-bottom: 1px solid rgba(0,255,65,0.15);
+        background: rgba(0,12,0,0.6);
         width: 100%;
         box-sizing: border-box;
     }
@@ -171,7 +171,7 @@
     /* ⚙ ícone esquerdo */
     .header-top .hdr-icon {
         color: #00ff41;
-        font-size: 1rem;
+        font-size: 0.95rem;
         flex-shrink: 0;
         text-shadow: 0 0 8px #00ff41;
     }
@@ -180,7 +180,7 @@
     .header-title {
         color: #00ff41;
         font-family: 'Share Tech Mono', monospace;
-        font-size: 0.88rem;
+        font-size: 0.85rem;
         font-weight: bold;
         letter-spacing: 3px;
         text-shadow: 0 0 8px rgba(0,255,65,0.55);
@@ -191,24 +191,33 @@
         text-overflow: ellipsis;
     }
 
-    /* meta direita (TIME / SPACE) */
+    /* meta direita — TIME: O(n log n) | SPACE: O(log n) */
     .header-top .hdr-meta {
         font-family: 'Share Tech Mono', monospace;
-        font-size: 0.6rem;
-        color: rgba(0,255,65,0.38);
+        font-size: 0.58rem;
+        color: rgba(0,255,65,0.35);
         letter-spacing: 1px;
         white-space: nowrap;
         flex-shrink: 0;
     }
 
-    /* botão fechar ✕ */
+    /* semáforo */
     .buttons { display: flex; gap: 6px; align-items: center; }
     .btn { width: 11px; height: 11px; border-radius: 50%; }
     .red { background: #ff5f56; }
     .yellow { background: #ffbd2e; }
     .green { background: #27c93f; }
 
-    /* ── Linha de stats (MAIN e ESPELHO) ── */
+    /* ── Wrapper das linhas MAIN / ESPELHO — padding lateral ── */
+    .hdr-rows-wrap {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+        padding: 6px 10px 7px;
+        background: rgba(0,6,0,0.55);
+    }
+
+    /* ── Cada linha (MAIN ou ESPELHO) — borda envolvendo tudo ── */
     .header-stats {
         display: flex;
         align-items: center;
@@ -216,45 +225,49 @@
         flex-wrap: nowrap;
         width: 100%;
         box-sizing: border-box;
-        padding: 0;
-        border-bottom: 1px solid rgba(0,255,65,0.18);
-        background: rgba(0,8,0,0.5);
-        min-height: 32px;
+        border: 1px solid rgba(0,255,65,0.55);
+        border-radius: 4px;
+        background: rgba(0,0,0,0.35);
+        min-height: 30px;
+        overflow: hidden;
+    }
+    .header-stats.espelho-row {
+        border-color: rgba(0,200,255,0.45);
     }
 
     /* rótulo MAIN / ESPELHO */
     .hdr-row-label {
         font-family: 'Share Tech Mono', monospace;
-        font-size: 0.62rem;
+        font-size: 0.6rem;
         font-weight: bold;
         letter-spacing: 2px;
         padding: 0 10px;
-        border-right: 1px solid rgba(0,255,65,0.2);
+        border-right: 1px solid rgba(0,255,65,0.3);
         color: #00ff41;
         white-space: nowrap;
         align-self: stretch;
         display: flex;
         align-items: center;
-        background: rgba(0,255,65,0.04);
+        background: rgba(0,255,65,0.07);
         flex-shrink: 0;
-        min-width: 58px;
-        text-shadow: 0 0 6px rgba(0,255,65,0.5);
+        min-width: 62px;
+        text-shadow: 0 0 6px rgba(0,255,65,0.6);
     }
     .hdr-row-label.espelho {
-        color: rgba(255,189,46,0.85);
-        border-color: rgba(255,189,46,0.25);
-        background: rgba(255,189,46,0.03);
-        text-shadow: 0 0 6px rgba(255,189,46,0.4);
+        color: #00d4ff;
+        border-color: rgba(0,200,255,0.3);
+        background: rgba(0,200,255,0.06);
+        text-shadow: 0 0 6px rgba(0,200,255,0.5);
     }
 
     /* cada célula de stat */
     .stat-box {
         font-family: 'Share Tech Mono', monospace;
         font-size: 0.72rem;
-        padding: 4px 6px;
-        border-right: 1px solid rgba(0,255,65,0.14);
+        padding: 4px 8px;
+        border-right: 1px solid rgba(0,255,65,0.1);
         background: transparent;
-        color: #b8c4b8;
+        color: #c8d4c8;
         white-space: nowrap;
         text-align: center;
         flex: 1;
@@ -263,24 +276,25 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        gap: 3px;
+        gap: 4px;
     }
     .stat-box:last-child { border-right: none; }
+    .espelho-row .stat-box { border-right-color: rgba(0,200,255,0.1); }
     .stat-box span { font-weight: bold; }
 
-    /* banca — amarelo */
-    .stat-box.balance span { color: #f0c040; }
+    /* banca — amarelo dourado */
+    .stat-box.balance span { color: #f5c842; font-size: 0.8rem; }
 
-    /* lucro — verde */
-    #hd-profit-box { background: rgba(0,255,65,0.05); border-right-color: rgba(0,255,65,0.25); }
-    #hd-profit-box #hd-profit  { color: #00ff41; font-size: 0.78rem; }
+    /* lucro */
+    #hd-profit-box { background: rgba(0,255,65,0.04); }
+    #hd-profit-box #hd-profit  { color: #00ff41; font-size: 0.8rem; }
     #hd-profit-box #hd-profit-brl { font-size: 0.62rem; color: rgba(0,255,65,0.5); }
 
     .stat-box.profit-pos span { color: #00ff41; }
     .stat-box.profit-neg span { color: #ff4444; }
     .stat-box.wins span   { color: #00ff41; }
     .stat-box.losses span { color: #ff4444; }
-    .stat-box.info-box span { color: #f0c040; }
+    .stat-box.info-box span { color: #f5c842; }
 
     .terminal-body {
         flex-grow: 1;
@@ -1716,41 +1730,46 @@
             </div>
         </div>
 
-        <!-- ══ LINHA MAIN — todos os stats espalhados pela largura total ══ -->
-        <div class="header-stats">
-            <div class="hdr-row-label">MAIN</div>
-            <div class="stat-box balance" id="hd-balance-box">💰 <span id="hd-balance">--</span></div>
-            <div class="stat-box balance" id="hd-balance-sec-box" style="display:none;cursor:pointer;" onclick="abrirModalMultiContas()" title="Conta secundária">
-                💳 <span id="hd-balance-sec" style="color:#60a5fa;font-weight:bold;">--</span>
-            </div>
-            <div class="stat-box" id="hd-profit-box">📈 <span id="hd-profit">$0.00</span> <span id="hd-profit-brl">+R$0,00</span></div>
-            <div class="stat-box wins">✅ <span id="hd-wins">0</span></div>
-            <div class="stat-box losses">🔁 <span id="hd-losses">0</span></div>
-            <div class="stat-box" id="hd-taxa-box">🎯 <span id="hd-taxa" style="color:#ffbd2e;font-weight:bold;">--%</span></div>
-            <div class="stat-box" id="hd-nextstake-box">⚡ <span id="hd-nextstake" style="color:#0ff;font-weight:bold;">$--</span></div>
-            <div class="stat-box info-box">⚙️ <span id="hd-mgmt">Martingale</span></div>
-            <div class="stat-box info-box">📊 <span id="hd-strat">Digit Under</span></div>
-            <div class="stat-box" id="hd-timer-box">⏱️ <span id="hd-timer" style="color:#0ff;font-weight:bold;">00:00:00</span></div>
-            <div class="stat-box" id="hd-ect-box" style="display:none;cursor:pointer;" onclick="ectAbrirPainel()" title="ECT Monitor">
-                🤖 <span id="hd-ect-status" style="color:#ffbd00;font-weight:bold;">ECT OFF</span>
-                <span id="hd-ect-next" style="color:#ffee44;font-size:0.7rem;font-weight:bold;"></span>
-            </div>
-        </div>
+        <!-- ══ WRAPPER LINHAS MAIN + ESPELHO ══ -->
+        <div class="hdr-rows-wrap">
 
-        <!-- ══ LINHA ESPELHO — só aparece quando conta secundária está ativa ══ -->
-        <div id="header-stats-teste" class="header-stats" style="display:none;background:rgba(255,189,46,0.03);border-top:1px solid rgba(255,189,46,0.2);border-bottom:none;">
-            <div class="hdr-row-label espelho">ESPELHO</div>
-            <div class="stat-box balance">💰 <span id="ts-balance">--</span></div>
-            <div class="stat-box" id="ts-profit-box">📈 <span id="ts-profit">$0.00</span> <span id="ts-profit-brl" style="font-size:0.62rem;opacity:0.7;">+R$0,00</span></div>
-            <div class="stat-box wins">✅ <span id="ts-wins">0</span></div>
-            <div class="stat-box losses">🔁 <span id="ts-losses">0</span></div>
-            <div class="stat-box" id="ts-taxa-box">🎯 <span id="ts-taxa" style="color:#ffbd2e;font-weight:bold;">--%</span></div>
-            <div class="stat-box">⚡ <span id="ts-nextstake" style="color:#0ff;font-weight:bold;">$--</span></div>
-            <div class="stat-box info-box">⚙️ <span id="ts-mgmt">--</span></div>
-            <div class="stat-box info-box">📊 <span id="ts-strat">--</span></div>
-        </div>
+            <!-- linha MAIN -->
+            <div class="header-stats">
+                <div class="hdr-row-label">MAIN</div>
+                <div class="stat-box balance" id="hd-balance-box">💰 <span id="hd-balance">--</span></div>
+                <div class="stat-box balance" id="hd-balance-sec-box" style="display:none;cursor:pointer;" onclick="abrirModalMultiContas()" title="Conta secundária">
+                    💳 <span id="hd-balance-sec" style="color:#60a5fa;font-weight:bold;">--</span>
+                </div>
+                <div class="stat-box" id="hd-profit-box">📈 <span id="hd-profit">$0.00</span> <span id="hd-profit-brl">+R$0,00</span></div>
+                <div class="stat-box wins">✅ <span id="hd-wins">0</span></div>
+                <div class="stat-box losses">🔁 <span id="hd-losses">0</span></div>
+                <div class="stat-box" id="hd-taxa-box">🎯 <span id="hd-taxa" style="color:#ffbd2e;font-weight:bold;">--%</span></div>
+                <div class="stat-box" id="hd-nextstake-box">⚡ <span id="hd-nextstake" style="color:#0ff;font-weight:bold;">$--</span></div>
+                <div class="stat-box info-box">⚙️ <span id="hd-mgmt">Martingale</span></div>
+                <div class="stat-box info-box">📊 <span id="hd-strat">Digit Under</span></div>
+                <div class="stat-box" id="hd-timer-box">⏱️ <span id="hd-timer" style="color:#0ff;font-weight:bold;">00:00:00</span></div>
+                <div class="stat-box" id="hd-ect-box" style="display:none;cursor:pointer;" onclick="ectAbrirPainel()" title="ECT Monitor">
+                    🤖 <span id="hd-ect-status" style="color:#ffbd00;font-weight:bold;">ECT OFF</span>
+                    <span id="hd-ect-next" style="color:#ffee44;font-size:0.7rem;font-weight:bold;"></span>
+                </div>
+            </div>
 
-    </div>
+            <!-- linha ESPELHO — só aparece quando conta secundária está ativa -->
+            <div id="header-stats-teste" class="header-stats espelho-row" style="display:none;">
+                <div class="hdr-row-label espelho">ESPELHO</div>
+                <div class="stat-box balance">💰 <span id="ts-balance">--</span></div>
+                <div class="stat-box" id="ts-profit-box">📈 <span id="ts-profit">$0.00</span> <span id="ts-profit-brl" style="font-size:0.62rem;opacity:0.7;">+R$0,00</span></div>
+                <div class="stat-box wins">✅ <span id="ts-wins">0</span></div>
+                <div class="stat-box losses">🔁 <span id="ts-losses">0</span></div>
+                <div class="stat-box" id="ts-taxa-box">🎯 <span id="ts-taxa" style="color:#ffbd2e;font-weight:bold;">--%</span></div>
+                <div class="stat-box">⚡ <span id="ts-nextstake" style="color:#0ff;font-weight:bold;">$--</span></div>
+                <div class="stat-box info-box">⚙️ <span id="ts-mgmt">--</span></div>
+                <div class="stat-box info-box">📊 <span id="ts-strat">--</span></div>
+            </div>
+
+        </div><!-- /hdr-rows-wrap -->
+
+    </div><!-- /terminal-header -->
 
     <!-- ══ BARRA DE PROGRESSO — LOGIN HACKER ══ -->
     <div id="terminal-loading" style="display: none;">
