@@ -1758,15 +1758,17 @@
         display:none; position:fixed; top:0; left:0;
         width:100%; height:100%;
         background:rgba(0,0,0,0.9); z-index:1200;
-        justify-content:center; align-items:center;">
+        justify-content:center; align-items:flex-start;
+        padding-top:40px; overflow-y:auto;">
       <div style="
           background:#0d0f12; border:1px solid #00ff41;
           border-radius:8px; padding:22px 20px;
           box-shadow:0 0 24px rgba(0,255,65,0.2);
           font-family:'Share Tech Mono',monospace;
           min-width:300px; max-width:500px; width:95%;
-          max-height:90vh; overflow-y:auto; color:#fff;">
+          color:#fff; margin:0 auto;">
 
+        <!-- Cabeçalho -->
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
           <span style="color:#00ff41;font-size:0.9rem;letter-spacing:2px;">⚙ CYBER SORT / DIGIT PATTERN SCANNER</span>
           <button onclick="document.getElementById('cyber-sort-modal').style.display='none'"
@@ -1774,23 +1776,80 @@
         </div>
         <p style="color:#6b7280;font-size:0.65rem;text-align:center;margin-bottom:16px;">TIME: O(n log n) &nbsp;|&nbsp; SPACE: O(log n)</p>
 
+        <!-- Grid de dígitos animados -->
         <div id="cs-digit-grid" style="display:flex;gap:6px;justify-content:center;margin-bottom:14px;flex-wrap:wrap;"></div>
 
+        <!-- Status da animação -->
         <div id="cs-status" style="
             background:rgba(0,255,65,0.05); border:1px solid #00ff41;
             padding:10px; text-align:center; font-size:0.8rem;
-            color:#00ff41; letter-spacing:1px; border-radius:4px; margin-bottom:12px;">
+            color:#00ff41; letter-spacing:1px; border-radius:4px; margin-bottom:14px;">
           AGUARDANDO DADOS DO MERCADO...
         </div>
 
-        <button onclick="csExecutar()" style="
-            width:100%; padding:10px;
-            background:rgba(0,255,65,0.1); border:1px solid #00ff41;
-            color:#00ff41; font-family:'Share Tech Mono',monospace;
-            font-weight:bold; letter-spacing:2px; cursor:pointer;
-            border-radius:4px; transition:background 0.2s;">
-          ▶ EXECUTAR ANÁLISE VISUAL
-        </button>
+        <!-- Sinal gerado -->
+        <div id="cs-sinal-box" style="display:none;
+            background:rgba(0,0,0,0.4); border:1px solid #30363d;
+            border-radius:6px; padding:12px; margin-bottom:14px; font-size:0.78rem;">
+          <div style="color:#6b7280;font-size:0.6rem;letter-spacing:1px;margin-bottom:6px;">▸ SINAL GERADO PELO ALGORITMO</div>
+          <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+            <span>CONTRATO: <b id="cs-sinal-contrato" style="color:#00ffff;">—</b></span>
+            <span>BARREIRA: <b id="cs-sinal-barreira" style="color:#ffbd2e;">—</b></span>
+            <span>CONFIANÇA: <b id="cs-sinal-conf" style="color:#00ff41;">—</b></span>
+          </div>
+          <div style="margin-top:8px;color:#6b7280;font-size:0.65rem;" id="cs-sinal-desc">—</div>
+        </div>
+
+        <!-- Configurações de operação -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
+          <div>
+            <label style="font-size:0.6rem;color:#00ffff;letter-spacing:1px;display:block;margin-bottom:4px;">ATIVO</label>
+            <select id="cs-ativo" style="
+                width:100%;background:#161b22;border:1px solid rgba(0,255,65,0.4);
+                color:#c9d1d9;font-family:'Share Tech Mono',monospace;font-size:0.75rem;
+                padding:7px 8px;border-radius:4px;cursor:pointer;">
+              <option value="R_100">R_100</option>
+              <option value="R_50">R_50</option>
+              <option value="R_25">R_25</option>
+              <option value="R_75">R_75</option>
+              <option value="1HZ100V">1HZ100V</option>
+              <option value="1HZ50V">1HZ50V</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:0.6rem;color:#00ffff;letter-spacing:1px;display:block;margin-bottom:4px;">STAKE (USD)</label>
+            <input id="cs-stake" type="number" value="0.35" min="0.35" step="0.01" style="
+                width:100%;background:#161b22;border:1px solid rgba(0,255,65,0.4);
+                color:#c9d1d9;font-family:'Share Tech Mono',monospace;font-size:0.75rem;
+                padding:7px 8px;border-radius:4px;outline:none;">
+          </div>
+        </div>
+
+        <!-- Botões de ação -->
+        <div style="display:flex;gap:8px;flex-direction:column;">
+          <button id="cs-btn-analisar" onclick="csExecutar()" style="
+              width:100%; padding:10px;
+              background:rgba(0,255,65,0.1); border:1px solid #00ff41;
+              color:#00ff41; font-family:'Share Tech Mono',monospace;
+              font-weight:bold; letter-spacing:2px; cursor:pointer;
+              border-radius:4px; transition:background 0.2s;">
+            ▶ EXECUTAR ANÁLISE VISUAL
+          </button>
+          <button id="cs-btn-operar" onclick="csOperar()" disabled style="
+              width:100%; padding:10px;
+              background:rgba(255,189,46,0.05); border:1px solid #444;
+              color:#555; font-family:'Share Tech Mono',monospace;
+              font-weight:bold; letter-spacing:2px; cursor:not-allowed;
+              border-radius:4px; transition:all 0.2s;">
+            ⚡ OPERAR COM SINAL
+          </button>
+        </div>
+
+        <!-- Log de resultado da operação -->
+        <div id="cs-op-log" style="display:none;margin-top:12px;
+            background:rgba(0,0,0,0.35);border:1px solid #1a2a1a;
+            border-radius:4px;padding:10px;font-size:0.72rem;color:#888;
+            max-height:120px;overflow-y:auto;line-height:1.6;"></div>
       </div>
     </div>
 
@@ -15481,8 +15540,11 @@ function _iniciarMatrixApk() {
   draw();
 }
 
-// ── CYBER SORT ─────────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+// CYBER SORT — Animação Quick Sort + Operação Real na Deriv
+// ══════════════════════════════════════════════════════════════════════════════
 const _csAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+let _csSinalAtual = null;   // { contract_type, barrier, conf, desc } gerado após análise
 
 function _csBip(freq, dur) {
     try {
@@ -15508,27 +15570,98 @@ function _csRenderGrid(arr, statusTxt) {
     if (stat && statusTxt) stat.textContent = statusTxt;
 }
 
+function _csLogOp(msg, cor) {
+    const el = document.getElementById('cs-op-log');
+    if (!el) return;
+    el.style.display = 'block';
+    const ts = new Date().toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+    el.innerHTML += `<div style="color:${cor || '#888'}">[${ts}] ${msg}</div>`;
+    el.scrollTop = el.scrollHeight;
+}
+
+/** Analisa o array ORIGINAL vs ORDENADO e gera o sinal de trading:
+ *  - Conta quantos grandes (>5) estão na 1ª metade do original
+ *  - Se dominam os GRANDES → mercado tendendo alto → DIGITUNDER barreira 5
+ *  - Se dominam os PEQUENOS → mercado tendendo baixo → DIGITOVER barreira 4
+ */
+function _csGerarSinal(original, ordenado) {
+    const metade = Math.floor(original.length / 2);
+    const grandes = original.slice(0, metade).filter(v => v > 5).length;
+    const pequenos = metade - grandes;
+    const diff = Math.abs(grandes - pequenos);
+    const conf = Math.round(50 + (diff / metade) * 50);
+
+    if (grandes >= pequenos) {
+        return {
+            contract_type: 'DIGITUNDER',
+            barrier: '5',
+            conf,
+            desc: `${grandes} dígitos grandes na 1ª metade → tendência BAIXA → Under<5`
+        };
+    } else {
+        return {
+            contract_type: 'DIGITOVER',
+            barrier: '4',
+            conf,
+            desc: `${pequenos} dígitos pequenos na 1ª metade → tendência ALTA → Over>4`
+        };
+    }
+}
+
 function abrirModalCyberSort() {
     const m = document.getElementById('cyber-sort-modal');
     if (!m) return;
+    // Pré-preenche stake com o valor atual do bot (se disponível)
+    const stakeEl = document.getElementById('cs-stake');
+    if (stakeEl && typeof bot !== 'undefined' && bot.stake) stakeEl.value = bot.stake;
+    // Pré-preenche ativo com o ativo atual do bot
+    const ativoEl = document.getElementById('cs-ativo');
+    if (ativoEl && typeof bot !== 'undefined' && bot._tickAtivo) {
+        for (const opt of ativoEl.options) { if (opt.value === bot._tickAtivo) { opt.selected = true; break; } }
+    }
+    // Reseta estado
+    _csSinalAtual = null;
+    document.getElementById('cs-sinal-box').style.display = 'none';
+    document.getElementById('cs-op-log').style.display = 'none';
+    document.getElementById('cs-op-log').innerHTML = '';
+    _csBotaoOperar(false);
     m.style.display = 'flex';
     _csRenderGrid([6,10,1,5,7,2,8,9,4,3], 'AGUARDANDO DADOS DO MERCADO...');
 }
 
+function _csBotaoOperar(ativo) {
+    const btn = document.getElementById('cs-btn-operar');
+    if (!btn) return;
+    btn.disabled = !ativo;
+    btn.style.background     = ativo ? 'rgba(255,189,46,0.15)' : 'rgba(255,189,46,0.05)';
+    btn.style.borderColor    = ativo ? '#ffbd2e' : '#444';
+    btn.style.color          = ativo ? '#ffbd2e' : '#555';
+    btn.style.cursor         = ativo ? 'pointer'  : 'not-allowed';
+}
+
 async function csExecutar() {
+    // Desativa botão de operar durante análise
+    _csBotaoOperar(false);
+    _csSinalAtual = null;
+    document.getElementById('cs-sinal-box').style.display = 'none';
+
+    const btnAn = document.getElementById('cs-btn-analisar');
+    if (btnAn) { btnAn.disabled = true; btnAn.textContent = '⏳ ANALISANDO...'; }
+
     try {
+        const listaOriginal = [6, 10, 1, 5, 7, 2, 8, 9, 4, 3];
         const res  = await fetch('/ia/quick-sort-simulacao', {
             method: 'POST',
             headers: {'Content-Type':'application/json'},
-            body: JSON.stringify({ lista: [6,10,1,5,7,2,8,9,4,3] })
+            body: JSON.stringify({ lista: listaOriginal })
         });
         const data = await res.json();
-        if (!data.ok) return;
+        if (!data.ok) { if (btnAn) { btnAn.disabled = false; btnAn.textContent = '▶ EXECUTAR ANÁLISE VISUAL'; } return; }
 
+        // ── Animação passo a passo ──
         for (const passo of data.passos) {
             _csRenderGrid(passo.arr, `AÇÃO: ${passo.acao.toUpperCase()} | PIVOT: ${passo.pivot ?? '—'}`);
             const boxes = document.querySelectorAll('#cs-digit-grid .cs-box');
-            // compare = amarelo, swap = vermelho
             const clrCompare = 'border-color:#ffbd2e;background:rgba(255,189,46,0.15);color:#ffbd2e;transform:translateY(-4px)';
             const clrSwap    = 'border-color:#ff4444;background:rgba(255,68,68,0.2);color:#ff4444;transform:scale(1.1)';
             if (passo.i >= 0 && boxes[passo.i]) boxes[passo.i].style.cssText += ';' + clrCompare;
@@ -15537,10 +15670,122 @@ async function csExecutar() {
             await new Promise(r => setTimeout(r, 400));
         }
 
+        // Estado final ordenado
+        const ordenado = data.passos.length ? data.passos[data.passos.length - 1].arr : [...listaOriginal].sort((a,b)=>a-b);
         const s = document.getElementById('cs-status');
         if (s) s.textContent = 'ORDENAÇÃO CONCLUÍDA COM SUCESSO ✅';
         _csBip(1000, 0.3);
-    } catch(e) { console.error('CyberSort erro:', e); }
+
+        // ── Gera sinal de trading ──
+        _csSinalAtual = _csGerarSinal(listaOriginal, ordenado);
+        document.getElementById('cs-sinal-contrato').textContent = _csSinalAtual.contract_type;
+        document.getElementById('cs-sinal-barreira').textContent = _csSinalAtual.barrier;
+        document.getElementById('cs-sinal-conf').textContent     = _csSinalAtual.conf + '%';
+        document.getElementById('cs-sinal-desc').textContent     = _csSinalAtual.desc;
+        document.getElementById('cs-sinal-box').style.display    = 'block';
+
+        // Habilita o botão de operar
+        _csBotaoOperar(true);
+
+    } catch(e) {
+        console.error('CyberSort erro:', e);
+    } finally {
+        if (btnAn) { btnAn.disabled = false; btnAn.textContent = '▶ EXECUTAR ANÁLISE VISUAL'; }
+    }
+}
+
+/** Executa a operação real na Deriv usando o sinal gerado */
+function csOperar() {
+    if (!_csSinalAtual) { _csLogOp('⚠️ Execute a análise primeiro.', '#ff4444'); return; }
+
+    // Valida conexão WebSocket
+    if (typeof bot === 'undefined' || !bot.ws || bot.ws.readyState !== WebSocket.OPEN) {
+        _csLogOp('⚠️ Bot não conectado. Conecte-se à Deriv primeiro.', '#ff4444');
+        return;
+    }
+
+    const stake  = parseFloat(document.getElementById('cs-stake').value) || 0.35;
+    const ativo  = document.getElementById('cs-ativo').value || 'R_100';
+    const ct     = _csSinalAtual.contract_type;
+    const barr   = _csSinalAtual.barrier;
+    const reqId  = Math.floor(Math.random() * 90000) + 10000;
+
+    _csLogOp(`🚀 Enviando proposta: <b style="color:#00ffff">${ct}</b> barr=<b style="color:#ffbd2e">${barr}</b> stake=<b>$${stake}</b> ativo=<b>${ativo}</b>`, '#ccc');
+
+    // Payload da proposta
+    const payload = {
+        proposal: 1, req_id: reqId,
+        amount: stake, basis: 'stake',
+        contract_type: ct,
+        currency: 'USD', duration: 1, duration_unit: 't',
+        underlying_symbol: ativo,
+        barrier: barr
+    };
+
+    // Intercepta a resposta da proposta para fazer o buy
+    const _origMsg = bot.ws.onmessage;
+    bot.ws.onmessage = (msg) => {
+        const d = JSON.parse(msg.data);
+
+        // Proposta recebida → compra
+        if (d.msg_type === 'proposal' && d.req_id === reqId) {
+            if (d.error) {
+                _csLogOp('⚠️ Proposta recusada: ' + d.error.message, '#ff4444');
+                bot.ws.onmessage = _origMsg;
+                _csBotaoOperar(true);
+                return;
+            }
+            const pid = d.proposal && d.proposal.id;
+            if (pid) {
+                _csLogOp(`✅ Proposta aceita — comprando contrato...`, '#00ff41');
+                bot.ws.send(JSON.stringify({ buy: pid, price: stake }));
+            }
+            return;
+        }
+
+        // Compra confirmada → assina resultado
+        if (d.msg_type === 'buy' && d.echo_req && d.echo_req.req_id === undefined) {
+            if (d.error) {
+                _csLogOp('⚠️ Compra recusada: ' + d.error.message, '#ff4444');
+                bot.ws.onmessage = _origMsg;
+                _csBotaoOperar(true);
+                return;
+            }
+            const cid = d.buy && d.buy.contract_id;
+            if (cid) {
+                _csLogOp(`🎯 Contrato aberto: <b>#${cid}</b> — aguardando resultado...`, '#ffbd2e');
+                bot.ws.send(JSON.stringify({ proposal_open_contract: 1, contract_id: cid, subscribe: 1 }));
+            }
+            bot.ws.onmessage = _origMsg;
+            return;
+        }
+
+        // Resultado do contrato CS (monitorado separadamente)
+        if (d.msg_type === 'proposal_open_contract' && d.proposal_open_contract && d.proposal_open_contract.is_sold) {
+            const poc    = d.proposal_open_contract;
+            const profit = parseFloat(poc.profit);
+            const won    = profit > 0;
+            if (won) {
+                _csLogOp(`🏆 RESULTADO: <b style="color:#00ff41">WIN +$${profit.toFixed(2)}</b>`, '#00ff41');
+                _csBip(1000, 0.4);
+            } else {
+                _csLogOp(`💔 RESULTADO: <b style="color:#ff4444">LOSS -$${Math.abs(profit).toFixed(2)}</b>`, '#ff4444');
+                _csBip(200, 0.2);
+            }
+            // Devolve o onmessage original e habilita nova operação
+            bot.ws.onmessage = _origMsg;
+            _csBotaoOperar(true);
+            return;
+        }
+
+        _origMsg(msg);
+    };
+
+    // Desabilita o botão até o resultado chegar
+    _csBotaoOperar(false);
+
+    // Envia a proposta
+    bot.ws.send(JSON.stringify(payload));
 }
 // ── FIM CYBER SORT ─────────────────────────────────────────────────────────────
 </script>
