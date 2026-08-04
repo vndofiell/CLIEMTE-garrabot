@@ -15893,20 +15893,23 @@ function _csAtualizarStats(proxStake) {
     if (eMEl) eMEl.textContent = 'SEC-' + mgmtSec;
 }
 
-// ── Notificações TG + WA ────────────────────────────────────────────────────
+// ── Notificações TG + WA — somente conta SECUNDÁRIA ────────────────────────
 function _csNotificar(won, profit, ct, barr, ativo) {
     const cot      = parseFloat(window._cotacaoBRL) || 5.85;
     const profBRL  = (Math.abs(profit) * cot).toFixed(2).replace('.', ',');
     const sinal    = won ? `✅ WIN +$${profit.toFixed(2)} (+R$${profBRL})` : `❌ LOSS -$${Math.abs(profit).toFixed(2)} (-R$${profBRL})`;
-    const banca    = document.getElementById('hd-balance')?.textContent || '--';
-    const taxa     = (_csWins + _csLosses) > 0 ? ((_csWins / (_csWins + _csLosses)) * 100).toFixed(1) + '%' : '--%';
-    const lucBRL   = (_csLucro * cot).toFixed(2).replace('.', ',');
+    // Usa banca e stats da conta SECUNDÁRIA
+    const banca    = (typeof _sec !== 'undefined' && _sec.saldo !== undefined)
+        ? `$${parseFloat(_sec.saldo).toFixed(2)}` : '--';
+    const taxa     = (_csEspWins + _csEspLosses) > 0
+        ? ((_csEspWins / (_csEspWins + _csEspLosses)) * 100).toFixed(1) + '%' : '--%';
+    const lucBRL   = (_csEspLucro * cot).toFixed(2).replace('.', ',');
 
-    const texto = `⚙ CYBER SORT\n${sinal}\n\n` +
+    const texto = `💳 CYBER SORT — SEC\n${sinal}\n\n` +
         `📊 ${ct} barr=${barr} | ${ativo}\n` +
-        `💰 Banca: ${banca}\n` +
-        `📈 Lucro sessão: ${_csLucro >= 0 ? '+' : ''}$${_csLucro.toFixed(2)} (R$${lucBRL})\n` +
-        `🎯 Taxa: ${taxa} (${_csWins}W / ${_csLosses}L)\n` +
+        `💰 Banca SEC: ${banca}\n` +
+        `📈 Lucro SEC: ${_csEspLucro >= 0 ? '+' : ''}$${_csEspLucro.toFixed(2)} (R$${lucBRL})\n` +
+        `🎯 Taxa SEC: ${taxa} (${_csEspWins}W / ${_csEspLosses}L)\n` +
         `💱 1 USD = R$ ${cot.toFixed(2)}`;
 
     // Telegram — usa a variável global _tgCfg já carregada pelo bot
@@ -16433,8 +16436,10 @@ function csOperar() {
                 _csBip(200, 0.2);
             }
 
-            // Notifica TG + WA
-            _csNotificar(won, profit, ct, barr, ativo);
+            // Notifica TG + WA — somente quando operando na conta SECUNDÁRIA
+            if (_csUsandoSec && espAtivo && secPronto) {
+                _csNotificar(won, profit, ct, barr, ativo);
+            }
 
             wsUsar.onmessage = _origMsg;
 
