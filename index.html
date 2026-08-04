@@ -145,75 +145,87 @@
         overflow: hidden;
     }
 
+    /* ══ HEADER CYBER CARD — estilo Cyber Sort ══ */
     .terminal-header {
-        background: #111;
-        padding: 8px 15px;
-        border-bottom: 1px solid var(--terminal-green);
+        background: #0d0d14;
+        padding: 0;
+        border-bottom: 1px solid rgba(0,255,0,0.35);
         display: flex;
         flex-direction: column;
-        gap: 6px;
+        gap: 0;
         overflow: visible;
     }
 
+    /* ── Barra do topo do card ── */
     .header-top {
         display: flex;
         justify-content: space-between;
         align-items: center;
+        padding: 6px 12px 5px;
+        border-bottom: 1px solid rgba(0,255,0,0.15);
+        background: rgba(0,255,0,0.03);
     }
 
+    /* ── Linha de stats (conta principal) ── */
     .header-stats {
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: 4px;
         flex-wrap: nowrap;
         width: 100%;
+        padding: 4px 8px;
+        border-bottom: 1px solid rgba(0,255,0,0.1);
+        background: rgba(0,0,0,0.25);
     }
 
+    /* ── Cada célula de stat ── */
     .stat-box {
         font-family: 'Share Tech Mono';
-        font-size: 0.75rem;
-        padding: 3px 8px;
-        border-radius: 4px;
-        border: 1px solid rgba(0,255,0,0.3);
-        background: rgba(0,255,0,0.05);
-        color: #ccc;
+        font-size: 0.72rem;
+        padding: 3px 7px;
+        border-radius: 3px;
+        border: 1px solid rgba(0,255,0,0.28);
+        background: rgba(0,0,0,0.35);
+        color: #b0b8c1;
         white-space: nowrap;
-        flex: 1;
         text-align: center;
+        flex: 1;
+        min-width: 0;
     }
 
     .stat-box span { font-weight: bold; }
-    .stat-box.balance span { color: var(--terminal-cyan); }
+    .stat-box.balance span { color: #f0c040; font-size: 0.82rem; }
 
-    /* ── caixa de lucro maior e mais visível ── */
+    /* ── Caixa de lucro ── */
     #hd-profit-box {
-        font-size: 0.9rem;
-        padding: 5px 14px;
-        border-width: 2px;
-        border-color: rgba(0,255,0,0.6);
-        background: rgba(0,255,0,0.09);
-        box-shadow: 0 0 8px rgba(0,255,0,0.2);
+        border-color: rgba(0,255,0,0.5);
+        background: rgba(0,255,0,0.07);
     }
-    #hd-profit-box #hd-profit { font-size: 1rem; letter-spacing: 1px; }
-    #hd-profit-box #hd-profit-brl { font-size: 0.78rem; opacity: 0.85; }
+    #hd-profit-box #hd-profit { color: #00ff41; font-size: 0.8rem; }
+    #hd-profit-box #hd-profit-brl { font-size: 0.65rem; color: rgba(0,255,0,0.55); }
 
-    .stat-box.profit-pos span { color: var(--terminal-green); }
+    .stat-box.profit-pos span { color: #00ff41; }
     .stat-box.profit-neg span { color: var(--terminal-red); }
-    .stat-box.wins span { color: var(--terminal-green); }
+    .stat-box.wins span { color: #00ff41; }
     .stat-box.losses span { color: var(--terminal-red); }
-    .stat-box.info-box span { color: #ffbd2e; }
+    .stat-box.info-box span { color: #f0c040; }
 
-    .buttons { display: flex; gap: 8px; }
-    .btn { width: 12px; height: 12px; border-radius: 50%; }
+    /* ── Botões topo (semáforo) ── */
+    .buttons { display: flex; gap: 6px; align-items: center; }
+    .btn { width: 11px; height: 11px; border-radius: 50%; }
     .red { background: #ff5f56; }
     .yellow { background: #ffbd2e; }
     .green { background: #27c93f; }
 
+    /* ── Título no header ── */
     .header-title {
         color: var(--terminal-green);
         font-family: 'Share Tech Mono';
-        font-size: 0.9rem;
-        text-shadow: 0 0 5px var(--terminal-green);
+        font-size: 1.0rem;
+        font-weight: bold;
+        letter-spacing: 3px;
+        text-shadow: 0 0 8px rgba(0,255,0,0.6);
+        text-transform: uppercase;
     }
 
     .terminal-body {
