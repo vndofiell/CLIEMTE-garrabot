@@ -15631,30 +15631,27 @@ function _csIniciarMatrix() {
     canvas.width  = window.innerWidth;
     canvas.height = window.innerHeight;
     const ctx   = canvas.getContext('2d');
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%&*⚡⚙▶✅🔁';
+    // Idêntico ao da tela de download do APK — katakana + GARRABOT + símbolos
+    const chars = 'ガギグゲゴサシスセソGARRABOTエリート01アイウエオカキクケコ@#$%&<>[]{}0110'.split('');
     const tam   = 14;
     const cols  = Math.floor(canvas.width / tam);
-    const drops = Array(cols).fill(0);  // começa no TOPO (0)
-    let _csLastFrame = 0;
-    const _csFrameInterval = 80;  // ms entre frames — maior = mais devagar
+    const drops = Array(cols).fill(1);
 
-    function draw(ts) {
-        _csMatrixRAF = requestAnimationFrame(draw);
-        if (ts - _csLastFrame < _csFrameInterval) return;
-        _csLastFrame = ts;
-        ctx.fillStyle = 'rgba(0,0,0,0.04)';
+    function draw() {
+        ctx.fillStyle = 'rgba(0,0,0,0.05)';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.font = tam + 'px "Share Tech Mono",monospace';
+        ctx.font = tam + 'px "Share Tech Mono", monospace';
         for (let i = 0; i < drops.length; i++) {
             const ch = chars[Math.floor(Math.random() * chars.length)];
-            ctx.fillStyle = Math.random() > 0.96 ? '#ffffff' : '#00ff41';
+            ctx.fillStyle = Math.random() > 0.95 ? '#ffffff' : '#00ff41';
             ctx.fillText(ch, i * tam, drops[i] * tam);
             if (drops[i] * tam > canvas.height && Math.random() > 0.975) drops[i] = 0;
             drops[i]++;
         }
+        _csMatrixRAF = requestAnimationFrame(draw);
     }
     if (_csMatrixRAF) cancelAnimationFrame(_csMatrixRAF);
-    _csMatrixRAF = requestAnimationFrame(draw);
+    draw();
 }
 
 function _csPararMatrix() {
