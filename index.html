@@ -3152,8 +3152,8 @@ function jcAtualizarTabela(d, dias) {
     const bancaFinalProj  = bancaAcum;  // banca acumulada ao final de todos os dias projetados
     const lucroProjetado  = parseFloat((bancaFinalProj - (d.banca_base || 0)).toFixed(2));
 
-    // Busca cotação em cache ou fallback 5.85
-    const _cotFinal = parseFloat(window._cotacaoBRL || 5.85);
+    // Busca cotação em cache ou fallback 6.20
+    const _cotFinal = parseFloat(window._cotacaoBRL || _cotacaoBRL || 6.20);
     const lucroRealBRL = (lucroRealTotal * _cotFinal).toFixed(2).replace('.', ',');
     const lucroProjBRL = (lucroProjetado * _cotFinal).toFixed(2).replace('.', ',');
 
@@ -3553,7 +3553,7 @@ function jcSecAtualizarTabela(d, dias) {
     const lucroRealTotal = (d.historico || []).reduce((s, h) => s + (h.lucro_real || 0), 0);
     const bancaFinalProj = bancaAcum;
     const lucroProjetado = parseFloat((bancaFinalProj - (d.banca_base || 0)).toFixed(2));
-    const _cotFinal = parseFloat(window._cotacaoBRL || 5.85);
+    const _cotFinal = parseFloat(window._cotacaoBRL || _cotacaoBRL || 6.20);
     const trSep = document.createElement('tr');
     trSep.innerHTML = `<td colspan="4" style="padding:0;"><div style="border-top:1px solid rgba(255,214,0,0.35);margin:2px 0;"></div></td>`;
     tbody.appendChild(trSep);
@@ -3754,7 +3754,8 @@ function jcOnMetaBatida(lucro, wins, losses, banca, estrategia, gerenciamento) {
 function jcExibirModalMetaBatida(d) {
     const total  = (d.wins || 0) + (d.losses || 0);
     const wr     = total > 0 ? ((d.wins / total) * 100).toFixed(0) : 0;
-    const cotBRL = 5.85;   // cotação fallback; substitui pela real abaixo
+    // Usa cotação já em cache (fetchCotacao roda a cada 60s)
+    const cotBRL = parseFloat(window._cotacaoBRL || _cotacaoBRL || 6.20);
     // Monta a mensagem exatamente como o Python monta para o Telegram
     const montar = cot => {
         const lucroBRL  = (d.lucro * cot).toFixed(2).replace('.', ',');
@@ -3789,14 +3790,6 @@ function jcExibirModalMetaBatida(d) {
         // Dispara confetti
         _mjcConfetti();
     }
-    // Tenta buscar cotação real e atualiza o corpo
-    fetch('https://economia.awesomeapi.com.br/json/last/USD-BRL', { mode: 'cors' })
-        .then(r => r.json())
-        .then(j => {
-            const cotReal = parseFloat(j.USDBRL?.bid || cotBRL);
-            if (corpo) corpo.innerHTML = montar(cotReal).replace(/\n/g, '<br>').replace(/<b>(.*?)<\/b>/g,'<b style="color:#ffd600">$1</b>').replace(/<i>(.*?)<\/i>/g,'<i style="color:#57606a">$1</i>');
-        })
-        .catch(() => {});
 }
 
 // ── Troféu para Stop Win MODO NORMAL (sem JC) ───────────────────────────────
@@ -4292,16 +4285,27 @@ function updateHeader(balance) {
 }
 
 async function fetchCotacao() {
+    let rate = 0;
+    // 1ª tentativa: API externa direta
     try {
         const res  = await fetch('https://economia.awesomeapi.com.br/json/last/USD-BRL');
         const data = await res.json();
-        const rate = parseFloat(data['USDBRL']['bid']);
-        if (!isNaN(rate)) {
-            _cotacaoBRL = rate;
-            document.getElementById('hd-cotacao').textContent = 'R$ ' + rate.toFixed(4).replace('.', ',');
-            updateHeader(); // atualiza o BRL do lucro imediatamente
-        }
-    } catch (_) { /* falha silenciosa — rede pode estar offline */ }
+        rate = parseFloat(data['USDBRL']['bid']);
+    } catch (_) {}
+    // 2ª tentativa: servidor (tem cache próprio + API de backup)
+    if (!rate || isNaN(rate)) {
+        try {
+            const res2 = await fetch('/cotacao-brl');
+            const d2   = await res2.json();
+            rate = parseFloat(d2.usd_brl);
+        } catch (_) {}
+    }
+    if (rate > 0 && !isNaN(rate)) {
+        _cotacaoBRL        = rate;
+        window._cotacaoBRL = rate; // sincroniza para _csNotificar e _csAtualizarStats
+        document.getElementById('hd-cotacao').textContent = 'R$ ' + rate.toFixed(4).replace('.', ',');
+        updateHeader();
+    }
 }
 
 // ═══════════════════════════════════════════════════════
@@ -15833,7 +15837,7 @@ let _csEspLosses = 0;
 let _csEspLucro  = 0;
 
 function _csAtualizarStats(proxStake) {
-    const cot    = parseFloat(_cotacaoBRL) || 5.85;
+    const cot    = parseFloat(window._cotacaoBRL || _cotacaoBRL) || 6.20;
     const espAtivo  = document.getElementById('cs-espelho-ativo')?.checked;
     const secPronto = (typeof _sec !== 'undefined') && _sec.pronto;
 
@@ -15897,7 +15901,7 @@ function _csAtualizarStats(proxStake) {
 
 // ── Notificações TG + WA — somente conta SECUNDÁRIA ────────────────────────
 function _csNotificar(won, profit, ct, barr, ativo) {
-    const cot      = parseFloat(window._cotacaoBRL) || 5.85;
+    const cot      = parseFloat(window._cotacaoBRL || _cotacaoBRL) || 6.20;
     const profBRL  = (Math.abs(profit) * cot).toFixed(2).replace('.', ',');
     const sinal    = won ? `✅ WIN +$${profit.toFixed(2)} (+R$${profBRL})` : `❌ LOSS -$${Math.abs(profit).toFixed(2)} (-R$${profBRL})`;
     // Usa banca e stats da conta SECUNDÁRIA

@@ -69,6 +69,36 @@ def _auth_gerar_token() -> str:
 # Estado global do modo de operação
 _MODO_OPERACAO = {"modo": "NORMAL"}   # NORMAL ou ESPELHO
 
+# ── Cache de cotação USD/BRL ──────────────────────────────────────────────────
+_COT_CACHE: dict = {"valor": 0.0, "ts": 0}
+_COT_LOCK = threading.Lock()
+
+def _buscar_cotacao() -> float:
+    """Retorna cotação USD/BRL em tempo real; usa cache de 60s."""
+    global _COT_CACHE
+    with _COT_LOCK:
+        if time.time() - _COT_CACHE["ts"] < 60 and _COT_CACHE["valor"] > 0:
+            return _COT_CACHE["valor"]
+    apis = [
+        ("https://economia.awesomeapi.com.br/json/last/USD-BRL",
+         lambda r: float(r.json()["USDBRL"]["bid"])),
+        ("https://open.er-api.com/v6/latest/USD",
+         lambda r: float(r.json()["rates"]["BRL"])),
+    ]
+    for url, extractor in apis:
+        try:
+            resp = requests.get(url, timeout=4)
+            val  = extractor(resp)
+            if val > 0:
+                with _COT_LOCK:
+                    _COT_CACHE["valor"] = val
+                    _COT_CACHE["ts"]    = time.time()
+                return val
+        except Exception:
+            continue
+    with _COT_LOCK:
+        return _COT_CACHE["valor"] if _COT_CACHE["valor"] > 0 else 6.20
+
 # Caminhos dos arquivos de persistência
 _BASE_DIR_AUTH  = os.path.dirname(os.path.abspath(__file__))
 _USUARIOS_FILE  = os.path.join(_BASE_DIR_AUTH, "usuarios_sistema.json")
@@ -2042,13 +2072,7 @@ def tg_send():
             return jsonify({"ok": True, "bloqueado": True, "motivo": "modo_espelho_conta_nao_secundaria"})
 
     # Cotação capturada aqui (fora da thread) para não atrasar o envio
-    cotacao = 5.0
-    try:
-        resp = requests.get(
-            "https://economia.awesomeapi.com.br/json/last/USD-BRL", timeout=3)
-        cotacao = float(resp.json()["USDBRL"]["bid"])
-    except Exception:
-        pass
+    cotacao = _buscar_cotacao()
 
     # Snapshot dos dados — evita capturar variáveis mutáveis na closure
     payload = dict(d)
@@ -2197,6 +2221,12 @@ def debug_render():
         return jsonify({"status_code": res.status_code, "body": body})
     except Exception as e:
         return jsonify({"erro": str(e)})
+
+@app.route('/cotacao-brl')
+def cotacao_brl():
+    """Retorna cotação USD/BRL em tempo real com cache de 60s."""
+    val = _buscar_cotacao()
+    return jsonify({"usd_brl": val, "ts": _COT_CACHE.get("ts", 0)})
 
 # ─────────────────────────────────────────────────────────
 # GROQ IA — config + geração + estratégias salvas
@@ -4984,13 +5014,7 @@ def wa_send():
                 return
 
             # Cotação USD→BRL para WA também
-            cotacao_wa = 5.0
-            try:
-                r_cot = requests.get(
-                    "https://economia.awesomeapi.com.br/json/last/USD-BRL", timeout=3)
-                cotacao_wa = float(r_cot.json()["USDBRL"]["bid"])
-            except Exception:
-                pass
+            cotacao_wa = _buscar_cotacao()
 
             conta_sec = d.get("conta", "") == "SECUNDARIA"
 
