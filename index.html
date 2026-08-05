@@ -1577,6 +1577,11 @@
         🔄 trocar conta
         <span class="cmd-label" id="lbl-trocar-conta" style="color:#fbbf24;">Desconectar e logar outra</span>
     </button>
+    <button class="cmd-btn" id="btn-trocar-modo" onclick="reabrirModo()"
+        style="border-color:rgba(0,255,255,0.4); color:#0ff;">
+        ⚙️ trocar modo
+        <span class="cmd-label" id="lbl-trocar-modo" style="color:#0ff;">Normal / Espelho</span>
+    </button>
 
     <div class="cmd-section">▸ ROBÔ</div>
     <button class="cmd-btn" id="btn-iniciar" onclick="runCmd('iniciar')">
@@ -15111,6 +15116,10 @@ document.getElementById('cad-user').addEventListener('keydown', function (e) {
 // ── Modo de Operação ────────────────────────────────────────
 
 function escolherModo(modo) {
+    // Salva o modo atual para exibir no botão do painel
+    window._modoAtual = modo;
+    const lbl = document.getElementById('lbl-trocar-modo');
+    if (lbl) lbl.textContent = 'Atual: ' + modo;
     // Fecha o overlay imediatamente — não espera resposta do servidor
     document.getElementById('overlay-modo').style.display = 'none';
     if (typeof window._pararMatrix === 'function') window._pararMatrix();
@@ -15121,6 +15130,16 @@ function escolherModo(modo) {
         headers: {'Content-Type': 'application/json'},
         body:    JSON.stringify({modo})
     }).catch(() => {});
+}
+
+function reabrirModo() {
+    // Atualiza o label do botão com o modo atual antes de abrir
+    const lbl = document.getElementById('lbl-trocar-modo');
+    if (lbl && window._modoAtual) {
+        lbl.textContent = 'Atual: ' + window._modoAtual;
+    }
+    document.getElementById('overlay-modo').style.display = 'flex';
+    if (typeof window._iniciarMatrix === 'function') window._iniciarMatrix();
 }
 
 function configurarInterfacePorModo(modo) {
