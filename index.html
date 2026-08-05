@@ -4296,18 +4296,26 @@ function updateHeader(balance) {
     const _profitStr = (bot.profit >= 0 ? '+' : '') + '$' + bot.profit.toFixed(2);
     profitEl.textContent  = _profitStr;
     profitBox.className   = 'stat-box ' + (bot.profit >= 0 ? 'profit-pos' : 'profit-neg');
-    // Atualiza lucro no CYBER SORT (substitui o texto antigo TIME/SPACE)
+    // Atualiza lucro no CYBER SORT:
+    // — quando espelho ativo: mostra lucro da conta SECUNDÁRIA (_sec.profit)
+    // — caso contrário: mostra lucro da conta principal (bot.profit)
     const csProfit = document.getElementById('cs-hd-profit');
     const csProfitBrl = document.getElementById('cs-hd-profit-brl');
+    const _secAtiva = (typeof _sec !== 'undefined') && _sec.pronto;
+    const _csVal    = _secAtiva ? _sec.profit : bot.profit;
+    const _csStr    = (_csVal >= 0 ? '+' : '') + '$' + _csVal.toFixed(2);
     if (csProfit) {
-        csProfit.textContent = _profitStr;
-        csProfit.style.color = bot.profit >= 0 ? '#00ff41' : '#f44444';
+        csProfit.textContent = _csStr;
+        csProfit.style.color = _csVal >= 0 ? '#00ff41' : '#f44444';
     }
     if (_cotacaoBRL > 0) {
         const brl = bot.profit * _cotacaoBRL;
         const _brlStr = '(' + (brl >= 0 ? '+' : '') + 'R$' + brl.toFixed(2).replace('.', ',') + ')';
         profitBRL.textContent = _brlStr;
-        if (csProfitBrl) csProfitBrl.textContent = _brlStr;
+        if (csProfitBrl) {
+            const _csBrl = _csVal * _cotacaoBRL;
+            csProfitBrl.textContent = '(' + (_csBrl >= 0 ? '+' : '') + 'R$' + _csBrl.toFixed(2).replace('.', ',') + ')';
+        }
     }
     document.getElementById('hd-mgmt').textContent  = bot.gerenciamento.replace(/[^\w\s]/gu, '').trim();
     document.getElementById('hd-strat').textContent = bot.estrategia.replace(/[^\w\s]/gu, '').trim();
