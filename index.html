@@ -15962,38 +15962,40 @@ function _csAtualizarStats(proxStake) {
     if (eMEl) eMEl.textContent = 'SEC-' + mgmtSec;
 }
 
-// ── Notificações TG + WA — somente conta SECUNDÁRIA ────────────────────────
-function _csNotificar(won, profit, ct, barr, ativo) {
-    const cot      = parseFloat(window._cotacaoBRL || _cotacaoBRL) || 6.20;
-    const profBRL  = (Math.abs(profit) * cot).toFixed(2).replace('.', ',');
-    const sinal    = won ? `✅ WIN +$${profit.toFixed(2)} (+R$${profBRL})` : `❌ LOSS -$${Math.abs(profit).toFixed(2)} (-R$${profBRL})`;
-    // Usa banca e stats da conta SECUNDÁRIA
-    const banca    = (typeof _sec !== 'undefined' && _sec.saldo !== undefined)
-        ? `$${parseFloat(_sec.saldo).toFixed(2)}` : '--';
-    const taxa     = (_csEspWins + _csEspLosses) > 0
-        ? ((_csEspWins / (_csEspWins + _csEspLosses)) * 100).toFixed(1) + '%' : '--%';
-    const lucBRL   = (_csEspLucro * cot).toFixed(2).replace('.', ',');
+// ── Notificações TG + WA — somente conta SECUNDÁRIA (CyberSort) ─────────────
+function _csNotificar(won, profit, ct, barr, ativo, entrada, proxStake) {
+    // Monta payload estruturado igual ao tgEnviarResultado — recebe imagem + novo formato
+    const saldoSec = (typeof _sec !== 'undefined' && _sec.saldo !== undefined)
+        ? parseFloat(_sec.saldo) : 0;
 
-    const texto = `💳 CYBER SORT — SEC\n${sinal}\n\n` +
-        `📊 ${ct} barr=${barr} | ${ativo}\n` +
-        `💰 Banca SEC: ${banca}\n` +
-        `📈 Lucro SEC: ${_csEspLucro >= 0 ? '+' : ''}$${_csEspLucro.toFixed(2)} (R$${lucBRL})\n` +
-        `🎯 Taxa SEC: ${taxa} (${_csEspWins}W / ${_csEspLosses}L)\n` +
-        `💱 1 USD = R$ ${cot.toFixed(2)}`;
+    const estrategia = `${ct} barr=${barr} | ${ativo}`;
+    const modo       = (typeof _mcConfig !== 'undefined' && _mcConfig.gerenciamento)
+        ? _mcConfig.gerenciamento : (document.getElementById('cs-mgr')?.value || 'CyberSort');
 
-    // Telegram — usa a variável global _tgCfg já carregada pelo bot
-    // Nota: não verifica _tgCfg.resultados pois é resultado real da conta SECUNDÁRIA
+    const payload = {
+        win:          won,
+        lucro:        profit,
+        profit_total: _csEspLucro,
+        banca:        saldoSec,
+        wins:         _csEspWins,
+        losses:       _csEspLosses,
+        prox_stake:   proxStake || 0,
+        entrada:      entrada   || 0,
+        modo:         modo,
+        estrategia:   estrategia,
+        conta:        'SECUNDARIA',
+    };
+
     if (typeof _tgCfg !== 'undefined' && _tgCfg.enabled && _tgCfg.token && _tgCfg.chat_id) {
         fetch('/tg-send', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ token: _tgCfg.token, chat_id: _tgCfg.chat_id, virtual: true, texto, conta: 'SECUNDARIA' })
+            body: JSON.stringify({ token: _tgCfg.token, chat_id: _tgCfg.chat_id, ...payload })
         }).catch(() => {});
     }
-    // WhatsApp — virtual:true + texto → rota de texto livre no servidor
     if (typeof _waNotifAtivo !== 'undefined' && _waNotifAtivo) {
         fetch('/wa-send', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ virtual: true, texto, conta: 'SECUNDARIA' })
+            body: JSON.stringify(payload)
         }).catch(() => {});
     }
 }
@@ -16516,7 +16518,7 @@ function csOperar() {
             // Notifica TG + WA — somente quando operando na conta SECUNDÁRIA
             // usa _eraSecAntes pois _csUsandoSec pode já ter sido resetado acima (WIN da SEC)
             if (_eraSecAntes && espAtivo && secPronto) {
-                _csNotificar(won, profit, ct, barr, ativo);
+                _csNotificar(won, profit, ct, barr, ativo, stake, proxStake);
             }
 
             // Libera o flag antes de restaurar o handler (permite novo ciclo autônomo)
