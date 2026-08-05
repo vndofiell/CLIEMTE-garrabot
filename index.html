@@ -1777,7 +1777,7 @@
 
         <!-- ── CABEÇALHO ── -->
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;">
-          <span style="color:#00ff41;font-size:0.9rem;letter-spacing:2px;">⚙ CYBER SORT / DIGIT PATTERN SCANNER</span>
+          <span style="color:#00ff41;font-size:0.9rem;letter-spacing:2px;">📊 BUBBLE SORT / DIGIT PATTERN SCANNER</span>
           <button onclick="csFechar()"
               style="background:none;border:none;color:#f44;font-size:1.1rem;cursor:pointer;">✕</button>
         </div>
@@ -1837,7 +1837,7 @@
         </div>
 
         <!-- ── GRID DE DÍGITOS + STATUS ── -->
-        <div id="cs-digit-grid" style="display:flex;gap:6px;justify-content:center;margin-bottom:10px;flex-wrap:wrap;"></div>
+        <div id="cs-digit-grid" style="display:flex;gap:6px;justify-content:center;align-items:flex-end;margin-bottom:10px;flex-wrap:nowrap;min-height:110px;background:rgba(0,0,0,0.25);border:1px solid #21262d;border-radius:6px;padding:8px 6px 0;"></div>
         <div id="cs-status" style="
             background:rgba(0,255,65,0.05); border:1px solid #00ff41;
             padding:8px; text-align:center; font-size:0.78rem;
@@ -7130,6 +7130,13 @@ function initWebSocket(wssUrl) {
         // ==========================
 
         // Tick — decide entrada pela estratégia
+        if (data.msg_type === 'tick' && data.tick) {
+            // Coleta dígitos reais para o Bubble Sort (buffer circular de 10)
+            const _d = parseInt(data.tick.quote.toString().slice(-1));
+            if (!window.ultimosDigitosReais) window.ultimosDigitosReais = [];
+            window.ultimosDigitosReais.push(_d);
+            if (window.ultimosDigitosReais.length > 10) window.ultimosDigitosReais.shift();
+        }
         if (data.msg_type === 'tick' && bot.running && !bot._buying) {
             const preco  = data.tick.quote;
             const digit  = parseInt(preco.toString().slice(-1));
@@ -14889,6 +14896,8 @@ async function mcCarregarContas() {
             const btnConectar = document.getElementById('mc-btn-conectar');
             if (faixaEl)     faixaEl.style.display    = '';
             if (btnConectar) btnConectar.style.display = '';
+            // Reseta conteúdo da faixa para exibir botões de login corretamente
+            mcAtualizarFaixa(_mcTokenOk ? 'com_token' : 'sem_token');
         }
 
         // Atualiza label do botão lateral
@@ -15868,10 +15877,19 @@ function _csRenderGrid(arr, statusTxt) {
     const grid = document.getElementById('cs-digit-grid');
     const stat = document.getElementById('cs-status');
     if (!grid) return;
+    // Barras verticais — altura proporcional ao dígito (0-9), mínimo 18px
     grid.innerHTML = arr.map(v =>
-        `<div style="width:40px;height:50px;background:#161b22;border:1px solid #30363d;border-radius:6px;
-          display:flex;align-items:center;justify-content:center;font-size:1rem;font-weight:bold;
-          color:#c9d1d9;transition:all 0.15s;font-family:'Share Tech Mono',monospace;" class="cs-box">${v}</div>`
+        `<div style="
+            display:flex;flex-direction:column;align-items:center;justify-content:flex-end;
+            width:38px;height:100px;gap:3px;" class="cs-bar-wrap">
+          <div class="cs-box" style="
+            width:38px;height:${Math.max(18, v * 10)}px;
+            background:#238636;border-radius:4px 4px 0 0;
+            display:flex;align-items:center;justify-content:center;
+            font-size:0.95rem;font-weight:bold;color:#fff;
+            transition:height 0.2s ease,background 0.15s ease,transform 0.15s ease;
+            font-family:'Share Tech Mono',monospace;">${v}</div>
+        </div>`
     ).join('');
     if (stat && statusTxt) stat.textContent = statusTxt;
 }
@@ -16214,7 +16232,10 @@ function abrirModalCyberSort() {
     csAtualizarLV();
     csAtualizarEspelho();
     m.style.display = 'flex';
-    _csRenderGrid([6,3,1,5,7,2,8,9,4,0], 'AGUARDANDO DADOS DO MERCADO...');
+    const _initList = (window.ultimosDigitosReais && window.ultimosDigitosReais.length >= 10)
+        ? window.ultimosDigitosReais.slice(-10)
+        : [6,3,1,5,7,2,8,9,4,0];
+    _csRenderGrid(_initList, 'AGUARDANDO DADOS DO MERCADO...');
     _csIniciarMatrix();
 }
 
@@ -16254,7 +16275,7 @@ function _csBotaoOperar(ativo) {
     btn.style.cursor      = ativo ? 'pointer'  : 'not-allowed';
 }
 
-// ── Análise / Animação ──────────────────────────────────────────────────────
+// ── Análise / Animação — Bubble Sort com dígitos reais ──────────────────────
 async function csExecutar() {
     if (!_csAtivo) return;
     _csBotaoOperar(false);
@@ -16265,10 +16286,26 @@ async function csExecutar() {
     if (btnAn) { btnAn.disabled = true; btnAn.textContent = '⏳ ANALISANDO...'; }
 
     try {
-        const listaOriginal = [6, 3, 1, 5, 7, 2, 8, 9, 4, 0];
-        _csLogAnalise('▶ Iniciando Quick Sort...', '#00ff41');
+        // Usa os últimos 10 dígitos reais coletados do mercado;
+        // se ainda não tiver 10, completa com dígitos fixos
+        const reais = window.ultimosDigitosReais || [];
+        const pad   = [8, 3, 7, 5, 4, 1, 6, 2, 9, 0];
+        const listaOriginal = reais.length >= 10
+            ? reais.slice(-10)
+            : [...pad.slice(0, 10 - reais.length), ...reais];
 
-        const res  = await fetch('/ia/quick-sort-simulacao', {
+        const ativoEl = document.getElementById('cs-ativo');
+        const ativoLbl = ativoEl ? ativoEl.value : 'R_100';
+
+        _csLogAnalise(`▶ Bubble Sort — dígitos reais de <b style="color:#00ffff">${ativoLbl}</b>`, '#00ff41');
+        _csLogAnalise(`📊 Lista: [${listaOriginal.join(', ')}]`, '#6b7280');
+
+        // Garante que o grid mostre as barras iniciais antes da animação
+        const gridEl = document.getElementById('cs-digit-grid');
+        if (gridEl) gridEl.style.alignItems = 'flex-end';
+        _csRenderGrid(listaOriginal, 'INICIANDO BUBBLE SORT...');
+
+        const res  = await fetch('/ia/bubble-sort-simulacao', {
             method: 'POST', headers: {'Content-Type':'application/json'},
             body: JSON.stringify({ lista: listaOriginal })
         });
@@ -16278,19 +16315,39 @@ async function csExecutar() {
         let swaps = 0, comparacoes = 0;
         for (const passo of data.passos) {
             if (!_csAtivo) return;
-            _csRenderGrid(passo.arr, `${passo.acao.toUpperCase()} | PIVOT: ${passo.pivot ?? '—'}`);
+
+            if (passo.acao === 'sorted') {
+                // Pinta todas as barras de verde e encerra
+                _csRenderGrid(passo.arr, 'ORDENAÇÃO CONCLUÍDA ✅  SINAL VALIDADO');
+                document.querySelectorAll('#cs-digit-grid .cs-box').forEach(b => {
+                    b.style.background = '#2ea043';
+                });
+                _csBip(880, 0.35);
+                break;
+            }
+
+            _csRenderGrid(passo.arr, `${passo.acao === 'swap' ? '🔄 SWAP' : '🔍 COMPARE'}  a[${passo.i}] ↔ a[${passo.j}]`);
             const boxes = document.querySelectorAll('#cs-digit-grid .cs-box');
-            const clrC  = 'border-color:#ffbd2e;background:rgba(255,189,46,0.15);color:#ffbd2e;transform:translateY(-4px)';
-            const clrS  = 'border-color:#ff4444;background:rgba(255,68,68,0.2);color:#ff4444;transform:scale(1.1)';
-            if (passo.i >= 0 && boxes[passo.i]) boxes[passo.i].style.cssText += ';' + clrC;
-            if (passo.j >= 0 && boxes[passo.j]) boxes[passo.j].style.cssText += ';' + (passo.acao === 'swap' ? clrS : clrC);
-            if (passo.acao === 'swap') swaps++; else comparacoes++;
-            _csBip(passo.acao === 'swap' ? 700 : 450, 0.08);
-            await new Promise(r => setTimeout(r, 400));
+
+            // Reseta cor de todas as barras
+            boxes.forEach(b => { b.style.background = '#238636'; b.style.transform = ''; });
+
+            if (passo.acao === 'compare') {
+                if (boxes[passo.i]) { boxes[passo.i].style.background = '#1f6feb'; boxes[passo.i].style.transform = 'translateY(-6px)'; }
+                if (boxes[passo.j]) { boxes[passo.j].style.background = '#1f6feb'; boxes[passo.j].style.transform = 'translateY(-6px)'; }
+                comparacoes++;
+                _csBip(300, 0.05);
+            } else if (passo.acao === 'swap') {
+                if (boxes[passo.i]) { boxes[passo.i].style.background = '#da3633'; boxes[passo.i].style.transform = 'scale(1.08)'; }
+                if (boxes[passo.j]) { boxes[passo.j].style.background = '#da3633'; boxes[passo.j].style.transform = 'scale(1.08)'; }
+                swaps++;
+                _csBip(150, 0.08);
+            }
+
+            await new Promise(r => setTimeout(r, 350));
         }
         if (!_csAtivo) return;
 
-        document.getElementById('cs-status').textContent = 'ORDENAÇÃO CONCLUÍDA ✅';
         _csLogAnalise(`✅ ${swaps} trocas · ${comparacoes} comparações`, '#00ff41');
         _csBip(1000, 0.3);
 
