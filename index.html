@@ -1786,9 +1786,9 @@
           <button onclick="csFechar()"
               style="background:none;border:none;color:#f44;font-size:1.1rem;cursor:pointer;">✕</button>
         </div>
-        <p style="font-size:0.72rem;text-align:center;margin-bottom:12px;letter-spacing:1px;font-family:'Share Tech Mono',monospace;">
-            <span id="cs-hd-profit" style="font-weight:bold;color:#00ff41;">$0.00</span>
-            &nbsp;<span id="cs-hd-profit-brl" style="color:#57606a;font-size:0.65rem;">(R$0,00)</span>
+        <p style="font-size:1rem;text-align:center;margin-bottom:12px;letter-spacing:1px;font-family:'Share Tech Mono',monospace;">
+            <span id="cs-hd-profit" style="font-weight:bold;font-size:1.35rem;color:#00ff41;text-shadow:0 0 8px rgba(0,255,65,0.5);">$0.00</span>
+            &nbsp;<span id="cs-hd-profit-brl" style="color:#aaa;font-size:0.85rem;">(R$0,00)</span>
         </p>
 
         <!-- ── LINHA PRINCIPAL ── -->
@@ -6125,9 +6125,10 @@ const _sec = {
     _pendingReqs:    new Set(), // req_ids enviados para a secundária
     _reconTimer:     null,   // timer de reconexão automática
     _keepaliveTimer: null,   // timer de ping keepalive (25s)
-    _tentativas:     0,      // tentativas de reconexão consecutivas
-    _erro:           false,  // true = limite de reconexoes atingido
-    _destruido:      false,  // true = desconexão intencional (não reconecta)
+    _tentativas:        0,      // tentativas de reconexão consecutivas
+    _erro:              false,  // true = limite de reconexoes atingido
+    _destruido:         false,  // true = desconexão intencional (não reconecta)
+    _jaConectouUmaVez:  false,  // true = já exibiu msgs de conexão inicial nesta sessão
 };
 
 /**
@@ -6209,22 +6210,26 @@ function _secVerificarEspelhamento(profit_atual) {
 
 /** Conecta o WebSocket da conta secundária buscando OTP no servidor. */
 async function _secConectar() {
-    print('💳 Verificando conta secundária…', 'log-info');
+    // Reconexões silenciosas (após queda) não poluem o terminal
+    const _silencioso = _sec._jaConectouUmaVez;
+    if (!_silencioso) print('💳 Verificando conta secundária…', 'log-info');
     let data;
     try {
         const r = await fetch('/contas/wss-secundaria');
         data = await r.json();
     } catch (e) {
-        print(`💳 SECUNDÁRIA — falha ao buscar WSS: ${e.message}`, 'log-loss');
+        if (!_silencioso) print(`💳 SECUNDÁRIA — falha ao buscar WSS: ${e.message}`, 'log-loss');
         return;
     }
 
     // Sem conta cadastrada — informa e sai
     if (!data.wss_url) {
-        if (data.erro && data.erro.includes('cadastrada')) {
-            print('💳 Sem conta secundária cadastrada. Use o botão "Conta Secundária" para adicionar.', 'log-info');
-        } else {
-            print(`💳 SECUNDÁRIA — ${data.erro || 'WSS não disponível'}`, 'log-loss');
+        if (!_silencioso) {
+            if (data.erro && data.erro.includes('cadastrada')) {
+                print('💳 Sem conta secundária cadastrada. Use o botão "Conta Secundária" para adicionar.', 'log-info');
+            } else {
+                print(`💳 SECUNDÁRIA — ${data.erro || 'WSS não disponível'}`, 'log-loss');
+            }
         }
         return;
     }
@@ -6233,7 +6238,7 @@ async function _secConectar() {
     _sec.tipo    = data.tipo     || 'SEC';
     _sec.contaId = data.conta_id || '';
 
-    print(`💳 SECUNDÁRIA — conectando ${_sec.nome} (${_sec.tipo})…`, 'log-info');
+    if (!_silencioso) print(`💳 SECUNDÁRIA — conectando ${_sec.nome} (${_sec.tipo})…`, 'log-info');
 
     // Fecha WS antigo se existir
     if (_sec.ws && _sec.ws.readyState <= 1) _sec.ws.close();
@@ -6274,7 +6279,7 @@ async function _secConectar() {
         const idx    = Math.min(_sec._tentativas - 1, delays.length - 1);
         const delay  = delays[idx];
 
-        print("SECUNDARIA - reconectando em " + (delay / 1000) + "s.. (tentativa " + _sec._tentativas + "/3)", "log-info");
+        if (!_sec._jaConectouUmaVez) print("SECUNDARIA - reconectando em " + (delay / 1000) + "s.. (tentativa " + _sec._tentativas + "/3)", "log-info");
 
         if (_sec._reconTimer) clearTimeout(_sec._reconTimer);
         _sec._reconTimer = setTimeout(() => {
@@ -6319,7 +6324,10 @@ async function _secConectar() {
             const lid = d.authorize.loginid;
             if (lid) {
                 _sec.loginid = lid;
-                print(`🔑 SECUNDÁRIA identificada: ${lid} | Banca: $${parseFloat(d.authorize.balance || 0).toFixed(2)}`, 'log-info');
+                // Só imprime na primeira conexão da sessão
+                if (!_sec._jaConectouUmaVez) {
+                    print(`🔑 SECUNDÁRIA identificada: ${lid} | Banca: $${parseFloat(d.authorize.balance || 0).toFixed(2)}`, 'log-info');
+                }
             }
         }
 
@@ -6328,6 +6336,7 @@ async function _secConectar() {
             const jaEstavaPronto = _sec.pronto;
             _sec.pronto      = true;
             _sec._erro       = false;
+            const _eraReconexao = (_sec._tentativas > 0); // captura ANTES de zerar
             _sec._tentativas = 0;   // reconectou com sucesso — reseta contador para próximas quedas
             const saldo    = parseFloat((d.balance && d.balance.balance) || 0).toFixed(2);
             const currency = (d.balance && d.balance.currency) || 'USD';
@@ -6359,24 +6368,28 @@ async function _secConectar() {
             // Atualiza o badge de status no topo com o saldo
             _secAtualizarBadge();
 
-            // Imprime "CONECTADA" apenas na primeira mensagem de balance (conexão inicial)
+            // Imprime "CONECTADA" apenas na primeira conexão real (não em reconexões silenciosas)
             if (!jaEstavaPronto) {
                 // Modo ESPELHO confirmado: oculta seção JC principal e atualiza label Entrada/Stops
                 const _jcPrincipalEl = document.getElementById('sec-jc-principal');
                 if (_jcPrincipalEl) _jcPrincipalEl.style.display = 'none';
                 if (typeof _cfgValoresAtualizarBtn === 'function') _cfgValoresAtualizarBtn();
 
-                if (_sec._tentativas > 0) {
-                    print(`💳 SECUNDÁRIA RECONECTADA ✅ — ${_sec.nome} (${_sec.tipo}) | Banca: ${currency} $${saldo}`, 'log-win');
-                } else {
+                if (_eraReconexao) {
+                    // Reconexão silenciosa após queda — só loga se era a 1ª vez na sessão
+                    if (!_sec._jaConectouUmaVez) {
+                        print(`💳 SECUNDÁRIA CONECTADA ✅ — ${_sec.nome} (${_sec.tipo}) | Banca: ${currency} $${saldo}`, 'log-win');
+                    }
+                } else if (!_sec._jaConectouUmaVez) {
+                    // Primeira conexão real da sessão — exibe mensagens completas
                     print(`💳 SECUNDÁRIA CONECTADA ✅ — ${_sec.nome} (${_sec.tipo}) | Banca: ${currency} $${saldo}`, 'log-win');
                     const _standbyMsg = _sec.limiteSeqLoss > 0
                         ? `💳 Modo STANDBY — ativará espelhamento após ${_sec.limiteSeqLoss} losses consecutivos na conta teste (ou perda >= $${Math.abs(_sec.limitePerda).toFixed(2)}) (clique no badge para mudar)`
                         : `💳 Modo STANDBY — ativará espelhamento quando perda da principal >= $${Math.abs(_sec.limitePerda).toFixed(2)} (clique no badge para mudar)`;
                     print(_standbyMsg, 'log-info');
-                    // Carrega limitePerda salvo ao conectar (garante que persiste entre reinicializações)
                     mcCarregarConfig();
                 }
+                _sec._jaConectouUmaVez = true;
 
                 // ── Planilha JC Secundária: ao conectar, sincroniza banca_atual com saldo real ──
                 const saldoNum = parseFloat(saldo);
