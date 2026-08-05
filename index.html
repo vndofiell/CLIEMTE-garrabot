@@ -16248,6 +16248,11 @@ async function csExecutar() {
 
     } catch(e) {
         _csLogAnalise('⚠️ Erro: ' + e.message, '#ff4444');
+        // Se AUTO-LOOP ativo e erro de rede (Failed to fetch), tenta novamente após 3s
+        if (_csAutoOperar && _csAtivo && e.message && e.message.toLowerCase().includes('fetch')) {
+            _csLogAnalise('🔄 Reconectando em 3s...', '#6b7280');
+            setTimeout(() => { if (_csAtivo && _csAutoOperar) csExecutar(); }, 3000);
+        }
     } finally {
         if (btnAn) { btnAn.disabled = false; btnAn.textContent = '▶ ANALISAR'; }
     }
