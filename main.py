@@ -69,36 +69,6 @@ def _auth_gerar_token() -> str:
 # Estado global do modo de operação
 _MODO_OPERACAO = {"modo": "NORMAL"}   # NORMAL ou ESPELHO
 
-# ── Cache de cotação USD/BRL ──────────────────────────────────────────────────
-_COT_CACHE: dict = {"valor": 0.0, "ts": 0}
-_COT_LOCK = threading.Lock()
-
-def _buscar_cotacao() -> float:
-    """Retorna cotação USD/BRL em tempo real; usa cache de 60s."""
-    global _COT_CACHE
-    with _COT_LOCK:
-        if time.time() - _COT_CACHE["ts"] < 60 and _COT_CACHE["valor"] > 0:
-            return _COT_CACHE["valor"]
-    apis = [
-        ("https://economia.awesomeapi.com.br/json/last/USD-BRL",
-         lambda r: float(r.json()["USDBRL"]["bid"])),
-        ("https://open.er-api.com/v6/latest/USD",
-         lambda r: float(r.json()["rates"]["BRL"])),
-    ]
-    for url, extractor in apis:
-        try:
-            resp = requests.get(url, timeout=4)
-            val  = extractor(resp)
-            if val > 0:
-                with _COT_LOCK:
-                    _COT_CACHE["valor"] = val
-                    _COT_CACHE["ts"]    = time.time()
-                return val
-        except Exception:
-            continue
-    with _COT_LOCK:
-        return _COT_CACHE["valor"] if _COT_CACHE["valor"] > 0 else 6.20
-
 # Caminhos dos arquivos de persistência
 _BASE_DIR_AUTH  = os.path.dirname(os.path.abspath(__file__))
 _USUARIOS_FILE  = os.path.join(_BASE_DIR_AUTH, "usuarios_sistema.json")
@@ -1985,7 +1955,7 @@ def _assets_path(nome):
 _TG_IP      = "149.154.167.99"
 _TG_BASE    = f"https://{_TG_IP}"
 _TG_HEADERS = {"Host": "api.telegram.org"}
-_TG_TIMEOUT = (10, 25)
+_TG_TIMEOUT = (8, 14)
 
 def _tg_url(token: str, method: str) -> str:
     return f"{_TG_BASE}/bot{token}/{method}"
@@ -2072,7 +2042,13 @@ def tg_send():
             return jsonify({"ok": True, "bloqueado": True, "motivo": "modo_espelho_conta_nao_secundaria"})
 
     # Cotação capturada aqui (fora da thread) para não atrasar o envio
-    cotacao = _buscar_cotacao()
+    cotacao = 5.0
+    try:
+        resp = requests.get(
+            "https://economia.awesomeapi.com.br/json/last/USD-BRL", timeout=3)
+        cotacao = float(resp.json()["USDBRL"]["bid"])
+    except Exception:
+        pass
 
     # Snapshot dos dados — evita capturar variáveis mutáveis na closure
     payload = dict(d)
@@ -2132,39 +2108,60 @@ def tg_send():
         prox_stake      = float(payload.get("prox_stake", 0))
         modo            = str(payload.get("modo", ""))
         estrategia      = str(payload.get("estrategia", ""))
+        seq_win         = int(payload.get("seq_win", 0))
+        seq_loss        = int(payload.get("seq_loss", 0))
+        max_win_consec  = int(payload.get("max_win_consec", 0))
+        max_loss_consec = int(payload.get("max_loss_consec", 0))
+        max_stake       = float(payload.get("max_stake", 0))
         total           = wins + losses
+        wr              = (wins / total * 100) if total > 0 else 0.0
         lucro_brl       = abs(lucro) * cot
-        profit_brl      = profit_tot * cot
+        profit_brl      = abs(profit_tot) * cot
         banca_brl       = banca * cot
+        teste           = bool(payload.get("teste", False))
+        conta_sec       = payload.get("conta", "") == "SECUNDARIA"
 
         if win:
-            img_nome     = "WIM GARRA.png"
-            res_linha    = "✅  RESULTADO: WIN"
-            lucro_linha  = f"💵  Lucro: +${lucro:.2f}"
+            img_nome  = "WIM GARRA.png"
+            sinal_usd = f"+${lucro:.2f}"
+            sinal_brl = f"+R${lucro_brl:.2f}"
+            profit_str = f"+${profit_tot:.2f}  <i>(R$ +{profit_brl:.2f})</i>"
+            emoji, tag = "✅", "WIN"
+            seq_str = f"🔥 Seq. atual: {seq_win} WIN consecutivos" if seq_win > 1 else ""
         else:
-            img_nome     = "LOSS GARRA.png"
-            res_linha    = "❌  RESULTADO: LOSS"
-            lucro_linha  = f"💵  Lucro: -${abs(lucro):.2f}"
+            img_nome  = "LOSS GARRA.png"
+            sinal_usd = f"-${abs(lucro):.2f}"
+            sinal_brl = f"-R${lucro_brl:.2f}"
+            profit_str = f"${profit_tot:+.2f}  <i>(R$ {'+' if profit_tot>=0 else ''}{profit_brl if profit_tot>=0 else -profit_brl:.2f})</i>"
+            emoji, tag = "🟥", "LOSS"
+            seq_str = f"💀 Seq. atual: {seq_loss} LOSS consecutivos" if seq_loss > 1 else ""
 
-        entrada        = float(payload.get("entrada", payload.get("prox_stake", 0)))
-        profit_brl_str = f"+R${abs(profit_brl):.2f}" if profit_tot >= 0 else f"-R${abs(profit_brl):.2f}"
-        banca_brl_str  = f"{banca_brl:.2f}".replace(".", ",")
-
-        msg = (
-            f"🟢  OPERAÇÃO FINALIZADA\n\n"
-            f"{res_linha}\n\n"
-            f"💰  Entrada: ${entrada:.2f}\n"
-            f"{lucro_linha}\n\n"
-            f"➡️  Próxima Entrada: ${prox_stake:.2f}\n"
-            f"⚙️  Gestão: {modo}\n\n"
-            f"📊  Mercado: {estrategia.split()[0] if estrategia else '--'}\n"
-            f"🎯  Estratégia: {estrategia}\n\n"
-            f"🏦  Banca: ${banca:.2f}  /  R${banca_brl_str}\n"
-            f"📈  Lucro Total: {'+' if profit_tot>=0 else ''}{profit_brl_str}\n\n"
-            f"🕐  {time.strftime('%H:%M')}"
-        )
+        prefixo = "💳 <b>SECUNDÁRIA</b>\n" if conta_sec else ("🧪 <b>TESTE</b>\n" if teste else "")
+        linha_seq = f"\n{seq_str}" if seq_str else ""
+        if win:
+            msg = (
+                f"🟢 WIN {sinal_usd}\n\n"
+                f"💰 Banca: ${banca:.2f} (R$ {banca_brl:.2f})\n"
+                f"📈 Sessão: {profit_str.replace('<i>','').replace('</i>','')}\n\n"
+                f"📊 {wins}W • {losses}L • {wr:.0f}%\n\n"
+                f"➡️ Próxima: ${prox_stake:.2f}\n\n"
+                f"🤖 {estrategia.upper()}\n"
+                f"⚙️ {modo.upper()}\n\n"
+                f"🕐 {time.strftime('%H:%M')}"
+            )
+        else:
+            msg = (
+                f"🟥 LOSS {sinal_usd}\n\n"
+                f"💰 Banca: ${banca:.2f} (R$ {banca_brl:.2f})\n"
+                f"📈 Sessão: {profit_str.replace('<i>','').replace('</i>','')}\n\n"
+                f"📊 {wins}W • {losses}L • {wr:.0f}%\n\n"
+                f"➡️ Próxima: ${prox_stake:.2f}\n\n"
+                f"🤖 {estrategia.upper()}\n"
+                f"⚙️ {modo.upper()}\n\n"
+                f"🕐 {time.strftime('%H:%M')}"
+            )
         img = _assets_path(img_nome)
-        if not _tg_enviar_foto(tok, cid, msg, img, max_width=320):
+        if not _tg_enviar_foto(tok, cid, msg, img, max_width=280):
             _tg_enviar_texto(tok, cid, msg)
 
     _tg_dispatch(_enviar)
@@ -2200,12 +2197,6 @@ def debug_render():
         return jsonify({"status_code": res.status_code, "body": body})
     except Exception as e:
         return jsonify({"erro": str(e)})
-
-@app.route('/cotacao-brl')
-def cotacao_brl():
-    """Retorna cotação USD/BRL em tempo real com cache de 60s."""
-    val = _buscar_cotacao()
-    return jsonify({"usd_brl": val, "ts": _COT_CACHE.get("ts", 0)})
 
 # ─────────────────────────────────────────────────────────
 # GROQ IA — config + geração + estratégias salvas
@@ -4993,7 +4984,13 @@ def wa_send():
                 return
 
             # Cotação USD→BRL para WA também
-            cotacao_wa = _buscar_cotacao()
+            cotacao_wa = 5.0
+            try:
+                r_cot = requests.get(
+                    "https://economia.awesomeapi.com.br/json/last/USD-BRL", timeout=3)
+                cotacao_wa = float(r_cot.json()["USDBRL"]["bid"])
+            except Exception:
+                pass
 
             conta_sec = d.get("conta", "") == "SECUNDARIA"
 
@@ -5027,42 +5024,63 @@ def wa_send():
                     f"🕐 {time.strftime('%H:%M')}"
                 )
             else:
-                win        = bool(d.get("win", False))
-                lucro      = float(d.get("lucro", 0))
-                profit_tot = float(d.get("profit_total", 0))
-                banca      = float(d.get("banca", 0))
-                wins       = int(d.get("wins", 0))
-                losses     = int(d.get("losses", 0))
-                prox_stake = float(d.get("prox_stake", 0))
-                entrada    = float(d.get("entrada", prox_stake))
-                modo       = str(d.get("modo", ""))
-                estrategia = str(d.get("estrategia", ""))
-                lucro_brl      = abs(lucro) * cotacao_wa
-                profit_brl     = profit_tot * cotacao_wa
-                banca_brl      = banca * cotacao_wa
-                banca_brl_str  = f"{banca_brl:.2f}".replace(".", ",")
-                profit_brl_str = f"+R${abs(profit_brl):.2f}" if profit_tot >= 0 else f"-R${abs(profit_brl):.2f}"
+                win             = bool(d.get("win", False))
+                lucro           = float(d.get("lucro", 0))
+                profit_tot      = float(d.get("profit_total", 0))
+                banca           = float(d.get("banca", 0))
+                wins            = int(d.get("wins", 0))
+                losses          = int(d.get("losses", 0))
+                prox_stake      = float(d.get("prox_stake", 0))
+                modo            = str(d.get("modo", "")).upper()
+                estrategia      = str(d.get("estrategia", "")).upper()
+                seq_win         = int(d.get("seq_win", 0))
+                seq_loss        = int(d.get("seq_loss", 0))
+                max_win_consec  = int(d.get("max_win_consec", 0))
+                max_loss_consec = int(d.get("max_loss_consec", 0))
+                max_stake       = float(d.get("max_stake", 0))
+                total           = wins + losses
+                wr              = (wins / total * 100) if total > 0 else 0
+                lucro_brl       = abs(lucro) * cotacao_wa
+                profit_brl      = abs(profit_tot) * cotacao_wa
+                banca_brl       = banca * cotacao_wa
+
+                # Barra de progresso visual (10 blocos)
+                blocos = 10
+                cheios = round(wr / 100 * blocos)
+                barra  = "🟢" * cheios + "⚪" * (blocos - cheios)
+
+                prefixo_wa = "💳 *SECUNDÁRIA*\n" if conta_sec else ""
+                if win:
+                    cabecalho  = f"✅ *GANHOU*  +${lucro:.2f}  _(+R${lucro_brl:.2f})_"
+                    profit_str = f"+${profit_tot:.2f}  _(R$ +{profit_brl:.2f})_"
+                    seq_str    = f"🔥 Seq. atual: {seq_win} WIN seguidos\n" if seq_win > 1 else ""
+                else:
+                    cabecalho  = f"🔴 *PERDEU*  -${abs(lucro):.2f}  _(-R${lucro_brl:.2f})_"
+                    profit_str = f"${profit_tot:+.2f}  _(R$ {profit_tot*cotacao_wa:+.2f})_"
+                    seq_str    = f"💀 Seq. atual: {seq_loss} LOSS seguidos\n" if seq_loss > 1 else ""
 
                 if win:
-                    res_linha   = "✅  RESULTADO: WIN"
-                    lucro_linha = f"💵  Lucro: +${lucro:.2f}"
+                    msg = (
+                        f"🟢 WIN +${lucro:.2f}\n\n"
+                        f"💰 Banca: ${banca:.2f} (R$ {banca_brl:.2f})\n"
+                        f"📈 Sessão: {profit_str.replace('*','').replace('_','')}\n\n"
+                        f"📊 {wins}W • {losses}L • {wr:.0f}%\n\n"
+                        f"➡️ Próxima: ${prox_stake:.2f}\n\n"
+                        f"🤖 {estrategia}\n"
+                        f"⚙️ {modo}\n\n"
+                        f"🕐 {time.strftime('%H:%M')}"
+                    )
                 else:
-                    res_linha   = "❌  RESULTADO: LOSS"
-                    lucro_linha = f"💵  Lucro: -${abs(lucro):.2f}"
-
-                msg = (
-                    f"🟢  OPERAÇÃO FINALIZADA\n\n"
-                    f"{res_linha}\n\n"
-                    f"💰  Entrada: ${entrada:.2f}\n"
-                    f"{lucro_linha}\n\n"
-                    f"➡️  Próxima Entrada: ${prox_stake:.2f}\n"
-                    f"⚙️  Gestão: {modo}\n\n"
-                    f"📊  Mercado: {estrategia.split()[0] if estrategia else '--'}\n"
-                    f"🎯  Estratégia: {estrategia}\n\n"
-                    f"🏦  Banca: ${banca:.2f}  /  R${banca_brl_str}\n"
-                    f"📈  Lucro Total: {'+' if profit_tot>=0 else ''}{profit_brl_str}\n\n"
-                    f"🕐  {time.strftime('%H:%M')}"
-                )
+                    msg = (
+                        f"🟥 LOSS -${abs(lucro):.2f}\n\n"
+                        f"💰 Banca: ${banca:.2f} (R$ {banca_brl:.2f})\n"
+                        f"📈 Sessão: {profit_str.replace('*','').replace('_','')}\n\n"
+                        f"📊 {wins}W • {losses}L • {wr:.0f}%\n\n"
+                        f"➡️ Próxima: ${prox_stake:.2f}\n\n"
+                        f"🤖 {estrategia}\n"
+                        f"⚙️ {modo}\n\n"
+                        f"🕐 {time.strftime('%H:%M')}"
+                    )
             enviar_notificacao_wa(msg)
         except Exception as e:
             print(f"[WA] Erro ao montar mensagem: {e}")

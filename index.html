@@ -1777,10 +1777,11 @@
 
         <!-- ── CABEÇALHO ── -->
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;">
-          <span style="color:#00ff41;font-size:0.9rem;letter-spacing:2px;">📊 BUBBLE SORT / DIGIT PATTERN SCANNER</span>
+          <span style="color:#00ff41;font-size:0.9rem;letter-spacing:2px;">⚙ CYBER SORT / DIGIT PATTERN SCANNER</span>
           <button onclick="csFechar()"
               style="background:none;border:none;color:#f44;font-size:1.1rem;cursor:pointer;">✕</button>
         </div>
+        <p style="color:#6b7280;font-size:0.62rem;text-align:center;margin-bottom:12px;">TIME: O(n log n) &nbsp;|&nbsp; SPACE: O(log n)</p>
 
         <!-- ── LINHA PRINCIPAL ── -->
         <div id="cs-linha-main" style="display:flex;align-items:center;gap:4px;flex-wrap:nowrap;margin-bottom:5px;padding:5px 8px;
@@ -1837,7 +1838,7 @@
         </div>
 
         <!-- ── GRID DE DÍGITOS + STATUS ── -->
-        <div id="cs-digit-grid" style="display:flex;gap:6px;justify-content:center;align-items:flex-end;margin-bottom:10px;flex-wrap:nowrap;min-height:110px;background:rgba(0,0,0,0.25);border:1px solid #21262d;border-radius:6px;padding:8px 6px 0;"></div>
+        <div id="cs-digit-grid" style="display:flex;gap:6px;justify-content:center;margin-bottom:10px;flex-wrap:wrap;"></div>
         <div id="cs-status" style="
             background:rgba(0,255,65,0.05); border:1px solid #00ff41;
             padding:8px; text-align:center; font-size:0.78rem;
@@ -1862,7 +1863,7 @@
         <div style="display:grid;grid-template-columns:1.2fr 1fr 1.8fr 1.8fr;gap:8px;margin-bottom:12px;align-items:end;">
           <div>
             <label style="font-size:0.58rem;color:#00ffff;letter-spacing:1px;display:block;margin-bottom:3px;">ATIVO</label>
-            <select id="cs-ativo" onchange="csSalvarCfg()" style="width:100%;background:#161b22;border:1px solid rgba(0,255,65,0.4);
+            <select id="cs-ativo" style="width:100%;background:#161b22;border:1px solid rgba(0,255,65,0.4);
                 color:#c9d1d9;font-family:'Share Tech Mono',monospace;font-size:0.72rem;
                 padding:6px 7px;border-radius:4px;cursor:pointer;">
               <option value="R_100">R_100</option>
@@ -1875,8 +1876,7 @@
           </div>
           <div>
             <label style="font-size:0.58rem;color:#00ffff;letter-spacing:1px;display:block;margin-bottom:3px;">STAKE (USD)</label>
-            <input id="cs-stake" type="number" value="0.35" min="0.35" step="0.01"
-                onchange="csSalvarCfg()" style="
+            <input id="cs-stake" type="number" value="0.35" min="0.35" step="0.01" style="
                 width:100%;background:#161b22;border:1px solid rgba(0,255,65,0.4);
                 color:#c9d1d9;font-family:'Share Tech Mono',monospace;font-size:0.72rem;
                 padding:6px 7px;border-radius:4px;outline:none;">
@@ -2299,21 +2299,18 @@
       <div style="background:rgba(0,255,100,0.04);border:1px solid rgba(0,255,100,0.25);border-radius:6px;padding:8px;">
         <label style="font-size:0.65rem;color:#2979ff;font-weight:700;">BANCA BASE ($)</label>
         <input id="jc-banca-base-input" type="number" value="100" min="1" step="1"
-          onchange="jcSalvarConfig()"
           style="width:100%;background:#0a0a12;border:1px solid rgba(0,255,100,0.4);color:#00ff64;
                  font-family:'Share Tech Mono';font-size:0.9rem;padding:6px 8px;border-radius:4px;margin-top:4px;">
       </div>
       <div style="background:rgba(0,255,100,0.04);border:1px solid rgba(0,255,100,0.25);border-radius:6px;padding:8px;">
         <label style="font-size:0.65rem;color:#2979ff;font-weight:700;">% META DIÁRIA</label>
         <input id="jc-perc-input" type="number" value="5" min="0.1" max="50" step="0.1"
-          onchange="jcSalvarConfig()"
           style="width:100%;background:#0a0a12;border:1px solid rgba(0,255,100,0.4);color:#00ff64;
                  font-family:'Share Tech Mono';font-size:0.9rem;padding:6px 8px;border-radius:4px;margin-top:4px;">
       </div>
       <div style="background:rgba(0,255,100,0.04);border:1px solid rgba(0,255,100,0.25);border-radius:6px;padding:8px;">
         <label style="font-size:0.65rem;color:#2979ff;font-weight:700;">DIAS PROJEÇÃO</label>
         <input id="jc-dias-input" type="number" value="30" min="1" max="365" step="1"
-          onchange="jcSalvarConfig()"
           style="width:100%;background:#0a0a12;border:1px solid rgba(0,255,100,0.4);color:#00ff64;
                  font-family:'Share Tech Mono';font-size:0.9rem;padding:6px 8px;border-radius:4px;margin-top:4px;">
       </div>
@@ -3155,8 +3152,8 @@ function jcAtualizarTabela(d, dias) {
     const bancaFinalProj  = bancaAcum;  // banca acumulada ao final de todos os dias projetados
     const lucroProjetado  = parseFloat((bancaFinalProj - (d.banca_base || 0)).toFixed(2));
 
-    // Busca cotação em cache ou fallback 6.20
-    const _cotFinal = parseFloat(window._cotacaoBRL || _cotacaoBRL || 6.20);
+    // Busca cotação em cache ou fallback 5.85
+    const _cotFinal = parseFloat(window._cotacaoBRL || 5.85);
     const lucroRealBRL = (lucroRealTotal * _cotFinal).toFixed(2).replace('.', ',');
     const lucroProjBRL = (lucroProjetado * _cotFinal).toFixed(2).replace('.', ',');
 
@@ -3556,7 +3553,7 @@ function jcSecAtualizarTabela(d, dias) {
     const lucroRealTotal = (d.historico || []).reduce((s, h) => s + (h.lucro_real || 0), 0);
     const bancaFinalProj = bancaAcum;
     const lucroProjetado = parseFloat((bancaFinalProj - (d.banca_base || 0)).toFixed(2));
-    const _cotFinal = parseFloat(window._cotacaoBRL || _cotacaoBRL || 6.20);
+    const _cotFinal = parseFloat(window._cotacaoBRL || 5.85);
     const trSep = document.createElement('tr');
     trSep.innerHTML = `<td colspan="4" style="padding:0;"><div style="border-top:1px solid rgba(255,214,0,0.35);margin:2px 0;"></div></td>`;
     tbody.appendChild(trSep);
@@ -3757,8 +3754,7 @@ function jcOnMetaBatida(lucro, wins, losses, banca, estrategia, gerenciamento) {
 function jcExibirModalMetaBatida(d) {
     const total  = (d.wins || 0) + (d.losses || 0);
     const wr     = total > 0 ? ((d.wins / total) * 100).toFixed(0) : 0;
-    // Usa cotação já em cache (fetchCotacao roda a cada 60s)
-    const cotBRL = parseFloat(window._cotacaoBRL || _cotacaoBRL || 6.20);
+    const cotBRL = 5.85;   // cotação fallback; substitui pela real abaixo
     // Monta a mensagem exatamente como o Python monta para o Telegram
     const montar = cot => {
         const lucroBRL  = (d.lucro * cot).toFixed(2).replace('.', ',');
@@ -3793,6 +3789,14 @@ function jcExibirModalMetaBatida(d) {
         // Dispara confetti
         _mjcConfetti();
     }
+    // Tenta buscar cotação real e atualiza o corpo
+    fetch('https://economia.awesomeapi.com.br/json/last/USD-BRL', { mode: 'cors' })
+        .then(r => r.json())
+        .then(j => {
+            const cotReal = parseFloat(j.USDBRL?.bid || cotBRL);
+            if (corpo) corpo.innerHTML = montar(cotReal).replace(/\n/g, '<br>').replace(/<b>(.*?)<\/b>/g,'<b style="color:#ffd600">$1</b>').replace(/<i>(.*?)<\/i>/g,'<i style="color:#57606a">$1</i>');
+        })
+        .catch(() => {});
 }
 
 // ── Troféu para Stop Win MODO NORMAL (sem JC) ───────────────────────────────
@@ -4288,27 +4292,16 @@ function updateHeader(balance) {
 }
 
 async function fetchCotacao() {
-    let rate = 0;
-    // 1ª tentativa: API externa direta
     try {
         const res  = await fetch('https://economia.awesomeapi.com.br/json/last/USD-BRL');
         const data = await res.json();
-        rate = parseFloat(data['USDBRL']['bid']);
-    } catch (_) {}
-    // 2ª tentativa: servidor (tem cache próprio + API de backup)
-    if (!rate || isNaN(rate)) {
-        try {
-            const res2 = await fetch('/cotacao-brl');
-            const d2   = await res2.json();
-            rate = parseFloat(d2.usd_brl);
-        } catch (_) {}
-    }
-    if (rate > 0 && !isNaN(rate)) {
-        _cotacaoBRL        = rate;
-        window._cotacaoBRL = rate; // sincroniza para _csNotificar e _csAtualizarStats
-        document.getElementById('hd-cotacao').textContent = 'R$ ' + rate.toFixed(4).replace('.', ',');
-        updateHeader();
-    }
+        const rate = parseFloat(data['USDBRL']['bid']);
+        if (!isNaN(rate)) {
+            _cotacaoBRL = rate;
+            document.getElementById('hd-cotacao').textContent = 'R$ ' + rate.toFixed(4).replace('.', ',');
+            updateHeader(); // atualiza o BRL do lucro imediatamente
+        }
+    } catch (_) { /* falha silenciosa — rede pode estar offline */ }
 }
 
 // ═══════════════════════════════════════════════════════
@@ -5762,7 +5755,7 @@ async function testarTelegram() {
     }
 }
 
-function tgEnviarResultado(win, lucro, prox_stake, _origemSec, _entrada) {
+function tgEnviarResultado(win, lucro, prox_stake, _origemSec) {
     const _modoEspelhoAtivo = (typeof _sec !== 'undefined' && _sec.pronto && _sec.espelhandoAtivo);
     const _lvVirtual        = bot.lv && bot.lv.ativo && !bot.lv.emRecuperacao;
 
@@ -5791,10 +5784,9 @@ function tgEnviarResultado(win, lucro, prox_stake, _origemSec, _entrada) {
         return;
     }
 
-    // ── Modo Espelho ou SEC autônoma: usa dados da conta SECUNDÁRIA ───────
+    // ── Modo Espelho: usa dados da conta SECUNDÁRIA, ignora a principal ───
     let payload;
-    const _ehSec = _modoEspelhoAtivo || _origemSec;
-    if (_ehSec) {
+    if (_modoEspelhoAtivo) {
         const saldoSec = parseFloat(_sec.saldo) || 0;
         payload = {
             win:             win,
@@ -5804,9 +5796,10 @@ function tgEnviarResultado(win, lucro, prox_stake, _origemSec, _entrada) {
             wins:            _sec.wins,
             losses:          _sec.losses,
             prox_stake:      prox_stake,
-            entrada:         _entrada || prox_stake,
-            modo:            (_mcConfig && _mcConfig.gerenciamento) || bot.gerenciamento,
+            modo:            _mcConfig.gerenciamento || bot.gerenciamento,
             estrategia:      bot.estrategia,
+            seq_win:         bot._seqWinAtual,
+            seq_loss:        bot._seqLossAtual,
             max_win_consec:  bot._maxWinConsec,
             max_loss_consec: bot._maxLossConsec,
             max_stake:       bot._maxStakeUsada,
@@ -5823,7 +5816,6 @@ function tgEnviarResultado(win, lucro, prox_stake, _origemSec, _entrada) {
             wins:            bot.wins,
             losses:          bot.losses,
             prox_stake:      prox_stake,
-            entrada:         _entrada || (bot.mgr ? bot.stake : bot.initialStake),
             modo:            bot.gerenciamento,
             estrategia:      bot.estrategia,
             seq_win:         bot._seqWinAtual,
@@ -6474,11 +6466,10 @@ async function _secConectar() {
             _sec.profit = parseFloat((_sec.profit + p).toFixed(2));
 
             // Atualiza o gerenciador da secundária (Martingale, Soros, etc.)
-            const _secStakeAntes = _sec.mgr ? _sec.mgr.getStake() : (_mcConfig.stake || 0);
             if (_sec.mgr) _sec.mgr.updateResult(won);
 
             // ── Notificação Telegram/WhatsApp com dados da conta SECUNDÁRIA ──
-            tgEnviarResultado(won, p, (_sec.mgr ? _sec.mgr.getStake() : _mcConfig.stake || 0), true, _secStakeAntes);
+            tgEnviarResultado(won, p, (_sec.mgr ? _sec.mgr.getStake() : _mcConfig.stake || 0), true);
 
             // Libera flag de anti-duplicata (modo autônomo)
             _sec._buying = false;
@@ -7130,13 +7121,6 @@ function initWebSocket(wssUrl) {
         // ==========================
 
         // Tick — decide entrada pela estratégia
-        if (data.msg_type === 'tick' && data.tick) {
-            // Coleta dígitos reais para o Bubble Sort (buffer circular de 10)
-            const _d = parseInt(data.tick.quote.toString().slice(-1));
-            if (!window.ultimosDigitosReais) window.ultimosDigitosReais = [];
-            window.ultimosDigitosReais.push(_d);
-            if (window.ultimosDigitosReais.length > 10) window.ultimosDigitosReais.shift();
-        }
         if (data.msg_type === 'tick' && bot.running && !bot._buying) {
             const preco  = data.tick.quote;
             const digit  = parseInt(preco.toString().slice(-1));
@@ -8000,7 +7984,7 @@ function initWebSocket(wssUrl) {
                 // updateHeader(bot._lastBalance);
                 bot.ws.send(json({ balance: 1 }));  // confirma saldo real com a Deriv
                 // Enquanto secundária estiver conectada (standby ou espelhando), bloqueia notif da principal
-                if (!(_sec && _sec.pronto)) tgEnviarResultado(wonReal, totalProfit, bot.stake, false, stakePorLado);
+                if (!(_sec && _sec.pronto)) tgEnviarResultado(wonReal, totalProfit, bot.stake);
                 // ── Planilha JC: registra histórico ──────────────────────
                 if (bot.mgr && bot.mgr.modo === "💹 Juros Compostos") {
                     jcRegistrarResultado(wonReal ? 'WIN' : 'LOSS', stakePorLado, totalProfit, bot.mgr._jcBanca);
@@ -8014,7 +7998,6 @@ function initWebSocket(wssUrl) {
                 // ── Resultado normal (contrato único) ─────────────────────
                 bot._buying = false;
                 bot.profit  += profit;
-                const _stakeAntes = bot.stake;   // captura antes do update (entrada desta rodada)
                 bot.mgr.updateResult(won);
                 const _stakeDepois = bot.mgr.getStake();
                 bot.stake = won ? _stakeDepois : _stakeDepois;
@@ -8064,7 +8047,7 @@ function initWebSocket(wssUrl) {
                 // updateHeader(bot._lastBalance);
                 bot.ws.send(json({ balance: 1 }));  // confirma saldo real com a Deriv
                 // Enquanto secundária estiver conectada (standby ou espelhando), bloqueia notif da principal
-                if (!(_sec && _sec.pronto)) tgEnviarResultado(won, profit, bot.stake, false, _stakeAntes);
+                if (!(_sec && _sec.pronto)) tgEnviarResultado(won, profit, bot.stake);
                 // ── Planilha JC: registra histórico ──────────────────────
                 if (bot.mgr && bot.mgr.modo === "💹 Juros Compostos") {
                     jcRegistrarResultado(won ? 'WIN' : 'LOSS', bot.stake, profit, bot.mgr._jcBanca);
@@ -14785,11 +14768,14 @@ async function mcReconectarExistente() {
             } else {
                 // Token expirado — precisa de novo login completo
                 mcStatus(`❌ ${d2.erro || 'Token expirado. Faça login novamente.'}`, '#f87171');
-                const faixaEl     = document.getElementById('mc-faixa-login');
+                const faixaEl  = document.getElementById('mc-faixa-login');
+                const textoEl  = document.getElementById('mc-faixa-texto');
+                const botoesEl = document.getElementById('mc-faixa-botoes');
+                if (faixaEl)  faixaEl.style.display = '';
+                if (textoEl) { textoEl.style.color = '#f87171'; textoEl.textContent = '❌ Token expirado. Faça login novamente com a conta secundária.'; }
+                if (botoesEl) botoesEl.innerHTML = '';
                 const btnConectar = document.getElementById('mc-btn-conectar');
-                if (faixaEl)     faixaEl.style.display = '';
                 if (btnConectar) btnConectar.style.display = '';
-                mcAtualizarFaixa('sem_token');
             }
         }, 1500);
     } catch (e) {
@@ -14896,8 +14882,6 @@ async function mcCarregarContas() {
             const btnConectar = document.getElementById('mc-btn-conectar');
             if (faixaEl)     faixaEl.style.display    = '';
             if (btnConectar) btnConectar.style.display = '';
-            // Reseta conteúdo da faixa para exibir botões de login corretamente
-            mcAtualizarFaixa(_mcTokenOk ? 'com_token' : 'sem_token');
         }
 
         // Atualiza label do botão lateral
@@ -15747,64 +15731,6 @@ function _iniciarMatrixApk() {
 // ══════════════════════════════════════════════════════════════════════════════
 // CYBER SORT — Quick Sort + Gerenciamento + TG/WA + Matrix + Stats BRL
 // ══════════════════════════════════════════════════════════════════════════════
-
-const _CS_CFG_KEY = 'cybersort_cfg_v1';
-
-function csSalvarCfg() {
-    try {
-        const cfg = {
-            stake:        parseFloat(document.getElementById('cs-stake')?.value) || 0.35,
-            ativo:        document.getElementById('cs-ativo')?.value || 'R_100',
-            mgr:          document.getElementById('cs-mgr')?.value || 'flat',
-            autoOperar:   _csAutoOperar,
-            lvAtivo:      document.getElementById('cs-lv-ativo')?.checked || false,
-            lvQtd:        parseInt(document.getElementById('cs-lv-qtd')?.value) || 3,
-            lvQuando:     document.getElementById('cs-lv-quando')?.value || 'sempre',
-            espelhoAtivo: document.getElementById('cs-espelho-ativo')?.checked || false,
-        };
-        localStorage.setItem(_CS_CFG_KEY, JSON.stringify(cfg));
-    } catch(_) {}
-}
-
-function csCarregarCfg() {
-    try {
-        const raw = localStorage.getItem(_CS_CFG_KEY);
-        if (!raw) return;
-        const cfg = JSON.parse(raw);
-
-        const stakeEl = document.getElementById('cs-stake');
-        if (stakeEl && cfg.stake > 0) stakeEl.value = cfg.stake;
-
-        const ativoEl = document.getElementById('cs-ativo');
-        if (ativoEl && cfg.ativo) {
-            for (const opt of ativoEl.options) { if (opt.value === cfg.ativo) { opt.selected = true; break; } }
-        }
-
-        const mgrEl = document.getElementById('cs-mgr');
-        if (mgrEl && cfg.mgr) { mgrEl.value = cfg.mgr; csOnMgrChange(); }
-
-        if (cfg.autoOperar !== undefined && cfg.autoOperar !== _csAutoOperar) {
-            _csAutoOperar = cfg.autoOperar;
-            _csAtualizarToggle();
-        }
-
-        const lvChk = document.getElementById('cs-lv-ativo');
-        if (lvChk && cfg.lvAtivo !== undefined) {
-            lvChk.checked = cfg.lvAtivo;
-            csAtualizarLV(true);   // semSalvar=true — não dispara save durante restore
-        }
-        const lvQtdEl = document.getElementById('cs-lv-qtd');
-        if (lvQtdEl && cfg.lvQtd) lvQtdEl.value = cfg.lvQtd;
-        const lvQuandoEl = document.getElementById('cs-lv-quando');
-        if (lvQuandoEl && cfg.lvQuando) lvQuandoEl.value = cfg.lvQuando;
-
-        const espChk = document.getElementById('cs-espelho-ativo');
-        if (espChk && cfg.espelhoAtivo !== undefined) {
-            espChk.checked = cfg.espelhoAtivo;
-            csAtualizarEspelho(true);  // semSalvar=true
-        }
-    } catch(_) {}
-}
 const _csAudioCtx  = new (window.AudioContext || window.webkitAudioContext)();
 let _csSinalAtual  = null;
 let _csAutoOperar  = false;
@@ -15877,19 +15803,10 @@ function _csRenderGrid(arr, statusTxt) {
     const grid = document.getElementById('cs-digit-grid');
     const stat = document.getElementById('cs-status');
     if (!grid) return;
-    // Barras verticais — altura proporcional ao dígito (0-9), mínimo 18px
     grid.innerHTML = arr.map(v =>
-        `<div style="
-            display:flex;flex-direction:column;align-items:center;justify-content:flex-end;
-            width:38px;height:100px;gap:3px;" class="cs-bar-wrap">
-          <div class="cs-box" style="
-            width:38px;height:${Math.max(18, v * 10)}px;
-            background:#238636;border-radius:4px 4px 0 0;
-            display:flex;align-items:center;justify-content:center;
-            font-size:0.95rem;font-weight:bold;color:#fff;
-            transition:height 0.2s ease,background 0.15s ease,transform 0.15s ease;
-            font-family:'Share Tech Mono',monospace;">${v}</div>
-        </div>`
+        `<div style="width:40px;height:50px;background:#161b22;border:1px solid #30363d;border-radius:6px;
+          display:flex;align-items:center;justify-content:center;font-size:1rem;font-weight:bold;
+          color:#c9d1d9;transition:all 0.15s;font-family:'Share Tech Mono',monospace;" class="cs-box">${v}</div>`
     ).join('');
     if (stat && statusTxt) stat.textContent = statusTxt;
 }
@@ -15918,7 +15835,7 @@ let _csEspLosses = 0;
 let _csEspLucro  = 0;
 
 function _csAtualizarStats(proxStake) {
-    const cot    = parseFloat(window._cotacaoBRL || _cotacaoBRL) || 6.20;
+    const cot    = parseFloat(_cotacaoBRL) || 5.85;
     const espAtivo  = document.getElementById('cs-espelho-ativo')?.checked;
     const secPronto = (typeof _sec !== 'undefined') && _sec.pronto;
 
@@ -15980,40 +15897,38 @@ function _csAtualizarStats(proxStake) {
     if (eMEl) eMEl.textContent = 'SEC-' + mgmtSec;
 }
 
-// ── Notificações TG + WA — somente conta SECUNDÁRIA (CyberSort) ─────────────
-function _csNotificar(won, profit, ct, barr, ativo, entrada, proxStake) {
-    // Monta payload estruturado igual ao tgEnviarResultado — recebe imagem + novo formato
-    const saldoSec = (typeof _sec !== 'undefined' && _sec.saldo !== undefined)
-        ? parseFloat(_sec.saldo) : 0;
+// ── Notificações TG + WA — somente conta SECUNDÁRIA ────────────────────────
+function _csNotificar(won, profit, ct, barr, ativo) {
+    const cot      = parseFloat(window._cotacaoBRL) || 5.85;
+    const profBRL  = (Math.abs(profit) * cot).toFixed(2).replace('.', ',');
+    const sinal    = won ? `✅ WIN +$${profit.toFixed(2)} (+R$${profBRL})` : `❌ LOSS -$${Math.abs(profit).toFixed(2)} (-R$${profBRL})`;
+    // Usa banca e stats da conta SECUNDÁRIA
+    const banca    = (typeof _sec !== 'undefined' && _sec.saldo !== undefined)
+        ? `$${parseFloat(_sec.saldo).toFixed(2)}` : '--';
+    const taxa     = (_csEspWins + _csEspLosses) > 0
+        ? ((_csEspWins / (_csEspWins + _csEspLosses)) * 100).toFixed(1) + '%' : '--%';
+    const lucBRL   = (_csEspLucro * cot).toFixed(2).replace('.', ',');
 
-    const estrategia = `${ct} barr=${barr} | ${ativo}`;
-    const modo       = (typeof _mcConfig !== 'undefined' && _mcConfig.gerenciamento)
-        ? _mcConfig.gerenciamento : (document.getElementById('cs-mgr')?.value || 'CyberSort');
+    const texto = `💳 CYBER SORT — SEC\n${sinal}\n\n` +
+        `📊 ${ct} barr=${barr} | ${ativo}\n` +
+        `💰 Banca SEC: ${banca}\n` +
+        `📈 Lucro SEC: ${_csEspLucro >= 0 ? '+' : ''}$${_csEspLucro.toFixed(2)} (R$${lucBRL})\n` +
+        `🎯 Taxa SEC: ${taxa} (${_csEspWins}W / ${_csEspLosses}L)\n` +
+        `💱 1 USD = R$ ${cot.toFixed(2)}`;
 
-    const payload = {
-        win:          won,
-        lucro:        profit,
-        profit_total: _csEspLucro,
-        banca:        saldoSec,
-        wins:         _csEspWins,
-        losses:       _csEspLosses,
-        prox_stake:   proxStake || 0,
-        entrada:      entrada   || 0,
-        modo:         modo,
-        estrategia:   estrategia,
-        conta:        'SECUNDARIA',
-    };
-
-    if (typeof _tgCfg !== 'undefined' && _tgCfg.enabled && _tgCfg.token && _tgCfg.chat_id) {
+    // Telegram — usa a variável global _tgCfg já carregada pelo bot
+    // virtual:true + texto → rota de texto livre no servidor
+    if (typeof _tgCfg !== 'undefined' && _tgCfg.enabled && _tgCfg.resultados && _tgCfg.token && _tgCfg.chat_id) {
         fetch('/tg-send', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ token: _tgCfg.token, chat_id: _tgCfg.chat_id, ...payload })
+            body: JSON.stringify({ token: _tgCfg.token, chat_id: _tgCfg.chat_id, virtual: true, texto })
         }).catch(() => {});
     }
+    // WhatsApp — virtual:true + texto → rota de texto livre no servidor
     if (typeof _waNotifAtivo !== 'undefined' && _waNotifAtivo) {
         fetch('/wa-send', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
+            body: JSON.stringify({ virtual: true, texto })
         }).catch(() => {});
     }
 }
@@ -16024,13 +15939,11 @@ function csOnMgrChange() {
     const stake = parseFloat(document.getElementById('cs-stake')?.value) || 0.35;
     if (!nome || nome === 'flat' || typeof GerenciadorUnificado === 'undefined') {
         _csMgr = null;
-        csSalvarCfg();
         return;
     }
     _csMgr = new GerenciadorUnificado(nome, { stake });
     _csLogAnalise(`⚙ Gerenciamento: <b style="color:#c084fc">${nome}</b>`, '#c084fc');
     _csAtualizarStats(_csMgr.getStake());
-    csSalvarCfg();
 }
 
 // ── Sinal ───────────────────────────────────────────────────────────────────
@@ -16051,7 +15964,7 @@ function _csGerarSinal(original) {
 
 // ── Loss Virtual ────────────────────────────────────────────────────────────
 // Controla visibilidade dos campos e estado do badge
-function csAtualizarLV(semSalvar) {
+function csAtualizarLV() {
     const ativo   = document.getElementById('cs-lv-ativo')?.checked;
     const campos  = document.getElementById('cs-lv-campos');
     const badge   = document.getElementById('cs-lv-badge');
@@ -16061,8 +15974,8 @@ function csAtualizarLV(semSalvar) {
     if (status) status.textContent  = ativo
         ? `Aguardando ${document.getElementById('cs-lv-qtd')?.value || 3} resultados virtuais`
         : 'Aguarda N resultados virtuais antes de operar';
+    // Inicializa / zera contador virtual quando ativado/desativado
     if (ativo) { window._csLvContador = 0; }
-    if (!semSalvar) csSalvarCfg();
 }
 
 // Corrige badge (o "if" em JS não aceita string — reescreve)
@@ -16076,7 +15989,7 @@ function _csLvBadge(ativo) {
 // ── Modo Espelho ─────────────────────────────────────────────────────────────
 // Usa exatamente as mesmas configurações da conta secundária (_sec.limiteSeqLoss,
 // _sec.gatilhoSeqAtivo, _sec.limitePerda, _sec.gatilhoPerdaAtivo) — não duplica config.
-function csAtualizarEspelho(semSalvar) {
+function csAtualizarEspelho() {
     const ativo     = document.getElementById('cs-espelho-ativo')?.checked;
     const badge     = document.getElementById('cs-espelho-badge');
     const cfg       = document.getElementById('cs-espelho-cfg');
@@ -16115,7 +16028,6 @@ function csAtualizarEspelho(semSalvar) {
     _csAtualizarCfgBadges();
     _csAtualizarStatusEspelho();
     _csAtualizarStats();
-    if (!semSalvar) csSalvarCfg();
 }
 
 // Atualiza os mini-cards de configuração lidos de _sec
@@ -16171,7 +16083,6 @@ function _csAtualizarStatusEspelho() {
 // ── Abrir / Fechar ──────────────────────────────────────────────────────────
 function csFechar() {
     _csAtivo = false;
-    csSalvarCfg();   // salva antes de fechar
     _csPararMatrix();
     document.getElementById('cyber-sort-modal').style.display = 'none';
 }
@@ -16180,6 +16091,13 @@ function abrirModalCyberSort() {
     const m = document.getElementById('cyber-sort-modal');
     if (!m) return;
     _csAtivo = true;
+
+    const stakeEl = document.getElementById('cs-stake');
+    if (stakeEl && typeof bot !== 'undefined' && bot.stake) stakeEl.value = bot.stake;
+    const ativoEl = document.getElementById('cs-ativo');
+    if (ativoEl && typeof bot !== 'undefined' && bot._tickAtivo) {
+        for (const opt of ativoEl.options) { if (opt.value === bot._tickAtivo) { opt.selected = true; break; } }
+    }
 
     _csSinalAtual  = null;
     _csMgr         = null;
@@ -16223,8 +16141,7 @@ function abrirModalCyberSort() {
     document.getElementById('cs-sinal-box').style.display  = 'none';
     document.getElementById('cs-log-analise').innerHTML    = '';
     document.getElementById('cs-op-log').innerHTML         = '';
-    // Restaura última config salva (stake, ativo, mgr, auto-loop, LV, espelho)
-    csCarregarCfg();
+    document.getElementById('cs-mgr').value                = 'flat';
     _csBotaoOperar(false);
     _csAtualizarToggle();
     _csAtualizarStats();
@@ -16232,17 +16149,13 @@ function abrirModalCyberSort() {
     csAtualizarLV();
     csAtualizarEspelho();
     m.style.display = 'flex';
-    const _initList = (window.ultimosDigitosReais && window.ultimosDigitosReais.length >= 10)
-        ? window.ultimosDigitosReais.slice(-10)
-        : [6,3,1,5,7,2,8,9,4,0];
-    _csRenderGrid(_initList, 'AGUARDANDO DADOS DO MERCADO...');
+    _csRenderGrid([6,3,1,5,7,2,8,9,4,0], 'AGUARDANDO DADOS DO MERCADO...');
     _csIniciarMatrix();
 }
 
 function csToggleAuto() {
     _csAutoOperar = !_csAutoOperar;
     _csAtualizarToggle();
-    csSalvarCfg();
 }
 
 function _csAtualizarToggle() {
@@ -16275,7 +16188,7 @@ function _csBotaoOperar(ativo) {
     btn.style.cursor      = ativo ? 'pointer'  : 'not-allowed';
 }
 
-// ── Análise / Animação — Bubble Sort com dígitos reais ──────────────────────
+// ── Análise / Animação ──────────────────────────────────────────────────────
 async function csExecutar() {
     if (!_csAtivo) return;
     _csBotaoOperar(false);
@@ -16286,26 +16199,10 @@ async function csExecutar() {
     if (btnAn) { btnAn.disabled = true; btnAn.textContent = '⏳ ANALISANDO...'; }
 
     try {
-        // Usa os últimos 10 dígitos reais coletados do mercado;
-        // se ainda não tiver 10, completa com dígitos fixos
-        const reais = window.ultimosDigitosReais || [];
-        const pad   = [8, 3, 7, 5, 4, 1, 6, 2, 9, 0];
-        const listaOriginal = reais.length >= 10
-            ? reais.slice(-10)
-            : [...pad.slice(0, 10 - reais.length), ...reais];
+        const listaOriginal = [6, 3, 1, 5, 7, 2, 8, 9, 4, 0];
+        _csLogAnalise('▶ Iniciando Quick Sort...', '#00ff41');
 
-        const ativoEl = document.getElementById('cs-ativo');
-        const ativoLbl = ativoEl ? ativoEl.value : 'R_100';
-
-        _csLogAnalise(`▶ Bubble Sort — dígitos reais de <b style="color:#00ffff">${ativoLbl}</b>`, '#00ff41');
-        _csLogAnalise(`📊 Lista: [${listaOriginal.join(', ')}]`, '#6b7280');
-
-        // Garante que o grid mostre as barras iniciais antes da animação
-        const gridEl = document.getElementById('cs-digit-grid');
-        if (gridEl) gridEl.style.alignItems = 'flex-end';
-        _csRenderGrid(listaOriginal, 'INICIANDO BUBBLE SORT...');
-
-        const res  = await fetch('/ia/bubble-sort-simulacao', {
+        const res  = await fetch('/ia/quick-sort-simulacao', {
             method: 'POST', headers: {'Content-Type':'application/json'},
             body: JSON.stringify({ lista: listaOriginal })
         });
@@ -16315,39 +16212,19 @@ async function csExecutar() {
         let swaps = 0, comparacoes = 0;
         for (const passo of data.passos) {
             if (!_csAtivo) return;
-
-            if (passo.acao === 'sorted') {
-                // Pinta todas as barras de verde e encerra
-                _csRenderGrid(passo.arr, 'ORDENAÇÃO CONCLUÍDA ✅  SINAL VALIDADO');
-                document.querySelectorAll('#cs-digit-grid .cs-box').forEach(b => {
-                    b.style.background = '#2ea043';
-                });
-                _csBip(880, 0.35);
-                break;
-            }
-
-            _csRenderGrid(passo.arr, `${passo.acao === 'swap' ? '🔄 SWAP' : '🔍 COMPARE'}  a[${passo.i}] ↔ a[${passo.j}]`);
+            _csRenderGrid(passo.arr, `${passo.acao.toUpperCase()} | PIVOT: ${passo.pivot ?? '—'}`);
             const boxes = document.querySelectorAll('#cs-digit-grid .cs-box');
-
-            // Reseta cor de todas as barras
-            boxes.forEach(b => { b.style.background = '#238636'; b.style.transform = ''; });
-
-            if (passo.acao === 'compare') {
-                if (boxes[passo.i]) { boxes[passo.i].style.background = '#1f6feb'; boxes[passo.i].style.transform = 'translateY(-6px)'; }
-                if (boxes[passo.j]) { boxes[passo.j].style.background = '#1f6feb'; boxes[passo.j].style.transform = 'translateY(-6px)'; }
-                comparacoes++;
-                _csBip(300, 0.05);
-            } else if (passo.acao === 'swap') {
-                if (boxes[passo.i]) { boxes[passo.i].style.background = '#da3633'; boxes[passo.i].style.transform = 'scale(1.08)'; }
-                if (boxes[passo.j]) { boxes[passo.j].style.background = '#da3633'; boxes[passo.j].style.transform = 'scale(1.08)'; }
-                swaps++;
-                _csBip(150, 0.08);
-            }
-
-            await new Promise(r => setTimeout(r, 350));
+            const clrC  = 'border-color:#ffbd2e;background:rgba(255,189,46,0.15);color:#ffbd2e;transform:translateY(-4px)';
+            const clrS  = 'border-color:#ff4444;background:rgba(255,68,68,0.2);color:#ff4444;transform:scale(1.1)';
+            if (passo.i >= 0 && boxes[passo.i]) boxes[passo.i].style.cssText += ';' + clrC;
+            if (passo.j >= 0 && boxes[passo.j]) boxes[passo.j].style.cssText += ';' + (passo.acao === 'swap' ? clrS : clrC);
+            if (passo.acao === 'swap') swaps++; else comparacoes++;
+            _csBip(passo.acao === 'swap' ? 700 : 450, 0.08);
+            await new Promise(r => setTimeout(r, 400));
         }
         if (!_csAtivo) return;
 
+        document.getElementById('cs-status').textContent = 'ORDENAÇÃO CONCLUÍDA ✅';
         _csLogAnalise(`✅ ${swaps} trocas · ${comparacoes} comparações`, '#00ff41');
         _csBip(1000, 0.3);
 
@@ -16445,17 +16322,12 @@ function csOperar() {
     const _origMsg = wsUsar.onmessage;
     let _csCid = null;
 
-    // Bloqueia o handler autônomo da SEC enquanto o CyberSort está operando
-    // Evita que _secEntrarAutonoma sobreponha o onmessage durante a espera do resultado
-    if (_csUsandoSec && typeof _sec !== 'undefined') _sec._buying = true;
-
     wsUsar.onmessage = (msg) => {
         const d = JSON.parse(msg.data);
 
         if (d.msg_type === 'proposal' && d.req_id === reqId) {
             if (d.error) {
                 _csLogOp('⚠️ Proposta recusada: ' + d.error.message, '#ff4444');
-                if (_csUsandoSec && typeof _sec !== 'undefined') _sec._buying = false;
                 wsUsar.onmessage = _origMsg; _csBotaoOperar(true); return;
             }
             const pid = d.proposal?.id;
@@ -16466,7 +16338,6 @@ function csOperar() {
         if (d.msg_type === 'buy') {
             if (d.error) {
                 _csLogOp('⚠️ Compra recusada: ' + d.error.message, '#ff4444');
-                if (_csUsandoSec && typeof _sec !== 'undefined') _sec._buying = false;
                 wsUsar.onmessage = _origMsg; _csBotaoOperar(true); return;
             }
             const cid = d.buy?.contract_id;
@@ -16575,12 +16446,9 @@ function csOperar() {
             // Notifica TG + WA — somente quando operando na conta SECUNDÁRIA
             // usa _eraSecAntes pois _csUsandoSec pode já ter sido resetado acima (WIN da SEC)
             if (_eraSecAntes && espAtivo && secPronto) {
-                _csNotificar(won, profit, ct, barr, ativo, stake, proxStake);
+                _csNotificar(won, profit, ct, barr, ativo);
             }
 
-            // Libera o flag antes de restaurar o handler (permite novo ciclo autônomo)
-            // Usa _eraSecAntes pois _csUsandoSec pode já ter sido resetado para false (WIN da SEC)
-            if (_eraSecAntes && typeof _sec !== 'undefined') _sec._buying = false;
             wsUsar.onmessage = _origMsg;
 
             // ── Stop Win / Stop Loss sincronizados com o bot ─────────────────
