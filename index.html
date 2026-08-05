@@ -5784,9 +5784,10 @@ function tgEnviarResultado(win, lucro, prox_stake, _origemSec) {
         return;
     }
 
-    // ── Modo Espelho: usa dados da conta SECUNDÁRIA, ignora a principal ───
+    // ── Modo Espelho ou SEC autônoma: usa dados da conta SECUNDÁRIA ───────
     let payload;
-    if (_modoEspelhoAtivo) {
+    const _ehSec = _modoEspelhoAtivo || _origemSec;
+    if (_ehSec) {
         const saldoSec = parseFloat(_sec.saldo) || 0;
         payload = {
             win:             win,
@@ -5796,10 +5797,10 @@ function tgEnviarResultado(win, lucro, prox_stake, _origemSec) {
             wins:            _sec.wins,
             losses:          _sec.losses,
             prox_stake:      prox_stake,
-            modo:            _mcConfig.gerenciamento || bot.gerenciamento,
+            modo:            (_mcConfig && _mcConfig.gerenciamento) || bot.gerenciamento,
             estrategia:      bot.estrategia,
-            seq_win:         bot._seqWinAtual,
-            seq_loss:        bot._seqLossAtual,
+            seq_win:         _sec.wins,
+            seq_loss:        _sec.losses,
             max_win_consec:  bot._maxWinConsec,
             max_loss_consec: bot._maxLossConsec,
             max_stake:       bot._maxStakeUsada,
@@ -15914,18 +15915,18 @@ function _csNotificar(won, profit, ct, barr, ativo) {
         `💱 1 USD = R$ ${cot.toFixed(2)}`;
 
     // Telegram — usa a variável global _tgCfg já carregada pelo bot
-    // virtual:true + texto → rota de texto livre no servidor
-    if (typeof _tgCfg !== 'undefined' && _tgCfg.enabled && _tgCfg.resultados && _tgCfg.token && _tgCfg.chat_id) {
+    // Nota: não verifica _tgCfg.resultados pois é resultado real da conta SECUNDÁRIA
+    if (typeof _tgCfg !== 'undefined' && _tgCfg.enabled && _tgCfg.token && _tgCfg.chat_id) {
         fetch('/tg-send', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ token: _tgCfg.token, chat_id: _tgCfg.chat_id, virtual: true, texto })
+            body: JSON.stringify({ token: _tgCfg.token, chat_id: _tgCfg.chat_id, virtual: true, texto, conta: 'SECUNDARIA' })
         }).catch(() => {});
     }
     // WhatsApp — virtual:true + texto → rota de texto livre no servidor
     if (typeof _waNotifAtivo !== 'undefined' && _waNotifAtivo) {
         fetch('/wa-send', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ virtual: true, texto })
+            body: JSON.stringify({ virtual: true, texto, conta: 'SECUNDARIA' })
         }).catch(() => {});
     }
 }
