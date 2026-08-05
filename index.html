@@ -16329,6 +16329,22 @@ function csOperar() {
 
     const _origMsg = wsUsar.onmessage;
     let _csCid = null;
+    let _csTravadoTimer = null;
+
+    // ── Função de recuperação: restaura tudo e retoma o loop ────────────────
+    const _csRecuperar = (motivo) => {
+        if (_csTravadoTimer) { clearTimeout(_csTravadoTimer); _csTravadoTimer = null; }
+        wsUsar.onmessage = _origMsg;
+        _csLogOp(`⚠️ ${motivo} — retomando loop...`, '#ff4444');
+        if (_csAutoOperar && _csAtivo) {
+            setTimeout(() => { if (_csAtivo && _csAutoOperar) csExecutar(); }, 2000);
+        } else {
+            _csBotaoOperar(true);
+        }
+    };
+
+    // Timeout global: se em 25s não chegou resultado, recupera automaticamente
+    _csTravadoTimer = setTimeout(() => _csRecuperar('Timeout — sem resposta em 25s'), 25000);
 
     wsUsar.onmessage = (msg) => {
         const d = JSON.parse(msg.data);
@@ -16336,23 +16352,32 @@ function csOperar() {
         if (d.msg_type === 'proposal' && d.req_id === reqId) {
             if (d.error) {
                 _csLogOp('⚠️ Proposta recusada: ' + d.error.message, '#ff4444');
-                wsUsar.onmessage = _origMsg; _csBotaoOperar(true); return;
+                _csRecuperar('Proposta recusada');
+                return;
             }
             const pid = d.proposal?.id;
-            if (pid) { _csLogOp('✅ Aceita — comprando...', '#00ff41'); wsUsar.send(JSON.stringify({ buy: pid, price: stake })); }
+            if (pid) {
+                _csLogOp('✅ Aceita — comprando...', '#00ff41');
+                wsUsar.send(JSON.stringify({ buy: pid, price: stake }));
+            } else {
+                _csRecuperar('Proposta sem ID');
+            }
             return;
         }
 
         if (d.msg_type === 'buy') {
             if (d.error) {
                 _csLogOp('⚠️ Compra recusada: ' + d.error.message, '#ff4444');
-                wsUsar.onmessage = _origMsg; _csBotaoOperar(true); return;
+                _csRecuperar('Compra recusada');
+                return;
             }
             const cid = d.buy?.contract_id;
             if (cid) {
                 _csCid = cid;
                 _csLogOp(`🎯 <b>#${cid}</b> — aguardando...`, '#ffbd2e');
                 wsUsar.send(JSON.stringify({ proposal_open_contract: 1, contract_id: cid, subscribe: 1 }));
+            } else {
+                _csRecuperar('Compra sem contract_id');
             }
             return;
         }
@@ -16361,6 +16386,9 @@ function csOperar() {
             const poc = d.proposal_open_contract;
             if (_csCid && poc.contract_id !== _csCid) { _origMsg(msg); return; }
             if (!poc.is_sold)                          { _origMsg(msg); return; }
+
+            // Contrato encerrado — cancela o timeout de segurança
+            if (_csTravadoTimer) { clearTimeout(_csTravadoTimer); _csTravadoTimer = null; }
 
             const profit = parseFloat(poc.profit);
             const won    = profit > 0;
