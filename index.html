@@ -4033,6 +4033,7 @@ function cfgSalvar() {
             gerenciamento: bot.gerenciamento,
             mgr_cfg:      bot.mgr ? bot.mgr.cfg : {},
             mgr_cfgs:     bot._mgrCfgs || {},  // configs de TODOS os modos
+            modo:         window._modoAtual || 'NORMAL',  // NORMAL | ESPELHO
             // configura──es internas de cada estratégia
             estrategias:  Object.fromEntries(
                 Object.entries(ESTRATEGIAS).map(([k, v]) => [k, {
@@ -4077,6 +4078,7 @@ function cfgSalvar() {
                 lista:      bot.rotacao.lista,
                 idxAtual:   bot.rotacao.idxAtual,
             },
+            edcFiltro: bot._edcFiltroAtivo || false,
         };
         localStorage.setItem(CFG_KEY, JSON.stringify(cfg));
     } catch(_) {}
@@ -4175,6 +4177,15 @@ function cfgCarregar() {
             bot._rotacaoBloqContador = 0;
         }
 
+        // EDC Filtro
+        if (cfg.edcFiltro != null) {
+            bot._edcFiltroAtivo = !!cfg.edcFiltro;
+            const _lblEdc = document.getElementById('lbl-edc-filtro');
+            const _btnEdc = document.getElementById('btn-edc-filtro');
+            if (_lblEdc) { _lblEdc.textContent = bot._edcFiltroAtivo ? 'Ativo ✅' : 'Inativo'; _lblEdc.style.color = bot._edcFiltroAtivo ? '#4ade80' : '#57606a'; }
+            if (_btnEdc) { _btnEdc.style.borderColor = bot._edcFiltroAtivo ? 'rgba(74,222,128,0.6)' : 'rgba(59,130,212,0.4)'; _btnEdc.style.color = bot._edcFiltroAtivo ? '#4ade80' : '#93c5fd'; }
+        }
+
         // Atualiza labels dos botões
         _atualizarLblLossVirtual();
         _volFiltroAtualizarBtn();
@@ -4190,6 +4201,18 @@ function cfgCarregar() {
             bot._modoIaLivre = true;
             setTimeout(() => toggleModoIaLivre(true), 300); // aguarda DOM pronto
         }
+
+        // Restaura modo de operação (NORMAL / ESPELHO) — sem abrir o overlay de seleção
+        if (cfg.modo && (cfg.modo === 'NORMAL' || cfg.modo === 'ESPELHO')) {
+            window._modoAtual = cfg.modo;
+            const lbl = document.getElementById('lbl-trocar-modo');
+            if (lbl) lbl.textContent = 'Atual: ' + cfg.modo;
+            configurarInterfacePorModo(cfg.modo);
+        }
+
+        // Restaura configurações da conta secundária no boot
+        mcCarregarConfig();
+
     } catch(_) {}
 }
 
@@ -8434,12 +8457,12 @@ function toggleModoIaLivre(forcar) {
         print('🔒 Modo IA Livre DESATIVADO — estratégia fixa restaurada.', 'log-info');
     }
 
-    // Persiste no localStorage
+    // Persiste na chave principal (mesma do cfgSalvar/cfgCarregar)
     try {
-        const raw = localStorage.getItem('garrabot_cfg') || '{}';
+        const raw = localStorage.getItem(CFG_KEY) || '{}';
         const c   = JSON.parse(raw);
         c._modoIaLivre = ativo;
-        localStorage.setItem('garrabot_cfg', JSON.stringify(c));
+        localStorage.setItem(CFG_KEY, JSON.stringify(c));
     } catch(_) {}
 }
 
@@ -8459,6 +8482,7 @@ function edcToggleFiltro() {
             : '🧠 Filtro EDC DESATIVADO — entradas ocorrem normalmente.',
         ativo ? 'log-win' : 'log-info'
     );
+    cfgSalvar();
 }
 
 // ═══════════════════════════════════════════════════════
