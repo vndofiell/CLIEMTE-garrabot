@@ -14768,14 +14768,11 @@ async function mcReconectarExistente() {
             } else {
                 // Token expirado — precisa de novo login completo
                 mcStatus(`❌ ${d2.erro || 'Token expirado. Faça login novamente.'}`, '#f87171');
-                const faixaEl  = document.getElementById('mc-faixa-login');
-                const textoEl  = document.getElementById('mc-faixa-texto');
-                const botoesEl = document.getElementById('mc-faixa-botoes');
-                if (faixaEl)  faixaEl.style.display = '';
-                if (textoEl) { textoEl.style.color = '#f87171'; textoEl.textContent = '❌ Token expirado. Faça login novamente com a conta secundária.'; }
-                if (botoesEl) botoesEl.innerHTML = '';
+                const faixaEl     = document.getElementById('mc-faixa-login');
                 const btnConectar = document.getElementById('mc-btn-conectar');
+                if (faixaEl)     faixaEl.style.display = '';
                 if (btnConectar) btnConectar.style.display = '';
+                mcAtualizarFaixa('sem_token');
             }
         }, 1500);
     } catch (e) {
