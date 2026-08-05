@@ -5762,7 +5762,7 @@ async function testarTelegram() {
     }
 }
 
-function tgEnviarResultado(win, lucro, prox_stake, _origemSec) {
+function tgEnviarResultado(win, lucro, prox_stake, _origemSec, _entrada) {
     const _modoEspelhoAtivo = (typeof _sec !== 'undefined' && _sec.pronto && _sec.espelhandoAtivo);
     const _lvVirtual        = bot.lv && bot.lv.ativo && !bot.lv.emRecuperacao;
 
@@ -5804,10 +5804,9 @@ function tgEnviarResultado(win, lucro, prox_stake, _origemSec) {
             wins:            _sec.wins,
             losses:          _sec.losses,
             prox_stake:      prox_stake,
+            entrada:         _entrada || prox_stake,
             modo:            (_mcConfig && _mcConfig.gerenciamento) || bot.gerenciamento,
             estrategia:      bot.estrategia,
-            seq_win:         _sec.wins,
-            seq_loss:        _sec.losses,
             max_win_consec:  bot._maxWinConsec,
             max_loss_consec: bot._maxLossConsec,
             max_stake:       bot._maxStakeUsada,
@@ -5824,6 +5823,7 @@ function tgEnviarResultado(win, lucro, prox_stake, _origemSec) {
             wins:            bot.wins,
             losses:          bot.losses,
             prox_stake:      prox_stake,
+            entrada:         _entrada || (bot.mgr ? bot.stake : bot.initialStake),
             modo:            bot.gerenciamento,
             estrategia:      bot.estrategia,
             seq_win:         bot._seqWinAtual,
@@ -6474,10 +6474,11 @@ async function _secConectar() {
             _sec.profit = parseFloat((_sec.profit + p).toFixed(2));
 
             // Atualiza o gerenciador da secundária (Martingale, Soros, etc.)
+            const _secStakeAntes = _sec.mgr ? _sec.mgr.getStake() : (_mcConfig.stake || 0);
             if (_sec.mgr) _sec.mgr.updateResult(won);
 
             // ── Notificação Telegram/WhatsApp com dados da conta SECUNDÁRIA ──
-            tgEnviarResultado(won, p, (_sec.mgr ? _sec.mgr.getStake() : _mcConfig.stake || 0), true);
+            tgEnviarResultado(won, p, (_sec.mgr ? _sec.mgr.getStake() : _mcConfig.stake || 0), true, _secStakeAntes);
 
             // Libera flag de anti-duplicata (modo autônomo)
             _sec._buying = false;
@@ -7992,7 +7993,7 @@ function initWebSocket(wssUrl) {
                 // updateHeader(bot._lastBalance);
                 bot.ws.send(json({ balance: 1 }));  // confirma saldo real com a Deriv
                 // Enquanto secundária estiver conectada (standby ou espelhando), bloqueia notif da principal
-                if (!(_sec && _sec.pronto)) tgEnviarResultado(wonReal, totalProfit, bot.stake);
+                if (!(_sec && _sec.pronto)) tgEnviarResultado(wonReal, totalProfit, bot.stake, false, stakePorLado);
                 // ── Planilha JC: registra histórico ──────────────────────
                 if (bot.mgr && bot.mgr.modo === "💹 Juros Compostos") {
                     jcRegistrarResultado(wonReal ? 'WIN' : 'LOSS', stakePorLado, totalProfit, bot.mgr._jcBanca);
@@ -8006,6 +8007,7 @@ function initWebSocket(wssUrl) {
                 // ── Resultado normal (contrato único) ─────────────────────
                 bot._buying = false;
                 bot.profit  += profit;
+                const _stakeAntes = bot.stake;   // captura antes do update (entrada desta rodada)
                 bot.mgr.updateResult(won);
                 const _stakeDepois = bot.mgr.getStake();
                 bot.stake = won ? _stakeDepois : _stakeDepois;
@@ -8055,7 +8057,7 @@ function initWebSocket(wssUrl) {
                 // updateHeader(bot._lastBalance);
                 bot.ws.send(json({ balance: 1 }));  // confirma saldo real com a Deriv
                 // Enquanto secundária estiver conectada (standby ou espelhando), bloqueia notif da principal
-                if (!(_sec && _sec.pronto)) tgEnviarResultado(won, profit, bot.stake);
+                if (!(_sec && _sec.pronto)) tgEnviarResultado(won, profit, bot.stake, false, _stakeAntes);
                 // ── Planilha JC: registra histórico ──────────────────────
                 if (bot.mgr && bot.mgr.modo === "💹 Juros Compostos") {
                     jcRegistrarResultado(won ? 'WIN' : 'LOSS', bot.stake, profit, bot.mgr._jcBanca);
