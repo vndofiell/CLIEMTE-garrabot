@@ -8995,11 +8995,15 @@ def contas_sec_config_get():
     Valores são SEPARADOS da conta teste!
     """
     padrao = {
-        "gerenciamento": "Martingale",
-        "stake": 0.35,
-        "stopWin": 10.0,
-        "stopLoss": 100.0,
-        "limitePerda": 10.0,
+        "gerenciamento":    "Martingale",
+        "stake":            0.35,
+        "stopWin":          10.0,
+        "stopLoss":         100.0,
+        "limitePerda":      10.0,
+        "limiteSeqLoss":    2,
+        "gatilhoSeqAtivo":  False,
+        "gatilhoPerdaAtivo": False,
+        "mgrCfgs":          {},
     }
     try:
         if os.path.exists(SEC_CFG_ARQUIVO):
@@ -9015,7 +9019,8 @@ def contas_sec_config_get():
 def contas_sec_config_post():
     """
     Salva as configurações independentes da conta secundária.
-    Payload: { gerenciamento, stake, stopWin, stopLoss }
+    Payload: { gerenciamento, stake, stopWin, stopLoss, limitePerda,
+               limiteSeqLoss, gatilhoSeqAtivo, gatilhoPerdaAtivo, mgrCfgs }
     """
     dados = request.get_json(force=True, silent=True) or {}
     # Carrega atual e faz merge
@@ -9026,7 +9031,12 @@ def contas_sec_config_post():
                 atual = json.load(f)
     except Exception:
         pass
-    for k in ("gerenciamento", "stake", "stopWin", "stopLoss", "limitePerda"):
+    campos = (
+        "gerenciamento", "stake", "stopWin", "stopLoss",
+        "limitePerda", "limiteSeqLoss", "gatilhoSeqAtivo",
+        "gatilhoPerdaAtivo", "mgrCfgs",
+    )
+    for k in campos:
         if k in dados:
             atual[k] = dados[k]
     try:

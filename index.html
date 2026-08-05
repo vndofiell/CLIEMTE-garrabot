@@ -14193,7 +14193,8 @@ function _mcSalvarConfigSilencioso() {
         limitePerda:       Math.abs(_sec.limitePerda) || 10,
         limiteSeqLoss:     _sec.limiteSeqLoss,
         gatilhoSeqAtivo:   _sec.gatilhoSeqAtivo,
-        gatilhoPerdaAtivo: _sec.gatilhoPerdaAtivo
+        gatilhoPerdaAtivo: _sec.gatilhoPerdaAtivo,
+        mgrCfgs:           _mcMgrCfgs || {},
     });
     try { localStorage.setItem('mc_sec_config', JSON.stringify(_cfgSil)); } catch (_) {}
     fetch("/contas/sec-config", {
@@ -14231,7 +14232,8 @@ function mcSalvarConfigSecundaria() {
         limitePerda:       Math.abs(_sec.limitePerda) || 10,
         limiteSeqLoss:     _sec.limiteSeqLoss,
         gatilhoSeqAtivo:   _sec.gatilhoSeqAtivo,
-        gatilhoPerdaAtivo: _sec.gatilhoPerdaAtivo
+        gatilhoPerdaAtivo: _sec.gatilhoPerdaAtivo,
+        mgrCfgs:           _mcMgrCfgs || {},
     });
     try { localStorage.setItem('mc_sec_config', JSON.stringify(_cfgParaSalvar)); } catch (_) {}
     fetch("/contas/sec-config", {
