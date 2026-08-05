@@ -2136,13 +2136,15 @@ def tg_send():
             emoji, tag = "🟥", "LOSS"
             seq_str = f"💀 Seq. atual: {seq_loss} LOSS consecutivos" if seq_loss > 1 else ""
 
-        prefixo = "💳 <b>SECUNDÁRIA</b>\n" if conta_sec else ("🧪 <b>TESTE</b>\n" if teste else "")
+        prefixo = "💳 CYBER SORT — SEC\n" if conta_sec else ("🧪 TESTE\n" if teste else "")
         linha_seq = f"\n{seq_str}" if seq_str else ""
+        sessao_str = profit_str.replace('<i>','').replace('</i>','')
         if win:
             msg = (
+                f"{prefixo}"
                 f"🟢 WIN {sinal_usd}\n\n"
                 f"💰 Banca: ${banca:.2f} (R$ {banca_brl:.2f})\n"
-                f"📈 Sessão: {profit_str.replace('<i>','').replace('</i>','')}\n\n"
+                f"📈 Sessão: {sessao_str}\n\n"
                 f"📊 {wins}W • {losses}L • {wr:.0f}%\n\n"
                 f"➡️ Próxima: ${prox_stake:.2f}\n\n"
                 f"🤖 {estrategia.upper()}\n"
@@ -2151,9 +2153,10 @@ def tg_send():
             )
         else:
             msg = (
+                f"{prefixo}"
                 f"🟥 LOSS {sinal_usd}\n\n"
                 f"💰 Banca: ${banca:.2f} (R$ {banca_brl:.2f})\n"
-                f"📈 Sessão: {profit_str.replace('<i>','').replace('</i>','')}\n\n"
+                f"📈 Sessão: {sessao_str}\n\n"
                 f"📊 {wins}W • {losses}L • {wr:.0f}%\n\n"
                 f"➡️ Próxima: ${prox_stake:.2f}\n\n"
                 f"🤖 {estrategia.upper()}\n"
