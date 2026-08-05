@@ -1781,7 +1781,6 @@
           <button onclick="csFechar()"
               style="background:none;border:none;color:#f44;font-size:1.1rem;cursor:pointer;">✕</button>
         </div>
-        <p style="color:#6b7280;font-size:0.62rem;text-align:center;margin-bottom:12px;">TIME: O(n log n) &nbsp;|&nbsp; SPACE: O(log n)</p>
 
         <!-- ── LINHA PRINCIPAL ── -->
         <div id="cs-linha-main" style="display:flex;align-items:center;gap:4px;flex-wrap:nowrap;margin-bottom:5px;padding:5px 8px;
@@ -1863,7 +1862,7 @@
         <div style="display:grid;grid-template-columns:1.2fr 1fr 1.8fr 1.8fr;gap:8px;margin-bottom:12px;align-items:end;">
           <div>
             <label style="font-size:0.58rem;color:#00ffff;letter-spacing:1px;display:block;margin-bottom:3px;">ATIVO</label>
-            <select id="cs-ativo" style="width:100%;background:#161b22;border:1px solid rgba(0,255,65,0.4);
+            <select id="cs-ativo" onchange="csSalvarCfg()" style="width:100%;background:#161b22;border:1px solid rgba(0,255,65,0.4);
                 color:#c9d1d9;font-family:'Share Tech Mono',monospace;font-size:0.72rem;
                 padding:6px 7px;border-radius:4px;cursor:pointer;">
               <option value="R_100">R_100</option>
@@ -1876,7 +1875,8 @@
           </div>
           <div>
             <label style="font-size:0.58rem;color:#00ffff;letter-spacing:1px;display:block;margin-bottom:3px;">STAKE (USD)</label>
-            <input id="cs-stake" type="number" value="0.35" min="0.35" step="0.01" style="
+            <input id="cs-stake" type="number" value="0.35" min="0.35" step="0.01"
+                onchange="csSalvarCfg()" style="
                 width:100%;background:#161b22;border:1px solid rgba(0,255,65,0.4);
                 color:#c9d1d9;font-family:'Share Tech Mono',monospace;font-size:0.72rem;
                 padding:6px 7px;border-radius:4px;outline:none;">
@@ -2299,18 +2299,21 @@
       <div style="background:rgba(0,255,100,0.04);border:1px solid rgba(0,255,100,0.25);border-radius:6px;padding:8px;">
         <label style="font-size:0.65rem;color:#2979ff;font-weight:700;">BANCA BASE ($)</label>
         <input id="jc-banca-base-input" type="number" value="100" min="1" step="1"
+          onchange="jcSalvarConfig()"
           style="width:100%;background:#0a0a12;border:1px solid rgba(0,255,100,0.4);color:#00ff64;
                  font-family:'Share Tech Mono';font-size:0.9rem;padding:6px 8px;border-radius:4px;margin-top:4px;">
       </div>
       <div style="background:rgba(0,255,100,0.04);border:1px solid rgba(0,255,100,0.25);border-radius:6px;padding:8px;">
         <label style="font-size:0.65rem;color:#2979ff;font-weight:700;">% META DIÁRIA</label>
         <input id="jc-perc-input" type="number" value="5" min="0.1" max="50" step="0.1"
+          onchange="jcSalvarConfig()"
           style="width:100%;background:#0a0a12;border:1px solid rgba(0,255,100,0.4);color:#00ff64;
                  font-family:'Share Tech Mono';font-size:0.9rem;padding:6px 8px;border-radius:4px;margin-top:4px;">
       </div>
       <div style="background:rgba(0,255,100,0.04);border:1px solid rgba(0,255,100,0.25);border-radius:6px;padding:8px;">
         <label style="font-size:0.65rem;color:#2979ff;font-weight:700;">DIAS PROJEÇÃO</label>
         <input id="jc-dias-input" type="number" value="30" min="1" max="365" step="1"
+          onchange="jcSalvarConfig()"
           style="width:100%;background:#0a0a12;border:1px solid rgba(0,255,100,0.4);color:#00ff64;
                  font-family:'Share Tech Mono';font-size:0.9rem;padding:6px 8px;border-radius:4px;margin-top:4px;">
       </div>
@@ -15733,6 +15736,64 @@ function _iniciarMatrixApk() {
 // ══════════════════════════════════════════════════════════════════════════════
 // CYBER SORT — Quick Sort + Gerenciamento + TG/WA + Matrix + Stats BRL
 // ══════════════════════════════════════════════════════════════════════════════
+
+const _CS_CFG_KEY = 'cybersort_cfg_v1';
+
+function csSalvarCfg() {
+    try {
+        const cfg = {
+            stake:        parseFloat(document.getElementById('cs-stake')?.value) || 0.35,
+            ativo:        document.getElementById('cs-ativo')?.value || 'R_100',
+            mgr:          document.getElementById('cs-mgr')?.value || 'flat',
+            autoOperar:   _csAutoOperar,
+            lvAtivo:      document.getElementById('cs-lv-ativo')?.checked || false,
+            lvQtd:        parseInt(document.getElementById('cs-lv-qtd')?.value) || 3,
+            lvQuando:     document.getElementById('cs-lv-quando')?.value || 'sempre',
+            espelhoAtivo: document.getElementById('cs-espelho-ativo')?.checked || false,
+        };
+        localStorage.setItem(_CS_CFG_KEY, JSON.stringify(cfg));
+    } catch(_) {}
+}
+
+function csCarregarCfg() {
+    try {
+        const raw = localStorage.getItem(_CS_CFG_KEY);
+        if (!raw) return;
+        const cfg = JSON.parse(raw);
+
+        const stakeEl = document.getElementById('cs-stake');
+        if (stakeEl && cfg.stake > 0) stakeEl.value = cfg.stake;
+
+        const ativoEl = document.getElementById('cs-ativo');
+        if (ativoEl && cfg.ativo) {
+            for (const opt of ativoEl.options) { if (opt.value === cfg.ativo) { opt.selected = true; break; } }
+        }
+
+        const mgrEl = document.getElementById('cs-mgr');
+        if (mgrEl && cfg.mgr) { mgrEl.value = cfg.mgr; csOnMgrChange(); }
+
+        if (cfg.autoOperar !== undefined && cfg.autoOperar !== _csAutoOperar) {
+            _csAutoOperar = cfg.autoOperar;
+            _csAtualizarToggle();
+        }
+
+        const lvChk = document.getElementById('cs-lv-ativo');
+        if (lvChk && cfg.lvAtivo !== undefined) {
+            lvChk.checked = cfg.lvAtivo;
+            csAtualizarLV(true);   // semSalvar=true — não dispara save durante restore
+        }
+        const lvQtdEl = document.getElementById('cs-lv-qtd');
+        if (lvQtdEl && cfg.lvQtd) lvQtdEl.value = cfg.lvQtd;
+        const lvQuandoEl = document.getElementById('cs-lv-quando');
+        if (lvQuandoEl && cfg.lvQuando) lvQuandoEl.value = cfg.lvQuando;
+
+        const espChk = document.getElementById('cs-espelho-ativo');
+        if (espChk && cfg.espelhoAtivo !== undefined) {
+            espChk.checked = cfg.espelhoAtivo;
+            csAtualizarEspelho(true);  // semSalvar=true
+        }
+    } catch(_) {}
+}
 const _csAudioCtx  = new (window.AudioContext || window.webkitAudioContext)();
 let _csSinalAtual  = null;
 let _csAutoOperar  = false;
@@ -15941,11 +16002,13 @@ function csOnMgrChange() {
     const stake = parseFloat(document.getElementById('cs-stake')?.value) || 0.35;
     if (!nome || nome === 'flat' || typeof GerenciadorUnificado === 'undefined') {
         _csMgr = null;
+        csSalvarCfg();
         return;
     }
     _csMgr = new GerenciadorUnificado(nome, { stake });
     _csLogAnalise(`⚙ Gerenciamento: <b style="color:#c084fc">${nome}</b>`, '#c084fc');
     _csAtualizarStats(_csMgr.getStake());
+    csSalvarCfg();
 }
 
 // ── Sinal ───────────────────────────────────────────────────────────────────
@@ -15966,7 +16029,7 @@ function _csGerarSinal(original) {
 
 // ── Loss Virtual ────────────────────────────────────────────────────────────
 // Controla visibilidade dos campos e estado do badge
-function csAtualizarLV() {
+function csAtualizarLV(semSalvar) {
     const ativo   = document.getElementById('cs-lv-ativo')?.checked;
     const campos  = document.getElementById('cs-lv-campos');
     const badge   = document.getElementById('cs-lv-badge');
@@ -15976,8 +16039,8 @@ function csAtualizarLV() {
     if (status) status.textContent  = ativo
         ? `Aguardando ${document.getElementById('cs-lv-qtd')?.value || 3} resultados virtuais`
         : 'Aguarda N resultados virtuais antes de operar';
-    // Inicializa / zera contador virtual quando ativado/desativado
     if (ativo) { window._csLvContador = 0; }
+    if (!semSalvar) csSalvarCfg();
 }
 
 // Corrige badge (o "if" em JS não aceita string — reescreve)
@@ -15991,7 +16054,7 @@ function _csLvBadge(ativo) {
 // ── Modo Espelho ─────────────────────────────────────────────────────────────
 // Usa exatamente as mesmas configurações da conta secundária (_sec.limiteSeqLoss,
 // _sec.gatilhoSeqAtivo, _sec.limitePerda, _sec.gatilhoPerdaAtivo) — não duplica config.
-function csAtualizarEspelho() {
+function csAtualizarEspelho(semSalvar) {
     const ativo     = document.getElementById('cs-espelho-ativo')?.checked;
     const badge     = document.getElementById('cs-espelho-badge');
     const cfg       = document.getElementById('cs-espelho-cfg');
@@ -16030,6 +16093,7 @@ function csAtualizarEspelho() {
     _csAtualizarCfgBadges();
     _csAtualizarStatusEspelho();
     _csAtualizarStats();
+    if (!semSalvar) csSalvarCfg();
 }
 
 // Atualiza os mini-cards de configuração lidos de _sec
@@ -16085,6 +16149,7 @@ function _csAtualizarStatusEspelho() {
 // ── Abrir / Fechar ──────────────────────────────────────────────────────────
 function csFechar() {
     _csAtivo = false;
+    csSalvarCfg();   // salva antes de fechar
     _csPararMatrix();
     document.getElementById('cyber-sort-modal').style.display = 'none';
 }
@@ -16093,13 +16158,6 @@ function abrirModalCyberSort() {
     const m = document.getElementById('cyber-sort-modal');
     if (!m) return;
     _csAtivo = true;
-
-    const stakeEl = document.getElementById('cs-stake');
-    if (stakeEl && typeof bot !== 'undefined' && bot.stake) stakeEl.value = bot.stake;
-    const ativoEl = document.getElementById('cs-ativo');
-    if (ativoEl && typeof bot !== 'undefined' && bot._tickAtivo) {
-        for (const opt of ativoEl.options) { if (opt.value === bot._tickAtivo) { opt.selected = true; break; } }
-    }
 
     _csSinalAtual  = null;
     _csMgr         = null;
@@ -16143,7 +16201,8 @@ function abrirModalCyberSort() {
     document.getElementById('cs-sinal-box').style.display  = 'none';
     document.getElementById('cs-log-analise').innerHTML    = '';
     document.getElementById('cs-op-log').innerHTML         = '';
-    document.getElementById('cs-mgr').value                = 'flat';
+    // Restaura última config salva (stake, ativo, mgr, auto-loop, LV, espelho)
+    csCarregarCfg();
     _csBotaoOperar(false);
     _csAtualizarToggle();
     _csAtualizarStats();
@@ -16158,6 +16217,7 @@ function abrirModalCyberSort() {
 function csToggleAuto() {
     _csAutoOperar = !_csAutoOperar;
     _csAtualizarToggle();
+    csSalvarCfg();
 }
 
 function _csAtualizarToggle() {
