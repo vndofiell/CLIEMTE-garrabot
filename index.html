@@ -16320,12 +16320,17 @@ function csOperar() {
     const _origMsg = wsUsar.onmessage;
     let _csCid = null;
 
+    // Bloqueia o handler autônomo da SEC enquanto o CyberSort está operando
+    // Evita que _secEntrarAutonoma sobreponha o onmessage durante a espera do resultado
+    if (_csUsandoSec && typeof _sec !== 'undefined') _sec._buying = true;
+
     wsUsar.onmessage = (msg) => {
         const d = JSON.parse(msg.data);
 
         if (d.msg_type === 'proposal' && d.req_id === reqId) {
             if (d.error) {
                 _csLogOp('⚠️ Proposta recusada: ' + d.error.message, '#ff4444');
+                if (_csUsandoSec && typeof _sec !== 'undefined') _sec._buying = false;
                 wsUsar.onmessage = _origMsg; _csBotaoOperar(true); return;
             }
             const pid = d.proposal?.id;
@@ -16336,6 +16341,7 @@ function csOperar() {
         if (d.msg_type === 'buy') {
             if (d.error) {
                 _csLogOp('⚠️ Compra recusada: ' + d.error.message, '#ff4444');
+                if (_csUsandoSec && typeof _sec !== 'undefined') _sec._buying = false;
                 wsUsar.onmessage = _origMsg; _csBotaoOperar(true); return;
             }
             const cid = d.buy?.contract_id;
@@ -16447,6 +16453,9 @@ function csOperar() {
                 _csNotificar(won, profit, ct, barr, ativo);
             }
 
+            // Libera o flag antes de restaurar o handler (permite novo ciclo autônomo)
+            // Usa _eraSecAntes pois _csUsandoSec pode já ter sido resetado para false (WIN da SEC)
+            if (_eraSecAntes && typeof _sec !== 'undefined') _sec._buying = false;
             wsUsar.onmessage = _origMsg;
 
             // ── Stop Win / Stop Loss sincronizados com o bot ─────────────────
