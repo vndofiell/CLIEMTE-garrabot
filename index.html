@@ -15936,6 +15936,42 @@ function _csNotificar(won, profit, ct, barr, ativo, proxStake) {
     }
 }
 
+// ── Stop Win TG + WA — somente conta SECUNDÁRIA ─────────────────────────────
+function _csNotificarStopWin() {
+    const bancaSec = (typeof _sec !== 'undefined' && _sec.saldo !== undefined)
+        ? parseFloat(_sec.saldo) : 0;
+    const modoEl   = document.getElementById('cs-mgr');
+    const modo     = (modoEl && modoEl.value && modoEl.value !== 'flat') ? modoEl.value : 'FLAT';
+    const total    = _csEspWins + _csEspLosses;
+
+    const payload = {
+        stop_win:        true,
+        lucro:           _csEspLucro,
+        banca:           bancaSec,
+        wins:            _csEspWins,
+        losses:          _csEspLosses,
+        modo:            modo,
+        estrategia:      'CYBER SORT — SEC',
+        max_win_consec:  0,
+        max_loss_consec: 0,
+        max_stake:       0,
+        conta:           'SECUNDARIA',
+    };
+
+    if (typeof _tgCfg !== 'undefined' && _tgCfg.enabled && _tgCfg.stopwin && _tgCfg.token && _tgCfg.chat_id) {
+        fetch('/tg-send', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token: _tgCfg.token, chat_id: _tgCfg.chat_id, ...payload })
+        }).catch(() => {});
+    }
+    if (typeof _waNotifAtivo !== 'undefined' && _waNotifAtivo) {
+        fetch('/wa-send', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        }).catch(() => {});
+    }
+}
+
 // ── Gerenciamento ───────────────────────────────────────────────────────────
 function csOnMgrChange() {
     const nome  = document.getElementById('cs-mgr')?.value;
@@ -16487,31 +16523,23 @@ function csOperar() {
 
             wsUsar.onmessage = _origMsg;
 
-            // ── Stop Win / Stop Loss sincronizados com o bot ─────────────────
-            const _lucroTotal = _csLucro + _csEspLucro;
-            if (_csStopWin < 999 && _lucroTotal >= _csStopWin) {
+            // ── Stop Win / Stop Loss — baseados SOMENTE no lucro da conta SECUNDÁRIA ──
+            // A conta principal (TESTE) não conta para stop win/loss do Cyber Sort
+            if (_csStopWin < 999 && _csEspLucro >= _csStopWin) {
                 _csAtivo = false;
                 _csAutoOperar = false;
                 _csBotaoOperar(true);
-                fetch('/jc-meta').then(r => r.json()).then(m2 => {
-                    if (m2.ativo && m2.meta_hoje > 0) {
-                        _csLogOp(`🏆 <b style="color:#ffd700">META JC ATINGIDA!</b> Lucro: +$${_lucroTotal.toFixed(2)} | Meta: $${_csStopWin.toFixed(2)} — sessão encerrada`, '#ffd700');
-                        _csBip(1200, 0.6);
-                    } else {
-                        _csLogOp(`🏆 <b style="color:#ffd700">STOP WIN ATINGIDO!</b> Lucro: +$${_lucroTotal.toFixed(2)} | Limite: $${_csStopWin.toFixed(2)} — sessão encerrada`, '#ffd700');
-                        _csBip(1200, 0.6);
-                    }
-                }).catch(() => {
-                    _csLogOp(`🏆 <b style="color:#ffd700">STOP WIN ATINGIDO!</b> Lucro: +$${_lucroTotal.toFixed(2)} — sessão encerrada`, '#ffd700');
-                    _csBip(1200, 0.6);
-                });
+                _csLogOp(`🏆 <b style="color:#ffd700">STOP WIN SEC ATINGIDO!</b> Lucro SEC: +$${_csEspLucro.toFixed(2)} | Limite: $${_csStopWin.toFixed(2)} — sessão encerrada`, '#ffd700');
+                _csBip(1200, 0.6);
+                // Notifica TG + WA com dados da SEC
+                _csNotificarStopWin();
                 return;
             }
-            if (_csStopLoss < 999 && _lucroTotal <= -_csStopLoss) {
+            if (_csStopLoss < 999 && _csEspLucro <= -_csStopLoss) {
                 _csAtivo = false;
                 _csAutoOperar = false;
                 _csBotaoOperar(true);
-                _csLogOp(`🛑 <b style="color:#ff4444">STOP LOSS ATINGIDO!</b> Perda: -$${Math.abs(_lucroTotal).toFixed(2)} | Limite: $${_csStopLoss.toFixed(2)} — sessão encerrada`, '#ff4444');
+                _csLogOp(`🛑 <b style="color:#ff4444">STOP LOSS SEC ATINGIDO!</b> Perda SEC: -$${Math.abs(_csEspLucro).toFixed(2)} | Limite: $${_csStopLoss.toFixed(2)} — sessão encerrada`, '#ff4444');
                 _csBip(200, 0.5);
                 return;
             }
