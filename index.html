@@ -1786,7 +1786,10 @@
           <button onclick="csFechar()"
               style="background:none;border:none;color:#f44;font-size:1.1rem;cursor:pointer;">✕</button>
         </div>
-        <p style="color:#6b7280;font-size:0.62rem;text-align:center;margin-bottom:12px;">TIME: O(n log n) &nbsp;|&nbsp; SPACE: O(log n)</p>
+        <p style="font-size:0.72rem;text-align:center;margin-bottom:12px;letter-spacing:1px;font-family:'Share Tech Mono',monospace;">
+            <span id="cs-hd-profit" style="font-weight:bold;color:#00ff41;">$0.00</span>
+            &nbsp;<span id="cs-hd-profit-brl" style="color:#57606a;font-size:0.65rem;">(R$0,00)</span>
+        </p>
 
         <!-- ── LINHA PRINCIPAL ── -->
         <div id="cs-linha-main" style="display:flex;align-items:center;gap:4px;flex-wrap:nowrap;margin-bottom:5px;padding:5px 8px;
@@ -4290,11 +4293,21 @@ function updateHeader(balance) {
     const profitEl   = document.getElementById('hd-profit');
     const profitBRL  = document.getElementById('hd-profit-brl');
     const profitBox  = document.getElementById('hd-profit-box');
-    profitEl.textContent  = (bot.profit >= 0 ? '+' : '') + '$' + bot.profit.toFixed(2);
+    const _profitStr = (bot.profit >= 0 ? '+' : '') + '$' + bot.profit.toFixed(2);
+    profitEl.textContent  = _profitStr;
     profitBox.className   = 'stat-box ' + (bot.profit >= 0 ? 'profit-pos' : 'profit-neg');
+    // Atualiza lucro no CYBER SORT (substitui o texto antigo TIME/SPACE)
+    const csProfit = document.getElementById('cs-hd-profit');
+    const csProfitBrl = document.getElementById('cs-hd-profit-brl');
+    if (csProfit) {
+        csProfit.textContent = _profitStr;
+        csProfit.style.color = bot.profit >= 0 ? '#00ff41' : '#f44444';
+    }
     if (_cotacaoBRL > 0) {
         const brl = bot.profit * _cotacaoBRL;
-        profitBRL.textContent = '(' + (brl >= 0 ? '+' : '') + 'R$' + brl.toFixed(2).replace('.', ',') + ')';
+        const _brlStr = '(' + (brl >= 0 ? '+' : '') + 'R$' + brl.toFixed(2).replace('.', ',') + ')';
+        profitBRL.textContent = _brlStr;
+        if (csProfitBrl) csProfitBrl.textContent = _brlStr;
     }
     document.getElementById('hd-mgmt').textContent  = bot.gerenciamento.replace(/[^\w\s]/gu, '').trim();
     document.getElementById('hd-strat').textContent = bot.estrategia.replace(/[^\w\s]/gu, '').trim();
@@ -6762,11 +6775,17 @@ function _secUpdateHeader() {
     const profitEl  = document.getElementById('hd-profit');
     const profitBRL = document.getElementById('hd-profit-brl');
     const profitBox = document.getElementById('hd-profit-box');
-    profitEl.textContent = (_sec.profit >= 0 ? '+' : '') + '$' + _sec.profit.toFixed(2);
+    const _secProfitStr = (_sec.profit >= 0 ? '+' : '') + '$' + _sec.profit.toFixed(2);
+    profitEl.textContent = _secProfitStr;
     profitBox.className  = 'stat-box ' + (_sec.profit >= 0 ? 'profit-pos' : 'profit-neg');
+    const csProfit2 = document.getElementById('cs-hd-profit');
+    const csProfitBrl2 = document.getElementById('cs-hd-profit-brl');
+    if (csProfit2) { csProfit2.textContent = _secProfitStr; csProfit2.style.color = _sec.profit >= 0 ? '#00ff41' : '#f44444'; }
     if (_cotacaoBRL > 0) {
         const brl = _sec.profit * _cotacaoBRL;
-        profitBRL.textContent = '(' + (brl >= 0 ? '+' : '') + 'R$' + brl.toFixed(2).replace('.', ',') + ')';
+        const _brlStr2 = '(' + (brl >= 0 ? '+' : '') + 'R$' + brl.toFixed(2).replace('.', ',') + ')';
+        profitBRL.textContent = _brlStr2;
+        if (csProfitBrl2) csProfitBrl2.textContent = _brlStr2;
     }
 
     // taxa de acerto
