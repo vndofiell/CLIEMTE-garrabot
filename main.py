@@ -9175,10 +9175,27 @@ def contas_mudar_estado():
     return jsonify({"ok": True, "msg": f"Estado alterado para {novo_estado}."})
 
 
+# Cache de OTP: evita gerar novo OTP a cada reconexão do WebSocket
+# O OTP é de uso único — invalidado assim que o WS abre com sucesso
+_sec_otp_cache = {"wss_url": None, "ts": 0, "conta_id": None}
+_SEC_OTP_TTL   = 30  # segundos — TTL máximo caso o onopen não invalide (failsafe)
+
+@app.route('/contas/wss-secundaria-invalidar', methods=['POST'])
+def contas_wss_secundaria_invalidar():
+    """
+    Invalida o cache de OTP depois que o WS foi aberto com sucesso.
+    O OTP é de uso único — uma vez consumido, um novo deve ser gerado na próxima reconexão.
+    """
+    _sec_otp_cache["wss_url"]  = None
+    _sec_otp_cache["ts"]       = 0
+    _sec_otp_cache["conta_id"] = None
+    return jsonify({"ok": True})
+
 @app.route('/contas/wss-secundaria', methods=['GET'])
 def contas_wss_secundaria():
     """
     Gera OTP fresco para a conta SECUNDÁRIA e retorna WSS URL.
+    Cache de 25s: evita flood de OTPs quando o WS reconecta repetidamente.
 
     IMPORTANTE: a conta secundária tem seu próprio access_token (diferente da principal).
     Usa SEMPRE o token salvo da própria conta secundária.
@@ -9201,7 +9218,21 @@ def contas_wss_secundaria():
             "erro": "Token da conta secundária expirado. Abra '💳 Conta Secundária' e reconecte com a conta secundária."
         })
 
-    # ── Gera OTP → WSS URL usando o token da conta secundária ────────────
+    # ── Cache: reutiliza OTP recente se ainda válido ──────────────────────
+    agora = time.time()
+    if (
+        _sec_otp_cache["wss_url"]
+        and _sec_otp_cache["conta_id"] == conta_id
+        and (agora - _sec_otp_cache["ts"]) < _SEC_OTP_TTL
+    ):
+        return jsonify({
+            "wss_url":  _sec_otp_cache["wss_url"],
+            "conta_id": conta_id,
+            "nome":     sec.get("nome", ""),
+            "tipo":     sec.get("tipo", ""),
+        })
+
+    # ── Gera OTP fresco → WSS URL usando o token da conta secundária ─────
     try:
         headers = {
             "Authorization": f"Bearer {access_token}",
@@ -9216,7 +9247,6 @@ def contas_wss_secundaria():
         wss_url  = (body_otp.get("data") or {}).get("url")
 
         if not wss_url:
-            # Tenta extrair mensagem de erro legível
             erros = body_otp.get("errors") or []
             if erros:
                 msg_err = erros[0].get("message", str(body_otp)[:120])
@@ -9225,7 +9255,10 @@ def contas_wss_secundaria():
             print(f"[SecWSS] OTP falhou para conta {conta_id}: {msg_err}")
             return jsonify({"wss_url": None, "erro": f"OTP falhou: {msg_err}"})
 
-        # Atualiza wss_url salvo (token não muda — só o OTP expira)
+        # Salva no cache e no AccountManager
+        _sec_otp_cache["wss_url"]  = wss_url
+        _sec_otp_cache["ts"]       = agora
+        _sec_otp_cache["conta_id"] = conta_id
         if conta_id in _account_manager.contas:
             _account_manager.contas[conta_id]["wss_url"] = wss_url
             _account_manager._salvar()

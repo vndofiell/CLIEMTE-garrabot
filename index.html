@@ -6273,17 +6273,17 @@ async function _secConectar() {
         if (_sec._destruido) return;
         if (!bot.token) return;
 
-        // Limite maximo de reconexoes: 3 tentativas no total
+        // Limite maximo de reconexoes: 5 tentativas no total
         _sec._tentativas++;
-        if (_sec._tentativas > 3) {
-            print("SECUNDARIA - limite de reconexoes atingido (3/3). Clique em Conta Secundaria para reconectar manualmente.", "log-loss");
+        if (_sec._tentativas > 5) {
+            print("SECUNDARIA - limite de reconexoes atingido (5/5). Clique em Conta Secundaria para reconectar manualmente.", "log-loss");
             _sec._erro = true;
             _secAtualizarBadge();
             return;
         }
 
-        // Reconexao automatica com backoff: 5s - 15s - 30s
-        const delays = [5000, 15000, 30000];
+        // Reconexao automatica com backoff crescente: 10s - 20s - 40s - 60s - 90s
+        const delays = [10000, 20000, 40000, 60000, 90000];
         const idx    = Math.min(_sec._tentativas - 1, delays.length - 1);
         const delay  = delays[idx];
 
@@ -6296,6 +6296,8 @@ async function _secConectar() {
         }, delay);
     };
     _sec.ws.onopen = () => {
+        // Invalida o cache de OTP no servidor — OTP foi consumido ao abrir o WS
+        fetch('/contas/wss-secundaria-invalidar', { method: 'POST' }).catch(() => {});
         // Identifica conta e pede saldo real
         _sec.loginid  = undefined;
         _sec._buying  = false;   // flag anti-duplicata para a secundária
