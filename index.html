@@ -15952,6 +15952,11 @@ function _csAtualizarStats(proxStake) {
     const linhaEsp = document.getElementById('cs-linha-espelho');
     if (!espAtivo || !secPronto) {
         if (linhaEsp) linhaEsp.style.display = 'none';
+        // Sem espelho: número grande mostra lucro da linha MAIN
+        const cshdN    = document.getElementById('cs-hd-profit');
+        const cshdNBrl = document.getElementById('cs-hd-profit-brl');
+        if (cshdN) { cshdN.textContent = (_csLucro >= 0 ? '+' : '') + '$' + _csLucro.toFixed(2); cshdN.style.color = _csLucro >= 0 ? '#00ff41' : '#f44444'; }
+        if (cshdNBrl) { const b0 = _csLucro * cot; cshdNBrl.textContent = '(' + (b0 >= 0 ? '+' : '') + 'R$' + b0.toFixed(2).replace('.', ',') + ')'; }
         return;
     }
     if (linhaEsp) linhaEsp.style.display = 'flex';
@@ -15983,6 +15988,18 @@ function _csAtualizarStats(proxStake) {
         ? _mcConfig.gerenciamento.replace(/[^\w\s]/gu,'').trim()
         : '--';
     if (eMEl) eMEl.textContent = 'SEC-' + mgmtSec;
+
+    // ── Número grande no topo: mostra lucro da conta SECUNDÁRIA ──────────
+    const cshd    = document.getElementById('cs-hd-profit');
+    const cshdBrl = document.getElementById('cs-hd-profit-brl');
+    if (cshd) {
+        cshd.textContent = (_csEspLucro >= 0 ? '+' : '') + '$' + _csEspLucro.toFixed(2);
+        cshd.style.color = _csEspLucro >= 0 ? '#00ff41' : '#f44444';
+    }
+    if (cshdBrl) {
+        const b = _csEspLucro * cot;
+        cshdBrl.textContent = '(' + (b >= 0 ? '+' : '') + 'R$' + b.toFixed(2).replace('.', ',') + ')';
+    }
 }
 
 // ── Notificações TG + WA — somente conta SECUNDÁRIA ────────────────────────
