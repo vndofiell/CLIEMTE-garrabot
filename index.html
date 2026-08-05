@@ -6285,8 +6285,9 @@ async function _secConectar() {
         // Saldo recebido da Deriv — atualiza banca com valor real
         if (d.msg_type === 'balance') {
             const jaEstavaPronto = _sec.pronto;
-            _sec.pronto = true;
-            _sec._erro  = false;
+            _sec.pronto      = true;
+            _sec._erro       = false;
+            _sec._tentativas = 0;   // reconectou com sucesso — reseta contador para próximas quedas
             const saldo    = parseFloat((d.balance && d.balance.balance) || 0).toFixed(2);
             const currency = (d.balance && d.balance.currency) || 'USD';
             // Guarda o loginid da conta que respondeu — usado para confirmar identidade
@@ -16320,7 +16321,13 @@ function csOperar() {
 
     // ── Verifica conexão principal ────────────────────────────────────────────
     if (typeof bot === 'undefined' || !bot.ws || bot.ws.readyState !== WebSocket.OPEN) {
-        _csLogOp('⚠️ Bot não conectado à Deriv.', '#ff4444');
+        _csLogOp('⚠️ Bot não conectado à Deriv. Aguardando reconexão...', '#ff4444');
+        // Se AUTO-LOOP ativo, tenta novamente em 3s quando o WS reconectar
+        if (_csAutoOperar && _csAtivo) {
+            setTimeout(() => { if (_csAtivo && _csAutoOperar) csExecutar(); }, 3000);
+        } else {
+            _csBotaoOperar(true);
+        }
         return;
     }
 
