@@ -35,6 +35,22 @@
       "motivo_bloqueio": null,
       "primeira_tentativa_ip": null,
       "primeira_tentativa_pc": null
+    },
+    {
+      "username": "fie",
+      "email": "foco35100@gmail.com",
+      "status": "PENDENTE",
+      "senha_hash": null,
+      "criado_em": "2026-08-06 20:41:16",
+      "login_token": null,
+      "ultimo_ip": null,
+      "ultimo_pc": null,
+      "primeira_tentativa_ip": null,
+      "primeira_tentativa_pc": null,
+      "ultima_atividade": null,
+      "tentativas_login_duplo": 0,
+      "bloqueado_em": null,
+      "motivo_bloqueio": null
     }
   ]
 }
