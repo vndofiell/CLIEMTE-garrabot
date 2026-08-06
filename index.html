@@ -6126,6 +6126,7 @@ const _sec = {
     _reconTimer:     null,   // timer de reconexão automática
     _keepaliveTimer: null,   // timer de ping keepalive (25s)
     _tentativas:        0,      // tentativas de reconexão consecutivas
+    _tentativasSemBalance: 0,   // tentativas onde WS fechou SEM receber balance (token inválido)
     _erro:              false,  // true = limite de reconexoes atingido
     _destruido:         false,  // true = desconexão intencional (não reconecta)
     _jaConectouUmaVez:  false,  // true = já exibiu msgs de conexão inicial nesta sessão
@@ -6281,6 +6282,7 @@ async function _secConectar() {
         if (typeof _cfgValoresAtualizarBtn === 'function') _cfgValoresAtualizarBtn();
     };
     _sec.ws.onclose = () => {
+        const _fechouSemBalance = !_sec.pronto; // WS fechou sem nunca ter recebido balance nesta tentativa
         _sec.pronto = false;
         _secAtualizarBadge();
         // Secundária desconectou: exibe seção JC principal e restaura label Entrada/Stops
@@ -6294,10 +6296,22 @@ async function _secConectar() {
         }
         if (!bot.token) return;
 
-        // Reconexao automatica com backoff crescente — SEM limite máximo de tentativas
-        // (a conta pode cair à noite e precisa reconectar sozinha)
+        // Detecta loop de quedas imediatas (WS fecha antes de receber balance)
+        // Isso indica token/OTP inválido — parar o loop e pedir login manual
+        if (_fechouSemBalance) {
+            _sec._tentativasSemBalance++;
+        } else {
+            _sec._tentativasSemBalance = 0; // conexão foi estável — zera contador
+        }
+        if (_sec._tentativasSemBalance >= 5) {
+            _sec._tentativasSemBalance = 0;
+            _sec._tentativas = 0;
+            print("💳 SECUNDÁRIA — token inválido ou expirado após 5 tentativas. Reconecte manualmente em '💳 Conta Secundária'.", "log-loss");
+            return; // Para o loop
+        }
+
+        // Reconexão automática com backoff crescente
         _sec._tentativas++;
-        // Após 5 tentativas usa 120s fixo para não sobrecarregar, mas nunca desiste
         const delays = [10000, 20000, 40000, 60000, 90000];
         const idx    = Math.min(_sec._tentativas - 1, delays.length - 1);
         const delay  = delays[idx];
@@ -6377,12 +6391,9 @@ async function _secConectar() {
             _sec.pronto      = true;
             _sec._erro       = false;
             const _eraReconexao = (_sec._tentativas > 0); // captura ANTES de zerar
-            // Só reseta o contador se a conexão ficou estável por pelo menos 8s
-            // Evita o loop "tentativa 1" quando a Deriv fecha imediatamente após o balance
-            const _tempoConectado = Date.now() - (_sec._tsOpen || 0);
-            if (_tempoConectado >= 8000) {
-                _sec._tentativas = 0;
-            }
+            // Reseta contadores — recebeu balance = conexão está ativa
+            _sec._tentativas           = 0;
+            _sec._tentativasSemBalance = 0;
             const saldo    = parseFloat((d.balance && d.balance.balance) || 0).toFixed(2);
             const currency = (d.balance && d.balance.currency) || 'USD';
             // Guarda o loginid da conta que respondeu — usado para confirmar identidade
@@ -6954,7 +6965,8 @@ function _secAtualizarBadge() {
         el.onclick = () => {
             // Se em erro, reconecta com tentativas resetadas
             if (_sec._erro) {
-                _sec._tentativas = 0;
+                _sec._tentativas           = 0;
+                _sec._tentativasSemBalance = 0;
                 _sec._erro = false;
                 print("SECUNDARIA - reiniciando conexao...", "log-info");
                 fetch('/get-modo').then(r=>r.json()).then(d=>{
@@ -14805,10 +14817,11 @@ async function mcTrocarConta() {
         // Sem WS ativo — não haverá onclose, reseta direto
         _sec._destruido = false;
     }
-    _sec.pronto          = false;
-    _sec.espelhandoAtivo = false;
-    _sec._tentativas     = 0;
-    _sec._erro           = false;
+    _sec.pronto                = false;
+    _sec.espelhandoAtivo       = false;
+    _sec._tentativas           = 0;
+    _sec._tentativasSemBalance = 0;
+    _sec._erro                 = false;
     _secAtualizarBadge();
 
     // Remove do servidor se houver conta registrada
@@ -14869,7 +14882,8 @@ async function mcReconectarExistente() {
     try {
         // Gera novo OTP usando o access_token salvo e tenta conectar via _secConectar
         // _secConectar já trata wss_url vazio e configura todos os handlers WS
-        _sec._tentativas = 0;
+        _sec._tentativas           = 0;
+        _sec._tentativasSemBalance = 0;
         _sec._erro = false;
         await _secConectar();
 

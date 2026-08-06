@@ -9209,6 +9209,18 @@ def contas_wss_secundaria():
         return jsonify({"wss_url": None, "erro": str(e)})
 
 
+@app.route('/contas/wss-secundaria-invalidar', methods=['POST'])
+def contas_wss_secundaria_invalidar():
+    """Limpa o wss_url salvo da conta secundária — chamado pelo frontend ao abrir o WS."""
+    sec = _account_manager.get_conta_secundaria()
+    if sec:
+        conta_id = sec.get("id", "")
+        if conta_id and conta_id in _account_manager.contas:
+            _account_manager.contas[conta_id]["wss_url"] = ""
+            _account_manager._salvar()
+    return jsonify({"ok": True})
+
+
 @app.route('/wa-ping')
 def wa_ping():
     """Verifica se o servidor WhatsApp está online."""
