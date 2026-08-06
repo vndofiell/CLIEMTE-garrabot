@@ -9178,37 +9178,44 @@ def contas_mudar_estado():
 @app.route('/contas/wss-secundaria', methods=['GET'])
 def contas_wss_secundaria():
     """
-    Gera OTP fresco para a conta SECUNDÁRIA e retorna WSS URL.
-
-    IMPORTANTE: a conta secundária tem seu próprio access_token (diferente da principal).
-    Usa SEMPRE o token salvo da própria conta secundária.
-    O token do Render pertence à conta principal (TESTE) e NÃO deve ser usado aqui.
+    Gera OTP fresco para a conta SECUNDÁRIA usando EXCLUSIVAMENTE
+    o token próprio da secundária, isolado do token principal.
+    Nunca acessa _token_recebido nem _render_token_cache.
     """
     sec = _account_manager.get_conta_secundaria()
     if not sec:
         return jsonify({
             "wss_url": None,
-            "erro": "Nenhuma conta secundária cadastrada. Clique em 💳 Conta Secundária e faça login com uma conta DIFERENTE."
+            "erro": "Nenhuma conta secundária cadastrada."
         })
 
-    conta_id     = sec.get("id", "")
-    # Usa SEMPRE o token próprio da conta secundária — nunca o do Render
-    access_token = sec.get("access_token", "").strip().strip('"')
+    conta_id = sec.get("id", "")
+
+    # ── ISOLAMENTO TOTAL: token vem exclusivamente do slot da secundária ─
+    # 1. Tenta o slot em memória (_token_secundaria), protegido pelo lock
+    access_token = ""
+    with _token_sec_lock:
+        access_token = _token_secundaria.get("access_token", "").strip().strip('"')
+
+    # 2. Fallback: token persistido no AccountManager (salvo no registro da conta)
+    #    Nunca usa _token_recebido nem _render_token_cache (esses são da conta principal)
+    if not access_token or access_token in ("None", "null", ""):
+        access_token = sec.get("access_token", "").strip().strip('"')
 
     if not access_token or access_token in ("None", "null", ""):
         return jsonify({
             "wss_url": None,
-            "erro": "Token da conta secundária expirado. Abra '💳 Conta Secundária' e reconecte com a conta secundária."
+            "erro": "Token da conta secundária expirado. Reconecte a conta secundária."
         })
 
-    # ── Gera OTP → WSS URL usando o token da conta secundária ────────────
+    # ── Gera OTP → WSS URL ────────────────────────────────────────────────
     try:
         headers = {
             "Authorization": f"Bearer {access_token}",
             "Deriv-App-ID":  APP_ID,
             "Content-Type":  "application/json",
         }
-        res_otp = requests.post(
+        res_otp  = requests.post(
             f"{API_BASE}/accounts/{conta_id}/otp",
             headers=headers, timeout=10
         )
@@ -9216,21 +9223,18 @@ def contas_wss_secundaria():
         wss_url  = (body_otp.get("data") or {}).get("url")
 
         if not wss_url:
-            # Tenta extrair mensagem de erro legível
-            erros = body_otp.get("errors") or []
-            if erros:
-                msg_err = erros[0].get("message", str(body_otp)[:120])
-            else:
-                msg_err = body_otp.get("error", {}).get("message", res_otp.text[:120])
-            print(f"[SecWSS] OTP falhou para conta {conta_id}: {msg_err}")
-            return jsonify({"wss_url": None, "erro": f"OTP falhou: {msg_err}"})
+            erros   = body_otp.get("errors") or []
+            msg_err = erros[0].get("message", str(body_otp)[:120]) if erros else \
+                      body_otp.get("error", {}).get("message", res_otp.text[:120])
+            print(f"[SecWSS] OTP Secundária falhou para conta {conta_id}: {msg_err}")
+            return jsonify({"wss_url": None, "erro": f"OTP Secundária falhou: {msg_err}"})
 
-        # Atualiza wss_url salvo (token não muda — só o OTP expira)
+        # Persiste wss_url no AccountManager (token não muda — só o OTP expira)
         if conta_id in _account_manager.contas:
             _account_manager.contas[conta_id]["wss_url"] = wss_url
             _account_manager._salvar()
 
-        print(f"[SecWSS] OTP OK — conta {conta_id}, WSS gerado com sucesso.")
+        print(f"[SecWSS] WSS da secundária gerado com sucesso para a conta {conta_id}")
         return jsonify({
             "wss_url":  wss_url,
             "conta_id": conta_id,
