@@ -4297,25 +4297,13 @@ function updateHeader(balance) {
     profitEl.textContent  = _profitStr;
     profitBox.className   = 'stat-box ' + (bot.profit >= 0 ? 'profit-pos' : 'profit-neg');
     // Atualiza lucro no CYBER SORT:
-    // — quando espelho ativo: mostra lucro da conta SECUNDÁRIA (_sec.profit)
-    // — caso contrário: mostra lucro da conta principal (bot.profit)
-    const csProfit = document.getElementById('cs-hd-profit');
-    const csProfitBrl = document.getElementById('cs-hd-profit-brl');
-    const _secAtiva = (typeof _sec !== 'undefined') && _sec.pronto;
-    const _csVal    = _secAtiva ? _sec.profit : bot.profit;
-    const _csStr    = (_csVal >= 0 ? '+' : '') + '$' + _csVal.toFixed(2);
-    if (csProfit) {
-        csProfit.textContent = _csStr;
-        csProfit.style.color = _csVal >= 0 ? '#00ff41' : '#f44444';
-    }
+    // O Cyber Sort tem contador próprio (_csLucro / _csEspLucro) independente
+    // do bot.profit — não sobrescrever aqui; deixar _csAtualizarStats() ser
+    // a única função que escreve no cs-hd-profit.
     if (_cotacaoBRL > 0) {
         const brl = bot.profit * _cotacaoBRL;
         const _brlStr = '(' + (brl >= 0 ? '+' : '') + 'R$' + brl.toFixed(2).replace('.', ',') + ')';
         profitBRL.textContent = _brlStr;
-        if (csProfitBrl) {
-            const _csBrl = _csVal * _cotacaoBRL;
-            csProfitBrl.textContent = '(' + (_csBrl >= 0 ? '+' : '') + 'R$' + _csBrl.toFixed(2).replace('.', ',') + ')';
-        }
     }
     document.getElementById('hd-mgmt').textContent  = bot.gerenciamento.replace(/[^\w\s]/gu, '').trim();
     document.getElementById('hd-strat').textContent = bot.estrategia.replace(/[^\w\s]/gu, '').trim();
@@ -4338,6 +4326,9 @@ function updateHeader(balance) {
     // Próxima stake
     const nextStake = bot.mgr ? bot.mgr.getStake() : bot.stake;
     document.getElementById('hd-nextstake').textContent = '$' + nextStake.toFixed(2);
+
+    // Garante que o Cyber Sort mostre seu próprio contador após qualquer updateHeader
+    if (typeof _csAtualizarStats === 'function') _csAtualizarStats();
 }
 
 async function fetchCotacao() {
@@ -6806,14 +6797,12 @@ function _secUpdateHeader() {
     const _secProfitStr = (_sec.profit >= 0 ? '+' : '') + '$' + _sec.profit.toFixed(2);
     profitEl.textContent = _secProfitStr;
     profitBox.className  = 'stat-box ' + (_sec.profit >= 0 ? 'profit-pos' : 'profit-neg');
-    const csProfit2 = document.getElementById('cs-hd-profit');
-    const csProfitBrl2 = document.getElementById('cs-hd-profit-brl');
-    if (csProfit2) { csProfit2.textContent = _secProfitStr; csProfit2.style.color = _sec.profit >= 0 ? '#00ff41' : '#f44444'; }
+    // cs-hd-profit é gerenciado exclusivamente por _csAtualizarStats()
+    // não sobrescrever aqui para evitar piscar entre _sec.profit e _csLucro
     if (_cotacaoBRL > 0) {
         const brl = _sec.profit * _cotacaoBRL;
         const _brlStr2 = '(' + (brl >= 0 ? '+' : '') + 'R$' + brl.toFixed(2).replace('.', ',') + ')';
         profitBRL.textContent = _brlStr2;
-        if (csProfitBrl2) csProfitBrl2.textContent = _brlStr2;
     }
 
     // taxa de acerto
@@ -6845,6 +6834,9 @@ function _secUpdateHeader() {
 
     // ── Atualiza linha TESTE (conta principal / demo) ─────────────────────
     _secAtualizarLinhaTeste();
+
+    // Garante que o Cyber Sort mostre seu próprio contador após qualquer updateHeader
+    if (typeof _csAtualizarStats === 'function') _csAtualizarStats();
 }
 
 /**
