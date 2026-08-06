@@ -6130,6 +6130,7 @@ const _sec = {
     _erro:              false,  // true = limite de reconexoes atingido
     _destruido:         false,  // true = desconexão intencional (não reconecta)
     _jaConectouUmaVez:  false,  // true = já exibiu msgs de conexão inicial nesta sessão
+    _tsOpen:            0,      // timestamp do último onopen — detecta quedas imediatas
 };
 
 /**
@@ -6219,15 +6220,31 @@ async function _secConectar() {
         const r = await fetch('/contas/wss-secundaria');
         data = await r.json();
     } catch (e) {
-        if (!_silencioso) print(`💳 SECUNDÁRIA — falha ao buscar WSS: ${e.message}`, 'log-loss');
+        // Falha de rede ao buscar WSS — agenda nova tentativa com backoff
+        if (!_silencioso) print(`💳 SECUNDÁRIA — falha de rede ao buscar WSS: ${e.message}`, 'log-loss');
+        _sec._tentativas++;
+        const delays = [10000, 20000, 40000, 60000, 90000];
+        const delay  = delays[Math.min(_sec._tentativas - 1, delays.length - 1)];
+        if (_sec._reconTimer) clearTimeout(_sec._reconTimer);
+        _sec._reconTimer = setTimeout(() => { _sec._reconTimer = null; _secConectar(); }, delay);
         return;
     }
 
-    // Sem conta cadastrada — informa e sai
+    // Sem conta cadastrada — para definitivamente (precisa de login manual)
     if (!data.wss_url) {
-        if (!_silencioso) {
-            if (data.erro && data.erro.includes('cadastrada')) {
+        const erroToken = data.erro && (data.erro.includes('expirado') || data.erro.includes('OTP'));
+        const erroCad   = data.erro && data.erro.includes('cadastrada');
+        if (!_silencioso || erroToken) {
+            if (erroCad) {
                 print('💳 Sem conta secundária cadastrada. Use o botão "Conta Secundária" para adicionar.', 'log-info');
+            } else if (erroToken) {
+                // Token/OTP expirou — tenta de novo com backoff crescente
+                print(`💳 SECUNDÁRIA — ${data.erro} Tentando novamente...`, 'log-loss');
+                _sec._tentativas++;
+                const delays2 = [10000, 20000, 40000, 60000, 90000];
+                const delay2  = delays2[Math.min(_sec._tentativas - 1, delays2.length - 1)];
+                if (_sec._reconTimer) clearTimeout(_sec._reconTimer);
+                _sec._reconTimer = setTimeout(() => { _sec._reconTimer = null; _secConectar(); }, delay2);
             } else {
                 print(`💳 SECUNDÁRIA — ${data.erro || 'WSS não disponível'}`, 'log-loss');
             }
@@ -6294,6 +6311,8 @@ async function _secConectar() {
     _sec.ws.onopen = () => {
         // Invalida o cache de OTP no servidor — OTP foi consumido ao abrir o WS
         fetch('/contas/wss-secundaria-invalidar', { method: 'POST' }).catch(() => {});
+        // Marca o instante de abertura para detectar quedas imediatas
+        _sec._tsOpen  = Date.now();
         // Identifica conta e pede saldo real
         _sec.loginid  = undefined;
         _sec._buying  = false;   // flag anti-duplicata para a secundária
@@ -6321,7 +6340,15 @@ async function _secConectar() {
         const d = JSON.parse(msg.data);
 
         if (d.error) {
-            print(`💳 SECUNDÁRIA — erro API: ${d.error.message}`, 'log-loss');
+            const eCode = d.error.code || '';
+            const eMsg  = d.error.message || '';
+            // Erros críticos: token/OTP inválido — fecha e reconecta para gerar novo OTP
+            if (eCode === 'AuthorizationRequired' || eCode === 'InvalidToken' || eCode === 'InvalidAppID') {
+                print(`💳 SECUNDÁRIA — token/OTP inválido (${eCode}): ${eMsg}. Reconectando...`, 'log-loss');
+                // Não fecha aqui — o onclose já vai disparar e agendar reconexão
+            } else {
+                print(`💳 SECUNDÁRIA — erro API: ${eMsg} [${eCode}]`, 'log-loss');
+            }
             return;
         }
 
@@ -6343,7 +6370,12 @@ async function _secConectar() {
             _sec.pronto      = true;
             _sec._erro       = false;
             const _eraReconexao = (_sec._tentativas > 0); // captura ANTES de zerar
-            _sec._tentativas = 0;   // reconectou com sucesso — reseta contador para próximas quedas
+            // Só reseta o contador se a conexão ficou estável por pelo menos 8s
+            // Evita o loop "tentativa 1" quando a Deriv fecha imediatamente após o balance
+            const _tempoConectado = Date.now() - (_sec._tsOpen || 0);
+            if (_tempoConectado >= 8000) {
+                _sec._tentativas = 0;
+            }
             const saldo    = parseFloat((d.balance && d.balance.balance) || 0).toFixed(2);
             const currency = (d.balance && d.balance.currency) || 'USD';
             // Guarda o loginid da conta que respondeu — usado para confirmar identidade
