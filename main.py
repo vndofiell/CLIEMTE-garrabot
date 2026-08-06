@@ -1925,9 +1925,8 @@ def _tg_carregar():
                 dados = json.load(f)
             if isinstance(dados, dict):
                 padrao.update(dados)
-                # bot_token é o token mais recente (Telegram revoga o anterior ao criar novo)
-                if dados.get("bot_token"):
-                    padrao["token"] = dados["bot_token"]
+                # bot_token é campo legado — não substituir token por ele.
+                # O campo "token" é o único autoritativo.
     except Exception:
         pass
     return padrao
