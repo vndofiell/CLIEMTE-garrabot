@@ -1925,6 +1925,9 @@ def _tg_carregar():
                 dados = json.load(f)
             if isinstance(dados, dict):
                 padrao.update(dados)
+                # bot_token é o token mais recente (Telegram revoga o anterior ao criar novo)
+                if dados.get("bot_token"):
+                    padrao["token"] = dados["bot_token"]
     except Exception:
         pass
     return padrao
@@ -1951,11 +1954,10 @@ def tg_config_post():
 def _assets_path(nome):
     return os.path.join(_BASE_DIR, "assets", nome)
 
-# IP do Telegram acessível nessa rede (149.154.167.99 — confirmado via socket test)
-_TG_IP      = "149.154.167.99"
-_TG_BASE    = f"https://{_TG_IP}"
-_TG_HEADERS = {"Host": "api.telegram.org"}
-_TG_TIMEOUT = (8, 14)
+# Usa o domínio oficial — Oracle Cloud tem DNS pleno, IP fixo não é necessário
+_TG_BASE    = "https://api.telegram.org"
+_TG_HEADERS = {}   # sem override de Host
+_TG_TIMEOUT = (10, 20)
 
 def _tg_url(token: str, method: str) -> str:
     return f"{_TG_BASE}/bot{token}/{method}"
