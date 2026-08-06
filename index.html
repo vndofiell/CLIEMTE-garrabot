@@ -5128,9 +5128,8 @@ function trocarContaPrincipal() {
 
     // Desconecta secundária também se estiver ativa
     if (_sec.pronto || (_sec.ws && _sec.ws.readyState <= 1)) {
-        _sec._destruido = true;
-        // _destruido permanece true até o onclose disparar (assíncrono)
-        // e só é resetado lá dentro, evitando reconexão não intencional
+        _sec._destruido  = true;
+        _sec._conectando = false;
         if (_sec._reconTimer) { clearTimeout(_sec._reconTimer); _sec._reconTimer = null; }
         if (_sec.ws) _sec.ws.close();
         _sec.pronto          = false;
@@ -6131,6 +6130,7 @@ const _sec = {
     _destruido:         false,  // true = desconexão intencional (não reconecta)
     _jaConectouUmaVez:  false,  // true = já exibiu msgs de conexão inicial nesta sessão
     _tsOpen:            0,      // timestamp do último onopen — detecta quedas imediatas
+    _conectando:        false,  // guard: impede duas chamadas paralelas de _secConectar()
 };
 
 /**
@@ -6212,6 +6212,10 @@ function _secVerificarEspelhamento(profit_atual) {
 
 /** Conecta o WebSocket da conta secundária buscando OTP no servidor. */
 async function _secConectar() {
+    // Guard: impede chamadas paralelas (onclose pode disparar antes do fetch terminar)
+    if (_sec._conectando) return;
+    _sec._conectando = true;
+
     // Reconexões silenciosas (após queda) não poluem o terminal
     const _silencioso = _sec._jaConectouUmaVez;
     if (!_silencioso) print('💳 Verificando conta secundária…', 'log-info');
@@ -6222,6 +6226,7 @@ async function _secConectar() {
     } catch (e) {
         // Falha de rede ao buscar WSS — agenda nova tentativa com backoff
         if (!_silencioso) print(`💳 SECUNDÁRIA — falha de rede ao buscar WSS: ${e.message}`, 'log-loss');
+        _sec._conectando = false;
         _sec._tentativas++;
         const delays = [10000, 20000, 40000, 60000, 90000];
         const delay  = delays[Math.min(_sec._tentativas - 1, delays.length - 1)];
@@ -6234,6 +6239,7 @@ async function _secConectar() {
     if (!data.wss_url) {
         const erroToken = data.erro && (data.erro.includes('expirado') || data.erro.includes('OTP'));
         const erroCad   = data.erro && data.erro.includes('cadastrada');
+        _sec._conectando = false;
         if (!_silencioso || erroToken) {
             if (erroCad) {
                 print('💳 Sem conta secundária cadastrada. Use o botão "Conta Secundária" para adicionar.', 'log-info');
@@ -6263,6 +6269,7 @@ async function _secConectar() {
 
     _sec.ws     = new WebSocket(data.wss_url);
     _sec.pronto = false;
+    _sec._conectando = false;  // guard liberado — a partir daqui onclose gerencia a reconexão
     _secAtualizarBadge();
 
     _sec.ws.onerror = () => {
