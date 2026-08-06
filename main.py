@@ -1826,7 +1826,7 @@ def open_login_secundaria():
 
 @app.route('/auth/deriv-secundaria', methods=['POST', 'OPTIONS'])
 def auth_deriv_secundaria():
-    """Recebe token OAuth da conta secundária — rota dedicada."""
+    """Recebe token OAuth da conta secundária — rota dedicada, totalmente isolada do slot principal."""
     if request.method == 'OPTIONS':
         resp = app.make_default_options_response()
         resp.headers['Access-Control-Allow-Origin']  = '*'
@@ -1837,10 +1837,11 @@ def auth_deriv_secundaria():
     access_token = (dados.get("access_token") or dados.get("token") or "").strip()
     if access_token:
         with _token_sec_lock:
+            # Salva EXCLUSIVAMENTE no slot da secundária — nunca toca o _token_recebido principal
             _token_secundaria["access_token"] = access_token
             _token_secundaria["ts"]           = time.time()
             _token_secundaria["aguardando"]   = False
-        print(f"[SecToken] Token secundária recebido: {access_token[:10]}...")
+        print(f"[SecToken] Token secundária isolado com sucesso: {access_token[:10]}...")
         resp = jsonify({"ok": True})
     else:
         resp = jsonify({"ok": False, "erro": "token vazio"})
@@ -8779,54 +8780,76 @@ _account_manager = AccountManager()
 def contas_adicionar():
     """
     Adiciona uma nova conta ao sistema.
-    Payload: { tipo: "TESTE"|"REAL", nome?: string }
+    Payload: { tipo: "TESTE"|"REAL"|"SECUNDARIA", nome?: string }
+
+    Isolamento de tokens:
+    - SECUNDARIA: usa APENAS o token exclusivo do slot _token_secundaria.
+      Se não houver token da secundária, retorna erro — nunca usa o token principal.
+    - TESTE / REAL: usa o token principal (_render_token_cache / _token_recebido).
     """
     dados = request.get_json(force=True, silent=True) or {}
     tipo  = dados.get("tipo", "TESTE").upper()
     nome  = dados.get("nome", "")
 
-    # "DEMO" é sinônimo de "TESTE" (front-end envia "DEMO" para conta demo)
+    # "DEMO" é sinônimo de "TESTE"
     if tipo == "DEMO":
         tipo = "TESTE"
 
-    if tipo not in ("TESTE", "REAL"):
-        return jsonify({"erro": "Tipo deve ser TESTE ou REAL."})
+    if tipo not in ("TESTE", "REAL", "SECUNDARIA"):
+        return jsonify({"erro": "Tipo deve ser TESTE, REAL ou SECUNDARIA."})
 
     try:
-        # 1. Prioriza token exclusivo da secundária (capturado após /open-login-secundaria)
         access_token = ""
-        with _token_sec_lock:
-            sec_tok  = _token_secundaria.get("access_token", "")
-            sec_age  = time.time() - _token_secundaria.get("ts", 0)
-            sec_ok   = bool(sec_tok) and sec_tok not in ("None", "null") and sec_age < 300
-            if sec_ok:
-                access_token = sec_tok
-                # Consome o token — evita reusar na próxima chamada
-                _token_secundaria["access_token"] = ""
-                _token_secundaria["ts"]           = 0
-                print(f"[SecToken] Usando token exclusivo da secundária: {access_token[:10]}...")
 
-        # 2. Fallback: token principal do cache
-        if not access_token:
-            cache_age = time.time() - _render_token_cache.get("ts", 0)
-            if _render_token_cache.get("token") and cache_age < 300:
-                access_token = _render_token_cache["token"]
-            else:
-                res = requests.get(SERVIDOR_URL, timeout=10)
-                if res.status_code != 200:
-                    return jsonify({"erro": "Servidor indisponível. Tente novamente."})
-                data = res.json()
-                tok  = (
-                    data.get("token") or
-                    data.get("access_token") or
-                    (data.get("data") or {}).get("token")
-                )
-                if isinstance(tok, dict):
-                    tok = tok.get("token") or tok.get("access_token")
-                access_token = str(tok).strip().strip('"') if tok else ""
-                if access_token and access_token not in ("None", "null", ""):
-                    _render_token_cache["token"] = access_token
-                    _render_token_cache["ts"]    = time.time()
+        if tipo == "SECUNDARIA":
+            # ── Token EXCLUSIVO da secundária — nunca usa token principal ──────
+            with _token_sec_lock:
+                sec_tok = _token_secundaria.get("access_token", "")
+                sec_age = time.time() - _token_secundaria.get("ts", 0)
+                sec_ok  = bool(sec_tok) and sec_tok not in ("None", "null") and sec_age < 300
+                if sec_ok:
+                    access_token = sec_tok
+                    # Consome o token — evita reusar na próxima chamada
+                    _token_secundaria["access_token"] = ""
+                    _token_secundaria["ts"]           = 0
+                    print(f"[SecToken] Usando token exclusivo da secundária: {access_token[:10]}...")
+            if not access_token:
+                return jsonify({"erro": "Token da conta secundária não encontrado. Faça login na conta secundária primeiro."})
+        else:
+            # ── Token da conta principal (TESTE / REAL) ───────────────────────
+            # 1. Prioriza token exclusivo da secundária presente no slot para
+            #    caso de chamada legada que ainda envia tipo=TESTE/REAL com token sec
+            with _token_sec_lock:
+                sec_tok = _token_secundaria.get("access_token", "")
+                sec_age = time.time() - _token_secundaria.get("ts", 0)
+                sec_ok  = bool(sec_tok) and sec_tok not in ("None", "null") and sec_age < 300
+                if sec_ok:
+                    access_token = sec_tok
+                    _token_secundaria["access_token"] = ""
+                    _token_secundaria["ts"]           = 0
+                    print(f"[SecToken] Usando token exclusivo da secundária (legado): {access_token[:10]}...")
+
+            # 2. Fallback: token principal do cache
+            if not access_token:
+                cache_age = time.time() - _render_token_cache.get("ts", 0)
+                if _render_token_cache.get("token") and cache_age < 300:
+                    access_token = _render_token_cache["token"]
+                else:
+                    res = requests.get(SERVIDOR_URL, timeout=10)
+                    if res.status_code != 200:
+                        return jsonify({"erro": "Servidor indisponível. Tente novamente."})
+                    data = res.json()
+                    tok  = (
+                        data.get("token") or
+                        data.get("access_token") or
+                        (data.get("data") or {}).get("token")
+                    )
+                    if isinstance(tok, dict):
+                        tok = tok.get("token") or tok.get("access_token")
+                    access_token = str(tok).strip().strip('"') if tok else ""
+                    if access_token and access_token not in ("None", "null", ""):
+                        _render_token_cache["token"] = access_token
+                        _render_token_cache["ts"]    = time.time()
 
         if not access_token or access_token in ("None", "null", ""):
             return jsonify({"erro": "Token não encontrado. Faça login na Deriv primeiro."})
@@ -8843,22 +8866,30 @@ def contas_adicionar():
 
         contas_api = res_contas.json().get("data", [])
 
-        # 3. Filtra por tipo
+        # 3. Filtra por tipo de conta Deriv (DEMO ou REAL)
+        # Para SECUNDARIA: usa tipoReal enviado pelo front-end (DEMO ou REAL)
+        tipo_filtro = dados.get("tipoReal", "DEMO").upper()
+        if tipo_filtro == "DEMO":
+            tipo_filtro = "TESTE"
+        if tipo_filtro not in ("TESTE", "REAL"):
+            tipo_filtro = "TESTE"
+
         conta_id = None
         for c in contas_api:
             cid          = str(c.get("account_id", ""))
             account_type = str(c.get("account_type", "")).lower()
             is_virt      = c.get("is_virtual", False)
             is_demo      = account_type == "demo" or is_virt or cid.upper().startswith(("VR", "DOT", "VRT"))
-            if tipo == "TESTE" and is_demo:
+            filtro_uso   = tipo if tipo in ("TESTE", "REAL") else tipo_filtro
+            if filtro_uso == "TESTE" and is_demo:
                 conta_id = cid
                 break
-            elif tipo == "REAL" and not is_demo:
+            elif filtro_uso == "REAL" and not is_demo:
                 conta_id = cid
                 break
 
         if not conta_id:
-            return jsonify({"erro": f"Nenhuma conta {tipo} encontrada na API Deriv."})
+            return jsonify({"erro": f"Nenhuma conta {tipo_filtro} encontrada na API Deriv."})
 
         # 4. Gera WSS URL (OTP)
         res_otp = requests.post(f"{API_BASE}/accounts/{conta_id}/otp", headers=headers, timeout=10)
@@ -8867,6 +8898,7 @@ def contas_adicionar():
             return jsonify({"erro": "OTP não retornou URL WSS."})
 
         # 5. Registra no AccountManager
+        # Conta secundária é sempre registrada com tipo="SECUNDARIA" independente do tipoReal
         conta = _account_manager.adicionar_conta(
             conta_id=conta_id, tipo=tipo,
             wss_url=wss_url, access_token=access_token, nome=nome,

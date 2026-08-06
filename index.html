@@ -6229,7 +6229,7 @@ async function _secConectar() {
         if (!_silencioso) print(`💳 SECUNDÁRIA — falha de rede ao buscar WSS: ${e.message}`, 'log-loss');
         _sec._conectando = false;
         _sec._tentativas++;
-        const delays = [10000, 20000, 40000, 60000, 90000];
+        const delays = [5000, 10000, 20000, 40000, 60000];
         const delay  = delays[Math.min(_sec._tentativas - 1, delays.length - 1)];
         if (_sec._reconTimer) clearTimeout(_sec._reconTimer);
         _sec._reconTimer = setTimeout(() => { _sec._reconTimer = null; _secConectar(); }, delay);
@@ -6248,7 +6248,7 @@ async function _secConectar() {
                 // Token/OTP expirou — tenta de novo com backoff crescente
                 print(`💳 SECUNDÁRIA — ${data.erro} Tentando novamente...`, 'log-loss');
                 _sec._tentativas++;
-                const delays2 = [10000, 20000, 40000, 60000, 90000];
+                const delays2 = [5000, 10000, 20000, 40000, 60000];
                 const delay2  = delays2[Math.min(_sec._tentativas - 1, delays2.length - 1)];
                 if (_sec._reconTimer) clearTimeout(_sec._reconTimer);
                 _sec._reconTimer = setTimeout(() => { _sec._reconTimer = null; _secConectar(); }, delay2);
@@ -6312,7 +6312,7 @@ async function _secConectar() {
 
         // Reconexão automática com backoff crescente
         _sec._tentativas++;
-        const delays = [10000, 20000, 40000, 60000, 90000];
+        const delays = [5000, 10000, 20000, 40000, 60000];
         const idx    = Math.min(_sec._tentativas - 1, delays.length - 1);
         const delay  = delays[idx];
 
@@ -14776,10 +14776,12 @@ async function mcConectarSecundaria() {
     if (nome === null) return;
     mcStatus('Conectando…', '#fbbf24');
     try {
+        // Envia tipo='SECUNDARIA' para que o servidor use EXCLUSIVAMENTE o token
+        // do slot da secundária — nunca o token da conta principal
         const resp = await fetch('/contas/adicionar', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ tipo, nome: nome.trim() || `Conta ${tipo}` })
+            body: JSON.stringify({ tipo: 'SECUNDARIA', tipoReal: tipo, nome: nome.trim() || `Conta ${tipo}` })
         });
         const data = await resp.json();
         if (data.ok) {
