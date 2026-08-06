@@ -9180,7 +9180,9 @@ def contas_mudar_estado():
 # Cache de OTP: evita gerar novo OTP a cada reconexão do WebSocket
 # O OTP é de uso único — invalidado assim que o WS abre com sucesso
 _sec_otp_cache = {"wss_url": None, "ts": 0, "conta_id": None}
-_SEC_OTP_TTL   = 30  # segundos — TTL máximo caso o onopen não invalide (failsafe)
+_SEC_OTP_TTL   = 8   # segundos — TTL curto: o onopen invalida na abertura;
+                     # o failsafe precisa ser menor que o backoff mínimo (10s)
+                     # para que a 1ª tentativa de reconexão sempre gere OTP fresco
 
 @app.route('/contas/wss-secundaria-invalidar', methods=['POST'])
 def contas_wss_secundaria_invalidar():

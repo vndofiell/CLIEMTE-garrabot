@@ -5138,10 +5138,12 @@ function trocarContaPrincipal() {
     // Desconecta secundária também se estiver ativa
     if (_sec.pronto || (_sec.ws && _sec.ws.readyState <= 1)) {
         _sec._destruido = true;
+        // _destruido permanece true até o onclose disparar (assíncrono)
+        // e só é resetado lá dentro, evitando reconexão não intencional
+        if (_sec._reconTimer) { clearTimeout(_sec._reconTimer); _sec._reconTimer = null; }
         if (_sec.ws) _sec.ws.close();
         _sec.pronto          = false;
         _sec.espelhandoAtivo = false;
-        _sec._destruido      = false;
         _secAtualizarBadge();
     }
 
@@ -6270,24 +6272,27 @@ async function _secConectar() {
         const _jcPrincipalEl = document.getElementById('sec-jc-principal');
         if (_jcPrincipalEl) _jcPrincipalEl.style.display = '';
         if (typeof _cfgValoresAtualizarBtn === 'function') _cfgValoresAtualizarBtn();
-        if (_sec._destruido) return;
-        if (!bot.token) return;
-
-        // Limite maximo de reconexoes: 5 tentativas no total
-        _sec._tentativas++;
-        if (_sec._tentativas > 5) {
-            print("SECUNDARIA - limite de reconexoes atingido (5/5). Clique em Conta Secundaria para reconectar manualmente.", "log-loss");
-            _sec._erro = true;
-            _secAtualizarBadge();
+        if (_sec._destruido) {
+            // Desconexão intencional: reseta flag e para por aqui
+            _sec._destruido = false;
             return;
         }
+        if (!bot.token) return;
 
-        // Reconexao automatica com backoff crescente: 10s - 20s - 40s - 60s - 90s
+        // Reconexao automatica com backoff crescente — SEM limite máximo de tentativas
+        // (a conta pode cair à noite e precisa reconectar sozinha)
+        _sec._tentativas++;
+        // Após 5 tentativas usa 120s fixo para não sobrecarregar, mas nunca desiste
         const delays = [10000, 20000, 40000, 60000, 90000];
         const idx    = Math.min(_sec._tentativas - 1, delays.length - 1);
         const delay  = delays[idx];
 
-        if (!_sec._jaConectouUmaVez) print("SECUNDARIA - reconectando em " + (delay / 1000) + "s.. (tentativa " + _sec._tentativas + "/3)", "log-info");
+        if (_sec._tentativas <= 5) {
+            print("💳 SECUNDÁRIA — reconectando em " + (delay / 1000) + "s (tentativa " + _sec._tentativas + ")...", "log-info");
+        } else if (_sec._tentativas % 5 === 1) {
+            // Avisa a cada 5 tentativas para não poluir o log
+            print("💳 SECUNDÁRIA — ainda tentando reconectar (tentativa " + _sec._tentativas + ")...", "log-info");
+        }
 
         if (_sec._reconTimer) clearTimeout(_sec._reconTimer);
         _sec._reconTimer = setTimeout(() => {
@@ -14759,13 +14764,18 @@ async function mcTrocarConta() {
     mcStatus('🔄 Desconectando…', '#fbbf24');
 
     // Para o WebSocket da secundária imediatamente
+    // Nota: _destruido=true é resetado DENTRO do onclose (assíncrono) para
+    // garantir que o onclose não dispare reconexão antes de ser resetado aqui
+    if (_sec._reconTimer) { clearTimeout(_sec._reconTimer); _sec._reconTimer = null; }
     if (_sec.ws && _sec.ws.readyState <= 1) {
         _sec._destruido = true;
         _sec.ws.close();
+    } else {
+        // Sem WS ativo — não haverá onclose, reseta direto
+        _sec._destruido = false;
     }
     _sec.pronto          = false;
     _sec.espelhandoAtivo = false;
-    _sec._destruido      = false;  // reseta para permitir reconexão futura
     _sec._tentativas     = 0;
     _sec._erro           = false;
     _secAtualizarBadge();
