@@ -6265,8 +6265,9 @@ async function _secConectar() {
 
     if (!_silencioso) print(`💳 SECUNDÁRIA — conectando ${_sec.nome} (${_sec.tipo})…`, 'log-info');
 
-    // Fecha WS antigo se existir
-    if (_sec.ws && _sec.ws.readyState <= 1) _sec.ws.close();
+    // Fecha WS antigo SOMENTE se não estiver conectado e autenticado
+    // Se _sec.pronto=true o WS está ativo — não fecha para não causar loop de reconexão
+    if (_sec.ws && _sec.ws.readyState <= 1 && !_sec.pronto) _sec.ws.close();
 
     _sec.ws     = new WebSocket(data.wss_url);
     _sec.pronto = false;
@@ -6400,6 +6401,8 @@ async function _secConectar() {
             // Reseta contadores — recebeu balance = conexão está ativa
             _sec._tentativas           = 0;
             _sec._tentativasSemBalance = 0;
+            // Cancela qualquer timer de reconexão pendente — conexão está ativa
+            if (_sec._reconTimer) { clearTimeout(_sec._reconTimer); _sec._reconTimer = null; }
             const saldo    = parseFloat((d.balance && d.balance.balance) || 0).toFixed(2);
             const currency = (d.balance && d.balance.currency) || 'USD';
             // Guarda o loginid da conta que respondeu — usado para confirmar identidade
