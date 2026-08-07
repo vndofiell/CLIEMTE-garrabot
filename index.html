@@ -16761,6 +16761,13 @@ function csOperar() {
                 _csBip(1200, 0.6);
                 // Notifica TG + WA com dados da SEC
                 _csNotificarStopWin();
+                // Registra na planilha JC Secundária se estiver ativa
+                if (window._jcSecAtivo) {
+                    const _bancaSecJC = (typeof _sec !== 'undefined' && _sec.saldo !== undefined)
+                        ? parseFloat(_sec.saldo) : 0;
+                    const _modoJC = document.getElementById('cs-mgr')?.value || 'FLAT';
+                    jcSecOnMetaBatida(_csEspLucro, _csEspWins, _csEspLosses, _bancaSecJC, 'CYBER SORT — SEC', _modoJC);
+                }
                 return;
             }
             if (_csStopLoss < 999 && _csEspLucro <= -_csStopLoss) {
