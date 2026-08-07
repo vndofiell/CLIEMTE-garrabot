@@ -6297,7 +6297,7 @@ async function _secConectar() {
         if (!bot.token) return;
 
         // Detecta loop de quedas imediatas (WS fecha antes de receber balance)
-        // Isso indica token/OTP inválido — parar o loop e pedir login manual
+        // Isso indica OTP expirado — aguarda 5 min e tenta gerar novo OTP automaticamente
         if (_fechouSemBalance) {
             _sec._tentativasSemBalance++;
         } else {
@@ -6306,8 +6306,14 @@ async function _secConectar() {
         if (_sec._tentativasSemBalance >= 5) {
             _sec._tentativasSemBalance = 0;
             _sec._tentativas = 0;
-            print("💳 SECUNDÁRIA — token inválido ou expirado após 5 tentativas. Reconecte manualmente em '💳 Conta Secundária'.", "log-loss");
-            return; // Para o loop
+            print("💳 SECUNDÁRIA — OTP expirado. Aguardando 5 min para gerar novo OTP e reconectar automaticamente...", "log-info");
+            if (_sec._reconTimer) clearTimeout(_sec._reconTimer);
+            _sec._reconTimer = setTimeout(() => {
+                _sec._reconTimer = null;
+                print("💳 SECUNDÁRIA — tentando reconexão automática (novo OTP)...", "log-info");
+                _secConectar();
+            }, 300000); // 5 minutos — tempo para OTP expirado ser renovado pelo servidor
+            return;
         }
 
         // Reconexão automática com backoff crescente
