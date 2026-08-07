@@ -1,9 +1,0 @@
-{
-  "api_key": "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",
-  "model": "llama-3.3-70b-versatile",
-  "chave": "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",
-  "modelo": "llama-3.1-8b-instant",
-  "nvidia_chave": "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",
-  "nvidia_modelo": "nvidia/ising-calibration-1.5-31b",
-  "provedor_ativo": "nvidia"
-}

@@ -1,9 +1,0 @@
-{
-  "threshold_supervisor": 92,
-  "estrategias_suspensas": [],
-  "regime_atual": "TENDENCIA",
-  "melhor_ativo": "R_10",
-  "melhor_recomendacao": "FLUXO_CALL | EMA_9x21 | velas_3",
-  "monitor_ativo": true,
-  "monitor_intervalo": 5
-}
