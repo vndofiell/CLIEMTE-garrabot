@@ -15975,9 +15975,14 @@ function _csLogOp(msg, cor) {
 
 // ── Stats ───────────────────────────────────────────────────────────────────
 // Variáveis de stats da conta secundária no Cyber Sort
-let _csEspWins   = 0;
-let _csEspLosses = 0;
-let _csEspLucro  = 0;
+let _csEspWins         = 0;
+let _csEspLosses       = 0;
+let _csEspLucro        = 0;
+let _csEspWinSeqAtual  = 0;   // sequência de wins consecutivos atual (SEC)
+let _csEspLossSeqAtualC= 0;   // sequência de losses consecutivos atual (SEC)
+let _csEspMaxWinConsec = 0;   // maior sequência de wins da sessão (SEC)
+let _csEspMaxLossConsec= 0;   // maior sequência de losses da sessão (SEC)
+let _csEspMaxStake     = 0;   // maior stake usada na sessão (SEC)
 
 function _csAtualizarStats(proxStake) {
     const cot    = parseFloat(_cotacaoBRL) || 5.85;
@@ -16114,9 +16119,9 @@ function _csNotificarStopWin() {
         losses:          _csEspLosses,
         modo:            modo,
         estrategia:      'CYBER SORT — SEC',
-        max_win_consec:  0,
-        max_loss_consec: 0,
-        max_stake:       0,
+        max_win_consec:  _csEspMaxWinConsec,
+        max_loss_consec: _csEspMaxLossConsec,
+        max_stake:       _csEspMaxStake,
         conta:           'SECUNDARIA',
     };
 
@@ -16304,12 +16309,17 @@ function abrirModalCyberSort() {
     _csMgr         = null;
     _csSecMgr      = null;
     window._csLvContador = 0;
-    _csEspLossSeq  = 0;
-    _csEspPerdaAc  = 0;
-    _csUsandoSec   = false;
-    _csEspWins     = 0;
-    _csEspLosses   = 0;
-    _csEspLucro    = 0;
+    _csEspLossSeq       = 0;
+    _csEspPerdaAc       = 0;
+    _csUsandoSec        = false;
+    _csEspWins          = 0;
+    _csEspLosses        = 0;
+    _csEspLucro         = 0;
+    _csEspWinSeqAtual   = 0;
+    _csEspLossSeqAtualC = 0;
+    _csEspMaxWinConsec  = 0;
+    _csEspMaxLossConsec = 0;
+    _csEspMaxStake      = 0;
 
     // ── Sincroniza Stop Win / Stop Loss com o bot principal ──────────────────
     _csStopWin  = (typeof bot !== 'undefined' && bot.stopWin  < 999) ? bot.stopWin  : 999;
@@ -16609,8 +16619,18 @@ function csOperar() {
             // ── Contabiliza stats: principal ou espelho ─────────────────────────
             if (espAtivo && secPronto && _csUsandoSec) {
                 // Operando na conta secundária — stats vão para a linha ESPELHO
-                if (won) { _csEspWins++;  _csEspLucro += profit; }
-                else     { _csEspLosses++; _csEspLucro += profit; }
+                if (won) {
+                    _csEspWins++;  _csEspLucro += profit;
+                    _csEspWinSeqAtual++;
+                    _csEspLossSeqAtualC = 0;
+                    if (_csEspWinSeqAtual > _csEspMaxWinConsec) _csEspMaxWinConsec = _csEspWinSeqAtual;
+                } else {
+                    _csEspLosses++; _csEspLucro += profit;
+                    _csEspLossSeqAtualC++;
+                    _csEspWinSeqAtual = 0;
+                    if (_csEspLossSeqAtualC > _csEspMaxLossConsec) _csEspMaxLossConsec = _csEspLossSeqAtualC;
+                }
+                if (stake > _csEspMaxStake) _csEspMaxStake = stake;
                 // Atualiza saldo real da secundária
                 _sec.saldo = parseFloat(_sec.saldo || 0) + profit;
             } else {
