@@ -52,7 +52,7 @@ color 0E
 echo.
 echo  Executando deploy...
 echo.
-ssh -i "C:\Users\vando\Downloads\ssh-key-2026-07-26.key" -o StrictHostKeyChecking=no ubuntu@158.101.108.207 "cd ~/CLIEMTE-garrabot && git pull && pm2 restart garrabot && pm2 status"
+ssh -i "C:\Users\vando\Downloads\ssh-key-2026-07-26.key" -o StrictHostKeyChecking=no ubuntu@158.101.108.207 "cd ~/CLIEMTE-garrabot && git pull origin main && pm2 restart garrabot && pm2 status"
 goto VOLTAR
 
 :: ─────────────────────────────────────────────
