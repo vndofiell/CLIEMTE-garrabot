@@ -1,22 +1,9 @@
 {
-  "dia_atual": 2,
-  "historico": [
-    {
-      "dia": 1,
-      "data": "25/07/2026 11:35",
-      "banca_inicial": 1052.81,
-      "meta": 52.64,
-      "lucro_real": 52.94,
-      "banca_final": 1105.75,
-      "atingiu_meta": true,
-      "wins": 90,
-      "losses": 88,
-      "dias_equivalentes": 1
-    }
-  ],
-  "banca_base": 1052.81,
-  "banca_atual": 1053.46,
+  "dia_atual": 1,
+  "historico": [],
+  "banca_base": 711.82,
+  "banca_atual": 711.82,
   "perc": 0.05,
-  "ativo": true,
-  "dias": 10
+  "ativo": false,
+  "dias": 30
 }
