@@ -1574,8 +1574,13 @@
     </button>
     <button class="cmd-btn" id="btn-trocar-conta" onclick="trocarContaPrincipal()"
         style="display:none; border-color:rgba(251,191,36,0.5); color:#fbbf24;">
-        🔄 trocar conta
+        🔑 conta teste
         <span class="cmd-label" id="lbl-trocar-conta" style="color:#fbbf24;">Desconectar e logar outra</span>
+    </button>
+    <button class="cmd-btn" id="btn-painel-sec" onclick="abrirModalMultiContas()"
+        style="display:none; border-color:rgba(96,165,250,0.5); color:#60a5fa;">
+        💳 conta secundária
+        <span class="cmd-label" id="lbl-painel-sec" style="color:#60a5fa;">Desconectada</span>
     </button>
     <button class="cmd-btn" id="btn-trocar-modo" onclick="reabrirModo()"
         style="border-color:rgba(0,255,255,0.4); color:#0ff;">
@@ -6263,11 +6268,19 @@ async function _secConectar() {
     _sec.tipo    = data.tipo     || 'SEC';
     _sec.contaId = data.conta_id || '';
 
+    // Se já está conectado e autenticado, não cria novo WS — evita loop de reconexão
+    if (_sec.pronto && _sec.ws && _sec.ws.readyState === WebSocket.OPEN) {
+        _sec._conectando = false;
+        return;
+    }
+
     if (!_silencioso) print(`💳 SECUNDÁRIA — conectando ${_sec.nome} (${_sec.tipo})…`, 'log-info');
 
-    // Fecha WS antigo SOMENTE se não estiver conectado e autenticado
-    // Se _sec.pronto=true o WS está ativo — não fecha para não causar loop de reconexão
-    if (_sec.ws && _sec.ws.readyState <= 1 && !_sec.pronto) _sec.ws.close();
+    // Fecha WS antigo se existir e não estiver autenticado
+    if (_sec.ws && _sec.ws.readyState <= 1) {
+        _sec._destruido = true;  // evita que onclose do WS antigo agende nova reconexão
+        _sec.ws.close();
+    }
 
     _sec.ws     = new WebSocket(data.wss_url);
     _sec.pronto = false;
@@ -7038,6 +7051,22 @@ function _secAtualizarBadge() {
         el.style.background = 'rgba(96,165,250,0.15)';
         el.style.color      = '#60a5fa';
         el.style.border     = '1px solid #60a5fa';
+    }
+
+    // ── Atualiza botão da conta secundária no painel lateral ─────────────
+    const _btnPainelSec = document.getElementById('btn-painel-sec');
+    const _lblPainelSec = document.getElementById('lbl-painel-sec');
+    if (_btnPainelSec) {
+        if (_sec.pronto) {
+            _btnPainelSec.style.display = '';
+            const _saldoStr = _sec.saldo !== undefined ? ` $${parseFloat(_sec.saldo).toFixed(2)}` : '';
+            const _statusStr = _sec.espelhandoAtivo ? '🔴 ESPELHANDO' : '🟢 STANDBY';
+            if (_lblPainelSec) _lblPainelSec.textContent = `${_sec.contaId || _sec.nome}${_saldoStr} — ${_statusStr}`;
+            _btnPainelSec.style.borderColor = _sec.espelhandoAtivo ? 'rgba(248,113,113,0.5)' : 'rgba(96,165,250,0.5)';
+            _btnPainelSec.style.color       = _sec.espelhandoAtivo ? '#f87171' : '#60a5fa';
+        } else {
+            _btnPainelSec.style.display = 'none';
+        }
     }
 }
 
@@ -14979,8 +15008,10 @@ async function mcCarregarContas() {
             const faixaEl     = document.getElementById('mc-faixa-login');
             const btnConectar = document.getElementById('mc-btn-conectar');
 
-            // wss_url vazio = bot reiniciou e OTP expirou → exibe aviso e botão reconectar
-            if (!sec.wss_url) {
+            // Verifica se está realmente conectada: usa _sec.pronto (estado real do WS)
+            // wss_url fica vazio após onopen (invalidar), mas _sec.pronto reflete a conexão real
+            const _secRealmConectada = (typeof _sec !== 'undefined' && _sec.pronto && _sec.ws && _sec.ws.readyState === WebSocket.OPEN);
+            if (!_secRealmConectada && !sec.wss_url) {
                 if (faixaEl) {
                     faixaEl.style.display = '';
                     const textoEl = document.getElementById('mc-faixa-texto');
