@@ -16361,21 +16361,22 @@ function abrirModalCyberSort() {
     _csEspMaxLossConsec = 0;
     _csEspMaxStake      = 0;
 
-    // ── Sincroniza Stop Win / Stop Loss com o bot principal ──────────────────
-    _csStopWin  = (typeof bot !== 'undefined' && bot.stopWin  < 999) ? bot.stopWin  : 999;
-    _csStopLoss = (typeof bot !== 'undefined' && bot.stopLoss < 999) ? bot.stopLoss : 999;
-    // Se JC ativo no servidor → usa a meta do dia como Stop Win
-    fetch('/jc-meta').then(r => r.json()).then(m => {
+    // ── Sincroniza Stop Win / Stop Loss com a conta SECUNDÁRIA ───────────────
+    // Usa stopWin/stopLoss da config da conta secundária (_mcConfig), não da principal
+    _csStopWin  = (_mcConfig && _mcConfig.stopWin  > 0) ? _mcConfig.stopWin  : 999;
+    _csStopLoss = (_mcConfig && _mcConfig.stopLoss > 0) ? _mcConfig.stopLoss : 999;
+    // Se JC SECUNDÁRIA ativo → usa a meta do dia da planilha SEC como Stop Win
+    fetch('/jc-sec-meta').then(r => r.json()).then(m => {
         if (m.ativo && m.meta_hoje && m.meta_hoje > 0) {
             _csStopWin = parseFloat(m.meta_hoje.toFixed(2));
             _csLogAnalise(
-                `💹 JC ATIVO — Stop Win = meta do dia <b>$${_csStopWin.toFixed(2)}</b>` +
+                `💹 JC SEC ATIVO — Stop Win = meta do dia <b>$${_csStopWin.toFixed(2)}</b>` +
                 ` | Stop Loss = <b>$${_csStopLoss < 999 ? _csStopLoss.toFixed(2) : '—'}</b>`,
                 '#00ff41'
             );
         } else if (_csStopWin < 999 || _csStopLoss < 999) {
             _csLogAnalise(
-                `⚙ Stop Win: <b>$${_csStopWin < 999 ? _csStopWin.toFixed(2) : '—'}</b>` +
+                `⚙ Stop Win SEC: <b>$${_csStopWin < 999 ? _csStopWin.toFixed(2) : '—'}</b>` +
                 ` | Stop Loss: <b>$${_csStopLoss < 999 ? _csStopLoss.toFixed(2) : '—'}</b>`,
                 '#6b7280'
             );
@@ -16383,7 +16384,7 @@ function abrirModalCyberSort() {
     }).catch(() => {
         if (_csStopWin < 999 || _csStopLoss < 999) {
             _csLogAnalise(
-                `⚙ Stop Win: <b>$${_csStopWin < 999 ? _csStopWin.toFixed(2) : '—'}</b>` +
+                `⚙ Stop Win SEC: <b>$${_csStopWin < 999 ? _csStopWin.toFixed(2) : '—'}</b>` +
                 ` | Stop Loss: <b>$${_csStopLoss < 999 ? _csStopLoss.toFixed(2) : '—'}</b>`,
                 '#6b7280'
             );
