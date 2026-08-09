@@ -1155,8 +1155,14 @@ def admin_panel():
         with open('admin.html', 'r', encoding='utf-8') as f:
             html = f.read()
         from flask import Response
+        import time as _time_mod
+        # Injeta um timestamp no <head> para forçar o browser a nunca usar cache
+        ts = str(int(_time_mod.time()))
+        html = html.replace('<meta charset="UTF-8">', f'<meta charset="UTF-8"><meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"><meta http-equiv="Pragma" content="no-cache"><meta http-equiv="Expires" content="0"><!-- v{ts} -->', 1)
         resp = Response(html, mimetype='text/html')
-        resp.headers['Cache-Control'] = 'no-store'
+        resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+        resp.headers['Pragma']        = 'no-cache'
+        resp.headers['Expires']       = '0'
         return resp
     except FileNotFoundError:
         return "<h1>admin.html não encontrado</h1>", 404
