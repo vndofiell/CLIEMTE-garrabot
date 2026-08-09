@@ -125,13 +125,22 @@ tr:hover td { background:rgba(0,255,65,0.03); }
 .countdown-crit { color:#ff4444; text-shadow:0 0 10px rgba(255,68,68,0.6); animation:blink-crit 1s step-end infinite; }
 @keyframes blink-crit { 0%,100%{opacity:1} 50%{opacity:0.5} }
 
-.adm-actions { display:flex; gap:6px; flex-wrap:wrap; }
+.adm-actions { display:flex; flex-direction:column; gap:4px; }
+.adm-actions-row { display:flex; gap:5px; flex-wrap:wrap; align-items:center; }
+.adm-actions-sep {
+    border:none; border-top:1px solid rgba(255,255,255,0.06);
+    margin:2px 0;
+}
 
 /* Colunas Motivo / IP / PC — texto compacto */
 .cell-motivo { color:#ff6060; font-size:0.65rem; letter-spacing:0.5px; max-width:130px; }
 .cell-ip     { color:#888; font-size:0.62rem; font-family:'Courier New',monospace; }
 .cell-pc     { color:#888; font-size:0.62rem; font-family:'Courier New',monospace; max-width:130px;
                overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+/* Info extra compacta abaixo do usuário */
+.user-info-extra { font-size:0.58rem; color:#444; margin-top:3px; font-family:'Courier New',monospace; line-height:1.6; }
+.user-info-extra span { color:#666; }
 
 /* Modal genérico */
 .modal-overlay {
@@ -364,12 +373,8 @@ tr:hover td { background:rgba(0,255,65,0.03); }
                 <table>
                     <thead>
                         <tr>
-                            <th>USUÁRIO</th>
-                            <th>E-MAIL</th>
+                            <th>USUÁRIO / INFO</th>
                             <th>STATUS</th>
-                            <th>MOTIVO</th>
-                            <th>ÚLTIMO IP</th>
-                            <th>ÚLTIMO PC</th>
                             <th>CADASTRO</th>
                             <th>PRAZO</th>
                             <th>AÇÕES</th>
@@ -958,21 +963,16 @@ function carregarUsuarios() {
                            : u.status === 'BLOQUEADO' && ehDuplo ? 'badge-duplo'
                            : u.status === 'BLOQUEADO' ? 'badge-block'
                            : 'badge-pend';
+            const badgeTxt = u.status === 'BLOQUEADO' && ehDuplo ? '🔴 BLOQUEADO' : u.status;
 
-            const badgeTxt = u.status === 'BLOQUEADO' && ehDuplo
-                           ? '🔴 BLOQUEADO'
-                           : u.status;
+            // Info extra compacta dentro da célula do usuário
+            const extraLines = [];
+            extraLines.push(`<span>✉</span> ${u.email}`);
+            if (u.ultimo_ip) extraLines.push(`<span>IP</span> ${u.ultimo_ip}`);
+            if (u.ultimo_pc) extraLines.push(`<span>PC</span> <span title="${u.ultimo_pc}" style="max-width:160px;overflow:hidden;text-overflow:ellipsis;display:inline-block;vertical-align:bottom;">${u.ultimo_pc}</span>`);
+            if (u.motivo_bloqueio) extraLines.push(`<span style="color:#ff6060;">⚠</span> <span style="color:#ff6060;">${u.motivo_bloqueio}</span>`);
 
-            // Coluna MOTIVO
-            const motivoCel = u.motivo_bloqueio
-                ? `<span class="cell-motivo">${u.motivo_bloqueio}</span>`
-                : `<span style="color:#333;font-size:0.6rem;">—</span>`;
-
-            // Colunas IP / PC
-            const ipCel = u.ultimo_ip ? `<span class="cell-ip">${u.ultimo_ip}</span>` : '<span style="color:#333">—</span>';
-            const pcCel = u.ultimo_pc ? `<span class="cell-pc" title="${u.ultimo_pc}">${u.ultimo_pc}</span>` : '<span style="color:#333">—</span>';
-
-            // Coluna de prazo — cronômetro ao vivo
+            // Prazo — cronômetro ao vivo
             let prazoCel = '<span class="badge badge-perm">∞ PERMANENTE</span>';
             if (u.dias_teste) {
                 const ap       = u.aprovado_em ? new Date(u.aprovado_em.replace(' ','T')) : null;
@@ -987,37 +987,51 @@ function carregarUsuarios() {
                 }
             }
 
-            const acoes = [];
+            // Ações organizadas em grupos separados por linha
+            // Grupo 1 — ação principal (aprovar / bloquear+reenviar)
+            const g1 = [];
             if (u.status === 'PENDENTE')
-                acoes.push(`<button class="adm-btn sm" onclick="abrirModalAprovar('${u.username}')">✔ APROVAR</button>`);
+                g1.push(`<button class="adm-btn sm" onclick="abrirModalAprovar('${u.username}')">✔ APROVAR</button>`);
             if (u.status === 'APROVADO')
-                acoes.push(`<button class="adm-btn sm warn" onclick="acao('${u.username}','BLOQUEAR')">⛔ BLOQUEAR</button>`);
+                g1.push(`<button class="adm-btn sm warn" onclick="acao('${u.username}','BLOQUEAR')">⛔ BLOQUEAR</button>`);
             if (u.status === 'APROVADO')
-                acoes.push(`<button class="adm-btn sm cyan" onclick="acao('${u.username}','REENVIAR')">📧 REENVIAR</button>`);
-            if (u.status === 'APROVADO')
-                acoes.push(`<button class="adm-btn sm" onclick="abrirEstenderPrazo('${u.username}')">⏱ PRAZO</button>`);
-            if (u.status === 'APROVADO')
-                acoes.push(`<button class="adm-btn sm cyan" onclick="abrirLiberarDevice('${u.username}')">🔄 DEVICE</button>`);
-            if (u.status === 'APROVADO')
-                acoes.push(`<button class="adm-btn sm" style="border-color:#a78bfa;color:#a78bfa;background:rgba(167,139,250,0.08);" onclick="abrirGerenciarPCs('${u.username}')">🖥️ PCs</button>`);
-            if (u.status === 'BLOQUEADO' && ehDuplo)
-                acoes.push(`<button class="adm-btn sm" style="border-color:#ff4444;color:#ff4444;" onclick="abrirIncidente(${JSON.stringify(u)})">🚨 INCIDENTE</button>`);
+                g1.push(`<button class="adm-btn sm cyan" onclick="acao('${u.username}','REENVIAR')">📧 REENVIAR</button>`);
             if (u.status === 'BLOQUEADO')
-                acoes.push(`<button class="adm-btn sm" onclick="desbloquearDireto('${u.username}')">🔓 DESBLOQUEAR</button>`);
-            acoes.push(`<button class="adm-btn sm warn" onclick="abrirHistoricoLogin('${u.username}')">📜 LOG</button>`);
-            acoes.push(`<button class="adm-btn sm danger" onclick="acao('${u.username}','REMOVER')">✕ REMOVER</button>`);
+                g1.push(`<button class="adm-btn sm" onclick="desbloquearDireto('${u.username}')">🔓 DESBLOQUEAR</button>`);
+            if (u.status === 'BLOQUEADO' && ehDuplo)
+                g1.push(`<button class="adm-btn sm" style="border-color:#ff4444;color:#ff4444;" onclick="abrirIncidente(${JSON.stringify(u)})">🚨 INCIDENTE</button>`);
+
+            // Grupo 2 — gestão de acesso (prazo, device, PCs)
+            const g2 = [];
+            if (u.status === 'APROVADO')
+                g2.push(`<button class="adm-btn sm" onclick="abrirEstenderPrazo('${u.username}')">⏱ PRAZO</button>`);
+            if (u.status === 'APROVADO')
+                g2.push(`<button class="adm-btn sm cyan" onclick="abrirLiberarDevice('${u.username}')">🔄 DEVICE</button>`);
+            if (u.status === 'APROVADO')
+                g2.push(`<button class="adm-btn sm" style="border-color:#a78bfa;color:#a78bfa;background:rgba(167,139,250,0.08);" onclick="abrirGerenciarPCs('${u.username}')">🖥️ PCs</button>`);
+
+            // Grupo 3 — histórico e remoção
+            const g3 = [];
+            g3.push(`<button class="adm-btn sm warn" onclick="abrirHistoricoLogin('${u.username}')">📜 LOG</button>`);
+            g3.push(`<button class="adm-btn sm danger" onclick="acao('${u.username}','REMOVER')">✕ REMOVER</button>`);
+
+            // Monta div de ações com separadores entre grupos não-vazios
+            const grupos = [g1, g2, g3].filter(g => g.length > 0);
+            const acoesHtml = grupos.map((g, i) =>
+                `<div class="adm-actions-row">${g.join('')}</div>` +
+                (i < grupos.length - 1 ? '<hr class="adm-actions-sep">' : '')
+            ).join('');
 
             return `
             <tr>
-                <td style="color:#fff">${u.username}</td>
-                <td>${u.email}</td>
+                <td>
+                    <div style="color:#fff;font-weight:bold;">${u.username}</div>
+                    <div class="user-info-extra">${extraLines.join('<br>')}</div>
+                </td>
                 <td><span class="badge ${badgeCls}">${badgeTxt}</span></td>
-                <td>${motivoCel}</td>
-                <td>${ipCel}</td>
-                <td>${pcCel}</td>
-                <td style="color:#555;font-size:0.65rem">${u.criado_em || '-'}</td>
+                <td style="color:#555;font-size:0.65rem;white-space:nowrap;">${(u.criado_em || '-').split(' ')[0]}</td>
                 <td>${prazoCel}</td>
-                <td><div class="adm-actions">${acoes.join('')}</div></td>
+                <td><div class="adm-actions">${acoesHtml}</div></td>
             </tr>`;
         }).join('');
     });
