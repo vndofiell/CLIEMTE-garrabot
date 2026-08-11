@@ -15941,6 +15941,7 @@ function csMuteToggle() {
 let _csSinalAtual  = null;
 let _csAutoOperar  = false;
 let _csAtivo       = false;
+let _csAguardandoReconexao = false; // evita múltiplos loops de retry enquanto WS está caído
 let _csWins        = 0;
 let _csLosses      = 0;
 let _csLucro       = 0;
@@ -16351,6 +16352,8 @@ function _csAtualizarStatusEspelho() {
 // ── Abrir / Fechar ──────────────────────────────────────────────────────────
 function csFechar() {
     _csAtivo = false;
+    _csAutoOperar = false;
+    _csAguardandoReconexao = false; // cancela qualquer espera por reconexão
     _csPararMatrix();
     document.getElementById('cyber-sort-modal').style.display = 'none';
 }
@@ -16565,14 +16568,29 @@ function csOperar() {
     // ── Verifica conexão principal ────────────────────────────────────────────
     if (typeof bot === 'undefined' || !bot.ws || bot.ws.readyState !== WebSocket.OPEN) {
         _csLogOp('⚠️ Bot não conectado à Deriv. Aguardando reconexão...', '#ff4444');
-        // Se AUTO-LOOP ativo, tenta novamente em 3s quando o WS reconectar
         if (_csAutoOperar && _csAtivo) {
-            setTimeout(() => { if (_csAtivo && _csAutoOperar) csExecutar(); }, 3000);
+            // Só registra um listener — evita acúmulo de retries enquanto WS está caído
+            if (!_csAguardandoReconexao) {
+                _csAguardandoReconexao = true;
+                _csLogOp('⏳ Aguardando WS reconectar para retomar o loop...', '#6b7280');
+                const _csEsperarWS = () => {
+                    if (!_csAtivo || !_csAutoOperar) { _csAguardandoReconexao = false; return; }
+                    if (bot && bot.ws && bot.ws.readyState === WebSocket.OPEN) {
+                        _csAguardandoReconexao = false;
+                        _csLogOp('🔁 WS reconectado — retomando AUTO-LOOP...', '#00ffff');
+                        csExecutar();
+                    } else {
+                        setTimeout(_csEsperarWS, 2000);
+                    }
+                };
+                setTimeout(_csEsperarWS, 2000);
+            }
         } else {
             _csBotaoOperar(true);
         }
         return;
     }
+    _csAguardandoReconexao = false; // WS está OK — limpa flag
 
     // ── Modo Espelho: decide qual WebSocket usar ───────────────────────────────
     // Igual ao bot principal: começa na conta principal, muda para secundária
