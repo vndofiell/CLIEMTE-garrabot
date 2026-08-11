@@ -1788,8 +1788,16 @@
         <!-- ── CABEÇALHO ── -->
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;">
           <span style="color:#00ff41;font-size:0.9rem;letter-spacing:2px;">⚙ CYBER SORT / DIGIT PATTERN SCANNER</span>
-          <button onclick="csFechar()"
-              style="background:none;border:none;color:#f44;font-size:1.1rem;cursor:pointer;">✕</button>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <button id="cs-btn-mute" onclick="csMuteToggle()" title="Mutar/desmutar sons"
+                style="background:rgba(0,255,65,0.08);border:1px solid rgba(0,255,65,0.35);color:#00ff41;
+                       font-size:0.72rem;padding:4px 10px;cursor:pointer;font-family:'Share Tech Mono',monospace;
+                       letter-spacing:1px;border-radius:3px;">
+                🔊 SOM ON
+            </button>
+            <button onclick="csFechar()"
+                style="background:none;border:none;color:#f44;font-size:1.1rem;cursor:pointer;">✕</button>
+          </div>
         </div>
         <p style="font-size:1rem;text-align:center;margin-bottom:12px;letter-spacing:1px;font-family:'Share Tech Mono',monospace;">
             <span id="cs-hd-profit" style="font-weight:bold;font-size:1.35rem;color:#00ff41;text-shadow:0 0 8px rgba(0,255,65,0.5);">$0.00</span>
@@ -15917,6 +15925,19 @@ function _iniciarMatrixApk() {
 // CYBER SORT — Quick Sort + Gerenciamento + TG/WA + Matrix + Stats BRL
 // ══════════════════════════════════════════════════════════════════════════════
 const _csAudioCtx  = new (window.AudioContext || window.webkitAudioContext)();
+let _csMuted = (localStorage.getItem('cs_muted') === '1');
+
+function csMuteToggle() {
+    _csMuted = !_csMuted;
+    localStorage.setItem('cs_muted', _csMuted ? '1' : '0');
+    const btn = document.getElementById('cs-btn-mute');
+    if (btn) {
+        btn.textContent = _csMuted ? '🔇 SOM OFF' : '🔊 SOM ON';
+        btn.style.borderColor  = _csMuted ? 'rgba(255,68,68,0.4)'   : 'rgba(0,255,65,0.35)';
+        btn.style.color        = _csMuted ? '#f87171'               : '#00ff41';
+        btn.style.background   = _csMuted ? 'rgba(255,68,68,0.08)'  : 'rgba(0,255,65,0.08)';
+    }
+}
 let _csSinalAtual  = null;
 let _csAutoOperar  = false;
 let _csAtivo       = false;
@@ -15972,6 +15993,7 @@ function _csPararMatrix() {
 
 // ── Áudio ──────────────────────────────────────────────────────────────────
 function _csBip(freq, dur) {
+    if (_csMuted) return;
     try {
         const o = _csAudioCtx.createOscillator();
         const g = _csAudioCtx.createGain();
@@ -16337,6 +16359,15 @@ function abrirModalCyberSort() {
     const m = document.getElementById('cyber-sort-modal');
     if (!m) return;
     _csAtivo = true;
+
+    // Sincroniza visual do botão de mute com o estado salvo
+    const _btnMute = document.getElementById('cs-btn-mute');
+    if (_btnMute) {
+        _btnMute.textContent      = _csMuted ? '🔇 SOM OFF' : '🔊 SOM ON';
+        _btnMute.style.borderColor = _csMuted ? 'rgba(255,68,68,0.4)'  : 'rgba(0,255,65,0.35)';
+        _btnMute.style.color       = _csMuted ? '#f87171'              : '#00ff41';
+        _btnMute.style.background  = _csMuted ? 'rgba(255,68,68,0.08)' : 'rgba(0,255,65,0.08)';
+    }
 
     const stakeEl = document.getElementById('cs-stake');
     if (stakeEl && typeof bot !== 'undefined' && bot.stake) stakeEl.value = bot.stake;
