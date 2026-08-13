@@ -1860,6 +1860,21 @@
 
         <!-- ── GRID DE DÍGITOS + STATUS ── -->
         <div id="cs-digit-grid" style="display:flex;gap:6px;justify-content:center;margin-bottom:10px;flex-wrap:wrap;"></div>
+
+        <!-- ── HISTOGRAMA DÍGITOS SESSÃO (DIGITUNDER 5) ── -->
+        <div style="background:rgba(0,0,0,0.35);border:1px solid rgba(0,255,65,0.18);border-radius:5px;
+                    padding:8px 12px 6px;margin-bottom:10px;display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap;">
+          <div>
+            <div style="font-size:0.52rem;color:rgba(0,255,65,0.6);letter-spacing:1px;margin-bottom:4px;">▸ DÍGITOS (SESSÃO)</div>
+            <div id="cs-digit-hist" style="min-height:68px;"></div>
+          </div>
+          <div id="cs-digit-hist-legenda" style="font-size:0.58rem;line-height:1.8;color:#6b7280;align-self:center;">
+            <div><span style="color:rgba(0,255,0,0.8);">█</span> WIN (0–4)</div>
+            <div><span style="color:#ffbd2e;">█</span> BARREIRA (5)</div>
+            <div><span style="color:rgba(255,68,68,0.8);">█</span> LOSS (6–9)</div>
+          </div>
+        </div>
+
         <div id="cs-status" style="
             background:rgba(0,255,65,0.05); border:1px solid #00ff41;
             padding:8px; text-align:center; font-size:0.78rem;
@@ -4961,6 +4976,8 @@ function _atualizarHistDigitos() {
     }
 
     el.innerHTML = html;
+    // Atualiza também o histograma do modal CyberSort (se estiver aberto)
+    if (typeof _csAtualizarHist === 'function') _csAtualizarHist();
 }
 
 function resetarPlacar() {
@@ -16006,6 +16023,57 @@ function _csBip(freq, dur) {
     } catch(e) {}
 }
 
+// ── Histograma de dígitos SESSÃO no CyberSort (DIGITUNDER 5) ───────────────
+function _csAtualizarHist() {
+    const el = document.getElementById('cs-digit-hist');
+    if (!el || !bot._digitCounts) return;
+    const counts = bot._digitCounts;
+    const total  = counts.reduce((a, b) => a + b, 0);
+    if (total === 0) { el.innerHTML = '<div style="color:#555;font-size:0.62rem;padding:4px 0;">Aguardando ticks...</div>'; return; }
+    const max = Math.max(...counts);
+    const ultimoDigito = bot._ultimoDigito;
+    const BAR_MAX_H = 48;
+
+    // Cor fixa DIGITUNDER barreira=5: 0-4=verde, 5=amarelo(barreira), 6-9=vermelho
+    function _corCS(d) {
+        if (d < 5)  return { bg: 'rgba(0,255,0,0.72)',    label: '#0f0' };
+        if (d === 5) return { bg: 'rgba(255,189,46,0.75)', label: '#ffbd2e' };
+        return           { bg: 'rgba(255,68,68,0.55)',    label: '#f66' };
+    }
+
+    let html = `<div style="display:flex;gap:3px;align-items:flex-end;height:${BAR_MAX_H}px;margin-bottom:3px;">`;
+    for (let d = 0; d <= 9; d++) {
+        const pct  = max > 0 ? (counts[d] / max) : 0;
+        const freq = total > 0 ? (counts[d] / total * 100).toFixed(0) : 0;
+        const h    = Math.max(3, Math.round(pct * BAR_MAX_H));
+        const { bg } = _corCS(d);
+        const borda = (d === ultimoDigito) ? 'outline:2px solid #fff;outline-offset:-1px;' : '';
+        html += `<div title="Dígito ${d}: ${counts[d]}x (${freq}%)"
+            style="width:18px;background:${bg};height:${h}px;border-radius:2px 2px 0 0;
+                   flex-shrink:0;position:relative;${borda}cursor:default;transition:height 0.25s;">`;
+        if (parseFloat(freq) >= 12) {
+            html += `<div style="position:absolute;top:-13px;left:50%;transform:translateX(-50%);
+                        font-size:0.53rem;color:#ccc;white-space:nowrap;">${freq}%</div>`;
+        }
+        html += '</div>';
+    }
+    html += '</div>';
+
+    // Labels dos dígitos
+    html += '<div style="display:flex;gap:3px;margin-bottom:3px;">';
+    for (let d = 0; d <= 9; d++) {
+        const { label } = _corCS(d);
+        const fw = (d === ultimoDigito) ? 'font-weight:bold;color:#fff;' : `color:${label};`;
+        html += `<div style="width:18px;text-align:center;${fw}font-size:0.62rem;">${d}</div>`;
+    }
+    html += '</div>';
+
+    const ultimoLabel = ultimoDigito !== undefined
+        ? ` — último: <b style="color:#0ff;">${ultimoDigito}</b>` : '';
+    html += `<div style="color:#555;font-size:0.58rem;">${total} ticks${ultimoLabel}</div>`;
+    el.innerHTML = html;
+}
+
 // ── Grid de dígitos ────────────────────────────────────────────────────────
 function _csRenderGrid(arr, statusTxt) {
     const grid = document.getElementById('cs-digit-grid');
@@ -16436,6 +16504,7 @@ function abrirModalCyberSort() {
     csAtualizarEspelho();
     m.style.display = 'flex';
     _csRenderGrid([6,3,1,5,7,2,8,9,4,0], 'AGUARDANDO DADOS DO MERCADO...');
+    _csAtualizarHist(); // exibe dados da sessão atual ao abrir
     _csIniciarMatrix();
 }
 
