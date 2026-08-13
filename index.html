@@ -1607,7 +1607,7 @@
 
     <div class="cmd-section">▸ ESTRATÉGIA</div>
     <button class="cmd-btn active-cyan" id="btn-estrategia" onclick="abrirModalEstrategia()">
-        📊 Digit Under
+        🤖 ECT Dinâmica
         <span class="cmd-label" id="lbl-estrategia">Clique para mudar</span>
     </button>
     <div class="cmd-section">▸ GERENCIAMENTO</div>
@@ -1672,7 +1672,7 @@
             <div class="stat-box" id="hd-taxa-box" style="flex:1 1 0%;border-color:rgba(255,189,46,0.4);">🎯 <span id="hd-taxa" style="color:#ffbd2e; font-weight:bold;">--%</span></div>
             <div class="stat-box" id="hd-nextstake-box" style="flex:1 1 0%;border-color:rgba(0,255,255,0.3);">⚡ <span id="hd-nextstake" style="color:#0ff; font-weight:bold;">$--</span></div>
             <div class="stat-box info-box" style="flex:1 1 0%;">⚙️ <span id="hd-mgmt">Martingale</span></div>
-            <div class="stat-box info-box" style="flex:1 1 0%;">📊 <span id="hd-strat">Digit Under</span></div>
+            <div class="stat-box info-box" style="flex:1 1 0%;">🤖 <span id="hd-strat">ECT Dinâmica</span></div>
             <div class="stat-box" id="hd-timer-box" style="flex:1 1 0%;border-color:rgba(0,255,255,0.35); min-width:78px; text-align:center;">
                 ⏱️ <span id="hd-timer" style="font-size:0.82rem; color:#0ff; font-weight:bold; letter-spacing:0;">00:00:00</span>
             </div>
@@ -1709,7 +1709,7 @@
 
     <div class="terminal-body" id="terminal-content">
         <div class="glitch">>> INICIANDO CYBER_DERIV_OS v3.0...</div>
-        <div class="log-info">> ESTRATÉGIAS: Digit Over/Under/Par/Ímpar | Lógica do preço | Fluxo Direcional</div>
+        <div class="log-info">> ESTRATÉGIAS: Adicione novas estratégias no menu Estratégia</div>
         <div class="log-info">> GERENCIAMENTOS: Martingale | Soros | QSR | Loss Recovery | Masaniello | ...</div>
         <div class="log-info">> DIGITE 'ajuda' PARA VER OS COMANDOS</div>
         <br>
@@ -2617,33 +2617,6 @@ setInterval(drawMatrix, 50);
 // DEFINI──ES: ESTRATÉGIAS
 // ═══════════════════════════════════════════════════════
 const ESTRATEGIAS = {
-    "🎯 Gatilho + Under":   { tipo: "gatilho", contract: "DIGITUNDER", gatilho: 9, barrier: 7, duracao: 1, ativo: "R_100", desc: "Espera o dígito GATILHO aparecer, então entra Under" },
-    "🎯 Gatilho + Over":    { tipo: "gatilho", contract: "DIGITOVER",  gatilho: 0, barrier: 2, duracao: 1, ativo: "R_100", desc: "Espera o dígito GATILHO aparecer, então entra Over" },
-    "🎯 Gatilho Duplo":     { tipo: "gatilho_duplo", gatilho: 5, rep_gatilho: 2, duracao: 1, ativo: "R_100", desc: "Aguarda dígito BARREIRA repetir N vezes → entra UNDER + OVER ao mesmo tempo" },
-    "🦾 Garra Dupla":       { tipo: "garra_dupla", qtd_gatilho: 2, duracao: 1, ativo: "R_100",
-                               contract: "DIGITUNDER", barrier: 5,
-                               nivel_gale: 0, fator_gale: 1.4,
-                               desc: "N dígitos repetidos → barreira fixa 5 | UNDER ou OVER | Martingale simples" },
-    "🔢 Digit Under":       { tipo: "digit", contract: "DIGITUNDER", barrier: 5, duracao: 1, seq_gatilho: 0, ativo: "R_100", desc: "Entra a cada tick — último dígito MENOR que a barreira" },
-    "🔢 Digit Over":        { tipo: "digit", contract: "DIGITOVER",  barrier: 4, duracao: 1, seq_gatilho: 0, ativo: "R_100", desc: "Entra a cada tick — último dígito MAIOR que a barreira" },
-    "🔢 Digit Par":         { tipo: "digit", contract: "DIGITEVEN",  barrier: null, duracao: 1, seq_gatilho: 0, ativo: "R_100", desc: "Entra a cada tick — último dígito PAR" },
-    "🔢 Digit Ímpar":       { tipo: "digit", contract: "DIGITODD",   barrier: null, duracao: 1, seq_gatilho: 0, ativo: "R_100", desc: "Entra a cada tick — último dígito ÍMPAR" },
-    "⚡ Digit Dupla":        { tipo: "dupla",  barrier_over: 3, barrier_under: 7, duracao: 1, seq_gatilho: 0, ativo: "R_100", desc: "Entra OVER e UNDER ao mesmo tempo — cobre os dois lados da barreira" },
-    "📊 % Histograma":       { tipo: "pct_hist", duracao: 1, ativo: "R_100",
-                               pct_janela: 50,
-                               pct_min_fraco: 40,  // lado fraco precisa estar ABAIXO disso
-                               pct_min_forte: 60,  // lado forte precisa estar ACIMA disso
-                               desc: "Entra baseado no % de pares/ímpares/over/under na janela recente" },
-    "🧠 Saturação Smart":   { tipo: "saturacao", duracao: 1, ativo: "R_100",
-                               sat_janela: 25,        // últimos N ticks para calcular %
-                               sat_limiar: 70,        // % de saturação para disparar (ex: 70%)
-                               sat_smart_min: 10,     // dígito ausente há ≥ N ticks para contar como "smart"
-                               desc: "Entra EVEN quando ímpares saturam >70% e o dígito mais ausente é PAR (e vice-versa)" },
-    "📊 Lógica do preço":   { tipo: "candle", desc: "Analisa pavios e rejeições nos candles (CALL/PUT)" },
-    "📈 Fluxo Direcional":  { tipo: "fluxo",  velas: 3, desc: "3 preços consecutivos subindo→CALL / descendo→PUT" },
-    "🏛️ Garra Trend Pro":   { tipo: "trend_pro", tf: 1, duracao: 1, duracao_unit: "t", ativo: "R_100",
-                               score_min: 92,
-                               desc: "10 módulos institucionais — Filtro Anti-Loss — score ≥92 (CALL/PUT)" },
     // ── Slot dinâmico ECT — sobrescrito a cada ciclo do monitor ──────────────
     "🤖 ECT Dinâmica":      { tipo: "digit", contract: "DIGITUNDER", barrier: 7, duracao: 1,
                                seq_gatilho: 0, ativo: "R_100", desc: "Estratégia criada ao vivo pela IA ECT" },
@@ -3974,7 +3947,7 @@ let bot = {
     _maxStakeUsada: 0,   // maior stake usada na sessão (recuperação)
     saldoMostrado: false,
     _buying: false, _pendingReqId: null,
-    estrategia: "🔢 Digit Under",
+    estrategia: "🤖 ECT Dinâmica",
     gerenciamento: "🔄 Martingale",
     mgr: new GerenciadorUnificado("🔄 Martingale", { stake: 1.0 }),
     // Loss Virtual
