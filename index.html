@@ -1763,11 +1763,151 @@
         <span class="cmd-label" style="color:#57606a;">Visualizar Quick Sort</span>
     </button>
     <button class="cmd-btn" id="btn-digit-sniper"
-        onclick="window.open('/digit-sniper','_blank')"
+        onclick="dsAbrirModal()"
         style="border-color:rgba(250,204,21,0.5);color:#facc15;font-size:0.78rem;padding:5px 10px;margin-top:4px;">
         🎯 Digit Sniper PRO
         <span class="cmd-label" style="color:#57606a;">Scanner de dígitos</span>
     </button>
+
+    <!-- ── MODAL DIGIT SNIPER PRO ────────────────────────── -->
+    <div id="ds-modal" style="
+        display:none; position:fixed; top:0; left:0;
+        width:100%; height:100%;
+        background:rgba(0,0,0,0.93); z-index:1200;
+        justify-content:center; align-items:flex-start;
+        padding:20px 8px 40px; overflow-y:auto;">
+
+      <!-- Canvas Matrix de fundo -->
+      <canvas id="ds-matrix-canvas" style="
+          position:fixed;top:0;left:0;width:100%;height:100%;
+          z-index:0;pointer-events:none;opacity:0.15;"></canvas>
+
+      <div style="
+          position:relative;z-index:1;
+          background:rgba(13,15,18,0.97); border:1px solid #facc15;
+          border-radius:8px; padding:22px 24px 24px;
+          box-shadow:0 0 28px rgba(250,204,21,0.15);
+          font-family:'Share Tech Mono',monospace;
+          width:100%; max-width:1100px; min-width:0;
+          color:#fff; margin:0 auto; overflow-x:hidden;">
+
+        <!-- Cabeçalho -->
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+          <div>
+            <span style="color:#facc15;font-size:0.9rem;letter-spacing:2px;">🎯 DIGIT SNIPER PRO</span>
+            <div style="font-size:0.6rem;color:#57606a;letter-spacing:1px;margin-top:2px;">SCANNER ESTATÍSTICO · EXAUSTÃO · PAYOUT · FILTRO DE RISCO</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span id="ds-live-badge" style="font-size:0.62rem;color:#00ff41;border:1px solid rgba(0,255,65,0.4);
+                padding:3px 8px;border-radius:3px;letter-spacing:1px;">● MONITORANDO</span>
+            <button onclick="dsFecharModal()"
+                style="background:none;border:none;color:#f44;font-size:1.1rem;cursor:pointer;">✕</button>
+          </div>
+        </div>
+
+        <!-- Controles -->
+        <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;
+                    background:rgba(0,0,0,0.35);border:1px solid rgba(250,204,21,0.2);
+                    border-radius:6px;padding:10px 14px;margin-bottom:14px;">
+          <div>
+            <div style="font-size:0.55rem;color:#facc15;letter-spacing:1px;margin-bottom:4px;">ATIVO</div>
+            <select id="ds-asset" style="background:#161b22;border:1px solid rgba(250,204,21,0.4);
+                color:#facc15;font-family:'Share Tech Mono';font-size:0.72rem;padding:5px 8px;border-radius:4px;">
+              <option>R_10</option><option>R_25</option><option>R_50</option>
+              <option>R_75</option><option selected>R_100</option>
+              <option>1HZ10V</option><option>1HZ25V</option><option>1HZ50V</option>
+              <option>1HZ75V</option><option>1HZ100V</option>
+            </select>
+          </div>
+          <div>
+            <div style="font-size:0.55rem;color:#facc15;letter-spacing:1px;margin-bottom:4px;">PAYOUT</div>
+            <input id="ds-payout" type="number" step="0.01" value="0.85" min="0" max="1"
+                style="width:80px;background:#161b22;border:1px solid rgba(250,204,21,0.4);
+                       color:#facc15;font-family:'Share Tech Mono';font-size:0.72rem;
+                       padding:5px 8px;border-radius:4px;">
+          </div>
+          <div>
+            <div style="font-size:0.55rem;color:#facc15;letter-spacing:1px;margin-bottom:4px;">ATUALIZAÇÃO</div>
+            <select id="ds-interval" style="background:#161b22;border:1px solid rgba(250,204,21,0.4);
+                color:#facc15;font-family:'Share Tech Mono';font-size:0.72rem;padding:5px 8px;border-radius:4px;">
+              <option value="1500">1,5s</option>
+              <option value="3000" selected>3s</option>
+              <option value="5000">5s</option>
+            </select>
+          </div>
+          <button onclick="dsScan()" style="background:rgba(250,204,21,0.15);border:1px solid rgba(250,204,21,0.5);
+              color:#facc15;font-family:'Share Tech Mono';font-size:0.72rem;padding:6px 14px;
+              border-radius:4px;cursor:pointer;letter-spacing:1px;">🔎 ANALISAR</button>
+          <button id="ds-auto-btn" onclick="dsToggleAuto()" style="background:rgba(0,255,65,0.08);
+              border:1px solid rgba(0,255,65,0.35);color:#00ff41;font-family:'Share Tech Mono';
+              font-size:0.72rem;padding:6px 14px;border-radius:4px;cursor:pointer;letter-spacing:1px;">▶ AUTO</button>
+        </div>
+
+        <!-- Grid principal -->
+        <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:10px;margin-bottom:12px;">
+
+          <!-- Dígitos + Distribuição -->
+          <div style="background:rgba(0,0,0,0.35);border:1px solid #30363d;border-radius:6px;padding:12px;">
+            <div style="font-size:0.6rem;color:#57606a;letter-spacing:1px;margin-bottom:8px;">▸ ÚLTIMOS DÍGITOS</div>
+            <div id="ds-digits" style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:12px;min-height:34px;"></div>
+            <div style="font-size:0.6rem;color:#57606a;letter-spacing:1px;margin-bottom:6px;">▸ DISTRIBUIÇÃO</div>
+            <div id="ds-bars" style="display:flex;gap:3px;align-items:flex-end;height:80px;margin-bottom:18px;"></div>
+          </div>
+
+          <!-- Score -->
+          <div style="background:rgba(0,0,0,0.35);border:1px solid #30363d;border-radius:6px;padding:12px;text-align:center;">
+            <div style="font-size:0.6rem;color:#57606a;letter-spacing:1px;margin-bottom:8px;">▸ SCORE</div>
+            <div id="ds-score" style="font-size:52px;font-weight:800;color:#facc15;
+                font-family:'Share Tech Mono';margin-bottom:8px;">—</div>
+            <div id="ds-status" style="font-size:0.75rem;font-weight:bold;padding:8px;
+                border-radius:4px;background:rgba(0,0,0,0.4);border:1px solid #30363d;
+                letter-spacing:1px;margin-bottom:8px;">Aguardando dados</div>
+            <div id="ds-reason" style="font-size:0.6rem;color:#57606a;line-height:1.5;"></div>
+          </div>
+
+          <!-- Sinal -->
+          <div style="background:rgba(0,0,0,0.35);border:1px solid #30363d;border-radius:6px;padding:12px;">
+            <div style="font-size:0.6rem;color:#57606a;letter-spacing:1px;margin-bottom:8px;">▸ MELHOR SINAL</div>
+            <div id="ds-signal" style="font-size:1.1rem;font-weight:bold;color:#00ffff;
+                font-family:'Share Tech Mono';margin-bottom:10px;">—</div>
+            <div style="font-size:0.7rem;line-height:2;color:#c9d1d9;">
+              Barreira: <b id="ds-barrier" style="color:#facc15;">—</b><br>
+              Gatilho: <b id="ds-trigger" style="color:#facc15;">—</b><br>
+              Taxa 20t: <b id="ds-rate20" style="color:#00ff41;">—</b><br>
+              Taxa 50t: <b id="ds-rate50" style="color:#00ff41;">—</b><br>
+              Payout: <b id="ds-pay" style="color:#facc15;">—</b><br>
+              Entropia: <b id="ds-entropy" style="color:#c084fc;">—</b>
+            </div>
+          </div>
+        </div>
+
+        <!-- Ranking -->
+        <div style="background:rgba(0,0,0,0.35);border:1px solid #30363d;border-radius:6px;padding:12px;">
+          <div style="font-size:0.6rem;color:#57606a;letter-spacing:1px;margin-bottom:8px;">▸ RANKING DE CANDIDATOS</div>
+          <div style="overflow-x:auto;">
+            <table style="width:100%;border-collapse:collapse;font-size:0.68rem;font-family:'Share Tech Mono';">
+              <thead>
+                <tr style="color:#facc15;border-bottom:1px solid rgba(250,204,21,0.2);">
+                  <th style="padding:6px 8px;text-align:left;">Tipo</th>
+                  <th style="padding:6px 8px;text-align:left;">Barreira</th>
+                  <th style="padding:6px 8px;text-align:left;">Score</th>
+                  <th style="padding:6px 8px;text-align:left;">Gatilho</th>
+                  <th style="padding:6px 8px;text-align:left;">20 ticks</th>
+                  <th style="padding:6px 8px;text-align:left;">50 ticks</th>
+                  <th style="padding:6px 8px;text-align:left;">Status</th>
+                </tr>
+              </thead>
+              <tbody id="ds-rank"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Rodapé -->
+        <div style="margin-top:10px;text-align:center;font-size:0.58rem;color:#30363d;letter-spacing:1px;">
+          ANALÍTICO APENAS — NÃO EXECUTA OPERAÇÕES REAIS
+        </div>
+      </div>
+    </div>
 
     <!-- ── MODAL CYBER SORT ──────────────────────────────── -->
     <div id="cyber-sort-modal" style="
@@ -16894,6 +17034,183 @@ function csOperar() {
     wsUsar.send(JSON.stringify(payload));
 }
 // ── FIM CYBER SORT ─────────────────────────────────────────────────────────────
+
+// ══════════════════════════════════════════════════════════════════════════════
+// DIGIT SNIPER PRO — Modal inline com tema Matrix
+// ══════════════════════════════════════════════════════════════════════════════
+let _dsTimer       = null;
+let _dsMatrixRAF   = null;
+let _dsMatrixDrops = null;
+
+function dsAbrirModal() {
+    const m = document.getElementById('ds-modal');
+    if (!m) return;
+    m.style.display = 'flex';
+    _dsIniciarMatrix();
+    dsScan();
+}
+
+function dsFecharModal() {
+    const m = document.getElementById('ds-modal');
+    if (m) m.style.display = 'none';
+    dsStopAuto();
+    _dsPararMatrix();
+}
+
+function _dsIniciarMatrix() {
+    const c = document.getElementById('ds-matrix-canvas');
+    if (!c) return;
+    c.width  = window.innerWidth;
+    c.height = window.innerHeight;
+    const ctx = c.getContext('2d');
+    const cols = Math.floor(c.width / 16);
+    _dsMatrixDrops = Array(cols).fill(1);
+    _dsPararMatrix();
+    function _tick() {
+        ctx.fillStyle = 'rgba(0,0,0,0.05)';
+        ctx.fillRect(0, 0, c.width, c.height);
+        ctx.fillStyle = '#facc15';
+        ctx.font = '14px Share Tech Mono, monospace';
+        const chars = '0123456789ABCDEF@#$%';
+        for (let i = 0; i < _dsMatrixDrops.length; i++) {
+            ctx.fillText(chars[Math.floor(Math.random() * chars.length)],
+                i * 16, _dsMatrixDrops[i] * 16);
+            if (_dsMatrixDrops[i] * 16 > c.height && Math.random() > 0.975)
+                _dsMatrixDrops[i] = 0;
+            _dsMatrixDrops[i]++;
+        }
+        _dsMatrixRAF = requestAnimationFrame(_tick);
+    }
+    _dsMatrixRAF = requestAnimationFrame(_tick);
+}
+
+function _dsPararMatrix() {
+    if (_dsMatrixRAF) { cancelAnimationFrame(_dsMatrixRAF); _dsMatrixRAF = null; }
+}
+
+async function dsScan() {
+    const asset   = document.getElementById('ds-asset')?.value   || 'R_100';
+    const payout  = parseFloat(document.getElementById('ds-payout')?.value) || 0.85;
+    const reasonEl = document.getElementById('ds-reason');
+    try {
+        const r = await fetch('/digit-sniper/analisar', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ asset, payout })
+        });
+        const j = await r.json();
+        if (!r.ok) throw new Error(j.erro || 'Falha na análise');
+        dsRender(j);
+    } catch(e) {
+        if (reasonEl) reasonEl.textContent = 'Erro: ' + e.message;
+    }
+}
+
+function dsRender(j) {
+    const ds   = j.digitos  || [];
+    const best = j.melhor   || {};
+    const f    = j.frequencias || {};
+
+    // Dígitos
+    const dEl = document.getElementById('ds-digits');
+    if (dEl) {
+        dEl.innerHTML = ds.map(x => {
+            const isWin = x < 5;
+            const cor = isWin ? 'rgba(0,255,65,0.15)' : 'rgba(255,68,68,0.15)';
+            const brd = isWin ? 'rgba(0,255,65,0.4)' : 'rgba(255,68,68,0.4)';
+            const txt = isWin ? '#00ff41' : '#f66';
+            return `<div style="width:28px;height:28px;border-radius:5px;display:flex;
+                align-items:center;justify-content:center;background:${cor};
+                border:1px solid ${brd};color:${txt};font-size:0.75rem;
+                font-family:'Share Tech Mono';">${x}</div>`;
+        }).join('');
+    }
+
+    // Barras de distribuição
+    const bEl = document.getElementById('ds-bars');
+    if (bEl) {
+        const mx = Math.max(1, ...Object.values(f));
+        bEl.innerHTML = Array.from({length:10}, (_, i) => {
+            const v   = f[i] || 0;
+            const h   = Math.max(3, Math.round((v / mx) * 76));
+            const pct = j.janela > 0 ? Math.round(v / j.janela * 100) : 0;
+            const bg  = i < 5 ? 'rgba(0,255,65,0.65)' : 'rgba(255,68,68,0.55)';
+            return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;
+                        justify-content:flex-end;gap:2px;position:relative;">
+                      ${pct >= 12 ? `<span style="font-size:0.5rem;color:#ccc;">${pct}%</span>` : ''}
+                      <div style="width:100%;height:${h}px;background:${bg};border-radius:2px 2px 0 0;"></div>
+                      <span style="font-size:0.58rem;color:${i<5?'#00ff41':'#f66'};">${i}</span>
+                    </div>`;
+        }).join('');
+    }
+
+    // Score
+    const scoreEl = document.getElementById('ds-score');
+    if (scoreEl) {
+        const sc = best.score ?? '—';
+        const cor = best.entrada ? '#00ff41' : (best.score >= 70 ? '#facc15' : '#ff6474');
+        scoreEl.textContent = sc;
+        scoreEl.style.color = cor;
+    }
+
+    // Status
+    const stEl = document.getElementById('ds-status');
+    if (stEl) {
+        stEl.textContent = best.status || '—';
+        if (best.entrada) {
+            stEl.style.color = '#00ff41'; stEl.style.borderColor = 'rgba(0,255,65,0.4)';
+        } else if (best.score >= 70) {
+            stEl.style.color = '#facc15'; stEl.style.borderColor = 'rgba(250,204,21,0.4)';
+        } else {
+            stEl.style.color = '#ff6474'; stEl.style.borderColor = 'rgba(255,68,68,0.4)';
+        }
+    }
+
+    const _set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+    _set('ds-reason',  best.motivo  || '');
+    _set('ds-signal',  best.tipo    || '—');
+    _set('ds-barrier', best.barreira ?? '—');
+    _set('ds-trigger', best.gatilho  ?? '—');
+    _set('ds-rate20',  (best.taxa20  ?? '—') + (best.taxa20  !== undefined ? '%' : ''));
+    _set('ds-rate50',  (best.taxa50  ?? '—') + (best.taxa50  !== undefined ? '%' : ''));
+    _set('ds-pay',     best.payout   ?? '—');
+    _set('ds-entropy', best.entropia ?? '—');
+
+    // Ranking
+    const rankEl = document.getElementById('ds-rank');
+    if (rankEl) {
+        rankEl.innerHTML = (j.ranking || []).map(x => {
+            const cor = x.entrada ? '#00ff41' : (x.score >= 70 ? '#facc15' : '#f66');
+            return `<tr style="border-bottom:1px solid #1d2d3a;">
+                <td style="padding:5px 8px;color:#00ffff;">${x.tipo}</td>
+                <td style="padding:5px 8px;color:#facc15;">${x.barreira}</td>
+                <td style="padding:5px 8px;color:${cor};font-weight:bold;">${x.score}</td>
+                <td style="padding:5px 8px;">${x.gatilho}</td>
+                <td style="padding:5px 8px;">${x.taxa20}%</td>
+                <td style="padding:5px 8px;">${x.taxa50}%</td>
+                <td style="padding:5px 8px;color:${cor};">${x.status}</td>
+            </tr>`;
+        }).join('');
+    }
+}
+
+function dsToggleAuto() {
+    const btn = document.getElementById('ds-auto-btn');
+    if (_dsTimer) {
+        dsStopAuto();
+        if (btn) { btn.textContent = '▶ AUTO'; btn.style.color = '#00ff41'; btn.style.borderColor = 'rgba(0,255,65,0.35)'; }
+    } else {
+        const ms = parseInt(document.getElementById('ds-interval')?.value || 3000);
+        dsScan();
+        _dsTimer = setInterval(dsScan, ms);
+        if (btn) { btn.textContent = '⏹ PARAR'; btn.style.color = '#f44'; btn.style.borderColor = 'rgba(255,68,68,0.4)'; }
+    }
+}
+
+function dsStopAuto() {
+    if (_dsTimer) { clearInterval(_dsTimer); _dsTimer = null; }
+}
+// ── FIM DIGIT SNIPER PRO ────────────────────────────────────────────────────
 </script>
 
 </body>
