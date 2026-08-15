@@ -1,4 +1,5 @@
 # import webbrowser
+from digit_sniper_pro import register_digit_sniper
 import threading
 import time
 import json
@@ -10177,6 +10178,9 @@ def quick_sort_simulacao():
     quick_sort(list(arr), 0, len(arr) - 1)
     return jsonify({"ok": True, "passos": passos})
 
+
+# ── Digit Sniper PRO ────────────────────────────────────────────────────────
+register_digit_sniper(app, _buscar_ticks_ws_sync)
 
 def start_server():
     # Oracle Cloud — porta configurável via variável de ambiente, padrão 5000
