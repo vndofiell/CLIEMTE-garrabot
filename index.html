@@ -1902,9 +1902,115 @@
           </div>
         </div>
 
-        <!-- Rodapé -->
-        <div style="margin-top:10px;text-align:center;font-size:0.58rem;color:#30363d;letter-spacing:1px;">
-          ANALÍTICO APENAS — NÃO EXECUTA OPERAÇÕES REAIS
+        <!-- CONFIGURAÇÃO DE OPERAÇÃO -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px;">
+          <!-- Coluna esquerda: Entrada/Stops/Gerenciamento -->
+          <div style="background:rgba(0,0,0,0.35);border:1px solid rgba(250,204,21,0.25);border-radius:6px;padding:12px;">
+            <div style="font-size:0.6rem;color:#facc15;letter-spacing:1px;margin-bottom:10px;">▸ CONFIGURAÇÃO DE OPERAÇÃO</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px;">
+              <div>
+                <div style="font-size:0.55rem;color:#57606a;margin-bottom:3px;">ENTRADA ($)</div>
+                <input id="ds-entrada" type="number" value="0.35" min="0.35" step="0.01"
+                    style="width:100%;background:#161b22;border:1px solid rgba(250,204,21,0.4);
+                           color:#facc15;font-family:'Share Tech Mono';font-size:0.72rem;padding:4px 6px;border-radius:4px;">
+              </div>
+              <div>
+                <div style="font-size:0.55rem;color:#57606a;margin-bottom:3px;">STOP WIN ($)</div>
+                <input id="ds-stopwin" type="number" value="10" min="0" step="0.1"
+                    style="width:100%;background:#161b22;border:1px solid rgba(0,255,65,0.4);
+                           color:#00ff41;font-family:'Share Tech Mono';font-size:0.72rem;padding:4px 6px;border-radius:4px;">
+              </div>
+              <div>
+                <div style="font-size:0.55rem;color:#57606a;margin-bottom:3px;">STOP LOSS ($)</div>
+                <input id="ds-stoploss" type="number" value="100" min="0" step="0.1"
+                    style="width:100%;background:#161b22;border:1px solid rgba(255,68,68,0.4);
+                           color:#f66;font-family:'Share Tech Mono';font-size:0.72rem;padding:4px 6px;border-radius:4px;">
+              </div>
+            </div>
+            <div style="margin-bottom:10px;">
+              <div style="font-size:0.55rem;color:#57606a;margin-bottom:3px;">GERENCIAMENTO</div>
+              <select id="ds-mgr" onchange="dsOnMgrChange()" style="width:100%;background:#161b22;
+                  border:1px solid rgba(168,85,247,0.5);color:#c084fc;
+                  font-family:'Share Tech Mono';font-size:0.68rem;padding:5px 7px;border-radius:4px;">
+                <option value="flat">💰 Stake Fixa</option>
+                <option value="🔄 Martingale">🔄 Martingale</option>
+                <option value="⚡ SorosGale">⚡ SorosGale</option>
+                <option value="📉 Loss Recovery">📉 Loss Recovery</option>
+                <option value="🛡️ Recovery Conservador">🛡️ Recovery Conservador</option>
+                <option value="📐 QSR">📐 QSR</option>
+                <option value="📊 Masaniello">📊 Masaniello</option>
+              </select>
+            </div>
+            <div style="display:flex;gap:8px;margin-top:6px;">
+              <button id="ds-btn-operar" onclick="dsOperar()" disabled style="flex:1;
+                  background:rgba(250,204,21,0.08);border:1px solid #444;color:#555;
+                  font-family:'Share Tech Mono';font-size:0.72rem;padding:8px;
+                  border-radius:4px;cursor:not-allowed;letter-spacing:1px;">
+                ⚡ OPERAR COM SINAL
+              </button>
+              <button id="ds-btn-auto-op" onclick="dsToggleAutoOperar()" style="
+                  background:rgba(0,0,0,0.3);border:1px solid #30363d;color:#6b7280;
+                  font-family:'Share Tech Mono';font-size:0.72rem;padding:8px 12px;
+                  border-radius:4px;cursor:pointer;letter-spacing:1px;white-space:nowrap;">
+                🤖 AUTO
+              </button>
+            </div>
+            <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">
+              <div style="border:1px solid rgba(0,255,65,0.3);border-radius:4px;padding:2px 7px;font-size:0.65rem;color:#00ff41;">✅ <span id="ds-stat-wins">0</span></div>
+              <div style="border:1px solid rgba(255,68,68,0.3);border-radius:4px;padding:2px 7px;font-size:0.65rem;color:#f66;">🔁 <span id="ds-stat-loss">0</span></div>
+              <div style="border:1px solid rgba(250,204,21,0.35);border-radius:4px;padding:2px 7px;font-size:0.65rem;color:#facc15;">💰 <span id="ds-stat-lucro">+$0.00</span></div>
+              <div style="border:1px solid rgba(168,85,247,0.35);border-radius:4px;padding:2px 7px;font-size:0.65rem;color:#c084fc;">⚡ <span id="ds-stat-prox">$--</span></div>
+            </div>
+          </div>
+          <!-- Coluna direita: Modo Espelho -->
+          <div style="background:rgba(0,0,0,0.35);border:1px solid rgba(255,189,46,0.25);border-radius:6px;padding:12px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+              <div style="font-size:0.6rem;color:#fbbf24;letter-spacing:1px;">▸ MODO ESPELHO (CONTA SEC.)</div>
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+                <input type="checkbox" id="ds-esp-ativo" onchange="dsAtualizarEspelho()"
+                    style="accent-color:#fbbf24;width:14px;height:14px;">
+                <span id="ds-esp-badge" style="font-size:0.6rem;color:#555;letter-spacing:1px;">OFF</span>
+              </label>
+            </div>
+            <div id="ds-esp-campos" style="display:none;flex-direction:column;gap:8px;">
+              <div style="display:flex;align-items:center;gap:8px;">
+                <input type="checkbox" id="ds-esp-seq-ativo" style="accent-color:#fbbf24;width:13px;height:13px;">
+                <div style="flex:1;">
+                  <div style="font-size:0.55rem;color:#57606a;margin-bottom:2px;">LOSSES CONSECUTIVOS P/ ATIVAR SEC.</div>
+                  <input id="ds-esp-seq-qtd" type="number" value="3" min="1" max="20"
+                      style="width:60px;background:#0a0a12;border:1px solid rgba(255,189,46,0.3);
+                             color:#fbbf24;font-family:'Share Tech Mono';font-size:0.72rem;padding:3px 6px;border-radius:3px;">
+                </div>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;">
+                <input type="checkbox" id="ds-esp-perda-ativo" style="accent-color:#fbbf24;width:13px;height:13px;">
+                <div style="flex:1;">
+                  <div style="font-size:0.55rem;color:#57606a;margin-bottom:2px;">PERDA EM $ P/ ATIVAR SEC.</div>
+                  <input id="ds-esp-perda-val" type="number" value="5" min="0" step="0.1"
+                      style="width:60px;background:#0a0a12;border:1px solid rgba(255,189,46,0.3);
+                             color:#fbbf24;font-family:'Share Tech Mono';font-size:0.72rem;padding:3px 6px;border-radius:3px;">
+                </div>
+              </div>
+              <div id="ds-esp-status" style="font-size:0.6rem;color:#57606a;background:rgba(0,0,0,0.3);
+                  border:1px solid #30363d;border-radius:4px;padding:5px 8px;line-height:1.6;">
+                Conta secundária: verificando...
+              </div>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                <div style="border:1px solid rgba(0,255,65,0.3);border-radius:4px;padding:2px 7px;font-size:0.65rem;color:#00ff41;">✅ <span id="ds-esp-wins">0</span></div>
+                <div style="border:1px solid rgba(255,68,68,0.3);border-radius:4px;padding:2px 7px;font-size:0.65rem;color:#f66;">🔁 <span id="ds-esp-loss">0</span></div>
+                <div style="border:1px solid rgba(255,189,46,0.35);border-radius:4px;padding:2px 7px;font-size:0.65rem;color:#fbbf24;">💰 <span id="ds-esp-lucro">+$0.00</span></div>
+              </div>
+            </div>
+            <div id="ds-esp-off-msg" style="font-size:0.6rem;color:#555;margin-top:8px;">
+              Ative para espelhar na conta secundária quando atingir o gatilho de losses ou perda.
+            </div>
+          </div>
+        </div>
+        <!-- LOG DE OPERAÇÕES -->
+        <div style="margin-top:10px;background:rgba(0,0,0,0.35);border:1px solid #30363d;border-radius:6px;padding:8px 12px;">
+          <div style="font-size:0.6rem;color:#57606a;letter-spacing:1px;margin-bottom:6px;">▸ LOG DE OPERAÇÕES</div>
+          <div id="ds-op-log" style="height:90px;overflow-y:auto;font-size:0.62rem;
+              font-family:'Share Tech Mono';line-height:1.6;color:#888;"></div>
         </div>
       </div>
     </div>
@@ -17176,6 +17282,16 @@ function dsRender(j) {
     _set('ds-pay',     best.payout   ?? '—');
     _set('ds-entropy', best.entropia ?? '—');
 
+    // Salva sinal atual para operação real e habilita botão se ENTRADA LIBERADA
+    if (best.entrada && best.tipo && best.barreira !== undefined) {
+        _dsSinalAtual = { contract_type: best.tipo, barrier: best.barreira, ativo: document.getElementById('ds-asset')?.value || 'R_100' };
+        dsBotaoOperar(true);
+        if (_dsAutoOperar && !_dsAguardandoRecon) dsOperar();
+    } else {
+        _dsSinalAtual = null;
+        dsBotaoOperar(false);
+    }
+
     // Ranking
     const rankEl = document.getElementById('ds-rank');
     if (rankEl) {
@@ -17209,6 +17325,216 @@ function dsToggleAuto() {
 
 function dsStopAuto() {
     if (_dsTimer) { clearInterval(_dsTimer); _dsTimer = null; }
+}
+
+// ── Operação real ─────────────────────────────────────────────────────────
+let _dsMgr            = null;
+let _dsSecMgr         = null;
+let _dsAutoOperar     = false;
+let _dsUsandoSec      = false;
+let _dsEspLossSeq     = 0;
+let _dsEspPerdaAc     = 0;
+let _dsWins           = 0;
+let _dsLosses         = 0;
+let _dsLucro          = 0;
+let _dsEspWins        = 0;
+let _dsEspLosses      = 0;
+let _dsEspLucro       = 0;
+let _dsSinalAtual     = null;
+let _dsAguardandoRecon= false;
+
+function dsLog(msg, cor) {
+    const el = document.getElementById('ds-op-log');
+    if (!el) return;
+    const ts = new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    el.innerHTML += `<div style="color:${cor||'#888'}">[${ts}] ${msg}</div>`;
+    el.scrollTop = el.scrollHeight;
+}
+
+function dsOnMgrChange() {
+    const nome  = document.getElementById('ds-mgr')?.value;
+    const stake = parseFloat(document.getElementById('ds-entrada')?.value) || 0.35;
+    _dsMgr = (nome && nome !== 'flat' && typeof GerenciadorUnificado !== 'undefined')
+        ? new GerenciadorUnificado(nome, { stake }) : null;
+    dsAtualizarStats();
+}
+
+function dsAtualizarStats() {
+    const prox = (_dsUsandoSec && _dsSecMgr) ? _dsSecMgr.getStake()
+               : _dsMgr ? _dsMgr.getStake()
+               : (parseFloat(document.getElementById('ds-entrada')?.value) || 0.35);
+    const _s = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
+    _s('ds-stat-wins',  _dsWins);
+    _s('ds-stat-loss',  _dsLosses);
+    _s('ds-stat-lucro', (_dsLucro >= 0 ? '+' : '') + '$' + _dsLucro.toFixed(2));
+    _s('ds-stat-prox',  '$' + prox.toFixed(2));
+    _s('ds-esp-wins',   _dsEspWins);
+    _s('ds-esp-loss',   _dsEspLosses);
+    _s('ds-esp-lucro',  (_dsEspLucro >= 0 ? '+' : '') + '$' + _dsEspLucro.toFixed(2));
+}
+
+function dsBotaoOperar(ativo) {
+    const btn = document.getElementById('ds-btn-operar');
+    if (!btn) return;
+    btn.disabled          = !ativo;
+    btn.style.background  = ativo ? 'rgba(250,204,21,0.15)' : 'rgba(250,204,21,0.05)';
+    btn.style.borderColor = ativo ? '#facc15' : '#444';
+    btn.style.color       = ativo ? '#facc15' : '#555';
+    btn.style.cursor      = ativo ? 'pointer' : 'not-allowed';
+}
+
+function dsToggleAutoOperar() {
+    _dsAutoOperar = !_dsAutoOperar;
+    const btn = document.getElementById('ds-btn-auto-op');
+    if (!btn) return;
+    if (_dsAutoOperar) {
+        btn.textContent = '⏹ PARAR AUTO'; btn.style.color = '#f44'; btn.style.borderColor = 'rgba(255,68,68,0.4)';
+        dsLog('🤖 AUTO-OPERAR ativado — opera quando ENTRADA LIBERADA', '#00ffff');
+    } else {
+        btn.textContent = '🤖 AUTO'; btn.style.color = '#6b7280'; btn.style.borderColor = '#30363d';
+        dsLog('⏹ AUTO-OPERAR desativado', '#6b7280');
+    }
+}
+
+function dsAtualizarEspelho() {
+    const ativo  = document.getElementById('ds-esp-ativo')?.checked;
+    const badge  = document.getElementById('ds-esp-badge');
+    const campos = document.getElementById('ds-esp-campos');
+    const offMsg = document.getElementById('ds-esp-off-msg');
+    if (badge)  { badge.textContent = ativo ? 'ON' : 'OFF'; badge.style.color = ativo ? '#fbbf24' : '#555'; }
+    if (campos) campos.style.display = ativo ? 'flex' : 'none';
+    if (offMsg) offMsg.style.display = ativo ? 'none' : 'block';
+    if (ativo) {
+        const secPronto = (typeof _sec !== 'undefined') && _sec.pronto && _sec.ws && _sec.ws.readyState === WebSocket.OPEN;
+        const stEl = document.getElementById('ds-esp-status');
+        if (stEl) {
+            if (secPronto) { stEl.innerHTML = `✅ SEC conectada | Banca: <b style="color:#fbbf24">$${parseFloat(_sec.saldo||0).toFixed(2)}</b>`; stEl.style.color = '#fbbf24'; }
+            else { stEl.textContent = '⚠️ Conta SEC não conectada. Configure em Conta Secundária.'; stEl.style.color = '#f66'; }
+        }
+    }
+}
+
+function dsOperar() {
+    if (!_dsSinalAtual) return;
+    if (typeof bot === 'undefined' || !bot.ws || bot.ws.readyState !== WebSocket.OPEN) {
+        dsLog('⚠️ Bot não conectado — aguardando WS...', '#f44');
+        if (_dsAutoOperar && !_dsAguardandoRecon) {
+            _dsAguardandoRecon = true;
+            const _esp = () => {
+                if (!_dsAutoOperar) { _dsAguardandoRecon = false; return; }
+                if (bot && bot.ws && bot.ws.readyState === WebSocket.OPEN) { _dsAguardandoRecon = false; dsOperar(); }
+                else setTimeout(_esp, 2000);
+            };
+            setTimeout(_esp, 2000);
+        }
+        return;
+    }
+    _dsAguardandoRecon = false;
+
+    // Stop Win / Stop Loss
+    const swLim = parseFloat(document.getElementById('ds-stopwin')?.value)  || 999;
+    const slLim = parseFloat(document.getElementById('ds-stoploss')?.value) || 999;
+    if (_dsLucro >= swLim)   { dsLog(`🏆 STOP WIN! Lucro: +$${_dsLucro.toFixed(2)}`, '#ffd700');  _dsAutoOperar = false; dsToggleAutoOperar(); return; }
+    if (_dsLucro <= -slLim)  { dsLog(`🛑 STOP LOSS! Perda: -$${Math.abs(_dsLucro).toFixed(2)}`, '#f44'); _dsAutoOperar = false; dsToggleAutoOperar(); return; }
+
+    const espAtivo  = document.getElementById('ds-esp-ativo')?.checked;
+    const secPronto = (typeof _sec !== 'undefined') && _sec.pronto && _sec.ws && _sec.ws.readyState === WebSocket.OPEN;
+    const wsUsar    = (espAtivo && secPronto && _dsUsandoSec) ? _sec.ws : bot.ws;
+
+    if (espAtivo && _dsUsandoSec && secPronto) dsLog('💳 <b style="color:#60a5fa">Conta SEC</b> — espelho ativo', '#60a5fa');
+    else if (espAtivo && !_dsUsandoSec)        dsLog('🏦 <b style="color:#00ffff">Conta principal</b> — monitorando gatilho', '#00ffff');
+    if (espAtivo && !secPronto)                dsLog('⚠️ Espelho ativo mas SEC não conectada', '#ffbd2e');
+
+    const baseStake = parseFloat(document.getElementById('ds-entrada')?.value) || 0.35;
+    const stake = (_dsUsandoSec && _dsSecMgr) ? _dsSecMgr.getStake() : _dsMgr ? _dsMgr.getStake() : baseStake;
+    const ct    = _dsSinalAtual.contract_type;
+    const barr  = _dsSinalAtual.barrier;
+    const ativ  = document.getElementById('ds-asset')?.value || 'R_100';
+    const reqId = Math.floor(Math.random() * 90000) + 10000;
+
+    dsLog(`🚀 <b style="color:#00ffff">${ct}</b> barr=<b style="color:#facc15">${barr}</b> $${stake.toFixed(2)} | ${ativ}`, '#ccc');
+    dsBotaoOperar(false);
+
+    const payload = { proposal:1, req_id:reqId, amount:stake, basis:'stake',
+        contract_type:ct, currency:'USD', duration:1, duration_unit:'t',
+        underlying_symbol:ativ, barrier:String(barr) };
+
+    const _origMsg = wsUsar.onmessage;
+    let _dsCid = null, _dsTravado = null;
+
+    const _rec = (motivo) => {
+        if (_dsTravado) { clearTimeout(_dsTravado); _dsTravado = null; }
+        wsUsar.onmessage = _origMsg;
+        dsLog(`⚠️ ${motivo}`, '#f44');
+        if (_dsAutoOperar) setTimeout(async () => { if (!_dsAutoOperar) return; await dsScan(); if (_dsSinalAtual) dsOperar(); }, 2000);
+        else dsBotaoOperar(true);
+    };
+
+    _dsTravado = setTimeout(() => _rec('Timeout 25s'), 25000);
+
+    wsUsar.onmessage = (msg) => {
+        const d = JSON.parse(msg.data);
+        if (d.msg_type === 'proposal' && d.req_id === reqId) {
+            if (d.error) { _rec('Proposta recusada: ' + d.error.message); return; }
+            const pid = d.proposal?.id;
+            if (pid) { dsLog('✅ Aceita — comprando...', '#00ff41'); wsUsar.send(JSON.stringify({ buy:pid, price:stake })); }
+            else _rec('Proposta sem ID');
+            return;
+        }
+        if (d.msg_type === 'buy') {
+            if (d.error) { _rec('Compra recusada: ' + d.error.message); return; }
+            const cid = d.buy?.contract_id;
+            if (cid) { _dsCid = cid; dsLog(`🎯 #${cid} — aguardando...`, '#ffbd2e'); wsUsar.send(JSON.stringify({ proposal_open_contract:1, contract_id:cid, subscribe:1 })); }
+            else _rec('Compra sem contract_id');
+            return;
+        }
+        if (d.msg_type === 'proposal_open_contract' && d.proposal_open_contract) {
+            const poc = d.proposal_open_contract;
+            if (_dsCid && poc.contract_id !== _dsCid) { _origMsg(msg); return; }
+            if (!poc.is_sold) { _origMsg(msg); return; }
+            if (_dsTravado) { clearTimeout(_dsTravado); _dsTravado = null; }
+            wsUsar.onmessage = _origMsg;
+            const profit = parseFloat(poc.profit), won = profit > 0;
+            if (_dsUsandoSec && _dsSecMgr) _dsSecMgr.updateResult(won);
+            else if (_dsMgr) _dsMgr.updateResult(won);
+            if (espAtivo && secPronto && _dsUsandoSec) {
+                if (won) { _dsEspWins++; _dsEspLucro += profit; } else { _dsEspLosses++; _dsEspLucro += profit; }
+            } else {
+                if (won) { _dsWins++; _dsLucro += profit; } else { _dsLosses++; _dsLucro += profit; }
+            }
+            const proxStake = (_dsUsandoSec && _dsSecMgr) ? _dsSecMgr.getStake() : (_dsMgr ? _dsMgr.getStake() : baseStake);
+            dsLog(`${won ? '🏆 WIN' : '💥 LOSS'} ${won?'+':''}$${profit.toFixed(2)} | próx $${proxStake.toFixed(2)}`, won ? '#00ff41' : '#f44');
+            dsAtualizarStats();
+            // Lógica espelho
+            if (espAtivo && secPronto) {
+                if (!_dsUsandoSec) {
+                    if (!won) { _dsEspLossSeq++; _dsEspPerdaAc += Math.abs(profit); } else _dsEspLossSeq = 0;
+                    const seqAtv = document.getElementById('ds-esp-seq-ativo')?.checked;
+                    const perdAtv= document.getElementById('ds-esp-perda-ativo')?.checked;
+                    const lossLim= parseInt(document.getElementById('ds-esp-seq-qtd')?.value||3);
+                    const perdLim= parseFloat(document.getElementById('ds-esp-perda-val')?.value||5);
+                    if ((seqAtv && _dsEspLossSeq >= lossLim) || (perdAtv && _dsEspPerdaAc >= perdLim)) {
+                        _dsUsandoSec = true;
+                        const mn = document.getElementById('ds-mgr')?.value;
+                        _dsSecMgr = (mn && mn !== 'flat' && typeof GerenciadorUnificado !== 'undefined') ? new GerenciadorUnificado(mn, { stake: baseStake }) : null;
+                        dsLog(`🔀 <b style="color:#60a5fa">TRIGGER SEC</b> — próxima na conta espelho`, '#60a5fa');
+                    }
+                } else if (won) {
+                    _dsUsandoSec = false; _dsSecMgr = null; _dsEspLossSeq = 0; _dsEspPerdaAc = 0;
+                    const mn = document.getElementById('ds-mgr')?.value;
+                    if (mn && mn !== 'flat' && typeof GerenciadorUnificado !== 'undefined') _dsMgr = new GerenciadorUnificado(mn, { stake: baseStake });
+                    dsLog('✅ SEC ganhou — voltando à conta principal', '#00ff41');
+                }
+                dsAtualizarEspelho();
+            }
+            if (_dsAutoOperar) {
+                setTimeout(async () => { if (!_dsAutoOperar) return; await dsScan(); if (_dsSinalAtual && _dsAutoOperar) dsOperar(); }, 1500);
+            } else dsBotaoOperar(true);
+            return;
+        }
+        _origMsg(msg);
+    };
+    wsUsar.send(JSON.stringify(payload));
 }
 // ── FIM DIGIT SNIPER PRO ────────────────────────────────────────────────────
 </script>
