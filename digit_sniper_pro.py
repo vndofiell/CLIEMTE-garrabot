@@ -32,9 +32,24 @@ OVER_BARRIERS = range(3, 7)
 
 
 def _last_digit(value: Any) -> int | None:
+    """Extrai o último dígito significativo da parte decimal do preço."""
     try:
-        s = f"{float(value):.10f}"
-        return int(s.split(".")[-1][-1])
+        # Converte para string preservando a precisão original
+        s = str(value).strip()
+        # Se já é string de preço (ex: "1234.56"), usa direto
+        # Se é float, converte sem zero-padding extra
+        if isinstance(value, float):
+            # Usa repr para evitar zeros extras: 1234.5 → "1234.5", não "1234.50000"
+            s = repr(value)
+        # Remove notação científica se houver
+        if 'e' in s or 'E' in s:
+            s = f"{float(s):.10f}".rstrip('0')
+        # Pega o último dígito da parte decimal (ou do inteiro se sem ponto)
+        if '.' in s:
+            decimal = s.split('.')[-1].rstrip('0') or '0'
+            return int(decimal[-1])
+        else:
+            return int(s[-1])
     except Exception:
         return None
 
