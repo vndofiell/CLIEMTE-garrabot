@@ -1995,6 +1995,12 @@
                   border:1px solid #30363d;border-radius:4px;padding:5px 8px;line-height:1.6;">
                 Conta secundária: verificando...
               </div>
+              <button id="ds-btn-conectar-sec" onclick="abrirModalMultiContas()"
+                  style="width:100%;background:rgba(255,189,46,0.1);border:1px solid rgba(255,189,46,0.5);
+                         color:#fbbf24;font-family:'Share Tech Mono';font-size:0.68rem;padding:6px;
+                         border-radius:4px;cursor:pointer;letter-spacing:1px;margin-top:2px;">
+                💳 Conectar / Configurar Conta SEC
+              </button>
               <div style="display:flex;gap:6px;flex-wrap:wrap;">
                 <div style="border:1px solid rgba(0,255,65,0.3);border-radius:4px;padding:2px 7px;font-size:0.65rem;color:#00ff41;">✅ <span id="ds-esp-wins">0</span></div>
                 <div style="border:1px solid rgba(255,68,68,0.3);border-radius:4px;padding:2px 7px;font-size:0.65rem;color:#f66;">🔁 <span id="ds-esp-loss">0</span></div>
@@ -17405,13 +17411,23 @@ function dsAtualizarEspelho() {
     if (campos) campos.style.display = ativo ? 'flex' : 'none';
     if (offMsg) offMsg.style.display = ativo ? 'none' : 'block';
     if (ativo) {
-        const secPronto = (typeof _sec !== 'undefined') && _sec.pronto && _sec.ws && _sec.ws.readyState === WebSocket.OPEN;
-        const stEl = document.getElementById('ds-esp-status');
-        if (stEl) {
-            if (secPronto) { stEl.innerHTML = `✅ SEC conectada | Banca: <b style="color:#fbbf24">$${parseFloat(_sec.saldo||0).toFixed(2)}</b>`; stEl.style.color = '#fbbf24'; }
-            else { stEl.textContent = '⚠️ Conta SEC não conectada. Configure em Conta Secundária.'; stEl.style.color = '#f66'; }
+    const secPronto = (typeof _sec !== 'undefined') && _sec.pronto && _sec.ws && _sec.ws.readyState === WebSocket.OPEN;
+    const stEl = document.getElementById('ds-esp-status');
+    const btnSec = document.getElementById('ds-btn-conectar-sec');
+    if (stEl) {
+        if (secPronto) {
+            stEl.innerHTML = `✅ SEC conectada | Banca: <b style="color:#fbbf24">$${parseFloat(_sec.saldo||0).toFixed(2)}</b>`;
+            stEl.style.color = '#fbbf24';
+            stEl.style.borderColor = 'rgba(255,189,46,0.4)';
+            if (btnSec) { btnSec.textContent = '✅ Conta SEC conectada — clique para reconfigurar'; btnSec.style.borderColor = 'rgba(0,255,65,0.4)'; btnSec.style.color = '#00ff41'; }
+        } else {
+            stEl.textContent = '⚠️ Conta SEC não conectada.';
+            stEl.style.color = '#f66';
+            stEl.style.borderColor = 'rgba(255,68,68,0.3)';
+            if (btnSec) { btnSec.textContent = '💳 Conectar / Configurar Conta SEC'; btnSec.style.borderColor = 'rgba(255,189,46,0.5)'; btnSec.style.color = '#fbbf24'; }
         }
     }
+}
 }
 
 function dsOperar() {
