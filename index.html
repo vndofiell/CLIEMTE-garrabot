@@ -1607,7 +1607,7 @@
 
     <div class="cmd-section">▸ ESTRATÉGIA</div>
     <button class="cmd-btn active-cyan" id="btn-estrategia" onclick="abrirModalEstrategia()">
-        🤖 ECT Dinâmica
+        🎯 DIGITUNDER 5
         <span class="cmd-label" id="lbl-estrategia">Clique para mudar</span>
     </button>
     <div class="cmd-section">▸ GERENCIAMENTO</div>
@@ -1672,7 +1672,7 @@
             <div class="stat-box" id="hd-taxa-box" style="flex:1 1 0%;border-color:rgba(255,189,46,0.4);">🎯 <span id="hd-taxa" style="color:#ffbd2e; font-weight:bold;">--%</span></div>
             <div class="stat-box" id="hd-nextstake-box" style="flex:1 1 0%;border-color:rgba(0,255,255,0.3);">⚡ <span id="hd-nextstake" style="color:#0ff; font-weight:bold;">$--</span></div>
             <div class="stat-box info-box" style="flex:1 1 0%;">⚙️ <span id="hd-mgmt">Martingale</span></div>
-            <div class="stat-box info-box" style="flex:1 1 0%;">🤖 <span id="hd-strat">ECT Dinâmica</span></div>
+            <div class="stat-box info-box" style="flex:1 1 0%;">🎯 <span id="hd-strat">DIGITUNDER 5</span></div>
             <div class="stat-box" id="hd-timer-box" style="flex:1 1 0%;border-color:rgba(0,255,255,0.35); min-width:78px; text-align:center;">
                 ⏱️ <span id="hd-timer" style="font-size:0.82rem; color:#0ff; font-weight:bold; letter-spacing:0;">00:00:00</span>
             </div>
@@ -2616,6 +2616,8 @@ setInterval(drawMatrix, 50);
 // DEFINI──ES: ESTRATÉGIAS
 // ═══════════════════════════════════════════════════════
 const ESTRATEGIAS = {
+    "🎯 DIGITUNDER 5":      { tipo: "digit", contract: "DIGITUNDER", barrier: 5, duracao: 1,
+                               seq_gatilho: 0, ativo: "R_100", desc: "Entra quando dígito < 5 (WIN: 0-4)" },
     // ── Slot dinâmico ECT — sobrescrito a cada ciclo do monitor ──────────────
     "🤖 ECT Dinâmica":      { tipo: "digit", contract: "DIGITUNDER", barrier: 7, duracao: 1,
                                seq_gatilho: 0, ativo: "R_100", desc: "Estratégia criada ao vivo pela IA ECT" },
@@ -3946,7 +3948,7 @@ let bot = {
     _maxStakeUsada: 0,   // maior stake usada na sessão (recuperação)
     saldoMostrado: false,
     _buying: false, _pendingReqId: null,
-    estrategia: "🤖 ECT Dinâmica",
+    estrategia: "🎯 DIGITUNDER 5",
     gerenciamento: "🔄 Martingale",
     mgr: new GerenciadorUnificado("🔄 Martingale", { stake: 1.0 }),
     // Loss Virtual
