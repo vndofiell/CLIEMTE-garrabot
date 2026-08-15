@@ -1834,73 +1834,29 @@
           </div>
         </div>
 
-        <!-- CORPO: 3 colunas — log | dígitos+ranking | cfg+espelho -->
-        <div style="display:grid;grid-template-columns:155px 1fr 295px;gap:5px;flex:1;min-height:0;overflow:hidden;">
+        <!-- CORPO: 4 colunas lado a lado — tudo cabe na altura -->
+        <div style="display:grid;grid-template-columns:1fr 110px 155px 270px;gap:5px;flex:1;min-height:0;overflow:hidden;">
 
-          <!-- ══ COLUNA ESQUERDA: Log de operações ══ -->
-          <div style="display:flex;flex-direction:column;gap:6px;overflow:hidden;">
-            <div style="background:rgba(0,0,0,0.35);border:1px solid #30363d;border-radius:6px;padding:8px;flex:1;min-height:0;display:flex;flex-direction:column;">
-              <div style="font-size:0.56rem;color:#57606a;letter-spacing:1px;margin-bottom:4px;flex-shrink:0;">▸ LOG DE OPERAÇÕES</div>
-              <div id="ds-op-log" style="flex:1;overflow-y:auto;font-size:0.58rem;
-                  font-family:'Share Tech Mono';line-height:1.5;color:#888;"></div>
-            </div>
-          </div>
-
-          <!-- ══ COLUNA CENTRAL: Dígitos + Score + Sinal + Ranking ══ -->
-          <div style="display:flex;flex-direction:column;gap:6px;overflow:hidden;">
-
-            <!-- Dígitos + Score + Sinal (linha) -->
-            <div style="display:grid;grid-template-columns:1fr 120px 140px;gap:6px;flex-shrink:0;">
-
-              <!-- Dígitos + Distribuição -->
-              <div style="background:rgba(0,0,0,0.35);border:1px solid #30363d;border-radius:6px;padding:8px;">
-                <div style="font-size:0.55rem;color:#57606a;letter-spacing:1px;margin-bottom:4px;">▸ ÚLTIMOS DÍGITOS</div>
-                <div id="ds-digits" style="display:flex;gap:2px;flex-wrap:wrap;margin-bottom:6px;min-height:26px;"></div>
-                <div style="font-size:0.55rem;color:#57606a;letter-spacing:1px;margin-bottom:3px;">▸ DISTRIBUIÇÃO</div>
-                <div id="ds-bars" style="display:flex;gap:2px;align-items:flex-end;height:60px;"></div>
-              </div>
-
-              <!-- Score -->
-              <div style="background:rgba(0,0,0,0.35);border:1px solid #30363d;border-radius:6px;padding:8px;text-align:center;">
-                <div style="font-size:0.55rem;color:#57606a;letter-spacing:1px;margin-bottom:4px;">▸ SCORE</div>
-                <div id="ds-score" style="font-size:36px;font-weight:800;color:#facc15;
-                    font-family:'Share Tech Mono';margin-bottom:4px;line-height:1;">—</div>
-                <div id="ds-status" style="font-size:0.6rem;font-weight:bold;padding:4px 3px;
-                    border-radius:3px;background:rgba(0,0,0,0.4);border:1px solid #30363d;
-                    letter-spacing:1px;margin-bottom:4px;">Aguardando</div>
-                <div id="ds-reason" style="font-size:0.52rem;color:#57606a;line-height:1.3;"></div>
-              </div>
-
-              <!-- Sinal -->
-              <div style="background:rgba(0,0,0,0.35);border:1px solid #30363d;border-radius:6px;padding:8px;">
-                <div style="font-size:0.55rem;color:#57606a;letter-spacing:1px;margin-bottom:4px;">▸ MELHOR SINAL</div>
-                <div id="ds-signal" style="font-size:0.85rem;font-weight:bold;color:#00ffff;
-                    font-family:'Share Tech Mono';margin-bottom:5px;">—</div>
-                <div style="font-size:0.6rem;line-height:1.6;color:#c9d1d9;">
-                  Barreira: <b id="ds-barrier" style="color:#facc15;">—</b><br>
-                  Gatilho: <b id="ds-trigger" style="color:#facc15;">—</b><br>
-                  Taxa 20t: <b id="ds-rate20" style="color:#00ff41;">—</b><br>
-                  Taxa 50t: <b id="ds-rate50" style="color:#00ff41;">—</b><br>
-                  Payout: <b id="ds-pay" style="color:#facc15;">—</b><br>
-                  Entropia: <b id="ds-entropy" style="color:#c084fc;">—</b>
-                </div>
-              </div>
-            </div>
-
-            <!-- Ranking (preenche o resto da coluna central) -->
-            <div style="background:rgba(0,0,0,0.35);border:1px solid #30363d;border-radius:6px;padding:8px;flex:1;min-height:0;display:flex;flex-direction:column;">
-              <div style="font-size:0.55rem;color:#57606a;letter-spacing:1px;margin-bottom:4px;flex-shrink:0;">▸ RANKING DE CANDIDATOS</div>
+          <!-- ══ COL 1: Dígitos + Distribuição ══ -->
+          <div style="background:rgba(0,0,0,0.35);border:1px solid #30363d;border-radius:5px;padding:7px;display:flex;flex-direction:column;overflow:hidden;">
+            <div style="font-size:0.52rem;color:#57606a;letter-spacing:1px;margin-bottom:4px;flex-shrink:0;">▸ ÚLTIMOS DÍGITOS</div>
+            <div id="ds-digits" style="display:flex;gap:2px;flex-wrap:wrap;margin-bottom:5px;flex-shrink:0;"></div>
+            <div style="font-size:0.52rem;color:#57606a;letter-spacing:1px;margin-bottom:3px;flex-shrink:0;">▸ DISTRIBUIÇÃO</div>
+            <div id="ds-bars" style="display:flex;gap:2px;align-items:flex-end;flex:1;min-height:40px;max-height:80px;"></div>
+            <!-- Ranking ocupa o resto desta coluna -->
+            <div style="margin-top:5px;flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden;">
+              <div style="font-size:0.52rem;color:#57606a;letter-spacing:1px;margin-bottom:3px;flex-shrink:0;">▸ RANKING</div>
               <div style="overflow-y:auto;flex:1;">
-                <table style="width:100%;border-collapse:collapse;font-size:0.6rem;font-family:'Share Tech Mono';">
+                <table style="width:100%;border-collapse:collapse;font-size:0.56rem;font-family:'Share Tech Mono';">
                   <thead>
                     <tr style="color:#facc15;border-bottom:1px solid rgba(250,204,21,0.2);">
-                      <th style="padding:3px 5px;text-align:left;">Tipo</th>
-                      <th style="padding:3px 5px;text-align:left;">Barr.</th>
-                      <th style="padding:3px 5px;text-align:left;">Score</th>
-                      <th style="padding:3px 5px;text-align:left;">Gatilho</th>
-                      <th style="padding:3px 5px;text-align:left;">20t</th>
-                      <th style="padding:3px 5px;text-align:left;">50t</th>
-                      <th style="padding:3px 5px;text-align:left;">Status</th>
+                      <th style="padding:2px 3px;text-align:left;">Tipo</th>
+                      <th style="padding:2px 3px;text-align:left;">B</th>
+                      <th style="padding:2px 3px;text-align:left;">Score</th>
+                      <th style="padding:2px 3px;text-align:left;">G</th>
+                      <th style="padding:2px 3px;text-align:left;">20t</th>
+                      <th style="padding:2px 3px;text-align:left;">50t</th>
+                      <th style="padding:2px 3px;text-align:left;">Status</th>
                     </tr>
                   </thead>
                   <tbody id="ds-rank"></tbody>
@@ -1909,37 +1865,61 @@
             </div>
           </div>
 
-          <!-- ══ COLUNA DIREITA: Configuração + Espelho ══ -->
-          <div style="display:flex;flex-direction:column;gap:6px;overflow-y:auto;padding-right:1px;">
+          <!-- ══ COL 2: Score ══ -->
+          <div style="background:rgba(0,0,0,0.35);border:1px solid #30363d;border-radius:5px;padding:7px;text-align:center;display:flex;flex-direction:column;justify-content:center;">
+            <div style="font-size:0.52rem;color:#57606a;letter-spacing:1px;margin-bottom:4px;">▸ SCORE</div>
+            <div id="ds-score" style="font-size:40px;font-weight:800;color:#facc15;font-family:'Share Tech Mono';line-height:1;margin-bottom:6px;">—</div>
+            <div id="ds-status" style="font-size:0.58rem;font-weight:bold;padding:5px 3px;border-radius:3px;background:rgba(0,0,0,0.4);border:1px solid #30363d;letter-spacing:1px;margin-bottom:5px;">Aguardando</div>
+            <div id="ds-reason" style="font-size:0.5rem;color:#57606a;line-height:1.3;"></div>
+          </div>
 
-            <!-- Configuração de operação -->
-            <div style="background:rgba(0,0,0,0.35);border:1px solid rgba(250,204,21,0.25);border-radius:6px;padding:8px;flex-shrink:0;">
-              <div style="font-size:0.56rem;color:#facc15;letter-spacing:1px;margin-bottom:6px;">▸ CONFIGURAÇÃO DE OPERAÇÃO</div>
-              <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:6px;">
+          <!-- ══ COL 3: Sinal + Log ══ -->
+          <div style="display:flex;flex-direction:column;gap:5px;overflow:hidden;">
+            <div style="background:rgba(0,0,0,0.35);border:1px solid #30363d;border-radius:5px;padding:7px;flex-shrink:0;">
+              <div style="font-size:0.52rem;color:#57606a;letter-spacing:1px;margin-bottom:4px;">▸ MELHOR SINAL</div>
+              <div id="ds-signal" style="font-size:0.88rem;font-weight:bold;color:#00ffff;font-family:'Share Tech Mono';margin-bottom:4px;">—</div>
+              <div style="font-size:0.58rem;line-height:1.65;color:#c9d1d9;">
+                Barreira: <b id="ds-barrier" style="color:#facc15;">—</b><br>
+                Gatilho: <b id="ds-trigger" style="color:#facc15;">—</b><br>
+                Taxa 20t: <b id="ds-rate20" style="color:#00ff41;">—</b><br>
+                Taxa 50t: <b id="ds-rate50" style="color:#00ff41;">—</b><br>
+                Payout: <b id="ds-pay" style="color:#facc15;">—</b><br>
+                Entropia: <b id="ds-entropy" style="color:#c084fc;">—</b>
+              </div>
+            </div>
+            <!-- Log de operações -->
+            <div style="background:rgba(0,0,0,0.35);border:1px solid #30363d;border-radius:5px;padding:7px;flex:1;min-height:0;display:flex;flex-direction:column;">
+              <div style="font-size:0.52rem;color:#57606a;letter-spacing:1px;margin-bottom:3px;flex-shrink:0;">▸ LOG</div>
+              <div id="ds-op-log" style="flex:1;overflow-y:auto;font-size:0.56rem;font-family:'Share Tech Mono';line-height:1.5;color:#888;"></div>
+            </div>
+          </div>
+
+          <!-- ══ COL 4: Configuração + Espelho ══ -->
+          <div style="display:flex;flex-direction:column;gap:5px;overflow:hidden;">
+
+            <!-- Configuração -->
+            <div style="background:rgba(0,0,0,0.35);border:1px solid rgba(250,204,21,0.25);border-radius:5px;padding:7px;flex-shrink:0;">
+              <div style="font-size:0.52rem;color:#facc15;letter-spacing:1px;margin-bottom:5px;">▸ CONFIGURAÇÃO DE OPERAÇÃO</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:5px;">
                 <div>
-                  <div style="font-size:0.48rem;color:#57606a;margin-bottom:2px;">ENTRADA ($)</div>
+                  <div style="font-size:0.46rem;color:#57606a;margin-bottom:2px;">ENTRADA ($)</div>
                   <input id="ds-entrada" type="number" value="0.35" min="0.35" step="0.01"
-                      style="width:100%;background:#161b22;border:1px solid rgba(250,204,21,0.4);
-                             color:#facc15;font-family:'Share Tech Mono';font-size:0.65rem;padding:3px 4px;border-radius:3px;">
+                      style="width:100%;background:#161b22;border:1px solid rgba(250,204,21,0.4);color:#facc15;font-family:'Share Tech Mono';font-size:0.62rem;padding:3px 4px;border-radius:3px;">
                 </div>
                 <div>
-                  <div style="font-size:0.48rem;color:#57606a;margin-bottom:2px;">STOP WIN ($)</div>
+                  <div style="font-size:0.46rem;color:#57606a;margin-bottom:2px;">STOP WIN ($)</div>
                   <input id="ds-stopwin" type="number" value="10" min="0" step="0.1"
-                      style="width:100%;background:#161b22;border:1px solid rgba(0,255,65,0.4);
-                             color:#00ff41;font-family:'Share Tech Mono';font-size:0.65rem;padding:3px 4px;border-radius:3px;">
+                      style="width:100%;background:#161b22;border:1px solid rgba(0,255,65,0.4);color:#00ff41;font-family:'Share Tech Mono';font-size:0.62rem;padding:3px 4px;border-radius:3px;">
                 </div>
                 <div>
-                  <div style="font-size:0.48rem;color:#57606a;margin-bottom:2px;">STOP LOSS ($)</div>
+                  <div style="font-size:0.46rem;color:#57606a;margin-bottom:2px;">STOP LOSS ($)</div>
                   <input id="ds-stoploss" type="number" value="100" min="0" step="0.1"
-                      style="width:100%;background:#161b22;border:1px solid rgba(255,68,68,0.4);
-                             color:#f66;font-family:'Share Tech Mono';font-size:0.65rem;padding:3px 4px;border-radius:3px;">
+                      style="width:100%;background:#161b22;border:1px solid rgba(255,68,68,0.4);color:#f66;font-family:'Share Tech Mono';font-size:0.62rem;padding:3px 4px;border-radius:3px;">
                 </div>
               </div>
-              <div style="margin-bottom:6px;">
-                <div style="font-size:0.48rem;color:#57606a;margin-bottom:2px;">GERENCIAMENTO</div>
-                <select id="ds-mgr" onchange="dsOnMgrChange()" style="width:100%;background:#161b22;
-                    border:1px solid rgba(168,85,247,0.5);color:#c084fc;
-                    font-family:'Share Tech Mono';font-size:0.62rem;padding:3px 5px;border-radius:3px;">
+              <div style="margin-bottom:5px;">
+                <div style="font-size:0.46rem;color:#57606a;margin-bottom:2px;">GERENCIAMENTO</div>
+                <select id="ds-mgr" onchange="dsOnMgrChange()" style="width:100%;background:#161b22;border:1px solid rgba(168,85,247,0.5);color:#c084fc;font-family:'Share Tech Mono';font-size:0.6rem;padding:3px 4px;border-radius:3px;">
                   <option value="flat">💰 Stake Fixa</option>
                   <option value="🔄 Martingale">🔄 Martingale</option>
                   <option value="⚡ SorosGale">⚡ SorosGale</option>
@@ -1949,77 +1929,61 @@
                   <option value="📊 Masaniello">📊 Masaniello</option>
                 </select>
               </div>
-              <div style="display:flex;gap:5px;">
-                <button id="ds-btn-operar" onclick="dsOperar()" disabled style="flex:1;
-                    background:rgba(250,204,21,0.05);border:1px solid #444;color:#555;
-                    font-family:'Share Tech Mono';font-size:0.62rem;padding:5px 3px;
-                    border-radius:3px;cursor:not-allowed;letter-spacing:1px;">⚡ OPERAR COM SINAL</button>
-                <button id="ds-btn-auto-op" onclick="dsToggleAutoOperar()" style="
-                    background:rgba(0,0,0,0.3);border:1px solid #30363d;color:#6b7280;
-                    font-family:'Share Tech Mono';font-size:0.62rem;padding:5px 6px;
-                    border-radius:3px;cursor:pointer;letter-spacing:1px;white-space:nowrap;">🤖 AUTO</button>
+              <div style="display:flex;gap:4px;margin-bottom:4px;">
+                <button id="ds-btn-operar" onclick="dsOperar()" disabled style="flex:1;background:rgba(250,204,21,0.05);border:1px solid #444;color:#555;font-family:'Share Tech Mono';font-size:0.6rem;padding:5px 3px;border-radius:3px;cursor:not-allowed;">⚡ OPERAR COM SINAL</button>
+                <button id="ds-btn-auto-op" onclick="dsToggleAutoOperar()" style="background:rgba(0,0,0,0.3);border:1px solid #30363d;color:#6b7280;font-family:'Share Tech Mono';font-size:0.6rem;padding:5px 6px;border-radius:3px;cursor:pointer;white-space:nowrap;">🤖 AUTO</button>
               </div>
-              <div style="display:flex;gap:4px;margin-top:5px;flex-wrap:wrap;">
-                <div style="border:1px solid rgba(0,255,65,0.3);border-radius:3px;padding:1px 4px;font-size:0.58rem;color:#00ff41;">✅ <span id="ds-stat-wins">0</span></div>
-                <div style="border:1px solid rgba(255,68,68,0.3);border-radius:3px;padding:1px 4px;font-size:0.58rem;color:#f66;">🔁 <span id="ds-stat-loss">0</span></div>
-                <div style="border:1px solid rgba(250,204,21,0.35);border-radius:3px;padding:1px 4px;font-size:0.58rem;color:#facc15;">💰 <span id="ds-stat-lucro">+$0.00</span></div>
-                <div style="border:1px solid rgba(168,85,247,0.35);border-radius:3px;padding:1px 4px;font-size:0.58rem;color:#c084fc;">⚡ <span id="ds-stat-prox">$--</span></div>
+              <div style="display:flex;gap:3px;flex-wrap:wrap;">
+                <div style="border:1px solid rgba(0,255,65,0.3);border-radius:3px;padding:1px 4px;font-size:0.56rem;color:#00ff41;">✅ <span id="ds-stat-wins">0</span></div>
+                <div style="border:1px solid rgba(255,68,68,0.3);border-radius:3px;padding:1px 4px;font-size:0.56rem;color:#f66;">🔁 <span id="ds-stat-loss">0</span></div>
+                <div style="border:1px solid rgba(250,204,21,0.35);border-radius:3px;padding:1px 4px;font-size:0.56rem;color:#facc15;">💰 <span id="ds-stat-lucro">+$0.00</span></div>
+                <div style="border:1px solid rgba(168,85,247,0.35);border-radius:3px;padding:1px 4px;font-size:0.56rem;color:#c084fc;">⚡ <span id="ds-stat-prox">$--</span></div>
               </div>
             </div>
 
             <!-- Modo Espelho -->
-            <div style="background:rgba(0,0,0,0.35);border:1px solid rgba(255,189,46,0.25);border-radius:6px;padding:8px;flex:1;min-height:0;overflow-y:auto;">
-              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-                <div style="font-size:0.56rem;color:#fbbf24;letter-spacing:1px;">▸ MODO ESPELHO (CONTA SEC.)</div>
+            <div style="background:rgba(0,0,0,0.35);border:1px solid rgba(255,189,46,0.25);border-radius:5px;padding:7px;flex:1;min-height:0;overflow-y:auto;">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">
+                <div style="font-size:0.52rem;color:#fbbf24;letter-spacing:1px;">▸ MODO ESPELHO (CONTA SEC.)</div>
                 <label style="display:flex;align-items:center;gap:4px;cursor:pointer;">
-                  <input type="checkbox" id="ds-esp-ativo" onchange="dsAtualizarEspelho()"
-                      style="accent-color:#fbbf24;width:13px;height:13px;">
-                  <span id="ds-esp-badge" style="font-size:0.56rem;color:#555;letter-spacing:1px;">ON</span>
+                  <input type="checkbox" id="ds-esp-ativo" onchange="dsAtualizarEspelho()" style="accent-color:#fbbf24;width:13px;height:13px;">
+                  <span id="ds-esp-badge" style="font-size:0.52rem;color:#555;">ON</span>
                 </label>
               </div>
               <div id="ds-esp-campos" style="display:none;flex-direction:column;gap:5px;">
                 <div style="display:flex;align-items:center;gap:5px;">
                   <input type="checkbox" id="ds-esp-seq-ativo" style="accent-color:#fbbf24;width:12px;height:12px;flex-shrink:0;">
                   <div style="flex:1;">
-                    <div style="font-size:0.48rem;color:#57606a;margin-bottom:1px;">LOSSES CONSEC. P/ ATIVAR SEC.</div>
+                    <div style="font-size:0.46rem;color:#57606a;margin-bottom:1px;">LOSSES CONSEC. P/ ATIVAR SEC.</div>
                     <input id="ds-esp-seq-qtd" type="number" value="3" min="1" max="20"
-                        style="width:48px;background:#0a0a12;border:1px solid rgba(255,189,46,0.3);
-                               color:#fbbf24;font-family:'Share Tech Mono';font-size:0.65rem;padding:2px 4px;border-radius:3px;">
+                        style="width:46px;background:#0a0a12;border:1px solid rgba(255,189,46,0.3);color:#fbbf24;font-family:'Share Tech Mono';font-size:0.62rem;padding:2px 4px;border-radius:3px;">
                   </div>
                 </div>
                 <div style="display:flex;align-items:center;gap:5px;">
                   <input type="checkbox" id="ds-esp-perda-ativo" style="accent-color:#fbbf24;width:12px;height:12px;flex-shrink:0;">
                   <div style="flex:1;">
-                    <div style="font-size:0.48rem;color:#57606a;margin-bottom:1px;">PERDA EM $ P/ ATIVAR SEC.</div>
+                    <div style="font-size:0.46rem;color:#57606a;margin-bottom:1px;">PERDA EM $ P/ ATIVAR SEC.</div>
                     <input id="ds-esp-perda-val" type="number" value="5" min="0" step="0.1"
-                        style="width:48px;background:#0a0a12;border:1px solid rgba(255,189,46,0.3);
-                               color:#fbbf24;font-family:'Share Tech Mono';font-size:0.65rem;padding:2px 4px;border-radius:3px;">
+                        style="width:46px;background:#0a0a12;border:1px solid rgba(255,189,46,0.3);color:#fbbf24;font-family:'Share Tech Mono';font-size:0.62rem;padding:2px 4px;border-radius:3px;">
                   </div>
                 </div>
-                <div id="ds-esp-status" style="font-size:0.55rem;color:#57606a;background:rgba(0,0,0,0.3);
-                    border:1px solid #30363d;border-radius:3px;padding:3px 6px;line-height:1.5;">
-                  Conta secundária: verificando...
-                </div>
+                <div id="ds-esp-status" style="font-size:0.52rem;color:#57606a;background:rgba(0,0,0,0.3);border:1px solid #30363d;border-radius:3px;padding:3px 5px;line-height:1.4;">Conta secundária: verificando...</div>
                 <button id="ds-btn-conectar-sec" onclick="abrirModalMultiContas()"
-                    style="width:100%;background:rgba(255,189,46,0.1);border:1px solid rgba(255,189,46,0.5);
-                           color:#fbbf24;font-family:'Share Tech Mono';font-size:0.6rem;padding:4px;
-                           border-radius:3px;cursor:pointer;letter-spacing:1px;">
+                    style="width:100%;background:rgba(255,189,46,0.1);border:1px solid rgba(255,189,46,0.5);color:#fbbf24;font-family:'Share Tech Mono';font-size:0.58rem;padding:4px;border-radius:3px;cursor:pointer;">
                   💳 Conectar / Configurar Conta SEC
                 </button>
-                <div style="display:flex;gap:4px;flex-wrap:wrap;">
-                  <div style="border:1px solid rgba(0,255,65,0.3);border-radius:3px;padding:1px 4px;font-size:0.58rem;color:#00ff41;">✅ <span id="ds-esp-wins">0</span></div>
-                  <div style="border:1px solid rgba(255,68,68,0.3);border-radius:3px;padding:1px 4px;font-size:0.58rem;color:#f66;">🔁 <span id="ds-esp-loss">0</span></div>
-                  <div style="border:1px solid rgba(255,189,46,0.35);border-radius:3px;padding:1px 4px;font-size:0.58rem;color:#fbbf24;">💰 <span id="ds-esp-lucro">+$0.00</span></div>
+                <div style="display:flex;gap:3px;flex-wrap:wrap;">
+                  <div style="border:1px solid rgba(0,255,65,0.3);border-radius:3px;padding:1px 4px;font-size:0.56rem;color:#00ff41;">✅ <span id="ds-esp-wins">0</span></div>
+                  <div style="border:1px solid rgba(255,68,68,0.3);border-radius:3px;padding:1px 4px;font-size:0.56rem;color:#f66;">🔁 <span id="ds-esp-loss">0</span></div>
+                  <div style="border:1px solid rgba(255,189,46,0.35);border-radius:3px;padding:1px 4px;font-size:0.56rem;color:#fbbf24;">💰 <span id="ds-esp-lucro">+$0.00</span></div>
                 </div>
               </div>
-              <div id="ds-esp-off-msg" style="font-size:0.56rem;color:#555;">
-                Ative para operar na conta secundária.
-              </div>
+              <div id="ds-esp-off-msg" style="font-size:0.54rem;color:#555;">Ative para operar na conta secundária.</div>
             </div>
 
-          </div><!-- fim coluna direita -->
+          </div><!-- fim col 4 -->
 
-        </div><!-- fim grid 3 colunas -->
+        </div><!-- fim grid 4 colunas -->
       </div><!-- fim container -->
     </div>
 
