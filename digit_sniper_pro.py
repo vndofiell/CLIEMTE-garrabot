@@ -23,10 +23,10 @@ DEFAULT_ASSETS = [
     "1HZ10V", "1HZ25V", "1HZ50V", "1HZ75V", "1HZ100V",
 ]
 
-MIN_SCORE = 82
+MIN_SCORE = 75        # reduzido: 82 era inalcançável com payout 0.85 e rate50 ~50%
 WINDOW = 50
-TRIGGER_MIN = 4
-TRIGGER_MAX = 6
+TRIGGER_MIN = 3       # gatilho mínimo reduzido: 3 ticks já é sinal relevante
+TRIGGER_MAX = 7       # teto aumentado: 7 ticks ainda é válido
 UNDER_BARRIERS = range(3, 8)
 OVER_BARRIERS = range(3, 7)
 
@@ -118,30 +118,32 @@ def _score_candidate(
     trigger = _streak_same_side(w20, tipo, barrier)
     ent = _entropy(w50)
 
-    # Frequência 30%, consistência 20%, gatilho 25%,
+    # Frequência 25%, consistência 15%, gatilho 35%,
     # payout 15%, estabilidade 10%.
-    freq_score = min(100.0, rate20 * 100.0)
-    consistency = 100.0 - min(100.0, abs(rate20 - rate50) * 250.0)
+    # Gatilho (exaustão) tem o maior peso — é o principal sinal de entrada.
+    # Frequência usa escala centrada em 50% (mercado equilibrado = 50 pts).
+    freq_score = min(100.0, max(0.0, (rate20 - 0.35) / 0.30 * 100.0))
+    consistency = 100.0 - min(100.0, abs(rate20 - rate50) * 200.0)
 
     if min_trigger <= trigger <= TRIGGER_MAX:
         trigger_score = 100.0
     elif trigger == min_trigger - 1:
-        trigger_score = 65.0
+        trigger_score = 70.0
     elif trigger > TRIGGER_MAX:
-        trigger_score = 35.0
+        trigger_score = 40.0
     else:
-        trigger_score = max(0.0, trigger * 18.0)
+        trigger_score = max(0.0, trigger * 22.0)
 
     payout_score = max(0.0, min(100.0, ((payout - 0.70) / 0.30) * 100.0))
     stability_score = max(
-        0.0, min(100.0, (1.0 - abs(ent - 0.82) / 0.82) * 100.0)
+        0.0, min(100.0, (1.0 - abs(ent - 0.85) / 0.85) * 100.0)
     )
 
     score = (
-        freq_score * 0.30
-        + consistency * 0.20
-        + trigger_score * 0.25
-        + payout_score * 0.15
+        freq_score    * 0.25
+        + consistency * 0.15
+        + trigger_score * 0.35
+        + payout_score  * 0.15
         + stability_score * 0.10
     )
 
@@ -152,9 +154,9 @@ def _score_candidate(
         reasons.append(f"gatilho {trigger}/{min_trigger}")
     if trigger > TRIGGER_MAX:
         reasons.append("gatilho excessivo")
-    if rate20 < 0.55:
-        reasons.append("frequência observada insuficiente")
-    if abs(rate20 - rate50) > 0.15:
+    if rate20 < 0.40:
+        reasons.append("frequência muito baixa (<40%)")
+    if abs(rate20 - rate50) > 0.20:
         reasons.append("janelas divergentes")
 
     entrada = score >= MIN_SCORE and not reasons
