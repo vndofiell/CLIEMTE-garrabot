@@ -17573,24 +17573,21 @@ async function dsOperar() {
             }
             let cot = 5.5;
             try { const rc = await fetch('https://economia.awesomeapi.com.br/json/last/USD-BRL', { mode:'cors' }); const jc = await rc.json(); cot = parseFloat(jc.USDBRL?.bid || cot); } catch(_) {}
+            // Digit Sniper sempre opera na SEC — conta = SECUNDARIA para não ser bloqueado pelo modo ESPELHO
+            const _swPayload = {
+                stop_win: true, lucro: _dsLucroCheck, banca: _bncSW,
+                wins: _wSW, losses: _lSW,
+                modo: _mgrNm, estrategia: `Digit Sniper barr=${_dsSinalAtual?.barrier||'?'}`,
+                conta: 'SECUNDARIA'
+            };
             if (tgAtual && tgAtual.enabled && tgAtual.stopwin && tgAtual.token && tgAtual.chat_id) {
-                const _wSW2 = (espAtivo && secPronto && _dsUsandoSec) ? _dsEspWins   : _dsWins;
-                const _lSW2 = (espAtivo && secPronto && _dsUsandoSec) ? _dsEspLosses : _dsLosses;
                 fetch('/tg-send', { method:'POST', headers:{'Content-Type':'application/json'},
-                    body: JSON.stringify({ token: tgAtual.token, chat_id: tgAtual.chat_id,
-                        stop_win: true, lucro: _dsLucroCheck, banca: _bncSW,
-                        wins: _wSW2, losses: _lSW2,
-                        modo: _mgrNm, estrategia: `Digit Sniper barr=${_dsSinalAtual?.barrier||'?'}`,
-                        conta: (espAtivo && secPronto && _dsUsandoSec) ? 'SECUNDARIA' : 'PRINCIPAL' }) }).catch(()=>{});
+                    body: JSON.stringify({ token: tgAtual.token, chat_id: tgAtual.chat_id, ..._swPayload }) }).catch(()=>{});
             }
             const waAtivo = (typeof _waNotifAtivo !== 'undefined') ? _waNotifAtivo : false;
             if (waAtivo) {
                 fetch('/wa-send', { method:'POST', headers:{'Content-Type':'application/json'},
-                    body: JSON.stringify({ stop_win: true, lucro: _dsLucroCheck, banca: _bncSW,
-                        wins: (espAtivo && secPronto && _dsUsandoSec) ? _dsEspWins : _dsWins,
-                        losses: (espAtivo && secPronto && _dsUsandoSec) ? _dsEspLosses : _dsLosses,
-                        modo: _mgrNm, estrategia: `Digit Sniper barr=${_dsSinalAtual?.barrier||'?'}`,
-                        conta: (espAtivo && secPronto && _dsUsandoSec) ? 'SECUNDARIA' : 'PRINCIPAL' }) }).catch(()=>{});
+                    body: JSON.stringify(_swPayload) }).catch(()=>{});
             }
         })();
         return;
