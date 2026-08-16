@@ -17504,7 +17504,7 @@ function dsAtualizarEspelho() {
 }
 }
 
-function dsOperar() {
+async function dsOperar() {
     if (!_dsSinalAtual) return;
     if (_dsEmOperacao) return;   // já tem operação em curso — ignora
     if (typeof bot === 'undefined' || !bot.ws || bot.ws.readyState !== WebSocket.OPEN) {
@@ -17522,9 +17522,20 @@ function dsOperar() {
     }
     _dsAguardandoRecon = false;
 
-    // Stop Win / Stop Loss
-    const swLim = parseFloat(document.getElementById('ds-stopwin')?.value)  || 999;
+    // Stop Win / Stop Loss — usa meta JC se disponível
+    let swLim = parseFloat(document.getElementById('ds-stopwin')?.value) || 999;
     const slLim = parseFloat(document.getElementById('ds-stoploss')?.value) || 999;
+    // Tenta buscar meta JC do dia e usar como Stop Win
+    try {
+        const _jcR = await fetch('/jc-meta').then(r => r.json()).catch(() => null);
+        if (_jcR && _jcR.ativo && _jcR.meta_hoje > 0) {
+            const metaJC = parseFloat(_jcR.meta_hoje.toFixed(2));
+            if (metaJC < swLim) {
+                swLim = metaJC;
+                dsLog(`💹 <b style="color:#00ffcc">JC ativo</b> — Stop Win = meta do dia $${metaJC.toFixed(2)}`, '#00ffcc');
+            }
+        }
+    } catch(_) {}
     if (_dsLucro >= swLim)   { dsLog(`🏆 STOP WIN! Lucro: +$${_dsLucro.toFixed(2)}`, '#ffd700');  _dsAutoOperar = false; dsToggleAutoOperar(); return; }
     if (_dsLucro <= -slLim)  { dsLog(`🛑 STOP LOSS! Perda: -$${Math.abs(_dsLucro).toFixed(2)}`, '#f44'); _dsAutoOperar = false; dsToggleAutoOperar(); return; }
 
@@ -17616,6 +17627,33 @@ function dsOperar() {
             const proxStake = (_dsUsandoSec && _dsSecMgr) ? _dsSecMgr.getStake() : (_dsMgr ? _dsMgr.getStake() : baseStake);
             dsLog(`${won ? '🏆 WIN' : '💥 LOSS'} ${won?'+':''}$${profit.toFixed(2)} | próx $${proxStake.toFixed(2)}`, won ? '#00ff41' : '#f44');
             dsAtualizarStats();
+
+            // ── Notificações Telegram + WhatsApp ─────────────────────────
+            const _lucroTotal = _dsUsandoSec ? _dsEspLucro + profit : _dsLucro;
+            const _bancaEl    = _dsUsandoSec
+                ? document.getElementById('hd-balance-sec')?.textContent?.replace(/[^0-9.]/g,'')
+                : document.getElementById('hd-balance')?.textContent?.replace(/[^0-9.]/g,'');
+            const _dsPayload = {
+                win:          won,
+                lucro:        profit,
+                profit_total: _lucroTotal,
+                banca:        parseFloat(_bancaEl) || 0,
+                wins:         _dsUsandoSec ? _dsEspWins  : _dsWins,
+                losses:       _dsUsandoSec ? _dsEspLosses: _dsLosses,
+                prox_stake:   proxStake,
+                modo:         'MA-Adaptativo (Digit Sniper)',
+                estrategia:   `DS ${ct} barr=${barr}`,
+                conta:        _dsUsandoSec ? 'SECUNDARIA' : 'PRINCIPAL',
+            };
+            if (typeof _tgCfg !== 'undefined' && _tgCfg.enabled && _tgCfg.resultados && _tgCfg.token && _tgCfg.chat_id) {
+                fetch('/tg-send', { method:'POST', headers:{'Content-Type':'application/json'},
+                    body: JSON.stringify({ token:_tgCfg.token, chat_id:_tgCfg.chat_id, ..._dsPayload }) }).catch(()=>{});
+            }
+            if (typeof _waNotifAtivo !== 'undefined' && _waNotifAtivo) {
+                fetch('/wa-send', { method:'POST', headers:{'Content-Type':'application/json'},
+                    body: JSON.stringify(_dsPayload) }).catch(()=>{});
+            }
+            // ─────────────────────────────────────────────────────────────
             // Lógica espelho
             if (espAtivo && secPronto) {
                 if (!_dsUsandoSec) {
