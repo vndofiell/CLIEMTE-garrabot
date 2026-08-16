@@ -1943,6 +1943,7 @@
                   border:1px solid rgba(168,85,247,0.5);color:#c084fc;
                   font-family:'Share Tech Mono';font-size:0.68rem;padding:5px 7px;border-radius:4px;">
                 <option value="flat">💰 Stake Fixa</option>
+                <option value="📐 MA-Adaptativo">📐 MA-Adaptativo</option>
                 <option value="🔄 Martingale">🔄 Martingale</option>
                 <option value="⚡ SorosGale">⚡ SorosGale</option>
                 <option value="📉 Loss Recovery">📉 Loss Recovery</option>
@@ -17428,8 +17429,13 @@ function dsLog(msg, cor) {
 function dsOnMgrChange() {
     const nome  = document.getElementById('ds-mgr')?.value;
     const stake = parseFloat(document.getElementById('ds-entrada')?.value) || 0.35;
-    _dsMgr = (nome && nome !== 'flat' && typeof GerenciadorUnificado !== 'undefined')
-        ? new GerenciadorUnificado(nome, { stake }) : null;
+    if (nome === '📐 MA-Adaptativo') {
+        _dsMgr = null;   // MA-Adaptativo usa lógica própria, não GerenciadorUnificado
+        _dsMaDiv = 0; _dsMaAtivo = false;
+    } else {
+        _dsMgr = (nome && nome !== 'flat' && typeof GerenciadorUnificado !== 'undefined')
+            ? new GerenciadorUnificado(nome, { stake }) : null;
+    }
     dsAtualizarStats();
 }
 
@@ -17534,9 +17540,11 @@ function dsOperar() {
     const payoutCfg  = parseFloat(document.getElementById('ds-payout')?.value)  || 0.85;
     const ct         = _dsSinalAtual.contract_type;
     const barr       = _dsSinalAtual.barrier;
-    // Martingale Adaptativo por Barreira na SEC — sempre calcula stake exato para recuperar
+    // Martingale Adaptativo por Barreira — ativo quando selecionado OU na SEC
+    const maNome = document.getElementById('ds-mgr')?.value;
+    const usarMA = (maNome === '📐 MA-Adaptativo') || _dsUsandoSec;
     let stake;
-    if (_dsUsandoSec) {
+    if (usarMA) {
         stake = _dsMaGetStake(baseStake, barr, payoutCfg);
         if (_dsMaAtivo) {
             const payout = _dsMaPayout(barr, payoutCfg);
@@ -17594,8 +17602,8 @@ function dsOperar() {
             wsUsar.onmessage = _origMsg;
             _dsEmOperacao = false;
             const profit = parseFloat(poc.profit), won = profit > 0;
-            // Atualiza Martingale Adaptativo da SEC
-            if (_dsUsandoSec) {
+            // Atualiza Martingale Adaptativo (SEC ou modo MA selecionado)
+            if (usarMA) {
                 _dsMaUpdate(won, profit, baseStake);
             }
             if (_dsUsandoSec && _dsSecMgr) _dsSecMgr.updateResult(won);
