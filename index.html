@@ -17692,7 +17692,10 @@ async function dsOperar() {
             } else {
                 if (won) { _dsWins++; _dsLucro += profit; } else { _dsLosses++; _dsLucro += profit; }
             }
-            const proxStake = (_dsUsandoSec && _dsSecMgr) ? _dsSecMgr.getStake() : (_dsMgr ? _dsMgr.getStake() : baseStake);
+            // Próxima stake: MA-Adaptativo tem prioridade (usa dívida já atualizada pelo _dsMaUpdate)
+            const proxStake = usarMA
+                ? _dsMaGetStake(baseStake, barr, payoutCfg)
+                : ((_dsUsandoSec && _dsSecMgr) ? _dsSecMgr.getStake() : (_dsMgr ? _dsMgr.getStake() : baseStake));
             dsLog(`${won ? '🏆 WIN' : '💥 LOSS'} ${won?'+':''}$${profit.toFixed(2)} | próx $${proxStake.toFixed(2)}`, won ? '#00ff41' : '#f44');
             dsAtualizarStats();
 
