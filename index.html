@@ -17629,30 +17629,56 @@ async function dsOperar() {
             dsAtualizarStats();
 
             // ── Notificações Telegram + WhatsApp ─────────────────────────
-            const _lucroTotal = _dsUsandoSec ? _dsEspLucro + profit : _dsLucro;
-            const _bancaEl    = _dsUsandoSec
-                ? document.getElementById('hd-balance-sec')?.textContent?.replace(/[^0-9.]/g,'')
-                : document.getElementById('hd-balance')?.textContent?.replace(/[^0-9.]/g,'');
-            const _dsPayload = {
-                win:          won,
-                lucro:        profit,
-                profit_total: _lucroTotal,
-                banca:        parseFloat(_bancaEl) || 0,
-                wins:         _dsUsandoSec ? _dsEspWins  : _dsWins,
-                losses:       _dsUsandoSec ? _dsEspLosses: _dsLosses,
-                prox_stake:   proxStake,
-                modo:         'MA-Adaptativo (Digit Sniper)',
-                estrategia:   `DS ${ct} barr=${barr}`,
-                conta:        _dsUsandoSec ? 'SECUNDARIA' : 'PRINCIPAL',
-            };
-            if (typeof _tgCfg !== 'undefined' && _tgCfg.enabled && _tgCfg.resultados && _tgCfg.token && _tgCfg.chat_id) {
-                fetch('/tg-send', { method:'POST', headers:{'Content-Type':'application/json'},
-                    body: JSON.stringify({ token:_tgCfg.token, chat_id:_tgCfg.chat_id, ..._dsPayload }) }).catch(()=>{});
-            }
-            if (typeof _waNotifAtivo !== 'undefined' && _waNotifAtivo) {
-                fetch('/wa-send', { method:'POST', headers:{'Content-Type':'application/json'},
-                    body: JSON.stringify(_dsPayload) }).catch(()=>{});
-            }
+            (async () => {
+                // Garante que _tgCfg está carregado do servidor
+                let tgAtual = (typeof _tgCfg !== 'undefined') ? _tgCfg : null;
+                if (!tgAtual || !tgAtual.token) {
+                    try {
+                        const r = await fetch('/tg-config');
+                        if (r.ok) {
+                            tgAtual = await r.json();
+                            if (typeof _tgCfg !== 'undefined') Object.assign(_tgCfg, tgAtual);
+                        }
+                    } catch(_) {}
+                }
+
+                const _lucroTotal = _dsUsandoSec ? _dsEspLucro : _dsLucro;
+                const _bancaRaw   = _dsUsandoSec
+                    ? document.getElementById('hd-balance-sec')?.textContent
+                    : document.getElementById('hd-balance')?.textContent;
+                const _banca = parseFloat((_bancaRaw||'').replace(/[^0-9.]/g,'')) || 0;
+                const _dsPayload = {
+                    win:          won,
+                    lucro:        profit,
+                    profit_total: _lucroTotal,
+                    banca:        _banca,
+                    wins:         _dsUsandoSec ? _dsEspWins   : _dsWins,
+                    losses:       _dsUsandoSec ? _dsEspLosses : _dsLosses,
+                    prox_stake:   proxStake,
+                    modo:         document.getElementById('ds-mgr')?.value || 'Digit Sniper',
+                    estrategia:   `${ct} barr=${barr}`,
+                    conta:        _dsUsandoSec ? 'SECUNDARIA' : 'PRINCIPAL',
+                };
+
+                // Telegram
+                if (tgAtual && tgAtual.enabled && tgAtual.resultados && tgAtual.token && tgAtual.chat_id) {
+                    fetch('/tg-send', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ token: tgAtual.token, chat_id: tgAtual.chat_id, ..._dsPayload })
+                    }).catch(() => {});
+                }
+
+                // WhatsApp
+                const waAtivo = (typeof _waNotifAtivo !== 'undefined') ? _waNotifAtivo : false;
+                if (waAtivo) {
+                    fetch('/wa-send', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(_dsPayload)
+                    }).catch(() => {});
+                }
+            })();
             // ─────────────────────────────────────────────────────────────
             // Lógica espelho
             if (espAtivo && secPronto) {
