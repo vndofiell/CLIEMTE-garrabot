@@ -17548,8 +17548,11 @@ async function dsOperar() {
     const _dsLucroCheck = (espAtivo && secPronto && _dsUsandoSec) ? _dsEspLucro : _dsLucro;
     if (_dsLucroCheck >= swLim) {
         dsLog(`🏆 STOP WIN! Lucro: +$${_dsLucroCheck.toFixed(2)}`, '#ffd700');
+        // Desliga AUTO-OPERAR sem toggle (evita religar acidentalmente)
         _dsAutoOperar = false;
-        dsToggleAutoOperar();
+        const _btnAuto = document.getElementById('ds-btn-auto-op');
+        if (_btnAuto) { _btnAuto.textContent = '🤖 AUTO'; _btnAuto.style.color = '#6b7280'; _btnAuto.style.borderColor = '#30363d'; }
+        dsLog('⏹ AUTO-OPERAR desativado — STOP WIN', '#6b7280');
         // Modal de confetti
         const _bncRaw = (espAtivo && secPronto && _dsUsandoSec)
             ? document.getElementById('hd-balance-sec')?.textContent
@@ -17598,7 +17601,13 @@ async function dsOperar() {
         })();
         return;
     }
-    if (_dsLucroCheck <= -slLim) { dsLog(`🛑 STOP LOSS! Perda: -$${Math.abs(_dsLucroCheck).toFixed(2)}`, '#f44'); _dsAutoOperar = false; dsToggleAutoOperar(); return; }
+    if (_dsLucroCheck <= -slLim) {
+        dsLog(`🛑 STOP LOSS! Perda: -$${Math.abs(_dsLucroCheck).toFixed(2)}`, '#f44');
+        _dsAutoOperar = false;
+        const _btnAutoSL = document.getElementById('ds-btn-auto-op');
+        if (_btnAutoSL) { _btnAutoSL.textContent = '🤖 AUTO'; _btnAutoSL.style.color = '#6b7280'; _btnAutoSL.style.borderColor = '#30363d'; }
+        return;
+    }
     const wsUsar = (espAtivo && secPronto && _dsUsandoSec) ? _sec.ws : bot.ws;
 
     if (espAtivo && _dsUsandoSec && secPronto) dsLog('💳 <b style="color:#60a5fa">Conta SEC</b> — espelho ativo', '#60a5fa');
