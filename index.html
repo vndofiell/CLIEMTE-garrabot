@@ -17722,6 +17722,7 @@ async function dsOperar() {
                     banca:        _banca,
                     wins:         _dsUsandoSec ? _dsEspWins   : _dsWins,
                     losses:       _dsUsandoSec ? _dsEspLosses : _dsLosses,
+                    entrada:      stake,        // stake REAL usada nesta operação
                     prox_stake:   proxStake,
                     modo:         document.getElementById('ds-mgr')?.value || 'Digit Sniper',
                     estrategia:   `${ct} barr=${barr}`,
