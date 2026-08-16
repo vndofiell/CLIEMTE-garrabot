@@ -1321,6 +1321,217 @@
 <!-- ══════════════════════════════════════
      MODAL — LOSS VIRTUAL
 ════════════════════════════════════════ -->
+<!-- ══════════════════════════════════════
+     MODAL — FILTROS (modal centralizado)
+════════════════════════════════════════ -->
+<div id="modal-filtros" class="modal-overlay" style="display:none;">
+  <div class="modal-box" style="max-width:420px; width:94vw; max-height:90vh; overflow-y:auto; padding:0;">
+
+    <!-- Cabeçalho -->
+    <div style="padding:18px 18px 14px; border-bottom:1px solid rgba(255,255,255,0.07);">
+      <div class="modal-title" style="margin-bottom:4px;">⚙️ FILTROS DE PROTEÇÃO</div>
+      <div class="modal-sub" style="margin:0;">Clique num filtro para configurar e ativar</div>
+    </div>
+
+    <!-- ─── Loss Virtual ─── -->
+    <div style="border-bottom:1px solid rgba(255,255,255,0.07);">
+      <div onclick="filtrosSelectItem('loss-virtual')"
+           style="display:flex;align-items:center;justify-content:space-between;
+                  padding:14px 18px; cursor:pointer; user-select:none;
+                  font-family:'Share Tech Mono'; font-size:0.82rem; color:#ffbd2e;
+                  transition:background 0.15s;"
+           onmouseover="this.style.background='rgba(255,189,46,0.07)'"
+           onmouseout="this.style.background=''">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span style="font-size:1rem;">🛡️</span>
+          <div>
+            <div style="font-weight:bold;">Loss Virtual</div>
+            <div style="font-size:0.62rem;color:#57606a;margin-top:1px;">Simula resultados antes de entrar de verdade</div>
+          </div>
+        </div>
+        <span id="lbl-loss-virtual" style="color:#57606a; font-size:0.68rem; white-space:nowrap;">Inativo</span>
+      </div>
+      <div id="filtros-cfg-loss-virtual" style="display:none; padding:14px 18px 18px; background:rgba(255,189,46,0.04); border-top:1px solid rgba(255,189,46,0.1);">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-family:'Share Tech Mono';font-size:0.8rem;color:#ffbd2e;margin-bottom:12px;">
+          <input type="checkbox" id="lv-ativo" style="accent-color:#ffbd2e;width:15px;height:15px;">
+          <b>Ativar Loss Virtual</b>
+        </label>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
+          <div>
+            <div style="font-size:0.62rem;color:#888;font-family:'Share Tech Mono';margin-bottom:4px;">Losses necessários (N)</div>
+            <input id="lv-qtd" type="number" value="3" min="1" max="20" step="1"
+              style="width:100%;box-sizing:border-box;background:#0a0a12;border:1px solid rgba(255,189,46,0.4);color:#ffbd2e;font-family:'Share Tech Mono';font-size:0.82rem;padding:7px 9px;border-radius:5px;">
+          </div>
+          <div>
+            <div style="font-size:0.62rem;color:#888;font-family:'Share Tech Mono';margin-bottom:4px;">Quando ativar</div>
+            <select id="lv-quando" style="width:100%;box-sizing:border-box;background:#0a0a12;border:1px solid rgba(255,189,46,0.4);color:#ffbd2e;font-family:'Share Tech Mono';font-size:0.76rem;padding:7px 7px;border-radius:5px;">
+              <option value="sempre">Sempre</option>
+              <option value="apos_loss">Após loss</option>
+            </select>
+          </div>
+          <div>
+            <div style="font-size:0.62rem;color:#888;font-family:'Share Tech Mono';margin-bottom:4px;">Modo de entrada</div>
+            <select id="lv-modo" style="width:100%;box-sizing:border-box;background:#0a0a12;border:1px solid rgba(255,189,46,0.4);color:#ffbd2e;font-family:'Share Tech Mono';font-size:0.76rem;padding:7px 7px;border-radius:5px;">
+              <option value="proximo_sinal">Próx. sinal</option>
+              <option value="imediato">Imediato</option>
+            </select>
+          </div>
+          <div>
+            <div style="font-size:0.62rem;color:#888;font-family:'Share Tech Mono';margin-bottom:4px;">Reativação</div>
+            <select id="lv-reativacao" style="width:100%;box-sizing:border-box;background:#0a0a12;border:1px solid rgba(255,189,46,0.4);color:#ffbd2e;font-family:'Share Tech Mono';font-size:0.76rem;padding:7px 7px;border-radius:5px;">
+              <option value="imediata">Imediata</option>
+              <option value="apos_win">Após WIN</option>
+            </select>
+          </div>
+        </div>
+        <!-- Filtro Histograma -->
+        <div style="border-top:1px solid rgba(0,255,255,0.15);padding-top:12px;margin-bottom:12px;">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-family:'Share Tech Mono';font-size:0.78rem;color:#0ff;margin-bottom:10px;">
+            <input type="checkbox" id="hist-ativo" style="accent-color:#0ff;width:15px;height:15px;">
+            <b>+ Filtro Histograma</b>
+          </label>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+            <div>
+              <div style="font-size:0.62rem;color:#888;font-family:'Share Tech Mono';margin-bottom:4px;">Janela (ticks)</div>
+              <input id="hist-janela" type="number" value="30" min="10" max="100" step="5"
+                style="width:100%;box-sizing:border-box;background:#0a0a12;border:1px solid rgba(0,255,255,0.4);color:#0ff;font-family:'Share Tech Mono';font-size:0.82rem;padding:7px 9px;border-radius:5px;">
+            </div>
+            <div>
+              <div style="font-size:0.62rem;color:#888;font-family:'Share Tech Mono';margin-bottom:4px;">Margem domínio (%)</div>
+              <input id="hist-margem" type="number" value="10" min="0" max="40" step="5"
+                style="width:100%;box-sizing:border-box;background:#0a0a12;border:1px solid rgba(0,255,255,0.4);color:#0ff;font-family:'Share Tech Mono';font-size:0.82rem;padding:7px 9px;border-radius:5px;"
+                oninput="document.getElementById('hist-margem-val').textContent='+'+this.value+'%'">
+              <span id="hist-margem-val" style="display:none;">+10%</span>
+            </div>
+            <div>
+              <div style="font-size:0.62rem;color:#888;font-family:'Share Tech Mono';margin-bottom:4px;">Seq. perdas bloqueio</div>
+              <input id="hist-seqperda" type="number" value="2" min="0" max="10" step="1"
+                style="width:100%;box-sizing:border-box;background:#0a0a12;border:1px solid rgba(255,68,68,0.4);color:#f87171;font-family:'Share Tech Mono';font-size:0.82rem;padding:7px 9px;border-radius:5px;">
+            </div>
+            <div>
+              <div style="font-size:0.62rem;color:#888;font-family:'Share Tech Mono';margin-bottom:4px;">Wins / Janela conf.</div>
+              <div style="display:flex;gap:5px;">
+                <input id="hist-winsconf" type="number" value="3" min="1" max="15" step="1"
+                  style="width:50%;box-sizing:border-box;background:#0a0a12;border:1px solid rgba(255,189,46,0.4);color:#ffbd2e;font-family:'Share Tech Mono';font-size:0.82rem;padding:7px 7px;border-radius:5px;" placeholder="W">
+                <input id="hist-janelaconf" type="number" value="5" min="3" max="20" step="1"
+                  style="width:50%;box-sizing:border-box;background:#0a0a12;border:1px solid rgba(255,189,46,0.4);color:#ffbd2e;font-family:'Share Tech Mono';font-size:0.82rem;padding:7px 7px;border-radius:5px;" placeholder="J">
+              </div>
+            </div>
+          </div>
+        </div>
+        <button onclick="confirmarLossVirtual()"
+          style="width:100%;background:rgba(255,189,46,0.12);border:1px solid rgba(255,189,46,0.55);
+                 color:#ffbd2e;font-family:'Share Tech Mono';font-size:0.8rem;padding:9px;
+                 border-radius:6px;cursor:pointer;">✅ Confirmar Loss Virtual</button>
+      </div>
+    </div>
+
+    <!-- ─── Filtro Volume ─── -->
+    <div style="border-bottom:1px solid rgba(255,255,255,0.07);">
+      <div onclick="filtrosSelectItem('vol-filtro')"
+           style="display:flex;align-items:center;justify-content:space-between;
+                  padding:14px 18px; cursor:pointer; user-select:none;
+                  font-family:'Share Tech Mono'; font-size:0.82rem; color:#f87171;
+                  transition:background 0.15s;"
+           onmouseover="this.style.background='rgba(248,113,113,0.07)'"
+           onmouseout="this.style.background=''">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span style="font-size:1rem;">📊</span>
+          <div>
+            <div style="font-weight:bold;">Filtro Volume</div>
+            <div style="font-size:0.62rem;color:#57606a;margin-top:1px;">Bloqueia entradas quando adversários dominam o volume</div>
+          </div>
+        </div>
+        <span id="lbl-vol-filtro" style="color:#57606a; font-size:0.68rem; white-space:nowrap;">Inativo</span>
+      </div>
+      <div id="filtros-cfg-vol-filtro" style="display:none; padding:14px 18px 18px; background:rgba(248,113,113,0.04); border-top:1px solid rgba(248,113,113,0.12);">
+        <div style="font-family:'Share Tech Mono';font-size:0.68rem;color:#8b949e;margin-bottom:12px;line-height:1.6;">
+          Analisa os últimos N ticks e bloqueia a entrada quando os adversários dominam o volume.<br>
+          Configure a janela e a margem na seção <b style="color:#0ff">Loss Virtual → Filtro Histograma</b> acima.
+        </div>
+        <button onclick="volFiltroToggle();filtrosAtualizarLabel()"
+          style="width:100%;background:rgba(248,113,113,0.12);border:1px solid rgba(248,113,113,0.55);
+                 color:#f87171;font-family:'Share Tech Mono';font-size:0.8rem;padding:9px;
+                 border-radius:6px;cursor:pointer;" id="btn-vol-filtro-toggle">
+          🔁 Alternar Filtro Volume
+        </button>
+      </div>
+    </div>
+
+    <!-- ─── Rotação Mercado ─── -->
+    <div style="border-bottom:1px solid rgba(255,255,255,0.07);">
+      <div onclick="filtrosSelectItem('rotacao')"
+           style="display:flex;align-items:center;justify-content:space-between;
+                  padding:14px 18px; cursor:pointer; user-select:none;
+                  font-family:'Share Tech Mono'; font-size:0.82rem; color:#c084fc;
+                  transition:background 0.15s;"
+           onmouseover="this.style.background='rgba(192,132,252,0.07)'"
+           onmouseout="this.style.background=''">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span style="font-size:1rem;">🔀</span>
+          <div>
+            <div style="font-weight:bold;">Rotação Mercado</div>
+            <div style="font-size:0.62rem;color:#57606a;margin-top:1px;">Troca de ativo automaticamente ao bloquear por muitos ticks</div>
+          </div>
+        </div>
+        <span id="lbl-rotacao" style="color:#57606a; font-size:0.68rem; white-space:nowrap;">Inativo</span>
+      </div>
+      <div id="filtros-cfg-rotacao" style="display:none; padding:14px 18px 18px; background:rgba(192,132,252,0.04); border-top:1px solid rgba(192,132,252,0.12);">
+        <div style="font-family:'Share Tech Mono';font-size:0.68rem;color:#8b949e;margin-bottom:12px;line-height:1.6;">
+          Quando o Filtro Volume bloqueia por muitos ticks consecutivos, o bot troca automaticamente para o próximo ativo da lista procurando volume favorável.
+        </div>
+        <button onclick="rotacaoToggle();filtrosAtualizarLabel()"
+          style="width:100%;background:rgba(192,132,252,0.12);border:1px solid rgba(192,132,252,0.55);
+                 color:#c084fc;font-family:'Share Tech Mono';font-size:0.8rem;padding:9px;
+                 border-radius:6px;cursor:pointer;">
+          🔁 Alternar Rotação Mercado
+        </button>
+      </div>
+    </div>
+
+    <!-- ─── Filtro EDC ─── -->
+    <div>
+      <div onclick="filtrosSelectItem('edc-filtro')"
+           style="display:flex;align-items:center;justify-content:space-between;
+                  padding:14px 18px; cursor:pointer; user-select:none;
+                  font-family:'Share Tech Mono'; font-size:0.82rem; color:#93c5fd;
+                  transition:background 0.15s;"
+           onmouseover="this.style.background='rgba(147,197,253,0.07)'"
+           onmouseout="this.style.background=''">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span style="font-size:1rem;">🧠</span>
+          <div>
+            <div style="font-weight:bold;">Filtro EDC</div>
+            <div style="font-size:0.62rem;color:#57606a;margin-top:1px;">O Conselho EDC avalia cada entrada antes de operar</div>
+          </div>
+        </div>
+        <span id="lbl-edc-filtro" style="color:#57606a; font-size:0.68rem; white-space:nowrap;">Inativo</span>
+      </div>
+      <div id="filtros-cfg-edc-filtro" style="display:none; padding:14px 18px 18px; background:rgba(147,197,253,0.04); border-top:1px solid rgba(147,197,253,0.12);">
+        <div style="font-family:'Share Tech Mono';font-size:0.68rem;color:#8b949e;margin-bottom:12px;line-height:1.6;">
+          O Conselho de Decisão avaliará cada sinal antes de operar, aumentando a precisão das entradas com base no contexto atual do mercado.
+        </div>
+        <button onclick="edcToggleFiltro();filtrosAtualizarLabel()"
+          style="width:100%;background:rgba(147,197,253,0.12);border:1px solid rgba(147,197,253,0.55);
+                 color:#93c5fd;font-family:'Share Tech Mono';font-size:0.8rem;padding:9px;
+                 border-radius:6px;cursor:pointer;">
+          🔁 Alternar Filtro EDC
+        </button>
+      </div>
+    </div>
+
+    <!-- Rodapé -->
+    <div style="padding:14px 18px; border-top:1px solid rgba(255,255,255,0.07);">
+      <button onclick="fecharModal('modal-filtros')"
+        style="width:100%;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.12);
+               color:#8b949e;font-family:'Share Tech Mono';font-size:0.8rem;padding:9px;
+               border-radius:6px;cursor:pointer;">✕ Fechar</button>
+    </div>
+
+  </div>
+</div>
+
+
 <div id="modal-loss-virtual" class="modal-overlay">
     <div class="modal-box" style="max-height:88vh; overflow-y:auto;">
         <div class="modal-title">🛡️ LOSS VIRTUAL</div>
@@ -1623,159 +1834,11 @@
     <button class="cmd-btn" id="btn-rotacao" style="display:none; border-color:rgba(168,85,247,0.4); color:#c084fc;">🔀 Rotação Mercado</button>
     <button class="cmd-btn" id="btn-edc-filtro" style="display:none; border-color:rgba(59,130,212,0.4); color:#93c5fd;">🧠 Filtro EDC</button>
 
-    <!-- Container do menu suspenso de filtros -->
-    <div style="position:relative;" id="filtros-menu-container">
-      <button class="cmd-btn" id="btn-filtros-menu" onclick="filtrosToggleMenu()" style="border-color:rgba(255,189,46,0.4); color:#ffbd2e; width:100%; justify-content:space-between;">
-        ⚙️ Filtros
-        <span id="lbl-filtros-menu" class="cmd-label" style="color:#57606a;">Nenhum ativo</span>
-      </button>
-
-      <!-- Dropdown suspenso -->
-      <div id="filtros-dropdown" style="display:none; position:absolute; left:0; right:0; top:100%; z-index:9999;
-           background:#0d1117; border:1px solid rgba(255,189,46,0.35); border-radius:6px;
-           margin-top:4px; overflow:hidden; box-shadow:0 8px 24px rgba(0,0,0,0.7);">
-
-        <!-- ─── Loss Virtual ─── -->
-        <div style="border-bottom:1px solid rgba(255,255,255,0.06);">
-          <div onclick="filtrosSelectItem('loss-virtual')" style="display:flex;align-items:center;justify-content:space-between;
-               padding:9px 12px; cursor:pointer; font-family:'Share Tech Mono'; font-size:0.75rem;
-               color:#ffbd2e; transition:background 0.15s;"
-               onmouseover="this.style.background='rgba(255,189,46,0.08)'" onmouseout="this.style.background=''"
-               id="filtros-item-loss-virtual">
-            <span>🛡️ Loss Virtual</span>
-            <span id="lbl-loss-virtual" style="color:#57606a; font-size:0.65rem;">Inativo</span>
-          </div>
-          <div id="filtros-cfg-loss-virtual" style="display:none; padding:10px 12px; background:rgba(255,189,46,0.04); border-top:1px solid rgba(255,189,46,0.1);">
-            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-family:'Share Tech Mono';font-size:0.72rem;color:#ffbd2e;margin-bottom:8px;">
-              <input type="checkbox" id="lv-ativo" style="accent-color:#ffbd2e;width:14px;height:14px;">
-              <b>Ativar Loss Virtual</b>
-            </label>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px;">
-              <div>
-                <div style="font-size:0.6rem;color:#888;font-family:'Share Tech Mono';margin-bottom:2px;">Losses necessários (N)</div>
-                <input id="lv-qtd" type="number" value="3" min="1" max="20" step="1"
-                  style="width:100%;box-sizing:border-box;background:#0a0a12;border:1px solid rgba(255,189,46,0.4);color:#ffbd2e;font-family:'Share Tech Mono';font-size:0.78rem;padding:5px 8px;border-radius:4px;">
-              </div>
-              <div>
-                <div style="font-size:0.6rem;color:#888;font-family:'Share Tech Mono';margin-bottom:2px;">Quando ativar</div>
-                <select id="lv-quando" style="width:100%;box-sizing:border-box;background:#0a0a12;border:1px solid rgba(255,189,46,0.4);color:#ffbd2e;font-family:'Share Tech Mono';font-size:0.7rem;padding:5px 6px;border-radius:4px;">
-                  <option value="sempre">Sempre</option>
-                  <option value="apos_loss">Após loss</option>
-                </select>
-              </div>
-              <div>
-                <div style="font-size:0.6rem;color:#888;font-family:'Share Tech Mono';margin-bottom:2px;">Modo de entrada</div>
-                <select id="lv-modo" style="width:100%;box-sizing:border-box;background:#0a0a12;border:1px solid rgba(255,189,46,0.4);color:#ffbd2e;font-family:'Share Tech Mono';font-size:0.7rem;padding:5px 6px;border-radius:4px;">
-                  <option value="proximo_sinal">Próx. sinal</option>
-                  <option value="imediato">Imediato</option>
-                </select>
-              </div>
-              <div>
-                <div style="font-size:0.6rem;color:#888;font-family:'Share Tech Mono';margin-bottom:2px;">Reativação</div>
-                <select id="lv-reativacao" style="width:100%;box-sizing:border-box;background:#0a0a12;border:1px solid rgba(255,189,46,0.4);color:#ffbd2e;font-family:'Share Tech Mono';font-size:0.7rem;padding:5px 6px;border-radius:4px;">
-                  <option value="imediata">Imediata</option>
-                  <option value="apos_win">Após WIN</option>
-                </select>
-              </div>
-            </div>
-            <!-- Filtro Histograma embutido -->
-            <div style="border-top:1px solid rgba(0,255,255,0.12);padding-top:8px;margin-bottom:8px;">
-              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-family:'Share Tech Mono';font-size:0.7rem;color:#0ff;margin-bottom:6px;">
-                <input type="checkbox" id="hist-ativo" style="accent-color:#0ff;width:13px;height:13px;">
-                <b>+ Filtro Histograma</b>
-              </label>
-              <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
-                <div>
-                  <div style="font-size:0.6rem;color:#888;font-family:'Share Tech Mono';margin-bottom:2px;">Janela (ticks)</div>
-                  <input id="hist-janela" type="number" value="30" min="10" max="100" step="5"
-                    style="width:100%;box-sizing:border-box;background:#0a0a12;border:1px solid rgba(0,255,255,0.4);color:#0ff;font-family:'Share Tech Mono';font-size:0.78rem;padding:5px 8px;border-radius:4px;">
-                </div>
-                <div>
-                  <div style="font-size:0.6rem;color:#888;font-family:'Share Tech Mono';margin-bottom:2px;">Margem domínio (%)</div>
-                  <input id="hist-margem" type="number" value="10" min="0" max="40" step="5"
-                    style="width:100%;box-sizing:border-box;background:#0a0a12;border:1px solid rgba(0,255,255,0.4);color:#0ff;font-family:'Share Tech Mono';font-size:0.78rem;padding:5px 8px;border-radius:4px;"
-                    oninput="document.getElementById('hist-margem-val').textContent='+'+this.value+'%'">
-                  <span id="hist-margem-val" style="display:none">+10%</span>
-                </div>
-                <div>
-                  <div style="font-size:0.6rem;color:#888;font-family:'Share Tech Mono';margin-bottom:2px;">Seq. perdas bloq.</div>
-                  <input id="hist-seqperda" type="number" value="2" min="0" max="10" step="1"
-                    style="width:100%;box-sizing:border-box;background:#0a0a12;border:1px solid rgba(255,68,68,0.4);color:#f87171;font-family:'Share Tech Mono';font-size:0.78rem;padding:5px 8px;border-radius:4px;">
-                </div>
-                <div>
-                  <div style="font-size:0.6rem;color:#888;font-family:'Share Tech Mono';margin-bottom:2px;">Wins conf./janela</div>
-                  <div style="display:flex;gap:4px;">
-                    <input id="hist-winsconf" type="number" value="3" min="1" max="15" step="1"
-                      style="width:50%;box-sizing:border-box;background:#0a0a12;border:1px solid rgba(255,189,46,0.4);color:#ffbd2e;font-family:'Share Tech Mono';font-size:0.78rem;padding:5px 6px;border-radius:4px;">
-                    <input id="hist-janelaconf" type="number" value="5" min="3" max="20" step="1"
-                      style="width:50%;box-sizing:border-box;background:#0a0a12;border:1px solid rgba(255,189,46,0.4);color:#ffbd2e;font-family:'Share Tech Mono';font-size:0.78rem;padding:5px 6px;border-radius:4px;">
-                  </div>
-                </div>
-              </div>
-            </div>
-            <button onclick="confirmarLossVirtual()" style="width:100%;background:rgba(255,189,46,0.12);border:1px solid rgba(255,189,46,0.5);color:#ffbd2e;font-family:'Share Tech Mono';font-size:0.72rem;padding:6px;border-radius:4px;cursor:pointer;">✅ Confirmar</button>
-          </div>
-        </div>
-
-        <!-- ─── Filtro Volume ─── -->
-        <div style="border-bottom:1px solid rgba(255,255,255,0.06);">
-          <div onclick="filtrosSelectItem('vol-filtro')" style="display:flex;align-items:center;justify-content:space-between;
-               padding:9px 12px; cursor:pointer; font-family:'Share Tech Mono'; font-size:0.75rem;
-               color:#f87171;" id="filtros-item-vol-filtro"
-               onmouseover="this.style.background='rgba(248,113,113,0.08)'" onmouseout="this.style.background=''">
-            <span>📊 Filtro Volume</span>
-            <span id="lbl-vol-filtro" style="color:#57606a; font-size:0.65rem;">Inativo</span>
-          </div>
-          <div id="filtros-cfg-vol-filtro" style="display:none; padding:10px 12px; background:rgba(248,113,113,0.04); border-top:1px solid rgba(248,113,113,0.1);">
-            <div style="font-family:'Share Tech Mono';font-size:0.65rem;color:#888;margin-bottom:8px;line-height:1.5;">
-              Bloqueia entradas quando adversários dominam o volume.<br>Configurado via Loss Virtual acima.
-            </div>
-            <button onclick="volFiltroToggle();filtrosAtualizarLabel()" style="width:100%;background:rgba(248,113,113,0.12);border:1px solid rgba(248,113,113,0.5);color:#f87171;font-family:'Share Tech Mono';font-size:0.72rem;padding:6px;border-radius:4px;cursor:pointer;" id="btn-vol-filtro-toggle">
-              🔁 Alternar Filtro Volume
-            </button>
-          </div>
-        </div>
-
-        <!-- ─── Rotação Mercado ─── -->
-        <div style="border-bottom:1px solid rgba(255,255,255,0.06);">
-          <div onclick="filtrosSelectItem('rotacao')" style="display:flex;align-items:center;justify-content:space-between;
-               padding:9px 12px; cursor:pointer; font-family:'Share Tech Mono'; font-size:0.75rem;
-               color:#c084fc;" id="filtros-item-rotacao"
-               onmouseover="this.style.background='rgba(192,132,252,0.08)'" onmouseout="this.style.background=''">
-            <span>🔀 Rotação Mercado</span>
-            <span id="lbl-rotacao" style="color:#57606a; font-size:0.65rem;">Inativo</span>
-          </div>
-          <div id="filtros-cfg-rotacao" style="display:none; padding:10px 12px; background:rgba(192,132,252,0.04); border-top:1px solid rgba(192,132,252,0.1);">
-            <div style="font-family:'Share Tech Mono';font-size:0.65rem;color:#888;margin-bottom:8px;line-height:1.5;">
-              Troca de ativo automaticamente quando Filtro Volume bloqueia por muitos ticks.
-            </div>
-            <button onclick="rotacaoToggle();filtrosAtualizarLabel()" style="width:100%;background:rgba(192,132,252,0.12);border:1px solid rgba(192,132,252,0.5);color:#c084fc;font-family:'Share Tech Mono';font-size:0.72rem;padding:6px;border-radius:4px;cursor:pointer;">
-              🔁 Alternar Rotação
-            </button>
-          </div>
-        </div>
-
-        <!-- ─── Filtro EDC ─── -->
-        <div>
-          <div onclick="filtrosSelectItem('edc-filtro')" style="display:flex;align-items:center;justify-content:space-between;
-               padding:9px 12px; cursor:pointer; font-family:'Share Tech Mono'; font-size:0.75rem;
-               color:#93c5fd;" id="filtros-item-edc-filtro"
-               onmouseover="this.style.background='rgba(147,197,253,0.08)'" onmouseout="this.style.background=''">
-            <span>🧠 Filtro EDC</span>
-            <span id="lbl-edc-filtro" style="color:#57606a; font-size:0.65rem;">Inativo</span>
-          </div>
-          <div id="filtros-cfg-edc-filtro" style="display:none; padding:10px 12px; background:rgba(147,197,253,0.04); border-top:1px solid rgba(147,197,253,0.1);">
-            <div style="font-family:'Share Tech Mono';font-size:0.65rem;color:#888;margin-bottom:8px;line-height:1.5;">
-              O Conselho EDC avalia cada entrada antes de operar.
-            </div>
-            <button onclick="edcToggleFiltro();filtrosAtualizarLabel()" style="width:100%;background:rgba(147,197,253,0.12);border:1px solid rgba(147,197,253,0.5);color:#93c5fd;font-family:'Share Tech Mono';font-size:0.72rem;padding:6px;border-radius:4px;cursor:pointer;">
-              🔁 Alternar Filtro EDC
-            </button>
-          </div>
-        </div>
-
-      </div><!-- /filtros-dropdown -->
-    </div><!-- /filtros-menu-container -->
+    <!-- Botão único Filtros -->
+    <button class="cmd-btn" id="btn-filtros-menu" onclick="filtrosAbrirModal()" style="border-color:rgba(255,189,46,0.4); color:#ffbd2e;">
+      ⚙️ Filtros
+      <span id="lbl-filtros-menu" class="cmd-label" style="color:#57606a;">Nenhum ativo</span>
+    </button>
 
     <button class="cmd-btn danger" onclick="runCmd('limpar')">
         🗑️ limpar
@@ -17820,18 +17883,10 @@ async function dsOperar() {
 }
 // ── FIM DIGIT SNIPER PRO ────────────────────────────────────────────────────
 
-// ── Menu Filtros Dropdown ──────────────────────────────────────────────────
-function filtrosToggleMenu() {
-    const dd = document.getElementById('filtros-dropdown');
-    if (!dd) return;
-    const aberto = dd.style.display !== 'none';
-    dd.style.display = aberto ? 'none' : 'block';
-    if (!aberto) filtrosSincronizarValores();
-}
-
-function filtrosFecharMenu() {
-    const dd = document.getElementById('filtros-dropdown');
-    if (dd) dd.style.display = 'none';
+// ── Modal Filtros de Proteção ─────────────────────────────────────────────
+function filtrosAbrirModal() {
+    filtrosSincronizarValores();
+    document.getElementById('modal-filtros').style.display = 'flex';
 }
 
 function filtrosSelectItem(id) {
@@ -17848,28 +17903,23 @@ function filtrosSelectItem(id) {
 function filtrosSincronizarValores() {
     const lv = bot.lv || {};
     const bh = bot.bloqHist || {};
-    const lvAtivoEl = document.getElementById('lv-ativo');
-    if (lvAtivoEl) lvAtivoEl.checked = !!lv.ativo;
-    const lvQtdEl = document.getElementById('lv-qtd');
-    if (lvQtdEl) lvQtdEl.value = lv.qtd || 3;
-    const lvQuandoEl = document.getElementById('lv-quando');
-    if (lvQuandoEl) lvQuandoEl.value = lv.quando || 'sempre';
-    const lvModoEl = document.getElementById('lv-modo');
-    if (lvModoEl) lvModoEl.value = lv.modo || 'proximo_sinal';
-    const lvReativEl = document.getElementById('lv-reativacao');
-    if (lvReativEl) lvReativEl.value = lv.reativacao || 'imediata';
-    const histAtivoEl = document.getElementById('hist-ativo');
-    if (histAtivoEl) histAtivoEl.checked = !!bh.ativo;
-    const histJanelaEl = document.getElementById('hist-janela');
-    if (histJanelaEl) histJanelaEl.value = bh.janelaRecente || 30;
-    const histMargemEl = document.getElementById('hist-margem');
-    if (histMargemEl) histMargemEl.value = bh.margemDominio !== undefined ? bh.margemDominio : 10;
-    const histSeqEl = document.getElementById('hist-seqperda');
-    if (histSeqEl) histSeqEl.value = bh.maxSeqPerda || 2;
-    const histJanelaConfEl = document.getElementById('hist-janelaconf');
-    if (histJanelaConfEl) histJanelaConfEl.value = bh.janelaConf || 5;
-    const histWinsConfEl = document.getElementById('hist-winsconf');
-    if (histWinsConfEl) histWinsConfEl.value = bh.winsConf || 3;
+    const set = (id, val) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        if (el.type === 'checkbox') el.checked = val;
+        else el.value = val;
+    };
+    set('lv-ativo',        !!lv.ativo);
+    set('lv-qtd',          lv.qtd || 3);
+    set('lv-quando',       lv.quando || 'sempre');
+    set('lv-modo',         lv.modo || 'proximo_sinal');
+    set('lv-reativacao',   lv.reativacao || 'imediata');
+    set('hist-ativo',      !!bh.ativo);
+    set('hist-janela',     bh.janelaRecente || 30);
+    set('hist-margem',     bh.margemDominio !== undefined ? bh.margemDominio : 10);
+    set('hist-seqperda',   bh.maxSeqPerda || 2);
+    set('hist-janelaconf', bh.janelaConf || 5);
+    set('hist-winsconf',   bh.winsConf || 3);
 }
 
 function filtrosAtualizarLabel() {
@@ -17884,20 +17934,14 @@ function filtrosAtualizarLabel() {
     if (partes.length === 0) {
         lbl.textContent = 'Nenhum ativo';
         lbl.style.color = '#57606a';
-        if (btn) btn.style.borderColor = 'rgba(255,189,46,0.4)';
+        if (btn) { btn.style.borderColor = 'rgba(255,189,46,0.4)'; btn.style.color = '#ffbd2e'; }
     } else {
         lbl.textContent = '✅ ' + partes.join(' + ');
         lbl.style.color = '#4ade80';
-        if (btn) btn.style.borderColor = 'rgba(74,222,128,0.6)';
+        if (btn) { btn.style.borderColor = 'rgba(74,222,128,0.6)'; btn.style.color = '#4ade80'; }
     }
 }
-
-// Fecha o dropdown ao clicar fora
-document.addEventListener('click', function(e) {
-    const container = document.getElementById('filtros-menu-container');
-    if (container && !container.contains(e.target)) filtrosFecharMenu();
-});
-// ── FIM Menu Filtros Dropdown ──────────────────────────────────────────────
+// ── FIM Modal Filtros ─────────────────────────────────────────────────────
 </script>
 
 </body>
