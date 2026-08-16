@@ -5053,7 +5053,11 @@ def wa_send():
                 profit_brl     = profit_tot * cotacao_wa
                 banca_brl      = banca * cotacao_wa
                 banca_brl_str  = f"{banca_brl:.2f}".replace(".", ",")
-                profit_brl_str = f"+R${abs(profit_brl):.2f}" if profit_tot >= 0 else f"-R${abs(profit_brl):.2f}"
+                sinal_tot      = "+" if profit_tot >= 0 else "-"
+                profit_brl_str = f"{sinal_tot}R${abs(profit_brl):.2f}"
+                profit_usd_str = f"{sinal_tot}${abs(profit_tot):.2f}"
+                lucro_op_brl   = abs(lucro) * cotacao_wa
+                lucro_op_str   = f"+R${lucro_op_brl:.2f}" if win else f"-R${lucro_op_brl:.2f}"
 
                 if win:
                     res_linha   = "✅  RESULTADO: WIN"
@@ -5066,13 +5070,13 @@ def wa_send():
                     f"🟢  OPERAÇÃO FINALIZADA\n\n"
                     f"{res_linha}\n\n"
                     f"💰  Entrada: ${entrada:.2f}\n"
-                    f"{lucro_linha}\n\n"
+                    f"{lucro_linha}  ({lucro_op_str})\n\n"
                     f"➡️  Próxima Entrada: ${prox_stake:.2f}\n"
                     f"⚙️  Gestão: {modo}\n\n"
                     f"📊  Mercado: {estrategia.split()[0] if estrategia else '--'}\n"
                     f"🎯  Estratégia: {estrategia}\n\n"
                     f"🏦  Banca: ${banca:.2f}  /  R${banca_brl_str}\n"
-                    f"📈  Lucro Total: {'+' if profit_tot>=0 else ''}{profit_brl_str}\n\n"
+                    f"📈  Lucro Total: {profit_usd_str}  /  {profit_brl_str}\n\n"
                     f"🕐  {time.strftime('%H:%M')}"
                 )
             enviar_notificacao_wa(msg)
