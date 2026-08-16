@@ -3055,7 +3055,7 @@ def _montar_system_prompt(perfil: str, contexto_extra: str = "") -> str:
         "- stop_loss_usd: SEMPRE use exatamente 100.0\n"
         "- take_profit_usd: SEMPRE use exatamente 10.0\n"
         "- entrada_usd: SEMPRE use exatamente 0.35\n"
-        "- gerenciamento: martingale|soros|loss_recovery|conservador|qsr|masaniello|ciclos|safeshield|adaptativo|escada|fixa\n"
+        "- gerenciamento: martingale|soros|loss_recovery|conservador|qsr|masaniello|ciclos|adaptativo|fixa\n"
         "- ativo: R_10|R_25|R_50|R_75|R_100|1HZ10V|1HZ25V|1HZ50V|1HZ75V|1HZ100V\n"
         f"Perfil de risco do usuário: {perfil}.\n"
     )
@@ -3732,7 +3732,7 @@ def ai_gerar_combo():
          "_assertividade":"82%"},
 
         # ── NOTOUCH CLÁSSICO ──────────────────────────────────────────────
-        {"tipo_contrato":"NOTOUCH","ativo":"1HZ50V","gerenciamento":"safeshield",
+        {"tipo_contrato":"NOTOUCH","ativo":"1HZ50V","gerenciamento":"conservador",
          "barreira":"+0.150","seq_gatilho":0,"duracao":3,
          "barreira_over":0,"barreira_under":0,
          "pct_janela":0,"pct_min_fraco":0,"pct_min_forte":0,
@@ -4567,12 +4567,8 @@ def ai_atualizar():
             "mas_eventos","mas_acertos",
             # Ciclos
             "ciclos",
-            # SafeShield
-            "ss_perc",
             # Recovery Adaptativo
             "ra_maxima","ra_rec_base",
-            # Recovery Escada
-            "re_maxima","re_crescimento",
         )
         for c in campos_editaveis:
             if c in dados:
@@ -6793,7 +6789,7 @@ def _monitor_executar_scan():
                 f"{proibe}\n"
                 f"SUGESTÃO para este ciclo: use {sugestao}\n\n"
                 f"Gerenciamentos: martingale | soros | loss_recovery | conservador | "
-                f"qsr | masaniello | ciclos | safeshield | adaptativo | escada | fixa\n\n"
+                f"qsr | masaniello | ciclos | adaptativo | fixa\n\n"
                 f"Entrada: ${entrada:.2f} | TP: ${take_profit:.2f} | SL: ${stop_loss:.2f}\n\n"
                 f"IMPORTANTE: Gere o campo 'tipo_contrato' com EXATAMENTE um dos tipos acima. "
                 f"Para FLUXO_1TICK use tipo_contrato='FLUXO' e velas=1."
@@ -6830,7 +6826,7 @@ def _monitor_executar_scan():
 
                     # ── Normaliza gerenciamento ──────────────────────────────
                     _GERES_VALIDOS = {"martingale","soros","loss_recovery","conservador","qsr",
-                                      "masaniello","ciclos","safeshield","adaptativo","escada","fixa"}
+                                      "masaniello","ciclos","adaptativo","fixa"}
                     ger_raw = str(proposta.get("gerenciamento", "")).lower().strip()
                     if ger_raw not in _GERES_VALIDOS:
                         proposta["gerenciamento"] = "soros"
@@ -7629,7 +7625,7 @@ ETAPA 4 — VEREDICTO FINAL
 
 7. Gerenciamento por perfil:
    • conservador → 'soros' ou 'conservador' ou 'fixa'
-   • moderado    → 'adaptativo' ou 'ciclos' ou 'safeshield'
+   • moderado    → 'adaptativo' ou 'ciclos'
    • agressivo   → 'martingale' (máx 3) ou 'loss_recovery'
 
 === FORMATO DE RESPOSTA ===
@@ -7659,7 +7655,7 @@ Responda APENAS com JSON válido contendo:
   "sat_limiar": "int 51-95 (apenas SATURACAO)",
   "sat_smart_min": "int (apenas SATURACAO)",
   "ativo": "R_10|R_25|R_50|R_75|R_100|1HZ10V|1HZ25V|1HZ50V|1HZ75V|1HZ100V",
-  "gerenciamento": "martingale|soros|loss_recovery|conservador|qsr|masaniello|ciclos|safeshield|adaptativo|escada|fixa",
+  "gerenciamento": "martingale|soros|loss_recovery|conservador|qsr|masaniello|ciclos|adaptativo|fixa",
   "entrada_usd": 0.35,
   "take_profit_usd": 10.0,
   "stop_loss_usd": 100.0,
@@ -8057,7 +8053,7 @@ ETAPA 4 — AUTO-CRÍTICA
 6. Gerenciamento por regime:
    • LATERAL → 'soros' | 'ciclos' | 'adaptativo'
    • TENDENCIA → 'martingale' (máx 3) | 'loss_recovery'
-   • ALTA_VOLATILIDADE → 'conservador' | 'safeshield' | 'fixa'
+   • ALTA_VOLATILIDADE → 'conservador' | 'fixa'
 
 7. Duração:
    • Dígitos → duracao=1 (tick único)

@@ -1617,26 +1617,165 @@
     </button>
 
     <div class="cmd-section">▸ PROTEÇÃO</div>
-    <button class="cmd-btn" id="btn-loss-virtual" onclick="abrirModalLossVirtual()"
-        style="border-color:rgba(255,189,46,0.4); color:#ffbd2e;">
-        🛡️ Loss Virtual
-        <span class="cmd-label" id="lbl-loss-virtual" style="color:#ffbd2e;">Inativo</span>
-    </button>
-    <button class="cmd-btn" id="btn-vol-filtro" onclick="volFiltroToggle()"
-        style="border-color:rgba(255,68,68,0.4); color:#f87171;">
-        📊 Filtro Volume
-        <span class="cmd-label" id="lbl-vol-filtro" style="color:#57606a;">Inativo</span>
-    </button>
-    <button class="cmd-btn" id="btn-rotacao" onclick="rotacaoToggle()"
-        style="border-color:rgba(168,85,247,0.4); color:#c084fc;">
-        🔀 Rotação Mercado
-        <span class="cmd-label" id="lbl-rotacao" style="color:#57606a;">Inativo</span>
-    </button>
-    <button class="cmd-btn" id="btn-edc-filtro" onclick="edcToggleFiltro()"
-        style="display:none; border-color:rgba(59,130,212,0.4); color:#93c5fd;">
-        🧠 Filtro EDC
-        <span class="cmd-label" id="lbl-edc-filtro" style="color:#57606a;">Inativo</span>
-    </button>
+    <!-- Botões legados ocultos — mantidos para compatibilidade com código JS existente -->
+    <button class="cmd-btn" id="btn-loss-virtual" style="display:none; border-color:rgba(255,189,46,0.4); color:#ffbd2e;">🛡️ Loss Virtual</button>
+    <button class="cmd-btn" id="btn-vol-filtro" style="display:none; border-color:rgba(255,68,68,0.4); color:#f87171;">📊 Filtro Volume</button>
+    <button class="cmd-btn" id="btn-rotacao" style="display:none; border-color:rgba(168,85,247,0.4); color:#c084fc;">🔀 Rotação Mercado</button>
+    <button class="cmd-btn" id="btn-edc-filtro" style="display:none; border-color:rgba(59,130,212,0.4); color:#93c5fd;">🧠 Filtro EDC</button>
+
+    <!-- Container do menu suspenso de filtros -->
+    <div style="position:relative;" id="filtros-menu-container">
+      <button class="cmd-btn" id="btn-filtros-menu" onclick="filtrosToggleMenu()" style="border-color:rgba(255,189,46,0.4); color:#ffbd2e; width:100%; justify-content:space-between;">
+        ⚙️ Filtros
+        <span id="lbl-filtros-menu" class="cmd-label" style="color:#57606a;">Nenhum ativo</span>
+      </button>
+
+      <!-- Dropdown suspenso -->
+      <div id="filtros-dropdown" style="display:none; position:absolute; left:0; right:0; top:100%; z-index:9999;
+           background:#0d1117; border:1px solid rgba(255,189,46,0.35); border-radius:6px;
+           margin-top:4px; overflow:hidden; box-shadow:0 8px 24px rgba(0,0,0,0.7);">
+
+        <!-- ─── Loss Virtual ─── -->
+        <div style="border-bottom:1px solid rgba(255,255,255,0.06);">
+          <div onclick="filtrosSelectItem('loss-virtual')" style="display:flex;align-items:center;justify-content:space-between;
+               padding:9px 12px; cursor:pointer; font-family:'Share Tech Mono'; font-size:0.75rem;
+               color:#ffbd2e; transition:background 0.15s;"
+               onmouseover="this.style.background='rgba(255,189,46,0.08)'" onmouseout="this.style.background=''"
+               id="filtros-item-loss-virtual">
+            <span>🛡️ Loss Virtual</span>
+            <span id="lbl-loss-virtual" style="color:#57606a; font-size:0.65rem;">Inativo</span>
+          </div>
+          <div id="filtros-cfg-loss-virtual" style="display:none; padding:10px 12px; background:rgba(255,189,46,0.04); border-top:1px solid rgba(255,189,46,0.1);">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-family:'Share Tech Mono';font-size:0.72rem;color:#ffbd2e;margin-bottom:8px;">
+              <input type="checkbox" id="lv-ativo" style="accent-color:#ffbd2e;width:14px;height:14px;">
+              <b>Ativar Loss Virtual</b>
+            </label>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px;">
+              <div>
+                <div style="font-size:0.6rem;color:#888;font-family:'Share Tech Mono';margin-bottom:2px;">Losses necessários (N)</div>
+                <input id="lv-qtd" type="number" value="3" min="1" max="20" step="1"
+                  style="width:100%;box-sizing:border-box;background:#0a0a12;border:1px solid rgba(255,189,46,0.4);color:#ffbd2e;font-family:'Share Tech Mono';font-size:0.78rem;padding:5px 8px;border-radius:4px;">
+              </div>
+              <div>
+                <div style="font-size:0.6rem;color:#888;font-family:'Share Tech Mono';margin-bottom:2px;">Quando ativar</div>
+                <select id="lv-quando" style="width:100%;box-sizing:border-box;background:#0a0a12;border:1px solid rgba(255,189,46,0.4);color:#ffbd2e;font-family:'Share Tech Mono';font-size:0.7rem;padding:5px 6px;border-radius:4px;">
+                  <option value="sempre">Sempre</option>
+                  <option value="apos_loss">Após loss</option>
+                </select>
+              </div>
+              <div>
+                <div style="font-size:0.6rem;color:#888;font-family:'Share Tech Mono';margin-bottom:2px;">Modo de entrada</div>
+                <select id="lv-modo" style="width:100%;box-sizing:border-box;background:#0a0a12;border:1px solid rgba(255,189,46,0.4);color:#ffbd2e;font-family:'Share Tech Mono';font-size:0.7rem;padding:5px 6px;border-radius:4px;">
+                  <option value="proximo_sinal">Próx. sinal</option>
+                  <option value="imediato">Imediato</option>
+                </select>
+              </div>
+              <div>
+                <div style="font-size:0.6rem;color:#888;font-family:'Share Tech Mono';margin-bottom:2px;">Reativação</div>
+                <select id="lv-reativacao" style="width:100%;box-sizing:border-box;background:#0a0a12;border:1px solid rgba(255,189,46,0.4);color:#ffbd2e;font-family:'Share Tech Mono';font-size:0.7rem;padding:5px 6px;border-radius:4px;">
+                  <option value="imediata">Imediata</option>
+                  <option value="apos_win">Após WIN</option>
+                </select>
+              </div>
+            </div>
+            <!-- Filtro Histograma embutido -->
+            <div style="border-top:1px solid rgba(0,255,255,0.12);padding-top:8px;margin-bottom:8px;">
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-family:'Share Tech Mono';font-size:0.7rem;color:#0ff;margin-bottom:6px;">
+                <input type="checkbox" id="hist-ativo" style="accent-color:#0ff;width:13px;height:13px;">
+                <b>+ Filtro Histograma</b>
+              </label>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+                <div>
+                  <div style="font-size:0.6rem;color:#888;font-family:'Share Tech Mono';margin-bottom:2px;">Janela (ticks)</div>
+                  <input id="hist-janela" type="number" value="30" min="10" max="100" step="5"
+                    style="width:100%;box-sizing:border-box;background:#0a0a12;border:1px solid rgba(0,255,255,0.4);color:#0ff;font-family:'Share Tech Mono';font-size:0.78rem;padding:5px 8px;border-radius:4px;">
+                </div>
+                <div>
+                  <div style="font-size:0.6rem;color:#888;font-family:'Share Tech Mono';margin-bottom:2px;">Margem domínio (%)</div>
+                  <input id="hist-margem" type="number" value="10" min="0" max="40" step="5"
+                    style="width:100%;box-sizing:border-box;background:#0a0a12;border:1px solid rgba(0,255,255,0.4);color:#0ff;font-family:'Share Tech Mono';font-size:0.78rem;padding:5px 8px;border-radius:4px;"
+                    oninput="document.getElementById('hist-margem-val').textContent='+'+this.value+'%'">
+                  <span id="hist-margem-val" style="display:none">+10%</span>
+                </div>
+                <div>
+                  <div style="font-size:0.6rem;color:#888;font-family:'Share Tech Mono';margin-bottom:2px;">Seq. perdas bloq.</div>
+                  <input id="hist-seqperda" type="number" value="2" min="0" max="10" step="1"
+                    style="width:100%;box-sizing:border-box;background:#0a0a12;border:1px solid rgba(255,68,68,0.4);color:#f87171;font-family:'Share Tech Mono';font-size:0.78rem;padding:5px 8px;border-radius:4px;">
+                </div>
+                <div>
+                  <div style="font-size:0.6rem;color:#888;font-family:'Share Tech Mono';margin-bottom:2px;">Wins conf./janela</div>
+                  <div style="display:flex;gap:4px;">
+                    <input id="hist-winsconf" type="number" value="3" min="1" max="15" step="1"
+                      style="width:50%;box-sizing:border-box;background:#0a0a12;border:1px solid rgba(255,189,46,0.4);color:#ffbd2e;font-family:'Share Tech Mono';font-size:0.78rem;padding:5px 6px;border-radius:4px;">
+                    <input id="hist-janelaconf" type="number" value="5" min="3" max="20" step="1"
+                      style="width:50%;box-sizing:border-box;background:#0a0a12;border:1px solid rgba(255,189,46,0.4);color:#ffbd2e;font-family:'Share Tech Mono';font-size:0.78rem;padding:5px 6px;border-radius:4px;">
+                  </div>
+                </div>
+              </div>
+            </div>
+            <button onclick="confirmarLossVirtual()" style="width:100%;background:rgba(255,189,46,0.12);border:1px solid rgba(255,189,46,0.5);color:#ffbd2e;font-family:'Share Tech Mono';font-size:0.72rem;padding:6px;border-radius:4px;cursor:pointer;">✅ Confirmar</button>
+          </div>
+        </div>
+
+        <!-- ─── Filtro Volume ─── -->
+        <div style="border-bottom:1px solid rgba(255,255,255,0.06);">
+          <div onclick="filtrosSelectItem('vol-filtro')" style="display:flex;align-items:center;justify-content:space-between;
+               padding:9px 12px; cursor:pointer; font-family:'Share Tech Mono'; font-size:0.75rem;
+               color:#f87171;" id="filtros-item-vol-filtro"
+               onmouseover="this.style.background='rgba(248,113,113,0.08)'" onmouseout="this.style.background=''">
+            <span>📊 Filtro Volume</span>
+            <span id="lbl-vol-filtro" style="color:#57606a; font-size:0.65rem;">Inativo</span>
+          </div>
+          <div id="filtros-cfg-vol-filtro" style="display:none; padding:10px 12px; background:rgba(248,113,113,0.04); border-top:1px solid rgba(248,113,113,0.1);">
+            <div style="font-family:'Share Tech Mono';font-size:0.65rem;color:#888;margin-bottom:8px;line-height:1.5;">
+              Bloqueia entradas quando adversários dominam o volume.<br>Configurado via Loss Virtual acima.
+            </div>
+            <button onclick="volFiltroToggle();filtrosAtualizarLabel()" style="width:100%;background:rgba(248,113,113,0.12);border:1px solid rgba(248,113,113,0.5);color:#f87171;font-family:'Share Tech Mono';font-size:0.72rem;padding:6px;border-radius:4px;cursor:pointer;" id="btn-vol-filtro-toggle">
+              🔁 Alternar Filtro Volume
+            </button>
+          </div>
+        </div>
+
+        <!-- ─── Rotação Mercado ─── -->
+        <div style="border-bottom:1px solid rgba(255,255,255,0.06);">
+          <div onclick="filtrosSelectItem('rotacao')" style="display:flex;align-items:center;justify-content:space-between;
+               padding:9px 12px; cursor:pointer; font-family:'Share Tech Mono'; font-size:0.75rem;
+               color:#c084fc;" id="filtros-item-rotacao"
+               onmouseover="this.style.background='rgba(192,132,252,0.08)'" onmouseout="this.style.background=''">
+            <span>🔀 Rotação Mercado</span>
+            <span id="lbl-rotacao" style="color:#57606a; font-size:0.65rem;">Inativo</span>
+          </div>
+          <div id="filtros-cfg-rotacao" style="display:none; padding:10px 12px; background:rgba(192,132,252,0.04); border-top:1px solid rgba(192,132,252,0.1);">
+            <div style="font-family:'Share Tech Mono';font-size:0.65rem;color:#888;margin-bottom:8px;line-height:1.5;">
+              Troca de ativo automaticamente quando Filtro Volume bloqueia por muitos ticks.
+            </div>
+            <button onclick="rotacaoToggle();filtrosAtualizarLabel()" style="width:100%;background:rgba(192,132,252,0.12);border:1px solid rgba(192,132,252,0.5);color:#c084fc;font-family:'Share Tech Mono';font-size:0.72rem;padding:6px;border-radius:4px;cursor:pointer;">
+              🔁 Alternar Rotação
+            </button>
+          </div>
+        </div>
+
+        <!-- ─── Filtro EDC ─── -->
+        <div>
+          <div onclick="filtrosSelectItem('edc-filtro')" style="display:flex;align-items:center;justify-content:space-between;
+               padding:9px 12px; cursor:pointer; font-family:'Share Tech Mono'; font-size:0.75rem;
+               color:#93c5fd;" id="filtros-item-edc-filtro"
+               onmouseover="this.style.background='rgba(147,197,253,0.08)'" onmouseout="this.style.background=''">
+            <span>🧠 Filtro EDC</span>
+            <span id="lbl-edc-filtro" style="color:#57606a; font-size:0.65rem;">Inativo</span>
+          </div>
+          <div id="filtros-cfg-edc-filtro" style="display:none; padding:10px 12px; background:rgba(147,197,253,0.04); border-top:1px solid rgba(147,197,253,0.1);">
+            <div style="font-family:'Share Tech Mono';font-size:0.65rem;color:#888;margin-bottom:8px;line-height:1.5;">
+              O Conselho EDC avalia cada entrada antes de operar.
+            </div>
+            <button onclick="edcToggleFiltro();filtrosAtualizarLabel()" style="width:100%;background:rgba(147,197,253,0.12);border:1px solid rgba(147,197,253,0.5);color:#93c5fd;font-family:'Share Tech Mono';font-size:0.72rem;padding:6px;border-radius:4px;cursor:pointer;">
+              🔁 Alternar Filtro EDC
+            </button>
+          </div>
+        </div>
+
+      </div><!-- /filtros-dropdown -->
+    </div><!-- /filtros-menu-container -->
 
     <button class="cmd-btn danger" onclick="runCmd('limpar')">
         🗑️ limpar
@@ -2203,9 +2342,7 @@
               <option value="📐 QSR">📐 QSR</option>
               <option value="📊 Masaniello">📊 Masaniello</option>
               <option value="🎯 Ciclos">🎯 Ciclos</option>
-              <option value="🔰 SafeShield">🔰 SafeShield</option>
               <option value="🤖 Recovery Adaptativo">🤖 Recovery Adaptativo</option>
-              <option value="🪜 Recovery Escada">🪜 Recovery Escada</option>
             </select>
           </div>
           <div onclick="csToggleAuto()" id="cs-auto-row" style="
@@ -2905,10 +3042,7 @@ const GERENCIAMENTOS = {
     "📐 QSR":                    { desc: "Recupera % da dívida a cada operação" },
     "📊 Masaniello":             { desc: "Gerenciamento estatístico baseado em eventos" },
     "🎯 Ciclos":                 { desc: "Sequência fixa de stakes: 5→6→3.5→7→14→28" },
-    "🔰 SafeShield":             { desc: "Aumenta stake levemente com % configurável" },
     "🤖 Recovery Adaptativo":    { desc: "Ajusta recuperação automaticamente pela assertividade" },
-    "🪜 Recovery Escada":        { desc: "Stake cresce por degraus até a máxima configurada" },
-    "🎲 Dupla Recovery":         { desc: "Recuperação exata para estratégia dupla OVER+UNDER" },
     "💹 Juros Compostos":        { desc: "Stake = % da banca. Meta e Stop próprios da planilha." },
 };
 
@@ -2932,10 +3066,6 @@ class GerenciadorUnificado {
         this._raDivida  = 0.0;
         this._raWins    = 0;
         this._raLosses  = 0;
-        // Recovery Escada
-        this._reNivel   = 0;
-        // Dupla Recovery
-        this._drDivida  = 0.0;  // dívida acumulada em dlar (perda lquida real)
         // ── Juros Compostos ──────────────────────────────────────────────────
         this._jcPct      = parseFloat(cfg.jc_pct    || 2.0);   // % da banca por entrada
         this._jcBanca    = parseFloat(cfg.jc_banca  || (base * 50)); // banca atual (sincroniza c/ saldo real)
@@ -2948,39 +3078,9 @@ class GerenciadorUnificado {
 
     updateResult(won) { won ? this._onWin() : this._onLoss(); }
 
-    // Mtodo especial para estratégia dupla — recebe o lucro lquido real
-    // e ajusta a stake para recuperar exatamente o acumulado
     updateResultDupla(totalProfit, stakePorLado) {
-        const base   = parseFloat(this.cfg.stake || this.initialStake);
-        const payout = parseFloat(this.cfg.dr_payout || 0.37); // payout Deriv padrão ~37%
-        const maxima = parseFloat(this.cfg.dr_maxima || 500);
-
-        if (totalProfit > 0) {
-            // WIN real — abate da dívida o lucro obtido
-            this._drDivida = Math.max(0, parseFloat((this._drDivida - totalProfit).toFixed(2)));
-            if (this._drDivida < 0.05) this._drDivida = 0;
-        } else {
-            // LOSS — acumula a perda lquida na dívida
-            this._drDivida = parseFloat((this._drDivida + Math.abs(totalProfit)).toFixed(2));
-        }
-
-        if (this.modo === "🎲 Dupla Recovery") {
-            this._calcDR(payout, base, maxima);
-        } else {
-            // Para outros modos, delega normalmente
-            this.updateResult(totalProfit > 0);
-        }
-    }
-
-    _calcDR(payout, base, maxima) {
-        // Frmula: stake_nova = (dívida / payout) + base
-        // Garante que ao ganhar um WIN (lucro = stake — payout), cobre a dívida + retorna ao base
-        if (this._drDivida <= 0.05) {
-            this.currentStake = base;
-        } else {
-            const nova = parseFloat(((this._drDivida / payout) + base).toFixed(2));
-            this.currentStake = Math.min(nova, maxima);
-        }
+        // Delega para updateResult normal (Dupla Recovery removido)
+        this.updateResult(totalProfit > 0);
     }
 
     _onWin() {
@@ -3022,9 +3122,6 @@ class GerenciadorUnificado {
                 this._indiceCiclo = 0;
                 this.currentStake = this._ciclosLista[0] || base; break;
 
-            case "🔰 SafeShield":
-                this.currentStake = base; break;
-
             case "🤖 Recovery Adaptativo":
                 this._raWins++;
                 this._raLosses = 0;  // reseta contador de losses ao ganhar
@@ -3033,17 +3130,6 @@ class GerenciadorUnificado {
                 if (this._raDivida < 0.05) this._raDivida = 0;
                 // Se dívida zerou, volta à base; senão mantém stake de recuperação
                 this.currentStake = this._calcRA();
-                break;
-
-            case "🪜 Recovery Escada":
-                this._reNivel = 0; this.currentStake = base; break;
-
-            case "🎲 Dupla Recovery":
-                this._drDivida = Math.max(0, parseFloat((this._drDivida - this.currentStake * parseFloat(this.cfg.dr_payout || 0.37)).toFixed(2)));
-                if (this._drDivida < 0.05) this._drDivida = 0;
-                this._calcDR(parseFloat(this.cfg.dr_payout || 0.37),
-                             parseFloat(this.cfg.stake || this.initialStake),
-                             parseFloat(this.cfg.dr_maxima || 500));
                 break;
 
             case "💹 Juros Compostos": {
@@ -3109,11 +3195,6 @@ class GerenciadorUnificado {
                 this._indiceCiclo = Math.min(this._indiceCiclo + 1, this._ciclosLista.length - 1);
                 this.currentStake = this._ciclosLista[this._indiceCiclo] || base; break;
 
-            case "🔰 SafeShield": {
-                const perc = parseFloat(cfg.ss_perc || 0.8) / 100;
-                this.currentStake = Math.max(this.initialStake, parseFloat((stake * (1 + perc)).toFixed(2)));
-                break; }
-
             case "🤖 Recovery Adaptativo": {
                 this._raLosses++;
                 this._raDivida = parseFloat((this._raDivida + stake).toFixed(2));
@@ -3127,23 +3208,6 @@ class GerenciadorUnificado {
                     this._raCongelado = false;
                 }
                 break; }
-
-            case "🪜 Recovery Escada": {
-                const maxima     = parseFloat(cfg.re_maxima || 5.0);
-                const crescimento = parseFloat(cfg.re_crescimento || 1.10);
-                this._reNivel++;
-                const nova = parseFloat((base * Math.pow(crescimento, this._reNivel)).toFixed(2));
-                this.currentStake = Math.min(nova, maxima);
-                break; }
-
-            case "🎲 Dupla Recovery":
-                // Acumula perda — mas o cálculo real vem do updateResultDupla
-                // Aqui apenas sobe a stake proporcionalmente caso chamado diretamente
-                this._drDivida = parseFloat((this._drDivida + stake * 2).toFixed(2));
-                this._calcDR(parseFloat(cfg.dr_payout || 0.37),
-                             parseFloat(cfg.stake || this.initialStake),
-                             parseFloat(cfg.dr_maxima || 500));
-                break;
 
             case "💹 Juros Compostos":
                 // LOSS: banca diminui pela stake perdida
@@ -3211,9 +3275,6 @@ class GerenciadorUnificado {
     }
 
     status() {
-        if (this.modo === "🎲 Dupla Recovery") {
-            return `${this.modo} | Stake/lado: $${this.getStake().toFixed(2)} | Dívida: $${this._drDivida.toFixed(2)}`;
-        }
         if (this.modo === "💹 Juros Compostos") {
             const lucro = this._jcBanca - this._jcBancaInicial;
             const pct   = ((lucro / this._jcBancaInicial) * 100).toFixed(1);
@@ -4625,22 +4686,16 @@ function fecharModal(id) { document.getElementById(id).style.display = 'none'; }
 // LOSS VIRTUAL — modal + lógica
 // ═══════════════════════════════════════════════════════
 function abrirModalLossVirtual() {
-    const lv = bot.lv;
-    document.getElementById('lv-ativo').checked    = lv.ativo;
-    document.getElementById('lv-qtd').value         = lv.qtd;
-    document.getElementById('lv-quando').value      = lv.quando;
-    document.getElementById('lv-modo').value        = lv.modo;
-    document.getElementById('lv-reativacao').value  = lv.reativacao;
-    // Filtro de Histograma
-    const bh = bot.bloqHist;
-    document.getElementById('hist-ativo').checked    = bh.ativo;
-    document.getElementById('hist-janela').value     = bh.janelaRecente;
-    document.getElementById('hist-margem').value     = bh.margemDominio;
-    document.getElementById('hist-margem-val').textContent = '+' + bh.margemDominio + '%';
-    document.getElementById('hist-seqperda').value   = bh.maxSeqPerda;
-    document.getElementById('hist-janelaconf').value = bh.janelaConf;
-    document.getElementById('hist-winsconf').value   = bh.winsConf;
-    document.getElementById('modal-loss-virtual').style.display = 'flex';
+    // Redireciona para o dropdown unificado de filtros
+    const dd = document.getElementById('filtros-dropdown');
+    if (dd) dd.style.display = 'block';
+    filtrosSincronizarValores();
+    ['vol-filtro','rotacao','edc-filtro'].forEach(k => {
+        const el = document.getElementById('filtros-cfg-' + k);
+        if (el) el.style.display = 'none';
+    });
+    const cfg = document.getElementById('filtros-cfg-loss-virtual');
+    if (cfg) cfg.style.display = 'block';
 }
 
 function _atualizarLblLossVirtual() {
@@ -4651,10 +4706,9 @@ function _atualizarLblLossVirtual() {
     if (bot.bloqHist.ativo) partes.push(`HIST +${bot.bloqHist.margemDominio}%`);
     const ativo = partes.length > 0;
     const status = ativo ? `✅ ${partes.join(' | ')}` : 'Inativo';
-    document.getElementById('lbl-loss-virtual').textContent = status;
-    document.getElementById('btn-loss-virtual').style.borderColor =
-        ativo ? 'rgba(0,255,0,0.6)' : 'rgba(255,189,46,0.4)';
-    document.getElementById('btn-loss-virtual').style.color = ativo ? '#0f0' : '#ffbd2e';
+    const lblLv = document.getElementById('lbl-loss-virtual');
+    if (lblLv) lblLv.textContent = status;
+    filtrosAtualizarLabel();
 }
 
 function confirmarLossVirtual() {
@@ -4681,8 +4735,8 @@ function confirmarLossVirtual() {
     bot._histBloqAtivo    = false;
     bot._histBloqContador = 0;
 
-    fecharModal('modal-loss-virtual');
     _atualizarLblLossVirtual();
+    filtrosAtualizarLabel();
     print(`🛡️ LOSS VIRTUAL: ${lv.ativo ? `ATIVO — N=${lv.qtd} | ${lv.quando} | ${lv.modo} | reativ.=${lv.reativacao}` : 'INATIVO'}`, 'log-info');
     if (bh.ativo) print(`📊 FILTRO HISTOGRAMA: ATIVO — janela=${bh.janelaRecente} | margem=+${bh.margemDominio}% | seq=${bh.maxSeqPerda} | conf=${bh.winsConf}/${bh.janelaConf}`, 'log-info');
     cfgSalvar();
@@ -5872,23 +5926,9 @@ function abrirCfgGerenciamento(nome) {
                 (cfg.ciclos || [5,6,3.5,7,14,28]).join(','));
             break;
 
-        case '🔰 SafeShield':
-            _campoMgmt('% aumento por loss', 'mgmt-ss-perc', 'number', cfg.ss_perc ?? 0.8, 0.01, 100, 0.01);
-            break;
-
         case '🤖 Recovery Adaptativo':
             _campoMgmt('Stake máxima ($)', 'mgmt-ra-maxima', 'number', cfg.ra_maxima ?? 20.0, 0.35, 10000, 0.01);
             _campoMgmt('% Recuperação base', 'mgmt-ra-base', 'number', cfg.ra_rec_base ?? 30, 1, 100, 1);
-            break;
-
-        case '🪜 Recovery Escada':
-            _campoMgmt('Stake máxima ($)', 'mgmt-re-maxima', 'number', cfg.re_maxima ?? 5.0, 0.35, 10000, 0.01);
-            _campoMgmt('Fator de crescimento', 'mgmt-re-cresc', 'number', cfg.re_crescimento ?? 1.10, 1.01, 5, 0.01);
-            break;
-
-        case '🎲 Dupla Recovery':
-            _campoMgmt('Payout da Deriv (ex: 0.37 = 37%)', 'mgmt-dr-payout', 'number', cfg.dr_payout ?? 0.37, 0.01, 0.99, 0.01);
-            _campoMgmt('Stake máxima por lado ($)', 'mgmt-dr-maxima', 'number', cfg.dr_maxima ?? 500, 0.35, 10000, 0.01);
             break;
 
         case '💹 Juros Compostos':
@@ -8440,8 +8480,8 @@ function initWebSocket(wssUrl) {
                         const _ttrDiv = Math.max(bot.mgr._dividaLR || 0, bot.mgr._raDivida || 0, bot.mgr._drDivida || 0);
                         print(`⚡ TTR ATIVADO — entrando em cada tick até recuperar dívida ($${_ttrDiv > 0 ? _ttrDiv.toFixed(2) : Math.abs(profit).toFixed(2)})`, 'log-info');
                     } else if (bot.tickRecovery.emRecuperacao) {
-                        // Dívida zerada = _dividaLR+_raDivida+_drDivida zerados
-                        // OU gerenciamento voltou à stake inicial (Martingale/SafeShield/Ciclos)
+                        // Dívida zerada = _dividaLR+_raDivida zerados
+                        // OU gerenciamento voltou à stake inicial (Martingale/Ciclos)
                         const dividaAtual = Math.max(
                             bot.mgr._dividaLR   || 0,
                             bot.mgr._raDivida   || 0,
@@ -8668,6 +8708,7 @@ function volFiltroToggle() {
     }
 
     _volFiltroAtualizarBtn();
+    filtrosAtualizarLabel();
     cfgSalvar();
 
     const est   = ESTRATEGIAS[bot.estrategia] || {};
@@ -8743,6 +8784,7 @@ function rotacaoToggle() {
     bot.rotacao.ativo = !bot.rotacao.ativo;
     bot._rotacaoBloqContador = 0;
     _rotacaoAtualizarBtn();
+    filtrosAtualizarLabel();
     cfgSalvar();
     print(
         bot.rotacao.ativo
@@ -8869,10 +8911,9 @@ function edcToggleFiltro() {
     const ativo  = bot._edcFiltroAtivo;
     const lbl    = document.getElementById('lbl-edc-filtro');
     const btn    = document.getElementById('btn-edc-filtro');
-    lbl.textContent   = ativo ? 'Ativo ✅' : 'Inativo';
-    lbl.style.color   = ativo ? '#4ade80'  : '#57606a';
-    btn.style.borderColor = ativo ? 'rgba(74,222,128,0.6)' : 'rgba(59,130,212,0.4)';
-    btn.style.color       = ativo ? '#4ade80' : '#93c5fd';
+    if (lbl) { lbl.textContent = ativo ? 'Ativo ✅' : 'Inativo'; lbl.style.color = ativo ? '#4ade80' : '#57606a'; }
+    if (btn) { btn.style.borderColor = ativo ? 'rgba(74,222,128,0.6)' : 'rgba(59,130,212,0.4)'; btn.style.color = ativo ? '#4ade80' : '#93c5fd'; }
+    filtrosAtualizarLabel();
     print(
         ativo
             ? '🧠 Filtro EDC ATIVADO — o Conselho avaliará cada entrada antes de operar.'
@@ -11288,9 +11329,7 @@ function groqEditarAbrir(idx) {
         'qsr':'qsr','📐 qsr':'qsr',
         'masaniello':'masaniello','📊 masaniello':'masaniello',
         'ciclos':'ciclos','🎯 ciclos':'ciclos',
-        'safeshield':'safeshield','🔰 safeshield':'safeshield',
         'adaptativo':'adaptativo','🤖 recovery adaptativo':'adaptativo',
-        'escada':'escada','🪜 recovery escada':'escada',
     };
     const _mgrRaw = (s.gerenciamento || '').toLowerCase().trim();
     const _mgrKey = _mgrNorm[_mgrRaw] || _mgrRaw || 'martingale';
@@ -11445,16 +11484,9 @@ function iaEditMgrMudou(estrategia) {
             campo('Ciclos (separados por vírgula)', 'ciclos', 'text',
                 (Array.isArray(s.ciclos) ? s.ciclos.join(',') : (s.ciclos || '5,6,3.5,7,14,28')));
             break;
-        case 'safeshield':
-            campo('% aumento por loss', 'ss_perc', 'number', s.ss_perc ?? 0.8, 0.01, 100, 0.01);
-            break;
         case 'adaptativo':
             campo('Stake máxima ($)',     'ra_maxima',  'number', s.ra_maxima  ?? 20.0, 0.35, 10000, 0.01);
             campo('% Recuperação base',  'ra_rec_base','number', s.ra_rec_base ?? 30,   1,    100,   1);
-            break;
-        case 'escada':
-            campo('Stake máxima ($)',       're_maxima',     'number', s.re_maxima     ?? 5.0,  0.35, 10000, 0.01);
-            campo('Fator de crescimento',  're_crescimento', 'number', s.re_crescimento ?? 1.10, 1.01, 5,     0.01);
             break;
         case 'fixa':
         default:
@@ -11507,9 +11539,7 @@ function groqAplicarNoBot(idx, cfg, silencioso) {
         'qsr':            '📐 QSR',
         'masaniello':     '📊 Masaniello',
         'ciclos':         '🎯 Ciclos',
-        'safeshield':     '🔰 SafeShield',
         'adaptativo':     '🤖 Recovery Adaptativo',
-        'escada':         '🪜 Recovery Escada',
         'fixa':           '💰 Stake Fixa',
     };
     const mgrKey = (cfg.gerenciamento||'').toLowerCase().replace(/[^a-z_]/g,'');
@@ -11542,14 +11572,9 @@ function groqAplicarNoBot(idx, cfg, silencioso) {
                 ? cfg.ciclos
                 : String(cfg.ciclos).split(',').map(x => parseFloat(x.trim())).filter(x => !isNaN(x) && x > 0);
         }
-        // SafeShield
-        if (cfg.ss_perc !== undefined) mgrCfg.ss_perc = parseFloat(cfg.ss_perc);
         // Recovery Adaptativo
         if (cfg.ra_maxima   !== undefined) mgrCfg.ra_maxima   = parseFloat(cfg.ra_maxima);
         if (cfg.ra_rec_base !== undefined) mgrCfg.ra_rec_base = parseFloat(cfg.ra_rec_base);
-        // Recovery Escada
-        if (cfg.re_maxima      !== undefined) mgrCfg.re_maxima      = parseFloat(cfg.re_maxima);
-        if (cfg.re_crescimento !== undefined) mgrCfg.re_crescimento = parseFloat(cfg.re_crescimento);
 
         bot.mgr = new GerenciadorUnificado(mgrNome, mgrCfg);
         // Persiste a cfg no dicionário de modos para que ao abrir o modal apareçam os valores corretos
@@ -13950,9 +13975,7 @@ select.ia-input { cursor: pointer; }
                     <option value="qsr">📐 QSR</option>
                     <option value="masaniello">📊 Masaniello</option>
                     <option value="ciclos">🎯 Ciclos</option>
-                    <option value="safeshield">🔰 SafeShield</option>
                     <option value="adaptativo">🤖 Recovery Adaptativo</option>
-                    <option value="escada">🪜 Recovery Escada</option>
                 </select>
             </div>
 
@@ -14806,20 +14829,9 @@ function mcAbrirCfgGerenciamento(nome) {
             _mcCampoMgmt('Valores dos ciclos (vírgula)', 'mc-mgmt-ciclos', 'text',
                 (cfg.ciclos || [5,6,3.5,7,14,28]).join(','));
             break;
-        case '🔰 SafeShield':
-            _mcCampoMgmt('% aumento por loss', 'mc-mgmt-ss_perc', 'number', cfg.ss_perc ?? 0.8, 0.01, 100, 0.01);
-            break;
         case '🤖 Recovery Adaptativo':
             _mcCampoMgmt('Stake máxima ($)',     'mc-mgmt-ra_maxima',  'number', cfg.ra_maxima  ?? 20.0, 0.35, 10000, 0.01);
             _mcCampoMgmt('% Recuperação base',   'mc-mgmt-ra_rec_base','number', cfg.ra_rec_base ?? 30,  1,    100,   1);
-            break;
-        case '🪜 Recovery Escada':
-            _mcCampoMgmt('Stake máxima ($)',       'mc-mgmt-re_maxima',    'number', cfg.re_maxima    ?? 5.0,  0.35, 10000, 0.01);
-            _mcCampoMgmt('Fator de crescimento',   'mc-mgmt-re_crescimento','number', cfg.re_crescimento ?? 1.10, 1.01, 5,  0.01);
-            break;
-        case '🎲 Dupla Recovery':
-            _mcCampoMgmt('Payout da Deriv (ex: 0.37)', 'mc-mgmt-dr_payout', 'number', cfg.dr_payout ?? 0.37, 0.01, 0.99, 0.01);
-            _mcCampoMgmt('Stake máxima por lado ($)',   'mc-mgmt-dr_maxima', 'number', cfg.dr_maxima ?? 500,  0.35, 10000, 0.01);
             break;
         case '💹 Juros Compostos':
             _mcCampoMgmt('% da banca por entrada',        'mc-mgmt-jc_pct',      'number', cfg.jc_pct      ?? 2.0,  0.1, 50,  0.1);
@@ -17807,6 +17819,85 @@ async function dsOperar() {
     wsUsar.send(JSON.stringify(payload));
 }
 // ── FIM DIGIT SNIPER PRO ────────────────────────────────────────────────────
+
+// ── Menu Filtros Dropdown ──────────────────────────────────────────────────
+function filtrosToggleMenu() {
+    const dd = document.getElementById('filtros-dropdown');
+    if (!dd) return;
+    const aberto = dd.style.display !== 'none';
+    dd.style.display = aberto ? 'none' : 'block';
+    if (!aberto) filtrosSincronizarValores();
+}
+
+function filtrosFecharMenu() {
+    const dd = document.getElementById('filtros-dropdown');
+    if (dd) dd.style.display = 'none';
+}
+
+function filtrosSelectItem(id) {
+    const cfg = document.getElementById('filtros-cfg-' + id);
+    if (!cfg) return;
+    const aberto = cfg.style.display !== 'none';
+    ['loss-virtual','vol-filtro','rotacao','edc-filtro'].forEach(k => {
+        const el = document.getElementById('filtros-cfg-' + k);
+        if (el && k !== id) el.style.display = 'none';
+    });
+    cfg.style.display = aberto ? 'none' : 'block';
+}
+
+function filtrosSincronizarValores() {
+    const lv = bot.lv || {};
+    const bh = bot.bloqHist || {};
+    const lvAtivoEl = document.getElementById('lv-ativo');
+    if (lvAtivoEl) lvAtivoEl.checked = !!lv.ativo;
+    const lvQtdEl = document.getElementById('lv-qtd');
+    if (lvQtdEl) lvQtdEl.value = lv.qtd || 3;
+    const lvQuandoEl = document.getElementById('lv-quando');
+    if (lvQuandoEl) lvQuandoEl.value = lv.quando || 'sempre';
+    const lvModoEl = document.getElementById('lv-modo');
+    if (lvModoEl) lvModoEl.value = lv.modo || 'proximo_sinal';
+    const lvReativEl = document.getElementById('lv-reativacao');
+    if (lvReativEl) lvReativEl.value = lv.reativacao || 'imediata';
+    const histAtivoEl = document.getElementById('hist-ativo');
+    if (histAtivoEl) histAtivoEl.checked = !!bh.ativo;
+    const histJanelaEl = document.getElementById('hist-janela');
+    if (histJanelaEl) histJanelaEl.value = bh.janelaRecente || 30;
+    const histMargemEl = document.getElementById('hist-margem');
+    if (histMargemEl) histMargemEl.value = bh.margemDominio !== undefined ? bh.margemDominio : 10;
+    const histSeqEl = document.getElementById('hist-seqperda');
+    if (histSeqEl) histSeqEl.value = bh.maxSeqPerda || 2;
+    const histJanelaConfEl = document.getElementById('hist-janelaconf');
+    if (histJanelaConfEl) histJanelaConfEl.value = bh.janelaConf || 5;
+    const histWinsConfEl = document.getElementById('hist-winsconf');
+    if (histWinsConfEl) histWinsConfEl.value = bh.winsConf || 3;
+}
+
+function filtrosAtualizarLabel() {
+    const partes = [];
+    if (bot.lv && bot.lv.ativo)             partes.push('LV');
+    if (bot.bloqHist && bot.bloqHist.ativo) partes.push('VOL');
+    if (bot.rotacao && bot.rotacao.ativo)   partes.push('ROT');
+    if (bot._edcFiltroAtivo)                partes.push('EDC');
+    const lbl = document.getElementById('lbl-filtros-menu');
+    const btn = document.getElementById('btn-filtros-menu');
+    if (!lbl) return;
+    if (partes.length === 0) {
+        lbl.textContent = 'Nenhum ativo';
+        lbl.style.color = '#57606a';
+        if (btn) btn.style.borderColor = 'rgba(255,189,46,0.4)';
+    } else {
+        lbl.textContent = '✅ ' + partes.join(' + ');
+        lbl.style.color = '#4ade80';
+        if (btn) btn.style.borderColor = 'rgba(74,222,128,0.6)';
+    }
+}
+
+// Fecha o dropdown ao clicar fora
+document.addEventListener('click', function(e) {
+    const container = document.getElementById('filtros-menu-container');
+    if (container && !container.contains(e.target)) filtrosFecharMenu();
+});
+// ── FIM Menu Filtros Dropdown ──────────────────────────────────────────────
 </script>
 
 </body>
