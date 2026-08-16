@@ -1883,8 +1883,18 @@
 
         <!-- Ranking -->
         <div style="background:rgba(0,0,0,0.35);border:1px solid #30363d;border-radius:6px;padding:12px;">
-          <div style="font-size:0.6rem;color:#57606a;letter-spacing:1px;margin-bottom:8px;">▸ RANKING DE CANDIDATOS</div>
-          <div style="overflow-x:auto;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+            <div style="font-size:0.6rem;color:#57606a;letter-spacing:1px;">▸ RANKING DE CANDIDATOS</div>
+            <button onclick="dsToggleRanking()" id="ds-ranking-btn"
+                style="background:rgba(255,255,255,0.05);border:1px solid #30363d;color:#57606a;
+                       font-family:'Share Tech Mono';font-size:0.55rem;padding:2px 8px;border-radius:3px;
+                       cursor:pointer;letter-spacing:1px;transition:all 0.15s;"
+                onmouseover="this.style.borderColor='#facc15';this.style.color='#facc15';"
+                onmouseout="this.style.borderColor='#30363d';this.style.color='#57606a';">
+              ▲ OCULTAR
+            </button>
+          </div>
+          <div id="ds-ranking-body" style="overflow-x:auto;">
             <table style="width:100%;border-collapse:collapse;font-size:0.68rem;font-family:'Share Tech Mono';">
               <thead>
                 <tr style="color:#facc15;border-bottom:1px solid rgba(250,204,21,0.2);">
@@ -17331,6 +17341,19 @@ function dsToggleAuto() {
 
 function dsStopAuto() {
     if (_dsTimer) { clearInterval(_dsTimer); _dsTimer = null; }
+}
+
+function dsToggleRanking() {
+    const body = document.getElementById('ds-ranking-body');
+    const btn  = document.getElementById('ds-ranking-btn');
+    if (!body || !btn) return;
+    if (body.style.display === 'none') {
+        body.style.display = 'block';
+        btn.innerHTML = '▲ OCULTAR';
+    } else {
+        body.style.display = 'none';
+        btn.innerHTML = '▼ MOSTRAR';
+    }
 }
 
 // ── Operação real ─────────────────────────────────────────────────────────
