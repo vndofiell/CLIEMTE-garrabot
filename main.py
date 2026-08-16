@@ -2074,6 +2074,7 @@ def tg_send():
     # ── Modo ESPELHO: só envia notificações da conta SECUNDÁRIA ──
     if _MODO_OPERACAO.get("modo") == "ESPELHO":
         conta = str(d.get("conta", "")).upper()
+        print(f"[TG] modo=ESPELHO conta='{conta}' stop_win={d.get('stop_win')} keys={list(d.keys())}")
         if conta != "SECUNDARIA":
             print("[TG] Modo ESPELHO: notificação bloqueada (não é conta SECUNDÁRIA).")
             return jsonify({"ok": True, "bloqueado": True, "motivo": "modo_espelho_conta_nao_secundaria"})
