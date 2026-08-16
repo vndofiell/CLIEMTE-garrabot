@@ -17559,6 +17559,15 @@ async function dsOperar() {
         const _lSW    = (espAtivo && secPronto && _dsUsandoSec) ? _dsEspLosses : _dsLosses;
         const _mgrNm  = document.getElementById('ds-mgr')?.value || 'Digit Sniper';
         stopWinExibirModal(_dsLucroCheck, _wSW, _lSW, _bncSW, `Digit Sniper barr=${_dsSinalAtual?.barrier||'?'}`, _mgrNm);
+        // ── Registrar na Planilha JC e avançar para próximo dia ──────────
+        const _dsEstrat = `Digit Sniper barr=${_dsSinalAtual?.barrier||'?'}`;
+        if (espAtivo && secPronto && _dsUsandoSec) {
+            // Conta SEC: registra na planilha JC-SEC
+            jcSecOnMetaBatida(_dsLucroCheck, _wSW, _lSW, _bncSW, _dsEstrat, _mgrNm);
+        } else {
+            // Conta principal: registra na planilha JC principal
+            jcOnMetaBatida(_dsLucroCheck, _wSW, _lSW, _bncSW, _dsEstrat, _mgrNm);
+        }
         // Notificação TG + WA de Stop Win
         (async () => {
             let tgAtual = (typeof _tgCfg !== 'undefined') ? _tgCfg : null;
