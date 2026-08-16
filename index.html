@@ -17512,7 +17512,9 @@ function dsAtualizarEspelho() {
 async function dsOperar() {
     if (!_dsSinalAtual) return;
     if (_dsEmOperacao) return;   // já tem operação em curso — ignora
+    _dsEmOperacao = true;        // trava IMEDIATAMENTE antes de qualquer await
     if (typeof bot === 'undefined' || !bot.ws || bot.ws.readyState !== WebSocket.OPEN) {
+        _dsEmOperacao = false;   // libera trava — não vai operar agora
         dsLog('⚠️ Bot não conectado — aguardando WS...', '#f44');
         if (_dsAutoOperar && !_dsAguardandoRecon) {
             _dsAguardandoRecon = true;
@@ -17611,6 +17613,7 @@ async function dsOperar() {
                 fetch('/wa-send', { method:'POST', headers:{'Content-Type':'application/json'}, body: _swBodyWA }).catch(()=>{});
             }
         }).catch(() => {});
+        _dsEmOperacao = false;   // libera — stop win não vai operar
         return;
     }
     if (_dsLucroCheck <= -slLim) {
@@ -17618,6 +17621,7 @@ async function dsOperar() {
         _dsAutoOperar = false;
         const _btnAutoSL = document.getElementById('ds-btn-auto-op');
         if (_btnAutoSL) { _btnAutoSL.textContent = '🤖 AUTO'; _btnAutoSL.style.color = '#6b7280'; _btnAutoSL.style.borderColor = '#30363d'; }
+        _dsEmOperacao = false;   // libera — stop loss não vai operar
         return;
     }
     const wsUsar = (espAtivo && secPronto && _dsUsandoSec) ? _sec.ws : bot.ws;
@@ -17646,7 +17650,6 @@ async function dsOperar() {
     const ativ  = document.getElementById('ds-asset')?.value || 'R_100';
     const reqId = Math.floor(Math.random() * 90000) + 10000;
 
-    _dsEmOperacao = true;
     dsLog(`🚀 <b style="color:#00ffff">${ct}</b> barr=<b style="color:#facc15">${barr}</b> $${stake.toFixed(2)} | ${ativ}`, '#ccc');
     dsBotaoOperar(false);
 
