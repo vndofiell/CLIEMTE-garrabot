@@ -17373,6 +17373,11 @@ let _dsEspLucro       = 0;
 let _dsSinalAtual     = null;
 let _dsAguardandoRecon= false;
 let _dsEmOperacao     = false;   // trava: impede compra dupla
+let _dsMaxWinSeq      = 0;       // maior sequência de wins
+let _dsMaxLossSeq     = 0;       // maior sequência de losses
+let _dsMaxStake       = 0;       // maior stake usada na sessão
+let _dsCurWinSeq      = 0;       // sequência atual de wins
+let _dsCurLossSeq     = 0;       // sequência atual de losses
 
 // ── Martingale Adaptativo por Barreira (SEC) ──────────────────────────────
 // Calcula stake exato para recuperar dívida + lucro mínimo usando o payout
@@ -17570,16 +17575,19 @@ async function dsOperar() {
             if (!tgAtual) tgAtual = (typeof _tgCfg !== 'undefined') ? _tgCfg : {};
             // payload com conta=SECUNDARIA para passar pelo filtro modo ESPELHO
             const _swBody = JSON.stringify({
-                token:      tgAtual.token    || '',
-                chat_id:    tgAtual.chat_id  || '',
-                stop_win:   true,
-                lucro:      _dsLucroCheck,
-                banca:      _bncSW,
-                wins:       _wSW,
-                losses:     _lSW,
-                modo:       _mgrNm,
-                estrategia: `Digit Sniper barr=${_dsSinalAtual?.barrier||'?'}`,
-                conta:      'SECUNDARIA'
+                token:           tgAtual.token    || '',
+                chat_id:         tgAtual.chat_id  || '',
+                stop_win:        true,
+                lucro:           _dsLucroCheck,
+                banca:           _bncSW,
+                wins:            _wSW,
+                losses:          _lSW,
+                max_win_consec:  _dsMaxWinSeq,
+                max_loss_consec: _dsMaxLossSeq,
+                max_stake:       _dsMaxStake,
+                modo:            _mgrNm,
+                estrategia:      `Digit Sniper barr=${_dsSinalAtual?.barrier||'?'}`,
+                conta:           'SECUNDARIA'
             });
             dsLog(`📤 Enviando STOP WIN TG/WA — lucro=$${_dsLucroCheck.toFixed(2)} conta=SECUNDARIA`, '#00ffcc');
             if (tgAtual.enabled && tgAtual.stopwin && tgAtual.token && tgAtual.chat_id) {
@@ -17588,14 +17596,17 @@ async function dsOperar() {
             const waAtivo = (typeof _waNotifAtivo !== 'undefined') ? _waNotifAtivo : false;
             if (waAtivo) {
                 const _swBodyWA = JSON.stringify({
-                    stop_win:   true,
-                    lucro:      _dsLucroCheck,
-                    banca:      _bncSW,
-                    wins:       _wSW,
-                    losses:     _lSW,
-                    modo:       _mgrNm,
-                    estrategia: `Digit Sniper barr=${_dsSinalAtual?.barrier||'?'}`,
-                    conta:      'SECUNDARIA'
+                    stop_win:        true,
+                    lucro:           _dsLucroCheck,
+                    banca:           _bncSW,
+                    wins:            _wSW,
+                    losses:          _lSW,
+                    max_win_consec:  _dsMaxWinSeq,
+                    max_loss_consec: _dsMaxLossSeq,
+                    max_stake:       _dsMaxStake,
+                    modo:            _mgrNm,
+                    estrategia:      `Digit Sniper barr=${_dsSinalAtual?.barrier||'?'}`,
+                    conta:           'SECUNDARIA'
                 });
                 fetch('/wa-send', { method:'POST', headers:{'Content-Type':'application/json'}, body: _swBodyWA }).catch(()=>{});
             }
@@ -17696,6 +17707,10 @@ async function dsOperar() {
             const proxStake = usarMA
                 ? _dsMaGetStake(baseStake, barr, payoutCfg)
                 : ((_dsUsandoSec && _dsSecMgr) ? _dsSecMgr.getStake() : (_dsMgr ? _dsMgr.getStake() : baseStake));
+            // Atualiza métricas de sequência e stake máxima
+            if (stake > _dsMaxStake) _dsMaxStake = stake;
+            if (won) { _dsCurWinSeq++; _dsCurLossSeq = 0; if (_dsCurWinSeq > _dsMaxWinSeq) _dsMaxWinSeq = _dsCurWinSeq; }
+            else     { _dsCurLossSeq++; _dsCurWinSeq = 0; if (_dsCurLossSeq > _dsMaxLossSeq) _dsMaxLossSeq = _dsCurLossSeq; }
             dsLog(`${won ? '🏆 WIN' : '💥 LOSS'} ${won?'+':''}$${profit.toFixed(2)} | próx $${proxStake.toFixed(2)}`, won ? '#00ff41' : '#f44');
             dsAtualizarStats();
 
@@ -17719,17 +17734,20 @@ async function dsOperar() {
                     : document.getElementById('hd-balance')?.textContent;
                 const _banca = parseFloat((_bancaRaw||'').replace(/[^0-9.]/g,'')) || 0;
                 const _dsPayload = {
-                    win:          won,
-                    lucro:        profit,
-                    profit_total: _lucroTotal,
-                    banca:        _banca,
-                    wins:         _dsUsandoSec ? _dsEspWins   : _dsWins,
-                    losses:       _dsUsandoSec ? _dsEspLosses : _dsLosses,
-                    entrada:      stake,        // stake REAL usada nesta operação
-                    prox_stake:   proxStake,
-                    modo:         document.getElementById('ds-mgr')?.value || 'Digit Sniper',
-                    estrategia:   `${ct} barr=${barr}`,
-                    conta:        _dsUsandoSec ? 'SECUNDARIA' : 'PRINCIPAL',
+                    win:             won,
+                    lucro:           profit,
+                    profit_total:    _lucroTotal,
+                    banca:           _banca,
+                    wins:            _dsUsandoSec ? _dsEspWins   : _dsWins,
+                    losses:          _dsUsandoSec ? _dsEspLosses : _dsLosses,
+                    entrada:         stake,
+                    prox_stake:      proxStake,
+                    max_win_consec:  _dsMaxWinSeq,
+                    max_loss_consec: _dsMaxLossSeq,
+                    max_stake:       _dsMaxStake,
+                    modo:            document.getElementById('ds-mgr')?.value || 'Digit Sniper',
+                    estrategia:      `${ct} barr=${barr}`,
+                    conta:           _dsUsandoSec ? 'SECUNDARIA' : 'PRINCIPAL',
                 };
 
                 // Telegram
