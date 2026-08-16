@@ -17371,6 +17371,7 @@ let _dsEspLosses      = 0;
 let _dsEspLucro       = 0;
 let _dsSinalAtual     = null;
 let _dsAguardandoRecon= false;
+let _dsEmOperacao     = false;   // trava: impede compra dupla
 
 function dsLog(msg, cor) {
     const el = document.getElementById('ds-op-log');
@@ -17455,6 +17456,7 @@ function dsAtualizarEspelho() {
 
 function dsOperar() {
     if (!_dsSinalAtual) return;
+    if (_dsEmOperacao) return;   // já tem operação em curso — ignora
     if (typeof bot === 'undefined' || !bot.ws || bot.ws.readyState !== WebSocket.OPEN) {
         dsLog('⚠️ Bot não conectado — aguardando WS...', '#f44');
         if (_dsAutoOperar && !_dsAguardandoRecon) {
@@ -17491,6 +17493,7 @@ function dsOperar() {
     const ativ  = document.getElementById('ds-asset')?.value || 'R_100';
     const reqId = Math.floor(Math.random() * 90000) + 10000;
 
+    _dsEmOperacao = true;
     dsLog(`🚀 <b style="color:#00ffff">${ct}</b> barr=<b style="color:#facc15">${barr}</b> $${stake.toFixed(2)} | ${ativ}`, '#ccc');
     dsBotaoOperar(false);
 
@@ -17504,6 +17507,7 @@ function dsOperar() {
     const _rec = (motivo) => {
         if (_dsTravado) { clearTimeout(_dsTravado); _dsTravado = null; }
         wsUsar.onmessage = _origMsg;
+        _dsEmOperacao = false;
         dsLog(`⚠️ ${motivo}`, '#f44');
         if (_dsAutoOperar) setTimeout(async () => { if (!_dsAutoOperar) return; await dsScan(); if (_dsSinalAtual) dsOperar(); }, 2000);
         else dsBotaoOperar(true);
@@ -17533,6 +17537,7 @@ function dsOperar() {
             if (!poc.is_sold) { _origMsg(msg); return; }
             if (_dsTravado) { clearTimeout(_dsTravado); _dsTravado = null; }
             wsUsar.onmessage = _origMsg;
+            _dsEmOperacao = false;
             const profit = parseFloat(poc.profit), won = profit > 0;
             if (_dsUsandoSec && _dsSecMgr) _dsSecMgr.updateResult(won);
             else if (_dsMgr) _dsMgr.updateResult(won);
