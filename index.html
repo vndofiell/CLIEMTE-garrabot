@@ -17522,30 +17522,31 @@ async function dsOperar() {
     }
     _dsAguardandoRecon = false;
 
-    // Stop Win / Stop Loss — usa meta JC do dia (sec tem prioridade se ativa)
+    // Stop Win / Stop Loss — usa SEMPRE a meta JC-SEC (Digit Sniper só opera na conta SEC)
     let swLim = parseFloat(document.getElementById('ds-stopwin')?.value) || 999;
     const slLim = parseFloat(document.getElementById('ds-stoploss')?.value) || 999;
 
     const espAtivo  = document.getElementById('ds-esp-ativo')?.checked;
     const secPronto = (typeof _sec !== 'undefined') && _sec.pronto && _sec.ws && _sec.ws.readyState === WebSocket.OPEN;
 
-    // Busca meta JC: se conta SEC está ativa usa /jc-sec-meta, senão /jc-meta
+    // Digit Sniper usa exclusivamente /jc-sec-meta (nunca a conta teste/principal)
     try {
-        const _jcUrl  = (espAtivo && secPronto) ? '/jc-sec-meta' : '/jc-meta';
-        const _jcR    = await fetch(_jcUrl).then(r => r.json()).catch(() => null);
+        const _jcR = await fetch('/jc-sec-meta').then(r => r.json()).catch(() => null);
         if (_jcR && _jcR.ativo && _jcR.meta_hoje > 0) {
             const metaJC = parseFloat(_jcR.meta_hoje.toFixed(2));
-            swLim = metaJC;   // meta JC sempre prevalece sobre o campo manual
-            const origem = (espAtivo && secPronto) ? 'JC-SEC' : 'JC';
-            dsLog(`💹 <b style="color:#00ffcc">${origem} ativo</b> — Stop Win = meta do dia <b>$${metaJC.toFixed(2)}</b>`, '#00ffcc');
-            // Atualiza o campo visual para o usuário ver
+            swLim = metaJC;
+            // Só loga quando a meta mudar (evita spam a cada operação)
             const swEl = document.getElementById('ds-stopwin');
-            if (swEl) swEl.value = metaJC.toFixed(2);
+            const swAtual = swEl ? parseFloat(swEl.value) : 0;
+            if (Math.abs(swAtual - metaJC) > 0.001) {
+                dsLog(`💹 <b style="color:#00ffcc">JC-SEC ativo</b> — Stop Win = meta do dia <b>$${metaJC.toFixed(2)}</b>`, '#00ffcc');
+                if (swEl) swEl.value = metaJC.toFixed(2);
+            }
         }
     } catch(_) {}
 
-    // Usa o lucro da conta correta para checar stop
-    const _dsLucroCheck = (espAtivo && secPronto && _dsUsandoSec) ? _dsEspLucro : _dsLucro;
+    // Digit Sniper: usa sempre lucro da conta SEC para checar meta JC-SEC
+    const _dsLucroCheck = (espAtivo && secPronto) ? _dsEspLucro : _dsLucro;
     if (_dsLucroCheck >= swLim) {
         dsLog(`🏆 STOP WIN! Lucro: +$${_dsLucroCheck.toFixed(2)}`, '#ffd700');
         // Desliga AUTO-OPERAR sem toggle (evita religar acidentalmente)
@@ -17553,24 +17554,17 @@ async function dsOperar() {
         const _btnAuto = document.getElementById('ds-btn-auto-op');
         if (_btnAuto) { _btnAuto.textContent = '🤖 AUTO'; _btnAuto.style.color = '#6b7280'; _btnAuto.style.borderColor = '#30363d'; }
         dsLog('⏹ AUTO-OPERAR desativado — STOP WIN', '#6b7280');
-        // Modal de confetti
-        const _bncRaw = (espAtivo && secPronto && _dsUsandoSec)
-            ? document.getElementById('hd-balance-sec')?.textContent
-            : document.getElementById('hd-balance')?.textContent;
+        // Modal de confetti — usa saldo da conta SEC (Digit Sniper sempre opera na SEC)
+        const _bncRaw = document.getElementById('hd-balance-sec')?.textContent
+                     || document.getElementById('hd-balance')?.textContent;
         const _bncSW  = parseFloat((_bncRaw||'').replace(/[^0-9.]/g,'')) || 0;
-        const _wSW    = (espAtivo && secPronto && _dsUsandoSec) ? _dsEspWins   : _dsWins;
-        const _lSW    = (espAtivo && secPronto && _dsUsandoSec) ? _dsEspLosses : _dsLosses;
+        const _wSW    = _dsEspWins   + _dsWins;
+        const _lSW    = _dsEspLosses + _dsLosses;
         const _mgrNm  = document.getElementById('ds-mgr')?.value || 'Digit Sniper';
         stopWinExibirModal(_dsLucroCheck, _wSW, _lSW, _bncSW, `Digit Sniper barr=${_dsSinalAtual?.barrier||'?'}`, _mgrNm);
-        // ── Registrar na Planilha JC e avançar para próximo dia ──────────
+        // ── Registrar na Planilha JC-SEC e avançar para próximo dia ──────
         const _dsEstrat = `Digit Sniper barr=${_dsSinalAtual?.barrier||'?'}`;
-        if (espAtivo && secPronto && _dsUsandoSec) {
-            // Conta SEC: registra na planilha JC-SEC
-            jcSecOnMetaBatida(_dsLucroCheck, _wSW, _lSW, _bncSW, _dsEstrat, _mgrNm);
-        } else {
-            // Conta principal: registra na planilha JC principal
-            jcOnMetaBatida(_dsLucroCheck, _wSW, _lSW, _bncSW, _dsEstrat, _mgrNm);
-        }
+        jcSecOnMetaBatida(_dsLucroCheck, _wSW, _lSW, _bncSW, _dsEstrat, _mgrNm);
         // Notificação TG + WA de Stop Win
         (async () => {
             let tgAtual = (typeof _tgCfg !== 'undefined') ? _tgCfg : null;
