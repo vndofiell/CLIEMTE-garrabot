@@ -17373,6 +17373,50 @@ let _dsSinalAtual     = null;
 let _dsAguardandoRecon= false;
 let _dsEmOperacao     = false;   // trava: impede compra dupla
 
+// ── Martingale Adaptativo por Barreira (SEC) ──────────────────────────────
+// Calcula stake exato para recuperar dívida + lucro mínimo usando o payout
+// real da barreira: stake = (divida + lucro_alvo) / payout_barreira
+let _dsMaDiv          = 0;      // dívida acumulada (perdas não recuperadas)
+let _dsMaAtivo        = false;  // true quando SEC está em modo recuperação
+
+function _dsMaPayout(barrier, payout_cfg) {
+    // Payout base configurado pelo usuário (ex: 0.85)
+    // Digit Over/Under: payout varia com a barreira
+    // Fórmula Deriv aproximada: barreiras extremas (0,1,8,9) pagam mais
+    // barreiras centrais (4,5) pagam menos
+    // Usamos o payout configurado como base e ajustamos ±
+    const base = parseFloat(payout_cfg) || 0.85;
+    // Ajuste por distância do centro (barrier 0 e 9 = mais distante = mais payout)
+    const dist = Math.abs(barrier - 4.5);  // 0-4.5
+    const adj  = dist * 0.02;              // +2% por ponto de distância
+    return parseFloat(Math.min(base + adj, 0.95).toFixed(4));
+}
+
+function _dsMaGetStake(baseStake, barrier, payout_cfg) {
+    if (_dsMaDiv <= 0.01) {
+        _dsMaAtivo = false;
+        return baseStake;
+    }
+    _dsMaAtivo = true;
+    const payout = _dsMaPayout(barrier, payout_cfg);
+    // stake necessário: recupera dívida + ganha pelo menos baseStake
+    const stake = parseFloat((((_dsMaDiv + baseStake) / payout)).toFixed(2));
+    return Math.max(baseStake, Math.min(stake, 500));
+}
+
+function _dsMaUpdate(won, profit, baseStake) {
+    if (won) {
+        // WIN: abate o lucro da dívida
+        _dsMaDiv = Math.max(0, parseFloat((_dsMaDiv - Math.abs(profit) + (Math.abs(profit) > 0 ? 0 : 0)).toFixed(2)));
+        // Se recuperou tudo, zera
+        if (_dsMaDiv < 0.02) { _dsMaDiv = 0; _dsMaAtivo = false; }
+    } else {
+        // LOSS: acumula na dívida
+        _dsMaDiv = parseFloat((_dsMaDiv + Math.abs(profit)).toFixed(2));
+        _dsMaAtivo = true;
+    }
+}
+
 function dsLog(msg, cor) {
     const el = document.getElementById('ds-op-log');
     if (!el) return;
@@ -17486,10 +17530,21 @@ function dsOperar() {
     else if (espAtivo && !_dsUsandoSec)        dsLog('🏦 <b style="color:#00ffff">Conta principal</b> — monitorando gatilho', '#00ffff');
     if (espAtivo && !secPronto)                dsLog('⚠️ Espelho ativo mas SEC não conectada', '#ffbd2e');
 
-    const baseStake = parseFloat(document.getElementById('ds-entrada')?.value) || 0.35;
-    const stake = (_dsUsandoSec && _dsSecMgr) ? _dsSecMgr.getStake() : _dsMgr ? _dsMgr.getStake() : baseStake;
-    const ct    = _dsSinalAtual.contract_type;
-    const barr  = _dsSinalAtual.barrier;
+    const baseStake  = parseFloat(document.getElementById('ds-entrada')?.value) || 0.35;
+    const payoutCfg  = parseFloat(document.getElementById('ds-payout')?.value)  || 0.85;
+    const ct         = _dsSinalAtual.contract_type;
+    const barr       = _dsSinalAtual.barrier;
+    // Martingale Adaptativo por Barreira na SEC — sempre calcula stake exato para recuperar
+    let stake;
+    if (_dsUsandoSec) {
+        stake = _dsMaGetStake(baseStake, barr, payoutCfg);
+        if (_dsMaAtivo) {
+            const payout = _dsMaPayout(barr, payoutCfg);
+            dsLog(`📐 <b style="color:#fbbf24">MA-Adaptativo</b> barr=${barr} payout=${(payout*100).toFixed(0)}% dívida=$${_dsMaDiv.toFixed(2)} → stake=$${stake.toFixed(2)}`, '#fbbf24');
+        }
+    } else {
+        stake = _dsMgr ? _dsMgr.getStake() : baseStake;
+    }
     const ativ  = document.getElementById('ds-asset')?.value || 'R_100';
     const reqId = Math.floor(Math.random() * 90000) + 10000;
 
@@ -17539,6 +17594,10 @@ function dsOperar() {
             wsUsar.onmessage = _origMsg;
             _dsEmOperacao = false;
             const profit = parseFloat(poc.profit), won = profit > 0;
+            // Atualiza Martingale Adaptativo da SEC
+            if (_dsUsandoSec) {
+                _dsMaUpdate(won, profit, baseStake);
+            }
             if (_dsUsandoSec && _dsSecMgr) _dsSecMgr.updateResult(won);
             else if (_dsMgr) _dsMgr.updateResult(won);
             if (espAtivo && secPronto && _dsUsandoSec) {
@@ -17565,6 +17624,7 @@ function dsOperar() {
                     }
                 } else if (won) {
                     _dsUsandoSec = false; _dsSecMgr = null; _dsEspLossSeq = 0; _dsEspPerdaAc = 0;
+                    _dsMaDiv = 0; _dsMaAtivo = false;  // reseta MA ao voltar p/ principal
                     const mn = document.getElementById('ds-mgr')?.value;
                     if (mn && mn !== 'flat' && typeof GerenciadorUnificado !== 'undefined') _dsMgr = new GerenciadorUnificado(mn, { stake: baseStake });
                     dsLog('✅ SEC ganhou — voltando à conta principal', '#00ff41');
