@@ -17546,7 +17546,49 @@ async function dsOperar() {
 
     // Usa o lucro da conta correta para checar stop
     const _dsLucroCheck = (espAtivo && secPronto && _dsUsandoSec) ? _dsEspLucro : _dsLucro;
-    if (_dsLucroCheck >= swLim)  { dsLog(`🏆 STOP WIN! Lucro: +$${_dsLucroCheck.toFixed(2)}`, '#ffd700');  _dsAutoOperar = false; dsToggleAutoOperar(); return; }
+    if (_dsLucroCheck >= swLim) {
+        dsLog(`🏆 STOP WIN! Lucro: +$${_dsLucroCheck.toFixed(2)}`, '#ffd700');
+        _dsAutoOperar = false;
+        dsToggleAutoOperar();
+        // Modal de confetti
+        const _bncRaw = (espAtivo && secPronto && _dsUsandoSec)
+            ? document.getElementById('hd-balance-sec')?.textContent
+            : document.getElementById('hd-balance')?.textContent;
+        const _bncSW  = parseFloat((_bncRaw||'').replace(/[^0-9.]/g,'')) || 0;
+        const _wSW    = (espAtivo && secPronto && _dsUsandoSec) ? _dsEspWins   : _dsWins;
+        const _lSW    = (espAtivo && secPronto && _dsUsandoSec) ? _dsEspLosses : _dsLosses;
+        const _mgrNm  = document.getElementById('ds-mgr')?.value || 'Digit Sniper';
+        stopWinExibirModal(_dsLucroCheck, _wSW, _lSW, _bncSW, `Digit Sniper barr=${_dsSinalAtual?.barrier||'?'}`, _mgrNm);
+        // Notificação TG + WA de Stop Win
+        (async () => {
+            let tgAtual = (typeof _tgCfg !== 'undefined') ? _tgCfg : null;
+            if (!tgAtual || !tgAtual.token) {
+                try { const r = await fetch('/tg-config'); if (r.ok) { tgAtual = await r.json(); if (typeof _tgCfg !== 'undefined') Object.assign(_tgCfg, tgAtual); } } catch(_) {}
+            }
+            let cot = 5.5;
+            try { const rc = await fetch('https://economia.awesomeapi.com.br/json/last/USD-BRL', { mode:'cors' }); const jc = await rc.json(); cot = parseFloat(jc.USDBRL?.bid || cot); } catch(_) {}
+            if (tgAtual && tgAtual.enabled && tgAtual.stopwin && tgAtual.token && tgAtual.chat_id) {
+                const _wSW2 = (espAtivo && secPronto && _dsUsandoSec) ? _dsEspWins   : _dsWins;
+                const _lSW2 = (espAtivo && secPronto && _dsUsandoSec) ? _dsEspLosses : _dsLosses;
+                fetch('/tg-send', { method:'POST', headers:{'Content-Type':'application/json'},
+                    body: JSON.stringify({ token: tgAtual.token, chat_id: tgAtual.chat_id,
+                        stop_win: true, lucro: _dsLucroCheck, banca: _bncSW,
+                        wins: _wSW2, losses: _lSW2,
+                        modo: _mgrNm, estrategia: `Digit Sniper barr=${_dsSinalAtual?.barrier||'?'}`,
+                        conta: (espAtivo && secPronto && _dsUsandoSec) ? 'SECUNDARIA' : 'PRINCIPAL' }) }).catch(()=>{});
+            }
+            const waAtivo = (typeof _waNotifAtivo !== 'undefined') ? _waNotifAtivo : false;
+            if (waAtivo) {
+                fetch('/wa-send', { method:'POST', headers:{'Content-Type':'application/json'},
+                    body: JSON.stringify({ stop_win: true, lucro: _dsLucroCheck, banca: _bncSW,
+                        wins: (espAtivo && secPronto && _dsUsandoSec) ? _dsEspWins : _dsWins,
+                        losses: (espAtivo && secPronto && _dsUsandoSec) ? _dsEspLosses : _dsLosses,
+                        modo: _mgrNm, estrategia: `Digit Sniper barr=${_dsSinalAtual?.barrier||'?'}`,
+                        conta: (espAtivo && secPronto && _dsUsandoSec) ? 'SECUNDARIA' : 'PRINCIPAL' }) }).catch(()=>{});
+            }
+        })();
+        return;
+    }
     if (_dsLucroCheck <= -slLim) { dsLog(`🛑 STOP LOSS! Perda: -$${Math.abs(_dsLucroCheck).toFixed(2)}`, '#f44'); _dsAutoOperar = false; dsToggleAutoOperar(); return; }
     const wsUsar = (espAtivo && secPronto && _dsUsandoSec) ? _sec.ws : bot.ws;
 
