@@ -17578,14 +17578,30 @@ async function dsOperar() {
     if (!_dsSinalAtual) return;
     if (_dsEmOperacao) return;   // já tem operação em curso — ignora
     _dsEmOperacao = true;        // trava IMEDIATAMENTE antes de qualquer await
-    if (typeof bot === 'undefined' || !bot.ws || bot.ws.readyState !== WebSocket.OPEN) {
+
+    // Decide qual WebSocket verificar: SEC tem prioridade quando _dsUsandoSec=true
+    const _espAtivoChk = document.getElementById('ds-esp-ativo')?.checked;
+    const _secProntoChk = (typeof _sec !== 'undefined') && _sec.pronto && _sec.ws && _sec.ws.readyState === WebSocket.OPEN;
+    const _wsNecessario = (_espAtivoChk && _dsUsandoSec && _secProntoChk) ? _sec.ws : bot?.ws;
+    const _wsOk = _wsNecessario && _wsNecessario.readyState === WebSocket.OPEN;
+
+    if (!_wsOk) {
         _dsEmOperacao = false;   // libera trava — não vai operar agora
-        dsLog('⚠️ Bot não conectado — aguardando WS...', '#f44');
+        // Se está na SEC mas SEC desconectou, avisa especificamente
+        if (_espAtivoChk && _dsUsandoSec) {
+            dsLog('⚠️ Conta SEC desconectada — aguardando reconexão...', '#f44');
+        } else {
+            dsLog('⚠️ Bot não conectado — aguardando WS...', '#f44');
+        }
         if (_dsAutoOperar && !_dsAguardandoRecon) {
             _dsAguardandoRecon = true;
             const _esp = () => {
                 if (!_dsAutoOperar) { _dsAguardandoRecon = false; return; }
-                if (bot && bot.ws && bot.ws.readyState === WebSocket.OPEN) { _dsAguardandoRecon = false; dsOperar(); }
+                const _secOkAgora = (typeof _sec !== 'undefined') && _sec.pronto && _sec.ws && _sec.ws.readyState === WebSocket.OPEN;
+                const _botOkAgora = bot && bot.ws && bot.ws.readyState === WebSocket.OPEN;
+                // Libera quando o WS necessário estiver pronto
+                const _prontoAgora = (_espAtivoChk && _dsUsandoSec) ? _secOkAgora : _botOkAgora;
+                if (_prontoAgora) { _dsAguardandoRecon = false; dsOperar(); }
                 else setTimeout(_esp, 2000);
             };
             setTimeout(_esp, 2000);
