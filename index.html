@@ -2128,7 +2128,7 @@
         </div>
 
         <!-- Log + Stats lado a lado -->
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
           <div style="border:1px solid #0b4b35;background:linear-gradient(180deg,#04100a,#020806);border-radius:6px;padding:12px;">
             <div style="font-size:0.62rem;color:#00ff88;letter-spacing:1px;margin-bottom:8px;">📋 LOG MATRIX</div>
             <pre id="dm-log" style="margin:0;max-height:200px;overflow-y:auto;white-space:pre-wrap;color:#4ca77e;font-size:0.67rem;line-height:1.5;"></pre>
@@ -2137,6 +2137,127 @@
             <div style="font-size:0.62rem;color:#00ff88;letter-spacing:1px;margin-bottom:8px;">📈 ESTATÍSTICAS</div>
             <div id="dm-stats"></div>
           </div>
+        </div>
+
+        <!-- CONFIGURAÇÃO DE OPERAÇÃO + MODO ESPELHO -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+
+          <!-- Coluna esquerda: Entrada / Stops / Gerenciamento -->
+          <div style="border:1px solid rgba(0,255,136,0.25);background:linear-gradient(180deg,#04100a,#020806);border-radius:6px;padding:12px;">
+            <div style="font-size:0.62rem;color:#00ff88;letter-spacing:1px;margin-bottom:10px;">⚙ CONFIGURAÇÃO DE OPERAÇÃO</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px;">
+              <div>
+                <div style="font-size:0.55rem;color:#57606a;margin-bottom:3px;">ENTRADA ($)</div>
+                <input id="dm-entrada" type="number" value="0.35" min="0.35" step="0.01"
+                    style="width:100%;background:#030e08;border:1px solid rgba(0,255,136,0.4);
+                           color:#00ff88;font-family:'Share Tech Mono';font-size:0.72rem;padding:4px 6px;border-radius:4px;">
+              </div>
+              <div>
+                <div style="font-size:0.55rem;color:#57606a;margin-bottom:3px;">STOP WIN ($)</div>
+                <input id="dm-stopwin" type="number" value="10" min="0" step="0.1"
+                    style="width:100%;background:#030e08;border:1px solid rgba(0,255,136,0.4);
+                           color:#4ade80;font-family:'Share Tech Mono';font-size:0.72rem;padding:4px 6px;border-radius:4px;">
+              </div>
+              <div>
+                <div style="font-size:0.55rem;color:#57606a;margin-bottom:3px;">STOP LOSS ($)</div>
+                <input id="dm-stoploss" type="number" value="100" min="0" step="0.1"
+                    style="width:100%;background:#030e08;border:1px solid rgba(255,79,109,0.4);
+                           color:#ff4f6d;font-family:'Share Tech Mono';font-size:0.72rem;padding:4px 6px;border-radius:4px;">
+              </div>
+            </div>
+            <div style="margin-bottom:10px;">
+              <div style="font-size:0.55rem;color:#57606a;margin-bottom:3px;">GERENCIAMENTO</div>
+              <select id="dm-mgr" onchange="dmOnMgrChange()" style="width:100%;background:#030e08;
+                  border:1px solid rgba(0,255,136,0.5);color:#00ff88;
+                  font-family:'Share Tech Mono';font-size:0.68rem;padding:5px 7px;border-radius:4px;">
+                <option value="flat">💰 Stake Fixa</option>
+                <option value="📐 MA-Adaptativo">📐 MA-Adaptativo</option>
+                <option value="🔄 Martingale">🔄 Martingale</option>
+                <option value="⚡ SorosGale">⚡ SorosGale</option>
+                <option value="📉 Loss Recovery">📉 Loss Recovery</option>
+                <option value="🛡️ Recovery Conservador">🛡️ Recovery Conservador</option>
+                <option value="📐 QSR">📐 QSR</option>
+                <option value="📊 Masaniello">📊 Masaniello</option>
+              </select>
+            </div>
+            <div style="display:flex;gap:8px;margin-top:6px;">
+              <button id="dm-btn-operar" onclick="dmOperar()" disabled style="flex:1;
+                  background:rgba(0,255,136,0.05);border:1px solid #1a4a35;color:#2a6a50;
+                  font-family:'Share Tech Mono';font-size:0.72rem;padding:8px;
+                  border-radius:4px;cursor:not-allowed;letter-spacing:1px;">
+                ⚡ OPERAR COM SINAL
+              </button>
+              <button id="dm-btn-auto-op" onclick="dmToggleAutoOperar()" style="
+                  background:rgba(0,0,0,0.3);border:1px solid #1a3a25;color:#2a6a40;
+                  font-family:'Share Tech Mono';font-size:0.72rem;padding:8px 12px;
+                  border-radius:4px;cursor:pointer;letter-spacing:1px;white-space:nowrap;">
+                🤖 AUTO
+              </button>
+            </div>
+            <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">
+              <div style="border:1px solid rgba(0,255,136,0.3);border-radius:4px;padding:2px 7px;font-size:0.65rem;color:#00ff88;">✅ <span id="dm-stat-wins">0</span></div>
+              <div style="border:1px solid rgba(255,79,109,0.3);border-radius:4px;padding:2px 7px;font-size:0.65rem;color:#ff4f6d;">🔁 <span id="dm-stat-loss">0</span></div>
+              <div style="border:1px solid rgba(0,255,136,0.35);border-radius:4px;padding:2px 7px;font-size:0.65rem;color:#00ff88;">💰 <span id="dm-stat-lucro">+$0.00</span></div>
+              <div style="border:1px solid rgba(57,230,255,0.35);border-radius:4px;padding:2px 7px;font-size:0.65rem;color:#39e6ff;">⚡ <span id="dm-stat-prox">$--</span></div>
+            </div>
+          </div>
+
+          <!-- Coluna direita: Modo Espelho (Conta SEC) -->
+          <div style="border:1px solid rgba(255,189,46,0.25);background:linear-gradient(180deg,#04100a,#020806);border-radius:6px;padding:12px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+              <div style="font-size:0.62rem;color:#fbbf24;letter-spacing:1px;">▸ MODO ESPELHO (CONTA SEC.)</div>
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+                <input type="checkbox" id="dm-esp-ativo" onchange="dmAtualizarEspelho()"
+                    style="accent-color:#fbbf24;width:14px;height:14px;">
+                <span id="dm-esp-badge" style="font-size:0.6rem;color:#555;letter-spacing:1px;">OFF</span>
+              </label>
+            </div>
+            <div id="dm-esp-campos" style="display:none;flex-direction:column;gap:8px;">
+              <div style="display:flex;align-items:center;gap:8px;">
+                <input type="checkbox" id="dm-esp-seq-ativo" style="accent-color:#fbbf24;width:13px;height:13px;">
+                <div style="flex:1;">
+                  <div style="font-size:0.55rem;color:#57606a;margin-bottom:2px;">LOSSES CONSECUTIVOS P/ ATIVAR SEC.</div>
+                  <input id="dm-esp-seq-qtd" type="number" value="3" min="1" max="20"
+                      style="width:60px;background:#030e08;border:1px solid rgba(255,189,46,0.3);
+                             color:#fbbf24;font-family:'Share Tech Mono';font-size:0.72rem;padding:3px 6px;border-radius:3px;">
+                </div>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;">
+                <input type="checkbox" id="dm-esp-perda-ativo" style="accent-color:#fbbf24;width:13px;height:13px;">
+                <div style="flex:1;">
+                  <div style="font-size:0.55rem;color:#57606a;margin-bottom:2px;">PERDA EM $ P/ ATIVAR SEC.</div>
+                  <input id="dm-esp-perda-val" type="number" value="5" min="0" step="0.1"
+                      style="width:60px;background:#030e08;border:1px solid rgba(255,189,46,0.3);
+                             color:#fbbf24;font-family:'Share Tech Mono';font-size:0.72rem;padding:3px 6px;border-radius:3px;">
+                </div>
+              </div>
+              <div id="dm-esp-status" style="font-size:0.6rem;color:#57606a;background:rgba(0,0,0,0.3);
+                  border:1px solid #1a3a25;border-radius:4px;padding:5px 8px;line-height:1.6;">
+                Conta secundária: verificando...
+              </div>
+              <button id="dm-btn-conectar-sec" onclick="abrirModalMultiContas()"
+                  style="width:100%;background:rgba(255,189,46,0.1);border:1px solid rgba(255,189,46,0.5);
+                         color:#fbbf24;font-family:'Share Tech Mono';font-size:0.68rem;padding:6px;
+                         border-radius:4px;cursor:pointer;letter-spacing:1px;margin-top:2px;">
+                💳 Conectar / Configurar Conta SEC
+              </button>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                <div style="border:1px solid rgba(0,255,136,0.3);border-radius:4px;padding:2px 7px;font-size:0.65rem;color:#00ff88;">✅ <span id="dm-esp-wins">0</span></div>
+                <div style="border:1px solid rgba(255,79,109,0.3);border-radius:4px;padding:2px 7px;font-size:0.65rem;color:#ff4f6d;">🔁 <span id="dm-esp-loss">0</span></div>
+                <div style="border:1px solid rgba(255,189,46,0.35);border-radius:4px;padding:2px 7px;font-size:0.65rem;color:#fbbf24;">💰 <span id="dm-esp-lucro">+$0.00</span></div>
+              </div>
+            </div>
+            <div id="dm-esp-off-msg" style="font-size:0.6rem;color:#555;margin-top:8px;">
+              Ative para espelhar na conta secundária quando atingir o gatilho de losses ou perda.
+            </div>
+          </div>
+        </div>
+
+        <!-- LOG DE OPERAÇÕES -->
+        <div style="border:1px solid #0b4b35;background:linear-gradient(180deg,#04100a,#020806);border-radius:6px;padding:8px 12px;">
+          <div style="font-size:0.62rem;color:#00ff88;letter-spacing:1px;margin-bottom:6px;">📋 LOG DE OPERAÇÕES</div>
+          <div id="dm-op-log" style="height:90px;overflow-y:auto;font-size:0.62rem;
+              font-family:'Share Tech Mono';line-height:1.6;color:#4ca77e;"></div>
         </div>
 
       </div><!-- /inner box -->
@@ -18326,6 +18447,20 @@ function dmRender(r) {
         logEl.textContent += `[${ts}] 🎯 ${best.contract} ${best.barrier} | score ${best.score}\n`;
         logEl.scrollTop = logEl.scrollHeight;
     }
+
+    // Habilita botão OPERAR quando há sinal confirmado
+    if (best && best.contract && best.barrier !== undefined) {
+        _dmSinalAtual = {
+            contract_type: best.contract,
+            barrier: best.barrier,
+            ativo: document.getElementById('dm-asset')?.value || 'R_100'
+        };
+        dmBotaoOperar(true);
+        if (_dmAutoOperar && !_dmAguardandoRecon) dmOperar();
+    } else {
+        _dmSinalAtual = null;
+        dmBotaoOperar(false);
+    }
 }
 
 function dmToggleAuto() {
@@ -18368,6 +18503,370 @@ async function dmSalvarConfig() {
         const logEl = document.getElementById('dm-log');
         if (logEl) logEl.textContent += `Erro ao salvar: ${e.message}\n`;
     }
+}
+// ── Operação real — Digit Matrix PRO ─────────────────────────────────────
+let _dmMgr            = null;
+let _dmSecMgr         = null;
+let _dmAutoOperar     = false;
+let _dmUsandoSec      = false;
+let _dmEspLossSeq     = 0;
+let _dmEspPerdaAc     = 0;
+let _dmWins           = 0;
+let _dmLosses         = 0;
+let _dmLucro          = 0;
+let _dmEspWins        = 0;
+let _dmEspLosses      = 0;
+let _dmEspLucro       = 0;
+let _dmSinalAtual     = null;
+let _dmAguardandoRecon= false;
+let _dmEmOperacao     = false;
+let _dmMaxWinSeq      = 0;
+let _dmMaxLossSeq     = 0;
+let _dmMaxStake       = 0;
+let _dmCurWinSeq      = 0;
+let _dmCurLossSeq     = 0;
+let _dmMaDiv          = 0;
+let _dmMaAtivo        = false;
+
+function _dmMaPayout(barrier, payoutCfg) {
+    const base = parseFloat(payoutCfg) || 0.85;
+    const dist = Math.abs(barrier - 4.5);
+    const adj  = dist * 0.02;
+    return parseFloat(Math.min(base + adj, 0.95).toFixed(4));
+}
+
+function _dmMaGetStake(baseStake, barrier, payoutCfg) {
+    if (_dmMaDiv <= 0.01) { _dmMaAtivo = false; return baseStake; }
+    _dmMaAtivo = true;
+    const payout = _dmMaPayout(barrier, payoutCfg);
+    const stake  = parseFloat(((_dmMaDiv + baseStake) / payout).toFixed(2));
+    return Math.max(baseStake, Math.min(stake, 500));
+}
+
+function _dmMaUpdate(won, profit, baseStake) {
+    if (won) {
+        _dmMaDiv = Math.max(0, parseFloat((_dmMaDiv - Math.abs(profit)).toFixed(2)));
+        if (_dmMaDiv < 0.02) { _dmMaDiv = 0; _dmMaAtivo = false; }
+    } else {
+        _dmMaDiv = parseFloat((_dmMaDiv + Math.abs(profit)).toFixed(2));
+        _dmMaAtivo = true;
+    }
+}
+
+function dmLog(msg, cor) {
+    const el = document.getElementById('dm-op-log');
+    if (!el) return;
+    const ts = new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    el.innerHTML += `<div style="color:${cor||'#4ca77e'}">[${ts}] ${msg}</div>`;
+    el.scrollTop = el.scrollHeight;
+}
+
+function dmOnMgrChange() {
+    const nome  = document.getElementById('dm-mgr')?.value;
+    const stake = parseFloat(document.getElementById('dm-entrada')?.value) || 0.35;
+    if (nome === '📐 MA-Adaptativo') {
+        _dmMgr = null; _dmMaDiv = 0; _dmMaAtivo = false;
+    } else {
+        _dmMgr = (nome && nome !== 'flat' && typeof GerenciadorUnificado !== 'undefined')
+            ? new GerenciadorUnificado(nome, { stake }) : null;
+    }
+    dmAtualizarStats();
+}
+
+function dmAtualizarStats() {
+    const prox = (_dmUsandoSec && _dmSecMgr) ? _dmSecMgr.getStake()
+               : _dmMgr ? _dmMgr.getStake()
+               : (parseFloat(document.getElementById('dm-entrada')?.value) || 0.35);
+    const _s = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
+    _s('dm-stat-wins',  _dmWins);
+    _s('dm-stat-loss',  _dmLosses);
+    _s('dm-stat-lucro', (_dmLucro >= 0 ? '+' : '') + '$' + _dmLucro.toFixed(2));
+    _s('dm-stat-prox',  '$' + prox.toFixed(2));
+    _s('dm-esp-wins',   _dmEspWins);
+    _s('dm-esp-loss',   _dmEspLosses);
+    _s('dm-esp-lucro',  (_dmEspLucro >= 0 ? '+' : '') + '$' + _dmEspLucro.toFixed(2));
+}
+
+function dmBotaoOperar(ativo) {
+    const btn = document.getElementById('dm-btn-operar');
+    if (!btn) return;
+    btn.disabled          = !ativo;
+    btn.style.background  = ativo ? 'rgba(0,255,136,0.12)' : 'rgba(0,255,136,0.03)';
+    btn.style.borderColor = ativo ? 'rgba(0,255,136,0.6)' : '#1a4a35';
+    btn.style.color       = ativo ? '#00ff88' : '#2a6a50';
+    btn.style.cursor      = ativo ? 'pointer' : 'not-allowed';
+}
+
+function dmToggleAutoOperar() {
+    _dmAutoOperar = !_dmAutoOperar;
+    const btn = document.getElementById('dm-btn-auto-op');
+    if (!btn) return;
+    if (_dmAutoOperar) {
+        btn.textContent = '⏹ PARAR AUTO'; btn.style.color = '#f44'; btn.style.borderColor = 'rgba(255,68,68,0.4)';
+        dmLog('🤖 AUTO-OPERAR ativado — opera quando SINAL confirmado', '#39e6ff');
+    } else {
+        btn.textContent = '🤖 AUTO'; btn.style.color = '#2a6a40'; btn.style.borderColor = '#1a3a25';
+        dmLog('⏹ AUTO-OPERAR desativado', '#57606a');
+    }
+}
+
+function dmAtualizarEspelho() {
+    const ativo  = document.getElementById('dm-esp-ativo')?.checked;
+    const badge  = document.getElementById('dm-esp-badge');
+    const campos = document.getElementById('dm-esp-campos');
+    const offMsg = document.getElementById('dm-esp-off-msg');
+    if (badge)  { badge.textContent = ativo ? 'ON' : 'OFF'; badge.style.color = ativo ? '#fbbf24' : '#555'; }
+    if (campos) campos.style.display = ativo ? 'flex' : 'none';
+    if (offMsg) offMsg.style.display = ativo ? 'none' : 'block';
+    if (ativo) {
+        const secPronto = (typeof _sec !== 'undefined') && _sec.pronto && _sec.ws && _sec.ws.readyState === WebSocket.OPEN;
+        const stEl   = document.getElementById('dm-esp-status');
+        const btnSec = document.getElementById('dm-btn-conectar-sec');
+        if (stEl) {
+            if (secPronto) {
+                stEl.innerHTML = `✅ SEC conectada | Banca: <b style="color:#fbbf24">$${parseFloat(_sec.saldo||0).toFixed(2)}</b>`;
+                stEl.style.color = '#fbbf24'; stEl.style.borderColor = 'rgba(255,189,46,0.4)';
+                if (btnSec) { btnSec.textContent = '✅ Conta SEC conectada — clique para reconfigurar'; btnSec.style.borderColor = 'rgba(0,255,136,0.4)'; btnSec.style.color = '#00ff88'; }
+            } else {
+                stEl.textContent = '⚠️ Conta SEC não conectada.';
+                stEl.style.color = '#f44'; stEl.style.borderColor = 'rgba(255,79,109,0.3)';
+                if (btnSec) { btnSec.textContent = '💳 Conectar / Configurar Conta SEC'; btnSec.style.borderColor = 'rgba(255,189,46,0.5)'; btnSec.style.color = '#fbbf24'; }
+            }
+        }
+    }
+}
+
+async function dmOperar() {
+    if (!_dmSinalAtual) return;
+    if (_dmEmOperacao) return;
+    _dmEmOperacao = true;
+
+    const _espAtivoChk  = document.getElementById('dm-esp-ativo')?.checked;
+    const _secProntoChk = (typeof _sec !== 'undefined') && _sec.pronto && _sec.ws && _sec.ws.readyState === WebSocket.OPEN;
+    const _wsNecessario = (_espAtivoChk && _dmUsandoSec && _secProntoChk) ? _sec.ws : bot?.ws;
+    const _wsOk = _wsNecessario && _wsNecessario.readyState === WebSocket.OPEN;
+
+    if (!_wsOk) {
+        _dmEmOperacao = false;
+        if (_espAtivoChk && _dmUsandoSec) {
+            dmLog('⚠️ Conta SEC desconectada — aguardando reconexão...', '#f44');
+        } else {
+            dmLog('⚠️ Bot não conectado — aguardando WS...', '#f44');
+        }
+        if (_dmAutoOperar && !_dmAguardandoRecon) {
+            _dmAguardandoRecon = true;
+            const _esp = () => {
+                if (!_dmAutoOperar) { _dmAguardandoRecon = false; return; }
+                const _secOkAgora = (typeof _sec !== 'undefined') && _sec.pronto && _sec.ws && _sec.ws.readyState === WebSocket.OPEN;
+                const _botOkAgora = bot && bot.ws && bot.ws.readyState === WebSocket.OPEN;
+                const _prontoAgora = (_espAtivoChk && _dmUsandoSec) ? _secOkAgora : _botOkAgora;
+                if (_prontoAgora) { _dmAguardandoRecon = false; dmOperar(); }
+                else setTimeout(_esp, 2000);
+            };
+            setTimeout(_esp, 2000);
+        }
+        return;
+    }
+    _dmAguardandoRecon = false;
+
+    let swLim  = parseFloat(document.getElementById('dm-stopwin')?.value)  || 999;
+    const slLim = parseFloat(document.getElementById('dm-stoploss')?.value) || 999;
+
+    const espAtivo  = document.getElementById('dm-esp-ativo')?.checked;
+    const secPronto = (typeof _sec !== 'undefined') && _sec.pronto && _sec.ws && _sec.ws.readyState === WebSocket.OPEN;
+
+    // Usa meta JC-SEC quando disponível
+    try {
+        const _jcR = await fetch('/jc-sec-meta').then(r => r.json()).catch(() => null);
+        if (_jcR && _jcR.ativo && _jcR.meta_hoje > 0) {
+            const metaJC = parseFloat(_jcR.meta_hoje.toFixed(2));
+            swLim = metaJC;
+            const swEl = document.getElementById('dm-stopwin');
+            if (swEl && Math.abs(parseFloat(swEl.value) - metaJC) > 0.001) {
+                dmLog(`💹 <b style="color:#00ffcc">JC-SEC ativo</b> — Stop Win = $${metaJC.toFixed(2)}`, '#00ffcc');
+                swEl.value = metaJC.toFixed(2);
+            }
+        }
+    } catch(_) {}
+
+    const _dmLucroCheck = (espAtivo && secPronto) ? _dmEspLucro : _dmLucro;
+    if (_dmLucroCheck >= swLim) {
+        dmLog(`🏆 STOP WIN! Lucro: +$${_dmLucroCheck.toFixed(2)}`, '#ffd700');
+        _dmAutoOperar = false;
+        const _btnAuto = document.getElementById('dm-btn-auto-op');
+        if (_btnAuto) { _btnAuto.textContent = '🤖 AUTO'; _btnAuto.style.color = '#2a6a40'; _btnAuto.style.borderColor = '#1a3a25'; }
+        const _bncRaw  = document.getElementById('hd-balance-sec')?.textContent || document.getElementById('hd-balance')?.textContent;
+        const _bncSW   = parseFloat((_bncRaw||'').replace(/[^0-9.]/g,'')) || 0;
+        const _wSW     = _dmEspWins + _dmWins;
+        const _lSW     = _dmEspLosses + _dmLosses;
+        const _mgrNmSW = document.getElementById('dm-mgr')?.value || 'DM Sniper';
+        stopWinExibirModal(_dmLucroCheck, _wSW, _lSW, _bncSW, `DM Sniper barr=${_dmSinalAtual?.barrier||'?'}`, _mgrNmSW);
+        jcSecOnMetaBatida(_dmLucroCheck, _wSW, _lSW, _bncSW, `DM Sniper barr=${_dmSinalAtual?.barrier||'?'}`, _mgrNmSW);
+        _dmEmOperacao = false;
+        return;
+    }
+    if (_dmLucroCheck <= -slLim) {
+        dmLog(`🛑 STOP LOSS! Perda: -$${Math.abs(_dmLucroCheck).toFixed(2)}`, '#f44');
+        _dmAutoOperar = false;
+        const _btnAutoSL = document.getElementById('dm-btn-auto-op');
+        if (_btnAutoSL) { _btnAutoSL.textContent = '🤖 AUTO'; _btnAutoSL.style.color = '#2a6a40'; _btnAutoSL.style.borderColor = '#1a3a25'; }
+        _dmEmOperacao = false;
+        return;
+    }
+
+    const wsUsar = (espAtivo && secPronto && _dmUsandoSec) ? _sec.ws : bot.ws;
+    if (espAtivo && _dmUsandoSec && secPronto) dmLog('💳 <b style="color:#60a5fa">Conta SEC</b> — espelho ativo', '#60a5fa');
+    else if (espAtivo && !_dmUsandoSec)        dmLog('🏦 <b style="color:#39e6ff">Conta principal</b> — monitorando gatilho', '#39e6ff');
+    if (espAtivo && !secPronto)                dmLog('⚠️ Espelho ativo mas SEC não conectada', '#ffbd2e');
+
+    const baseStake  = parseFloat(document.getElementById('dm-entrada')?.value) || 0.35;
+    const payoutCfg  = 0.85;
+    const ct         = _dmSinalAtual.contract_type;
+    const barr       = _dmSinalAtual.barrier;
+    const maNome     = document.getElementById('dm-mgr')?.value;
+    const usarMA     = (maNome === '📐 MA-Adaptativo') || _dmUsandoSec;
+    let stake;
+    if (usarMA) {
+        stake = _dmMaGetStake(baseStake, barr, payoutCfg);
+        if (_dmMaAtivo) {
+            const payout = _dmMaPayout(barr, payoutCfg);
+            dmLog(`📐 <b style="color:#fbbf24">MA-Adaptativo</b> barr=${barr} payout=${(payout*100).toFixed(0)}% dívida=$${_dmMaDiv.toFixed(2)} → stake=$${stake.toFixed(2)}`, '#fbbf24');
+        }
+    } else {
+        stake = _dmMgr ? _dmMgr.getStake() : baseStake;
+    }
+
+    const ativ  = document.getElementById('dm-asset')?.value || 'R_100';
+    const reqId = Math.floor(Math.random() * 90000) + 10000;
+
+    dmLog(`🚀 <b style="color:#39e6ff">${ct}</b> barr=<b style="color:#00ff88">${barr}</b> $${stake.toFixed(2)} | ${ativ}`, '#b7ffd9');
+    dmBotaoOperar(false);
+
+    const payload = { proposal:1, req_id:reqId, amount:stake, basis:'stake',
+        contract_type:ct, currency:'USD', duration:1, duration_unit:'t',
+        underlying_symbol:ativ, barrier:String(barr) };
+
+    const _origMsg = wsUsar.onmessage;
+    let _dmCid = null, _dmTravado = null;
+
+    const _rec = (motivo) => {
+        if (_dmTravado) { clearTimeout(_dmTravado); _dmTravado = null; }
+        wsUsar.onmessage = _origMsg;
+        _dmEmOperacao = false;
+        dmLog(`⚠️ ${motivo}`, '#f44');
+        if (_dmAutoOperar) setTimeout(async () => { if (!_dmAutoOperar) return; dmAtualizar(); setTimeout(() => { if (_dmSinalAtual) dmOperar(); }, 1000); }, 2000);
+        else dmBotaoOperar(true);
+    };
+
+    _dmTravado = setTimeout(() => _rec('Timeout 25s'), 25000);
+
+    wsUsar.onmessage = (msg) => {
+        const d = JSON.parse(msg.data);
+        if (d.msg_type === 'proposal' && d.req_id === reqId) {
+            if (d.error) { _rec('Proposta recusada: ' + d.error.message); return; }
+            const pid = d.proposal?.id;
+            if (pid) { dmLog('✅ Aceita — comprando...', '#00ff88'); wsUsar.send(JSON.stringify({ buy:pid, price:stake })); }
+            else _rec('Proposta sem ID');
+            return;
+        }
+        if (d.msg_type === 'buy') {
+            if (d.error) { _rec('Compra recusada: ' + d.error.message); return; }
+            const cid = d.buy?.contract_id;
+            if (cid) { _dmCid = cid; dmLog(`🎯 #${cid} — aguardando...`, '#ffbd2e'); wsUsar.send(JSON.stringify({ proposal_open_contract:1, contract_id:cid, subscribe:1 })); }
+            else _rec('Compra sem contract_id');
+            return;
+        }
+        if (d.msg_type === 'proposal_open_contract' && d.proposal_open_contract) {
+            const poc = d.proposal_open_contract;
+            if (_dmCid && poc.contract_id !== _dmCid) { _origMsg(msg); return; }
+            if (!poc.is_sold) { _origMsg(msg); return; }
+            if (_dmTravado) { clearTimeout(_dmTravado); _dmTravado = null; }
+            wsUsar.onmessage = _origMsg;
+            _dmEmOperacao = false;
+            const profit = parseFloat(poc.profit), won = profit > 0;
+
+            if (maNome === '📐 MA-Adaptativo' || _dmUsandoSec) _dmMaUpdate(won, profit, baseStake);
+            if (_dmUsandoSec && _dmSecMgr) _dmSecMgr.updateResult(won);
+            else if (_dmMgr) _dmMgr.updateResult(won);
+
+            if (espAtivo && secPronto && _dmUsandoSec) {
+                if (won) { _dmEspWins++; _dmEspLucro += profit; } else { _dmEspLosses++; _dmEspLucro += profit; }
+            } else {
+                if (won) { _dmWins++; _dmLucro += profit; } else { _dmLosses++; _dmLucro += profit; }
+            }
+
+            const proxStake = usarMA
+                ? _dmMaGetStake(baseStake, barr, payoutCfg)
+                : ((_dmUsandoSec && _dmSecMgr) ? _dmSecMgr.getStake() : (_dmMgr ? _dmMgr.getStake() : baseStake));
+
+            if (stake > _dmMaxStake) _dmMaxStake = stake;
+            if (won) { _dmCurWinSeq++; _dmCurLossSeq = 0; if (_dmCurWinSeq > _dmMaxWinSeq) _dmMaxWinSeq = _dmCurWinSeq; }
+            else     { _dmCurLossSeq++; _dmCurWinSeq = 0; if (_dmCurLossSeq > _dmMaxLossSeq) _dmMaxLossSeq = _dmCurLossSeq; }
+
+            dmLog(`${won ? '🏆 WIN' : '💥 LOSS'} ${won?'+':''}$${profit.toFixed(2)} | próx $${proxStake.toFixed(2)}`, won ? '#00ff88' : '#f44');
+            dmAtualizarStats();
+
+            // Notificações TG + WA
+            (async () => {
+                let tgAtual = (typeof _tgCfg !== 'undefined') ? _tgCfg : null;
+                if (!tgAtual || !tgAtual.token) {
+                    try { const r = await fetch('/tg-config'); if (r.ok) { tgAtual = await r.json(); if (typeof _tgCfg !== 'undefined') Object.assign(_tgCfg, tgAtual); } } catch(_) {}
+                }
+                const _lucroTotal = _dmUsandoSec ? _dmEspLucro : _dmLucro;
+                const _bancaRaw   = _dmUsandoSec ? document.getElementById('hd-balance-sec')?.textContent : document.getElementById('hd-balance')?.textContent;
+                const _banca = parseFloat((_bancaRaw||'').replace(/[^0-9.]/g,'')) || 0;
+                const _dmPayload = {
+                    win: won, lucro: profit, profit_total: _lucroTotal, banca: _banca,
+                    wins: _dmUsandoSec ? _dmEspWins : _dmWins, losses: _dmUsandoSec ? _dmEspLosses : _dmLosses,
+                    entrada: stake, prox_stake: proxStake,
+                    max_win_consec: _dmMaxWinSeq, max_loss_consec: _dmMaxLossSeq, max_stake: _dmMaxStake,
+                    modo: maNome || 'DM Sniper', estrategia: `${ct} barr=${barr}`,
+                    conta: _dmUsandoSec ? 'SECUNDARIA' : 'PRINCIPAL',
+                };
+                if (tgAtual && tgAtual.enabled && tgAtual.resultados && tgAtual.token && tgAtual.chat_id)
+                    fetch('/tg-send', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ token: tgAtual.token, chat_id: tgAtual.chat_id, ..._dmPayload }) }).catch(()=>{});
+                const waAtivo = (typeof _waNotifAtivo !== 'undefined') ? _waNotifAtivo : false;
+                if (waAtivo) fetch('/wa-send', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(_dmPayload) }).catch(()=>{});
+            })();
+
+            // Lógica espelho
+            if (espAtivo && secPronto) {
+                if (!_dmUsandoSec) {
+                    if (!won) { _dmEspLossSeq++; _dmEspPerdaAc += Math.abs(profit); } else _dmEspLossSeq = 0;
+                    const seqAtv  = document.getElementById('dm-esp-seq-ativo')?.checked;
+                    const perdAtv = document.getElementById('dm-esp-perda-ativo')?.checked;
+                    const lossLim = parseInt(document.getElementById('dm-esp-seq-qtd')?.value || 3);
+                    const perdLim = parseFloat(document.getElementById('dm-esp-perda-val')?.value || 5);
+                    if ((seqAtv && _dmEspLossSeq >= lossLim) || (perdAtv && _dmEspPerdaAc >= perdLim)) {
+                        _dmUsandoSec = true;
+                        if (!_dmSecMgr) {
+                            const mn = document.getElementById('dm-mgr')?.value;
+                            _dmSecMgr = (mn && mn !== 'flat' && typeof GerenciadorUnificado !== 'undefined') ? new GerenciadorUnificado(mn, { stake: baseStake }) : null;
+                        }
+                        dmLog(`🔀 <b style="color:#60a5fa">TRIGGER SEC</b> — próxima na conta espelho${_dmMaDiv > 0.01 ? ` (dívida: $${_dmMaDiv.toFixed(2)})` : ''}`, '#60a5fa');
+                    }
+                } else {
+                    if (won && _dmEspLucro >= -0.01) {
+                        _dmUsandoSec = false; _dmSecMgr = null; _dmEspLossSeq = 0; _dmEspPerdaAc = 0;
+                        _dmMaDiv = 0; _dmMaAtivo = false;
+                        const mn = document.getElementById('dm-mgr')?.value;
+                        if (mn && mn !== 'flat' && typeof GerenciadorUnificado !== 'undefined') _dmMgr = new GerenciadorUnificado(mn, { stake: baseStake });
+                        dmLog(`✅ SEC positiva ($${_dmEspLucro >= 0 ? '+' : ''}$${_dmEspLucro.toFixed(2)}) — voltando à conta principal`, '#00ff88');
+                    } else if (won) {
+                        dmLog(`🔄 SEC ganhou mas ainda negativa: $${_dmEspLucro.toFixed(2)} — continua na SEC`, '#fbbf24');
+                    }
+                }
+                dmAtualizarEspelho();
+            }
+
+            if (_dmAutoOperar) {
+                setTimeout(async () => { if (!_dmAutoOperar) return; dmAtualizar(); setTimeout(() => { if (_dmSinalAtual && _dmAutoOperar) dmOperar(); }, 1000); }, 1500);
+            } else dmBotaoOperar(true);
+            return;
+        }
+        _origMsg(msg);
+    };
+    wsUsar.send(JSON.stringify(payload));
 }
 // ── FIM DIGIT MATRIX SNIPER PRO ───────────────────────────────────────────
 
