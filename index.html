@@ -7831,6 +7831,18 @@ function initWebSocket(wssUrl) {
                 _volFiltroAtualizarBtn();   // atualiza label WIN/ADV em tempo real
                 _rotacaoAtualizarBtn();     // atualiza ativo atual da rotação
 
+                // ── Digit Matrix PRO: alimenta motor com cada tick do bot ──
+                if (document.getElementById('dm-modal')?.style.display !== 'none') {
+                    const _dmAsset = document.getElementById('dm-asset')?.value || 'R_100';
+                    fetch('/api/digit-matrix/ticks', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ asset: _dmAsset, digits: [_dDigit] })
+                    }).then(r => r.json()).then(j => {
+                        if (j.ok && j.analysis) dmRender(j.analysis);
+                    }).catch(() => {});
+                }
+
                 // ── Lógica do Preço / Trend Pro: acumula buffer em todo tick (inclusive durante operação) ──
                 // A análise e entrada ficam bloqueadas por bot._buying, mas o buffer
                 // continua crescendo para que a vela não perca ticks durante operações.
@@ -18265,6 +18277,16 @@ function dmAbrirModal() {
     if (!m) return;
     m.style.display = 'flex';
     _dmIniciarMatrix();
+    // Semeia o motor com os últimos dígitos já acumulados pelo bot
+    const _dmAsset = document.getElementById('dm-asset')?.value || 'R_100';
+    const _recentes = (typeof bot !== 'undefined' && bot._digitRecentes) ? bot._digitRecentes.slice() : [];
+    if (_recentes.length > 0) {
+        fetch('/api/digit-matrix/ticks', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ asset: _dmAsset, digits: _recentes })
+        }).then(r => r.json()).then(j => { if (j.ok && j.analysis) dmRender(j.analysis); }).catch(() => {});
+    }
     dmAtualizar();
 }
 
@@ -18308,8 +18330,29 @@ function _dmPararMatrix() {
 
 async function dmAtualizar() {
     const asset = document.getElementById('dm-asset')?.value || 'R_100';
+    // Se o bot estiver conectado e o ativo do bot difere do DM,
+    // força o select para o ativo do bot (para receber ticks em tempo real)
+    if (typeof bot !== 'undefined' && bot._tickAtivo && bot._tickAtivo !== asset) {
+        const sel = document.getElementById('dm-asset');
+        if (sel) {
+            for (let i = 0; i < sel.options.length; i++) {
+                if (sel.options[i].value === bot._tickAtivo) {
+                    sel.value = bot._tickAtivo; break;
+                }
+            }
+        }
+        // Semeia com os ticks do ativo atual do bot
+        if (bot._digitRecentes && bot._digitRecentes.length > 0) {
+            fetch('/api/digit-matrix/ticks', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ asset: bot._tickAtivo, digits: bot._digitRecentes.slice() })
+            }).catch(() => {});
+        }
+    }
     try {
-        const r = await fetch(`/api/digit-matrix/state?asset=${encodeURIComponent(asset)}`);
+        const assetAtual = document.getElementById('dm-asset')?.value || 'R_100';
+        const r = await fetch(`/api/digit-matrix/state?asset=${encodeURIComponent(assetAtual)}`);
         const j = await r.json();
         if (!r.ok || !j.ok) throw new Error(j.error || j.message || 'Falha na análise');
         dmRender(j.analysis);
