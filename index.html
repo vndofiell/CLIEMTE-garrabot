@@ -1976,11 +1976,171 @@
         <span class="cmd-label" style="color:#57606a;">Scanner de dígitos</span>
     </button>
     <button class="cmd-btn" id="btn-digit-matrix"
-        onclick="window.open('/digit-matrix','_blank')"
+        onclick="dmAbrirModal()"
         style="border-color:rgba(0,255,136,0.5);color:#00ff88;font-size:0.78rem;padding:5px 10px;margin-top:4px;">
         🧬 Digit Matrix PRO
         <span class="cmd-label" style="color:#57606a;">Matrix de análise</span>
     </button>
+
+    <!-- ── MODAL DIGIT MATRIX SNIPER PRO ────────────────────────── -->
+    <div id="dm-modal" style="
+        display:none; position:fixed; top:0; left:0;
+        width:100%; height:100%;
+        background:rgba(0,0,0,0.95); z-index:1200;
+        justify-content:center; align-items:flex-start;
+        padding:20px 8px 40px; overflow-y:auto;">
+
+      <!-- Canvas Matrix verde de fundo -->
+      <canvas id="dm-matrix-canvas" style="
+          position:fixed;top:0;left:0;width:100%;height:100%;
+          z-index:0;pointer-events:none;opacity:0.18;"></canvas>
+
+      <div style="
+          position:relative;z-index:1;
+          background:rgba(2,10,6,0.97); border:1px solid #00ff88;
+          border-radius:8px; padding:22px 24px 24px;
+          box-shadow:0 0 32px rgba(0,255,136,0.18);
+          font-family:'Share Tech Mono',monospace;
+          width:100%; max-width:1160px; min-width:0;
+          color:#b7ffd9; margin:0 auto; overflow-x:hidden;">
+
+        <!-- Cabeçalho -->
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+          <div>
+            <span style="color:#00ff88;font-size:0.9rem;letter-spacing:2px;">🧬 DIGIT MATRIX SNIPER PRO</span>
+            <div style="font-size:0.6rem;color:#57606a;letter-spacing:1px;margin-top:2px;">ANÁLISE MULTI-JANELA · SCORE 0–100 · EXAUSTÃO · FREQUÊNCIA · HISTÓRICO</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span id="dm-live-badge" style="font-size:0.62rem;color:#00ff88;border:1px solid rgba(0,255,136,0.4);
+                padding:3px 8px;border-radius:3px;letter-spacing:1px;">● MONITORANDO</span>
+            <button onclick="dmFecharModal()"
+                style="background:none;border:none;color:#f44;font-size:1.1rem;cursor:pointer;">✕</button>
+          </div>
+        </div>
+
+        <!-- Controles -->
+        <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;
+                    background:rgba(0,0,0,0.4);border:1px solid rgba(0,255,136,0.2);
+                    border-radius:6px;padding:10px 14px;margin-bottom:14px;">
+          <div>
+            <div style="font-size:0.55rem;color:#00ff88;letter-spacing:1px;margin-bottom:4px;">ATIVO</div>
+            <select id="dm-asset" onchange="dmAtualizar()" style="background:#061309;border:1px solid rgba(0,255,136,0.4);
+                color:#00ff88;font-family:'Share Tech Mono';font-size:0.72rem;padding:5px 8px;border-radius:4px;">
+              <option>R_10</option><option>R_25</option><option>R_50</option>
+              <option>R_75</option><option selected>R_100</option>
+              <option>1HZ10V</option><option>1HZ25V</option><option>1HZ50V</option>
+              <option>1HZ75V</option><option>1HZ100V</option>
+            </select>
+          </div>
+          <div>
+            <div style="font-size:0.55rem;color:#00ff88;letter-spacing:1px;margin-bottom:4px;">SCORE MÍN.</div>
+            <input id="dm-score-min" type="number" min="50" max="100" value="82"
+                style="width:70px;background:#061309;border:1px solid rgba(0,255,136,0.4);
+                       color:#00ff88;font-family:'Share Tech Mono';font-size:0.72rem;padding:5px 8px;border-radius:4px;">
+          </div>
+          <div>
+            <div style="font-size:0.55rem;color:#00ff88;letter-spacing:1px;margin-bottom:4px;">UNDER barr.</div>
+            <input id="dm-under-barr" type="number" min="1" max="7" value="6"
+                style="width:60px;background:#061309;border:1px solid rgba(0,255,136,0.4);
+                       color:#00ff88;font-family:'Share Tech Mono';font-size:0.72rem;padding:5px 8px;border-radius:4px;">
+          </div>
+          <div>
+            <div style="font-size:0.55rem;color:#00ff88;letter-spacing:1px;margin-bottom:4px;">OVER barr.</div>
+            <input id="dm-over-barr" type="number" min="3" max="8" value="3"
+                style="width:60px;background:#061309;border:1px solid rgba(0,255,136,0.4);
+                       color:#00ff88;font-family:'Share Tech Mono';font-size:0.72rem;padding:5px 8px;border-radius:4px;">
+          </div>
+          <div>
+            <div style="font-size:0.55rem;color:#00ff88;letter-spacing:1px;margin-bottom:4px;">INTERVALO</div>
+            <select id="dm-interval" style="background:#061309;border:1px solid rgba(0,255,136,0.4);
+                color:#00ff88;font-family:'Share Tech Mono';font-size:0.72rem;padding:5px 8px;border-radius:4px;">
+              <option value="800">0,8s</option>
+              <option value="1500" selected>1,5s</option>
+              <option value="3000">3s</option>
+            </select>
+          </div>
+          <button onclick="dmSalvarConfig()" style="background:rgba(0,255,136,0.1);border:1px solid rgba(0,255,136,0.4);
+              color:#00ff88;font-family:'Share Tech Mono';font-size:0.72rem;padding:6px 14px;
+              border-radius:4px;cursor:pointer;letter-spacing:1px;">💾 SALVAR</button>
+          <button id="dm-auto-btn" onclick="dmToggleAuto()" style="background:rgba(0,255,65,0.08);
+              border:1px solid rgba(0,255,65,0.35);color:#00ff41;font-family:'Share Tech Mono';
+              font-size:0.72rem;padding:6px 14px;border-radius:4px;cursor:pointer;letter-spacing:1px;">▶ AUTO</button>
+        </div>
+
+        <!-- Grid principal: stream | under×over | filtros -->
+        <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:10px;margin-bottom:10px;">
+
+          <!-- Stream / Matrix de dígitos -->
+          <div style="border:1px solid #0b4b35;background:linear-gradient(180deg,#04100a,#020806);border-radius:6px;padding:12px;">
+            <div style="font-size:0.62rem;color:#00ff88;letter-spacing:1px;margin-bottom:8px;">🔢 STREAM / MATRIX</div>
+            <div id="dm-stream" style="font-size:0.72rem;color:#4ca77e;min-height:18px;margin-bottom:10px;word-break:break-all;"></div>
+            <div id="dm-digits-grid" style="display:grid;grid-template-columns:repeat(10,1fr);gap:4px;"></div>
+          </div>
+
+          <!-- Under x Over -->
+          <div style="border:1px solid #0b4b35;background:linear-gradient(180deg,#04100a,#020806);border-radius:6px;padding:12px;">
+            <div style="font-size:0.62rem;color:#00ff88;letter-spacing:1px;margin-bottom:8px;">🎯 UNDER × OVER</div>
+            <div style="display:flex;justify-content:space-between;font-size:0.7rem;border-bottom:1px dotted #0b4935;padding:6px 0;">
+              <span>DIGITUNDER</span><b id="dm-under-score" style="color:#fff;">--</b>
+            </div>
+            <div style="height:7px;background:#03150e;border:1px solid #0a4935;margin:6px 0 10px;overflow:hidden;">
+              <div id="dm-under-bar" style="height:100%;background:#00ff88;width:0;transition:.3s;"></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:0.7rem;border-bottom:1px dotted #0b4935;padding:6px 0;">
+              <span>DIGITOVER</span><b id="dm-over-score" style="color:#fff;">--</b>
+            </div>
+            <div style="height:7px;background:#03150e;border:1px solid #0a4935;margin:6px 0 10px;overflow:hidden;">
+              <div id="dm-over-bar" style="height:100%;background:#39e6ff;width:0;transition:.3s;"></div>
+            </div>
+            <!-- Sinal -->
+            <div id="dm-signal-box" style="margin-top:8px;padding:14px;text-align:center;
+                border:1px solid #56303a;background:rgba(255,79,109,0.05);border-radius:5px;">
+              <div id="dm-decision" style="font-size:1.1rem;color:#ff4f6d;font-weight:900;letter-spacing:2px;">SEM ENTRADA</div>
+              <div id="dm-score-big" style="font-size:1.8rem;font-weight:900;margin:6px 0;color:#fff;">--/100</div>
+              <div id="dm-reason" style="font-size:0.65rem;color:#57606a;">Aguardando dados...</div>
+              <div id="dm-regime-badge" style="margin-top:6px;font-size:0.6rem;color:#4ca77e;"></div>
+            </div>
+          </div>
+
+          <!-- Filtros Matrix -->
+          <div style="border:1px solid #0b4b35;background:linear-gradient(180deg,#04100a,#020806);border-radius:6px;padding:12px;">
+            <div style="font-size:0.62rem;color:#00ff88;letter-spacing:1px;margin-bottom:8px;">🧠 FILTROS MATRIX</div>
+            <div id="dm-filters"></div>
+          </div>
+        </div>
+
+        <!-- Mapa dos 10 dígitos -->
+        <div style="border:1px solid #0b4b35;background:linear-gradient(180deg,#04100a,#020806);border-radius:6px;padding:12px;margin-bottom:10px;">
+          <div style="font-size:0.62rem;color:#00ff88;letter-spacing:1px;margin-bottom:8px;">📊 MAPA DOS 10 DÍGITOS</div>
+          <table style="width:100%;border-collapse:collapse;font-size:0.7rem;">
+            <thead>
+              <tr style="color:#54d99b;">
+                <th style="padding:6px;border-bottom:1px solid #0a392b;text-align:center;">Dígito</th>
+                <th style="padding:6px;border-bottom:1px solid #0a392b;text-align:center;">Freq.</th>
+                <th style="padding:6px;border-bottom:1px solid #0a392b;text-align:center;">Total</th>
+                <th style="padding:6px;border-bottom:1px solid #0a392b;text-align:center;">10T</th>
+                <th style="padding:6px;border-bottom:1px solid #0a392b;text-align:center;">20T</th>
+                <th style="padding:6px;border-bottom:1px solid #0a392b;text-align:center;">Estado</th>
+              </tr>
+            </thead>
+            <tbody id="dm-matrix-table"></tbody>
+          </table>
+        </div>
+
+        <!-- Log + Stats lado a lado -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <div style="border:1px solid #0b4b35;background:linear-gradient(180deg,#04100a,#020806);border-radius:6px;padding:12px;">
+            <div style="font-size:0.62rem;color:#00ff88;letter-spacing:1px;margin-bottom:8px;">📋 LOG MATRIX</div>
+            <pre id="dm-log" style="margin:0;max-height:200px;overflow-y:auto;white-space:pre-wrap;color:#4ca77e;font-size:0.67rem;line-height:1.5;"></pre>
+          </div>
+          <div style="border:1px solid #0b4b35;background:linear-gradient(180deg,#04100a,#020806);border-radius:6px;padding:12px;">
+            <div style="font-size:0.62rem;color:#00ff88;letter-spacing:1px;margin-bottom:8px;">📈 ESTATÍSTICAS</div>
+            <div id="dm-stats"></div>
+          </div>
+        </div>
+
+      </div><!-- /inner box -->
+    </div><!-- /dm-modal -->
 
     <!-- ── MODAL DIGIT SNIPER PRO ────────────────────────── -->
     <div id="ds-modal" style="
@@ -17969,6 +18129,248 @@ function filtrosAtualizarLabel() {
         if (btn) { btn.style.borderColor = 'rgba(74,222,128,0.6)'; btn.style.color = '#4ade80'; }
     }
 }
+// ── FIM Modal Filtros ─────────────────────────────────────────────────────
+
+// ══════════════════════════════════════════════════════════════════════════
+// ── DIGIT MATRIX SNIPER PRO ───────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════
+
+let _dmMatrixRAF   = null;
+let _dmMatrixDrops = [];
+let _dmTimer       = null;     // intervalo de auto-scan
+
+function dmAbrirModal() {
+    const m = document.getElementById('dm-modal');
+    if (!m) return;
+    m.style.display = 'flex';
+    _dmIniciarMatrix();
+    dmAtualizar();
+}
+
+function dmFecharModal() {
+    const m = document.getElementById('dm-modal');
+    if (m) m.style.display = 'none';
+    dmPararAuto();
+    _dmPararMatrix();
+}
+
+function _dmIniciarMatrix() {
+    const c = document.getElementById('dm-matrix-canvas');
+    if (!c) return;
+    c.width  = window.innerWidth;
+    c.height = window.innerHeight;
+    const ctx = c.getContext('2d');
+    const cols = Math.floor(c.width / 16);
+    _dmMatrixDrops = Array(cols).fill(1);
+    _dmPararMatrix();
+    function _tick() {
+        ctx.fillStyle = 'rgba(0,0,0,0.05)';
+        ctx.fillRect(0, 0, c.width, c.height);
+        ctx.fillStyle = '#00ff88';
+        ctx.font = '14px Share Tech Mono, monospace';
+        const chars = '0123456789ABCDEF@#$%';
+        for (let i = 0; i < _dmMatrixDrops.length; i++) {
+            ctx.fillText(chars[Math.floor(Math.random() * chars.length)],
+                i * 16, _dmMatrixDrops[i] * 16);
+            if (_dmMatrixDrops[i] * 16 > c.height && Math.random() > 0.975)
+                _dmMatrixDrops[i] = 0;
+            _dmMatrixDrops[i]++;
+        }
+        _dmMatrixRAF = requestAnimationFrame(_tick);
+    }
+    _dmMatrixRAF = requestAnimationFrame(_tick);
+}
+
+function _dmPararMatrix() {
+    if (_dmMatrixRAF) { cancelAnimationFrame(_dmMatrixRAF); _dmMatrixRAF = null; }
+}
+
+async function dmAtualizar() {
+    const asset = document.getElementById('dm-asset')?.value || 'R_100';
+    try {
+        const r = await fetch(`/api/digit-matrix/state?asset=${encodeURIComponent(asset)}`);
+        const j = await r.json();
+        if (!r.ok || !j.ok) throw new Error(j.error || j.message || 'Falha na análise');
+        dmRender(j.analysis);
+    } catch(e) {
+        const reasonEl = document.getElementById('dm-reason');
+        if (reasonEl) reasonEl.textContent = 'Erro: ' + e.message;
+    }
+}
+
+function dmRender(r) {
+    if (!r) return;
+
+    const _s = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+
+    // Stream de dígitos
+    const streamEl = document.getElementById('dm-stream');
+    if (streamEl) {
+        const digs = (r.digits || []).slice(-40);
+        streamEl.textContent = digs.join(' ');
+    }
+
+    // Grid dos últimos 30 dígitos
+    const gridEl = document.getElementById('dm-digits-grid');
+    if (gridEl) {
+        const digs = (r.digits || []).slice(-30);
+        gridEl.innerHTML = digs.map(d => {
+            const cor = d <= 4 ? '#00ff88' : '#39e6ff';
+            const bg  = d <= 4 ? 'rgba(0,255,136,0.1)' : 'rgba(57,230,255,0.1)';
+            const brd = d <= 4 ? 'rgba(0,255,136,0.35)' : 'rgba(57,230,255,0.35)';
+            return `<div style="width:24px;height:24px;border-radius:4px;display:flex;
+                align-items:center;justify-content:center;background:${bg};
+                border:1px solid ${brd};color:${cor};font-size:0.7rem;">${d}</div>`;
+        }).join('');
+    }
+
+    // Under × Over scores
+    const u = r.under, o = r.over;
+    _s('dm-under-score', u ? u.score + '/100' : '--');
+    _s('dm-over-score',  o ? o.score + '/100' : '--');
+    const uBar = document.getElementById('dm-under-bar');
+    const oBar = document.getElementById('dm-over-bar');
+    if (uBar) uBar.style.width = (u ? Math.min(u.score, 100) : 0) + '%';
+    if (oBar) oBar.style.width = (o ? Math.min(o.score, 100) : 0) + '%';
+
+    // Caixa de decisão
+    const best  = r.best;
+    const decEl = document.getElementById('dm-decision');
+    const scEl  = document.getElementById('dm-score-big');
+    const sigBox= document.getElementById('dm-signal-box');
+    if (best) {
+        if (decEl) { decEl.textContent = best.contract + ' ' + best.barrier; decEl.style.color = '#00ff88'; }
+        if (scEl)  { scEl.textContent  = best.score + '/100';               scEl.style.color  = '#00ff88'; }
+        if (sigBox) { sigBox.style.borderColor = 'rgba(0,255,136,0.5)'; sigBox.style.background = 'rgba(0,255,136,0.06)'; }
+    } else {
+        const bestScore = u ? (o ? Math.max(u.score, o.score) : u.score) : (o ? o.score : 0);
+        if (decEl) { decEl.textContent = r.status || 'SEM ENTRADA'; decEl.style.color = '#ff4f6d'; }
+        if (scEl)  { scEl.textContent  = (bestScore || '--') + (bestScore ? '/100' : ''); scEl.style.color = '#888'; }
+        if (sigBox) { sigBox.style.borderColor = '#56303a'; sigBox.style.background = 'rgba(255,79,109,0.05)'; }
+    }
+    _s('dm-reason', r.reason || 'Aguardando dados...');
+    _s('dm-regime-badge', r.regime ? '⚡ Regime: ' + r.regime : '');
+
+    // Filtros Matrix — scores do melhor candidato
+    const fEl = document.getElementById('dm-filters');
+    if (fEl && (best || u || o)) {
+        const b = best || (u && u.score >= (o ? o.score : 0) ? u : o);
+        if (b) {
+            fEl.innerHTML = [
+                ['Frequência',   b.frequency_score],
+                ['Exaustão',     b.exhaustion_score],
+                ['Repetição',    b.repetition_score],
+                ['Distribuição', b.distribution_score],
+                ['Volatilidade', b.volatility_score],
+                ['Histórico',    b.history_score],
+                ['Atividade',    b.volume_score]
+            ].map(([lbl, val]) => {
+                const v = typeof val === 'number' ? val : 0;
+                const pct = Math.min(v, 100);
+                const clr = v >= 70 ? '#00ff88' : v >= 50 ? '#facc15' : '#f44';
+                return `<div style="margin-bottom:6px;">
+                    <div style="display:flex;justify-content:space-between;font-size:0.6rem;margin-bottom:2px;">
+                        <span style="color:#4ca77e;">${lbl}</span>
+                        <span style="color:${clr};">${v.toFixed(1)}</span>
+                    </div>
+                    <div style="height:4px;background:#03150e;border-radius:2px;overflow:hidden;">
+                        <div style="height:100%;width:${pct}%;background:${clr};border-radius:2px;transition:.3s;"></div>
+                    </div>
+                </div>`;
+            }).join('');
+        } else {
+            fEl.innerHTML = '<span style="color:#57606a;font-size:0.65rem;">Sem dados suficientes.</span>';
+        }
+    }
+
+    // Mapa dos 10 dígitos
+    const tblEl = document.getElementById('dm-matrix-table');
+    if (tblEl && r.matrix) {
+        tblEl.innerHTML = r.matrix.map(row => {
+            const clr = row.recent === 'HOT' ? '#00ff88' : row.recent === 'COLD' ? '#ff4f6d' : '#4ca77e';
+            const badge = row.recent === 'HOT' ? '🔥 HOT' : row.recent === 'COLD' ? '❄️ COLD' : 'NORMAL';
+            return `<tr style="border-bottom:1px solid #0b4b35;">
+                <td style="padding:5px 8px;text-align:center;color:#00ff88;font-weight:900;">${row.digit}</td>
+                <td style="padding:5px 8px;text-align:center;color:#b7ffd9;">${row.frequency.toFixed(1)}%</td>
+                <td style="padding:5px 8px;text-align:center;color:#57606a;">${row.count}</td>
+                <td style="padding:5px 8px;text-align:center;color:#4ca77e;">${row.last10}</td>
+                <td style="padding:5px 8px;text-align:center;color:#4ca77e;">${row.last20}</td>
+                <td style="padding:5px 8px;text-align:center;color:${clr};font-size:0.65rem;">${badge}</td>
+            </tr>`;
+        }).join('');
+    }
+
+    // Stats
+    const stEl = document.getElementById('dm-stats');
+    if (stEl && r.stats) {
+        const st = r.stats;
+        stEl.innerHTML = [
+            ['Sinais',    st.signals  || 0],
+            ['Bloqueios', st.blocked  || 0],
+            ['Wins',      st.wins     || 0],
+            ['Losses',    st.losses   || 0],
+            ['Regime',    r.regime    || '—']
+        ].map(([lbl, val]) =>
+            `<div style="display:flex;justify-content:space-between;padding:4px 0;
+                border-bottom:1px solid #0b4b35;font-size:0.68rem;">
+                <span style="color:#4ca77e;">${lbl}</span>
+                <b style="color:#00ff88;">${val}</b>
+            </div>`
+        ).join('');
+    }
+
+    // Log Matrix
+    const logEl = document.getElementById('dm-log');
+    if (logEl && best) {
+        const ts = new Date().toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+        logEl.textContent += `[${ts}] 🎯 ${best.contract} ${best.barrier} | score ${best.score}\n`;
+        logEl.scrollTop = logEl.scrollHeight;
+    }
+}
+
+function dmToggleAuto() {
+    const btn = document.getElementById('dm-auto-btn');
+    if (_dmTimer) {
+        dmPararAuto();
+        if (btn) { btn.textContent = '▶ AUTO'; btn.style.color = '#00ff41'; btn.style.borderColor = 'rgba(0,255,65,0.35)'; }
+    } else {
+        const ms = parseInt(document.getElementById('dm-interval')?.value || 1500);
+        dmAtualizar();
+        _dmTimer = setInterval(dmAtualizar, ms);
+        if (btn) { btn.textContent = '⏹ PARAR'; btn.style.color = '#f44'; btn.style.borderColor = 'rgba(255,68,68,0.4)'; }
+    }
+}
+
+function dmPararAuto() {
+    if (_dmTimer) { clearInterval(_dmTimer); _dmTimer = null; }
+}
+
+async function dmSalvarConfig() {
+    const body = {
+        score_minimo:    parseInt(document.getElementById('dm-score-min')?.value  || 82),
+        under_barreira:  parseInt(document.getElementById('dm-under-barr')?.value || 6),
+        over_barreira:   parseInt(document.getElementById('dm-over-barr')?.value  || 3)
+    };
+    try {
+        const r = await fetch('/api/digit-matrix/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        const j = await r.json();
+        const logEl = document.getElementById('dm-log');
+        if (logEl) {
+            const ts = new Date().toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+            logEl.textContent += `[${ts}] ✅ Config salva — score≥${body.score_minimo} UNDER≤${body.under_barreira} OVER≥${body.over_barreira}\n`;
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+    } catch(e) {
+        const logEl = document.getElementById('dm-log');
+        if (logEl) logEl.textContent += `Erro ao salvar: ${e.message}\n`;
+    }
+}
+// ── FIM DIGIT MATRIX SNIPER PRO ───────────────────────────────────────────
+
 // ── FIM Modal Filtros ─────────────────────────────────────────────────────
 </script>
 
