@@ -1,5 +1,6 @@
 # import webbrowser
 from digit_sniper_pro import register_digit_sniper
+from digit_matrix_sniper import register_digit_matrix
 import threading
 import time
 import json
@@ -10189,6 +10190,9 @@ def quick_sort_simulacao():
 
 # ── Digit Sniper PRO ────────────────────────────────────────────────────────
 register_digit_sniper(app, _buscar_ticks_ws_sync)
+
+# ── Digit Matrix Sniper PRO ──────────────────────────────────────────────────
+register_digit_matrix(app, _buscar_ticks_ws_sync)
 
 def start_server():
     # Oracle Cloud — porta configurável via variável de ambiente, padrão 5000
