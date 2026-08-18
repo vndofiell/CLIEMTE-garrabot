@@ -7515,17 +7515,6 @@ function initWebSocket(wssUrl) {
                     bot.mgr._recalcJC();
                     bot.stake = bot.mgr.getStake();
                 }
-                // ── Planilha JC: sincroniza banca com saldo real da corretora ──
-                // Faz silenciosamente somente se houve mudança real no saldo
-                const _saldoNum = parseFloat(saldo);
-                if (_saldoNum > 0 && (typeof window._jcUltimoSaldoSync === 'undefined' || Math.abs(_saldoNum - (window._jcUltimoSaldoSync || 0)) > 0.001)) {
-                    window._jcUltimoSaldoSync = _saldoNum;
-                    fetch('/jc-config', {
-                        method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({ banca_base: _saldoNum })
-                    }).catch(() => {});
-                }
                 if (!bot.saldoMostrado) {
                     bot.saldoMostrado = true;
                     print("💰 SALDO: $" + parseFloat(saldo).toFixed(2), "log-info");

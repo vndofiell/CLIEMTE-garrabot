@@ -5213,14 +5213,17 @@ def jc_config_get():
 
 @app.route('/jc-config', methods=['POST'])
 def jc_config_post():
-    """Salva/atualiza configuração de JC (banca_base, perc, ativo)."""
+    """Salva/atualiza configuração de JC (banca_base, perc, ativo).
+    NUNCA sobrescreve banca_atual quando já há histórico — preserva o progresso."""
     body  = request.get_json(force=True, silent=True) or {}
     dados = jc_carregar()
+    tem_historico = len(dados.get("historico", [])) > 0
     if "banca_base" in body:
         banca = float(body["banca_base"])
-        # banca_base sempre reflete a banca atual (campo exibe banca_atual)
-        dados["banca_base"]  = banca
-        dados["banca_atual"] = banca
+        dados["banca_base"] = banca
+        # Só reseta banca_atual se ainda não há histórico (planilha virgem / dia 1 sem registros)
+        if not tem_historico:
+            dados["banca_atual"] = banca
     if "perc" in body:
         dados["perc"] = float(body["perc"])
     if "perc_pct" in body:
