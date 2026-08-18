@@ -17760,8 +17760,11 @@ async function dsOperar() {
             wsUsar.onmessage = _origMsg;
             _dsEmOperacao = false;
             const profit = parseFloat(poc.profit), won = profit > 0;
-            // Atualiza Martingale Adaptativo (SEC ou modo MA selecionado)
-            if (usarMA) {
+            // Atualiza dívida MA-Adaptativo SOMENTE quando:
+            //   a) modo MA-Adaptativo selecionado (conta principal usa MA explicitamente)
+            //   b) OU está operando na SEC (cada entrada na SEC atualiza a dívida da SEC)
+            // NUNCA acumula dívida de perdas da conta principal quando o trigger ainda não ativou
+            if (maNome === '📐 MA-Adaptativo' || _dsUsandoSec) {
                 _dsMaUpdate(won, profit, baseStake);
             }
             if (_dsUsandoSec && _dsSecMgr) _dsSecMgr.updateResult(won);
@@ -17841,6 +17844,7 @@ async function dsOperar() {
             // Lógica espelho
             if (espAtivo && secPronto) {
                 if (!_dsUsandoSec) {
+                    // Conta PRINCIPAL: acumula sequência/perda para trigger
                     if (!won) { _dsEspLossSeq++; _dsEspPerdaAc += Math.abs(profit); } else _dsEspLossSeq = 0;
                     const seqAtv = document.getElementById('ds-esp-seq-ativo')?.checked;
                     const perdAtv= document.getElementById('ds-esp-perda-ativo')?.checked;
@@ -17848,16 +17852,29 @@ async function dsOperar() {
                     const perdLim= parseFloat(document.getElementById('ds-esp-perda-val')?.value||5);
                     if ((seqAtv && _dsEspLossSeq >= lossLim) || (perdAtv && _dsEspPerdaAc >= perdLim)) {
                         _dsUsandoSec = true;
-                        const mn = document.getElementById('ds-mgr')?.value;
-                        _dsSecMgr = (mn && mn !== 'flat' && typeof GerenciadorUnificado !== 'undefined') ? new GerenciadorUnificado(mn, { stake: baseStake }) : null;
-                        dsLog(`🔀 <b style="color:#60a5fa">TRIGGER SEC</b> — próxima na conta espelho`, '#60a5fa');
+                        // NÃO recria _dsSecMgr se já existe dívida pendente — preserva o estado de recuperação
+                        if (!_dsSecMgr) {
+                            const mn = document.getElementById('ds-mgr')?.value;
+                            _dsSecMgr = (mn && mn !== 'flat' && typeof GerenciadorUnificado !== 'undefined') ? new GerenciadorUnificado(mn, { stake: baseStake }) : null;
+                        }
+                        dsLog(`🔀 <b style="color:#60a5fa">TRIGGER SEC</b> — próxima na conta espelho${_dsMaDiv > 0.01 ? ` (dívida pendente: $${_dsMaDiv.toFixed(2)})` : ''}`, '#60a5fa');
                     }
-                } else if (won) {
-                    _dsUsandoSec = false; _dsSecMgr = null; _dsEspLossSeq = 0; _dsEspPerdaAc = 0;
-                    _dsMaDiv = 0; _dsMaAtivo = false;  // reseta MA ao voltar p/ principal
-                    const mn = document.getElementById('ds-mgr')?.value;
-                    if (mn && mn !== 'flat' && typeof GerenciadorUnificado !== 'undefined') _dsMgr = new GerenciadorUnificado(mn, { stake: baseStake });
-                    dsLog('✅ SEC ganhou — voltando à conta principal', '#00ff41');
+                } else {
+                    // Conta SEC: verifica se dívida foi totalmente recuperada
+                    if (won) {
+                        // Só volta à conta principal se a dívida da SEC foi zerada
+                        if (_dsMaDiv <= 0.01) {
+                            // Dívida zerada — volta ao modo normal na conta principal
+                            _dsUsandoSec = false; _dsSecMgr = null; _dsEspLossSeq = 0; _dsEspPerdaAc = 0;
+                            _dsMaDiv = 0; _dsMaAtivo = false;
+                            const mn = document.getElementById('ds-mgr')?.value;
+                            if (mn && mn !== 'flat' && typeof GerenciadorUnificado !== 'undefined') _dsMgr = new GerenciadorUnificado(mn, { stake: baseStake });
+                            dsLog('✅ SEC recuperou tudo — voltando à conta principal', '#00ff41');
+                        } else {
+                            // Dívida ainda positiva — permanece na SEC para continuar recuperando
+                            dsLog(`🔄 SEC ganhou mas dívida ainda $${_dsMaDiv.toFixed(2)} — continua na SEC`, '#fbbf24');
+                        }
+                    }
                 }
                 dsAtualizarEspelho();
             }
