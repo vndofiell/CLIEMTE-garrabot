@@ -17860,19 +17860,19 @@ async function dsOperar() {
                         dsLog(`🔀 <b style="color:#60a5fa">TRIGGER SEC</b> — próxima na conta espelho${_dsMaDiv > 0.01 ? ` (dívida pendente: $${_dsMaDiv.toFixed(2)})` : ''}`, '#60a5fa');
                     }
                 } else {
-                    // Conta SEC: verifica se dívida foi totalmente recuperada
+                    // Conta SEC: após qualquer resultado, verifica se lucro da SEC ficou >= 0
                     if (won) {
-                        // Só volta à conta principal se a dívida da SEC foi zerada
-                        if (_dsMaDiv <= 0.01) {
-                            // Dívida zerada — volta ao modo normal na conta principal
+                        // Critério de saída: lucro real da SEC >= 0 (não está mais negativo)
+                        if (_dsEspLucro >= -0.01) {
+                            // SEC positiva ou zerada — volta para conta principal
                             _dsUsandoSec = false; _dsSecMgr = null; _dsEspLossSeq = 0; _dsEspPerdaAc = 0;
                             _dsMaDiv = 0; _dsMaAtivo = false;
                             const mn = document.getElementById('ds-mgr')?.value;
                             if (mn && mn !== 'flat' && typeof GerenciadorUnificado !== 'undefined') _dsMgr = new GerenciadorUnificado(mn, { stake: baseStake });
-                            dsLog('✅ SEC recuperou tudo — voltando à conta principal', '#00ff41');
+                            dsLog(`✅ SEC positiva ($${_dsEspLucro >= 0 ? '+' : ''}$${_dsEspLucro.toFixed(2)}) — voltando à conta principal`, '#00ff41');
                         } else {
-                            // Dívida ainda positiva — permanece na SEC para continuar recuperando
-                            dsLog(`🔄 SEC ganhou mas dívida ainda $${_dsMaDiv.toFixed(2)} — continua na SEC`, '#fbbf24');
+                            // SEC ainda negativa — permanece na SEC para continuar recuperando
+                            dsLog(`🔄 SEC ganhou mas ainda negativa: $${_dsEspLucro.toFixed(2)} | dívida $${_dsMaDiv.toFixed(2)} — continua na SEC`, '#fbbf24');
                         }
                     }
                 }
