@@ -19007,11 +19007,16 @@ async function dmOperar() {
     const secPronto = (typeof _sec !== 'undefined') && _sec.pronto && _sec.ws && _sec.ws.readyState === WebSocket.OPEN;
     const _mc       = (typeof _mcConfig !== 'undefined') ? _mcConfig : {};
 
-    // Quando modo espelho ativo, usa SW/SL da conta SEC (_mcConfig); senão usa inputs próprios
-    let swLim  = (espAtivo && _mc.stopWin  > 0) ? _mc.stopWin  : (parseFloat(document.getElementById('dm-stopwin')?.value)  || 999);
-    const slLim = (espAtivo && _mc.stopLoss > 0) ? _mc.stopLoss : (parseFloat(document.getElementById('dm-stoploss')?.value) || 999);
+    // SW/SL: quando espelho ativo usa SEMPRE os limites da conta SEC (_mcConfig)
+    // O lucro checado é SEMPRE apenas da conta SEC (_dmEspLucro) — nunca mistura com a principal
+    let swLim  = (espAtivo && secPronto && _mc.stopWin  > 0) ? _mc.stopWin
+               : (!espAtivo && parseFloat(document.getElementById('dm-stopwin')?.value) > 0)
+                    ? parseFloat(document.getElementById('dm-stopwin').value) : 999;
+    const slLim = (espAtivo && secPronto && _mc.stopLoss > 0) ? _mc.stopLoss
+               : (!espAtivo && parseFloat(document.getElementById('dm-stoploss')?.value) > 0)
+                    ? parseFloat(document.getElementById('dm-stoploss').value) : 999;
 
-    // Usa meta JC-SEC quando disponível (sobrescreve SW)
+    // Usa meta JC-SEC quando disponível (sobrescreve SW — só vale com espelho ativo)
     try {
         const _jcR = await fetch('/jc-sec-meta').then(r => r.json()).catch(() => null);
         if (_jcR && _jcR.ativo && _jcR.meta_hoje > 0) {
@@ -19021,9 +19026,9 @@ async function dmOperar() {
         }
     } catch(_) {}
 
-    const _dmLucroCheck = (espAtivo && secPronto && _dmUsandoSec) ? _dmEspLucro
-                        : (espAtivo && secPronto) ? (_dmEspLucro + _dmLucro)
-                        : _dmLucro;
+    // Lucro checado: quando espelho ativo usa SOMENTE o lucro da conta SEC (_dmEspLucro)
+    // Nunca mistura lucro da conta teste — o SW é exclusivo da secundária
+    const _dmLucroCheck = (espAtivo && secPronto) ? _dmEspLucro : _dmLucro;
     if (_dmLucroCheck >= swLim) {
         dmLog(`🏆 STOP WIN! Lucro: +$${_dmLucroCheck.toFixed(2)}`, '#ffd700');
         _dmAutoOperar = false;
