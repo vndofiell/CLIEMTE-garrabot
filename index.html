@@ -18933,29 +18933,29 @@ async function dmOperar() {
             dmLog(`${won ? '🏆 WIN' : '💥 LOSS'} ${won?'+':''}$${profit.toFixed(2)} | próx $${proxStake.toFixed(2)}`, won ? '#00ff88' : '#f44');
             dmAtualizarStats();
 
-            // Notificações TG + WA
-            (async () => {
-                let tgAtual = (typeof _tgCfg !== 'undefined') ? _tgCfg : null;
-                if (!tgAtual || !tgAtual.token) {
-                    try { const r = await fetch('/tg-config'); if (r.ok) { tgAtual = await r.json(); if (typeof _tgCfg !== 'undefined') Object.assign(_tgCfg, tgAtual); } } catch(_) {}
-                }
-                const _lucroTotal = _dmUsandoSec ? _dmEspLucro : _dmLucro;
-                const _bancaRaw   = _dmUsandoSec ? document.getElementById('hd-balance-sec')?.textContent : document.getElementById('hd-balance')?.textContent;
-                const _banca = parseFloat((_bancaRaw||'').replace(/[^0-9.]/g,'')) || 0;
-                const _dmPayload = {
-                    win: won, lucro: profit, profit_total: _lucroTotal, banca: _banca,
-                    wins: _dmUsandoSec ? _dmEspWins : _dmWins, losses: _dmUsandoSec ? _dmEspLosses : _dmLosses,
-                    entrada: stake, prox_stake: proxStake,
-                    max_win_consec: _dmMaxWinSeq, max_loss_consec: _dmMaxLossSeq, max_stake: _dmMaxStake,
-                    modo: maNome || 'DM Sniper', estrategia: `${ct} barr=${barr}`,
-                    // Sempre SECUNDARIA — DM PRO opera via conta SEC (passa pelo filtro modo ESPELHO)
-                    conta: 'SECUNDARIA',
-                };
-                if (tgAtual && tgAtual.enabled && tgAtual.resultados && tgAtual.token && tgAtual.chat_id)
-                    fetch('/tg-send', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ token: tgAtual.token, chat_id: tgAtual.chat_id, ..._dmPayload }) }).catch(()=>{});
-                const waAtivo = (typeof _waNotifAtivo !== 'undefined') ? _waNotifAtivo : false;
-                if (waAtivo) fetch('/wa-send', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(_dmPayload) }).catch(()=>{});
-            })();
+            // Notificações TG + WA — somente quando operando na conta SEC
+            if (_dmUsandoSec) {
+                (async () => {
+                    let tgAtual = (typeof _tgCfg !== 'undefined') ? _tgCfg : null;
+                    if (!tgAtual || !tgAtual.token) {
+                        try { const r = await fetch('/tg-config'); if (r.ok) { tgAtual = await r.json(); if (typeof _tgCfg !== 'undefined') Object.assign(_tgCfg, tgAtual); } } catch(_) {}
+                    }
+                    const _bncRaw = document.getElementById('hd-balance-sec')?.textContent || document.getElementById('hd-balance')?.textContent;
+                    const _banca  = parseFloat((_bncRaw||'').replace(/[^0-9.]/g,'')) || 0;
+                    const _dmPayload = {
+                        win: won, lucro: profit, profit_total: _dmEspLucro, banca: _banca,
+                        wins: _dmEspWins, losses: _dmEspLosses,
+                        entrada: stake, prox_stake: proxStake,
+                        max_win_consec: _dmMaxWinSeq, max_loss_consec: _dmMaxLossSeq, max_stake: _dmMaxStake,
+                        modo: maNome || 'DM Sniper', estrategia: `${ct} barr=${barr}`,
+                        conta: 'SECUNDARIA',
+                    };
+                    if (tgAtual && tgAtual.enabled && tgAtual.resultados && tgAtual.token && tgAtual.chat_id)
+                        fetch('/tg-send', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ token: tgAtual.token, chat_id: tgAtual.chat_id, ..._dmPayload }) }).catch(()=>{});
+                    const waAtivo = (typeof _waNotifAtivo !== 'undefined') ? _waNotifAtivo : false;
+                    if (waAtivo) fetch('/wa-send', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(_dmPayload) }).catch(()=>{});
+                })();
+            }
 
             // Lógica espelho
             if (espAtivo && secPronto) {
