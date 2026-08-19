@@ -2225,34 +2225,55 @@
               </label>
             </div>
             <div id="dm-esp-campos" style="display:none;flex-direction:column;gap:8px;">
-              <div style="display:flex;align-items:center;gap:8px;">
-                <input type="checkbox" id="dm-esp-seq-ativo" style="accent-color:#fbbf24;width:13px;height:13px;">
-                <div style="flex:1;">
-                  <div style="font-size:0.55rem;color:#57606a;margin-bottom:2px;">LOSSES CONSECUTIVOS P/ ATIVAR SEC.</div>
-                  <input id="dm-esp-seq-qtd" type="number" value="3" min="1" max="20"
-                      style="width:60px;background:#030e08;border:1px solid rgba(255,189,46,0.3);
-                             color:#fbbf24;font-family:'Share Tech Mono';font-size:0.72rem;padding:3px 6px;border-radius:3px;">
+              <!-- Badges de configuração da conta SEC (somente leitura — editar em Conta Secundária) -->
+              <div style="display:flex;gap:6px;margin-bottom:2px;">
+                <!-- Gatilho Losses -->
+                <div style="flex:1;background:rgba(0,0,0,0.3);border:1px solid rgba(255,189,46,0.2);border-radius:4px;padding:4px 7px;">
+                  <div style="font-size:0.5rem;color:#6b7280;letter-spacing:1px;margin-bottom:2px;">LOSSES P/ ATIVAR</div>
+                  <div style="display:flex;align-items:center;justify-content:space-between;">
+                    <span id="dm-cfg-seq-val" style="font-size:0.82rem;font-weight:bold;color:#fbbf24;">--</span>
+                    <span id="dm-cfg-seq-badge" style="font-size:0.55rem;padding:1px 4px;border-radius:3px;background:rgba(100,100,100,0.3);color:#555;">OFF</span>
+                  </div>
+                </div>
+                <!-- Gatilho Perda -->
+                <div style="flex:1;background:rgba(0,0,0,0.3);border:1px solid rgba(255,189,46,0.2);border-radius:4px;padding:4px 7px;">
+                  <div style="font-size:0.5rem;color:#6b7280;letter-spacing:1px;margin-bottom:2px;">PERDA P/ ATIVAR</div>
+                  <div style="display:flex;align-items:center;justify-content:space-between;">
+                    <span id="dm-cfg-perda-val" style="font-size:0.82rem;font-weight:bold;color:#fbbf24;">--</span>
+                    <span id="dm-cfg-perda-badge" style="font-size:0.55rem;padding:1px 4px;border-radius:3px;background:rgba(100,100,100,0.3);color:#555;">OFF</span>
+                  </div>
                 </div>
               </div>
-              <div style="display:flex;align-items:center;gap:8px;">
-                <input type="checkbox" id="dm-esp-perda-ativo" style="accent-color:#fbbf24;width:13px;height:13px;">
-                <div style="flex:1;">
-                  <div style="font-size:0.55rem;color:#57606a;margin-bottom:2px;">PERDA EM $ P/ ATIVAR SEC.</div>
-                  <input id="dm-esp-perda-val" type="number" value="5" min="0" step="0.1"
-                      style="width:60px;background:#030e08;border:1px solid rgba(255,189,46,0.3);
-                             color:#fbbf24;font-family:'Share Tech Mono';font-size:0.72rem;padding:3px 6px;border-radius:3px;">
+              <!-- Badges Entrada / Stop Win / Stop Loss da SEC -->
+              <div style="display:flex;gap:6px;">
+                <div style="flex:1;background:rgba(0,0,0,0.3);border:1px solid rgba(0,255,204,0.2);border-radius:4px;padding:4px 7px;">
+                  <div style="font-size:0.5rem;color:#6b7280;letter-spacing:1px;margin-bottom:2px;">ENTRADA</div>
+                  <span id="dm-cfg-stake" style="font-size:0.78rem;font-weight:bold;color:#00ffcc;">--</span>
+                </div>
+                <div style="flex:1;background:rgba(0,0,0,0.3);border:1px solid rgba(74,222,128,0.2);border-radius:4px;padding:4px 7px;">
+                  <div style="font-size:0.5rem;color:#6b7280;letter-spacing:1px;margin-bottom:2px;">STOP WIN</div>
+                  <span id="dm-cfg-sw" style="font-size:0.78rem;font-weight:bold;color:#4ade80;">--</span>
+                </div>
+                <div style="flex:1;background:rgba(0,0,0,0.3);border:1px solid rgba(248,113,113,0.2);border-radius:4px;padding:4px 7px;">
+                  <div style="font-size:0.5rem;color:#6b7280;letter-spacing:1px;margin-bottom:2px;">STOP LOSS</div>
+                  <span id="dm-cfg-sl" style="font-size:0.78rem;font-weight:bold;color:#f87171;">--</span>
                 </div>
               </div>
+              <!-- Gerenciamento da SEC -->
+              <div style="background:rgba(0,0,0,0.3);border:1px solid rgba(96,165,250,0.2);border-radius:4px;padding:4px 7px;">
+                <div style="font-size:0.5rem;color:#6b7280;letter-spacing:1px;margin-bottom:2px;">GERENCIAMENTO SEC</div>
+                <span id="dm-cfg-mgr" style="font-size:0.72rem;font-weight:bold;color:#60a5fa;">--</span>
+              </div>
+              <button onclick="abrirModalMultiContas()" style="width:100%;padding:5px;
+                  background:rgba(255,189,46,0.08);border:1px solid rgba(255,189,46,0.3);
+                  color:#fbbf24;font-family:'Share Tech Mono',monospace;font-size:0.62rem;
+                  letter-spacing:1px;cursor:pointer;border-radius:3px;">
+                ⚙ CONFIGURAR CONTA SECUNDÁRIA
+              </button>
               <div id="dm-esp-status" style="font-size:0.6rem;color:#57606a;background:rgba(0,0,0,0.3);
                   border:1px solid #1a3a25;border-radius:4px;padding:5px 8px;line-height:1.6;">
                 Conta secundária: verificando...
               </div>
-              <button id="dm-btn-conectar-sec" onclick="abrirModalMultiContas()"
-                  style="width:100%;background:rgba(255,189,46,0.1);border:1px solid rgba(255,189,46,0.5);
-                         color:#fbbf24;font-family:'Share Tech Mono';font-size:0.68rem;padding:6px;
-                         border-radius:4px;cursor:pointer;letter-spacing:1px;margin-top:2px;">
-                💳 Conectar / Configurar Conta SEC
-              </button>
               <div style="display:flex;gap:6px;flex-wrap:wrap;">
                 <div style="border:1px solid rgba(0,255,136,0.3);border-radius:4px;padding:2px 7px;font-size:0.65rem;color:#00ff88;">✅ <span id="dm-esp-wins">0</span></div>
                 <div style="border:1px solid rgba(255,79,109,0.3);border-radius:4px;padding:2px 7px;font-size:0.65rem;color:#ff4f6d;">🔁 <span id="dm-esp-loss">0</span></div>
@@ -16348,6 +16369,116 @@ _wakeLockAtivar();
   });
 })();
 
+// ══════════════════════════════════════════════════════════════
+// ── ANTI-SUSPEND: mantém bot operando com tela apagada/minimizada ──
+// ══════════════════════════════════════════════════════════════
+(function() {
+
+    // ── 1. Watchdog — verifica WS a cada 5s e reconecta se cair ──
+    setInterval(() => {
+        // Bot principal
+        if (typeof bot !== 'undefined' && bot.running && bot._wssUrl) {
+            if (!bot.ws || bot.ws.readyState === WebSocket.CLOSED || bot.ws.readyState === WebSocket.CLOSING) {
+                console.warn('🔁 Watchdog: WS principal caiu — reconectando...');
+                try { initWebSocket(bot._wssUrl); } catch(_) {}
+            }
+        }
+        // Conta secundária
+        if (typeof _sec !== 'undefined' && _sec.pronto && _sec._wssUrl) {
+            if (!_sec.ws || _sec.ws.readyState === WebSocket.CLOSED || _sec.ws.readyState === WebSocket.CLOSING) {
+                console.warn('🔁 Watchdog: WS SEC caiu — reconectando...');
+                try {
+                    if (typeof _sec._reconectar === 'function') _sec._reconectar();
+                    else if (typeof iniciarSecundaria === 'function') iniciarSecundaria(_sec._wssUrl);
+                } catch(_) {}
+            }
+        }
+    }, 5000);
+
+    // ── 2. Heartbeat WS — envia ping a cada 20s para não fechar por inatividade ──
+    setInterval(() => {
+        if (typeof bot !== 'undefined' && bot.ws && bot.ws.readyState === WebSocket.OPEN) {
+            try { bot.ws.send(JSON.stringify({ ping: 1 })); } catch(_) {}
+        }
+        if (typeof _sec !== 'undefined' && _sec.ws && _sec.ws.readyState === WebSocket.OPEN) {
+            try { _sec.ws.send(JSON.stringify({ ping: 1 })); } catch(_) {}
+        }
+    }, 20000);
+
+    // ── 3. Audio Context trick — mantém browser awake em celular ──
+    // Toca silêncio inaudível para impedir o browser de suspender a aba
+    (function _audioKeepAlive() {
+        try {
+            const _actx = new (window.AudioContext || window.webkitAudioContext)();
+            function _playsilence() {
+                if (_actx.state === 'suspended') _actx.resume().catch(() => {});
+                const buf = _actx.createBuffer(1, _actx.sampleRate * 0.1, _actx.sampleRate);
+                const src = _actx.createBufferSource();
+                src.buffer = buf;
+                src.connect(_actx.destination);
+                src.start();
+                src.stop(_actx.currentTime + 0.1);
+            }
+            setInterval(_playsilence, 25000);
+            document.addEventListener('click', () => {
+                if (_actx.state === 'suspended') _actx.resume().catch(() => {});
+            }, { once: false });
+        } catch(_) {}
+    })();
+
+    // ── 4. Visibilitychange robusto — reconecta tudo ao voltar do background ──
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState !== 'visible') return;
+        setTimeout(() => {
+            // Reconecta bot principal se caiu
+            if (typeof bot !== 'undefined' && bot.running && bot._wssUrl) {
+                if (!bot.ws || bot.ws.readyState !== WebSocket.OPEN) {
+                    console.log('📡 Voltou do background — reconectando bot principal...');
+                    try { initWebSocket(bot._wssUrl); } catch(_) {}
+                }
+            }
+            // Reconecta SEC se caiu
+            if (typeof _sec !== 'undefined' && _sec.pronto && _sec._wssUrl) {
+                if (!_sec.ws || _sec.ws.readyState !== WebSocket.OPEN) {
+                    console.log('📡 Voltou do background — reconectando SEC...');
+                    try {
+                        if (typeof _sec._reconectar === 'function') _sec._reconectar();
+                        else if (typeof iniciarSecundaria === 'function') iniciarSecundaria(_sec._wssUrl);
+                    } catch(_) {}
+                }
+            }
+            // Retoma auto-operar do DM se estava ativo
+            if (typeof _dmAutoOperar !== 'undefined' && _dmAutoOperar && typeof _dmSinalAtual !== 'undefined' && _dmSinalAtual) {
+                if (!_dmAguardandoRecon && !_dmEmOperacao) {
+                    console.log('🔁 Voltou do background — retomando dmOperar...');
+                    try { dmOperar(); } catch(_) {}
+                }
+            }
+            // Retoma auto-operar do DS se estava ativo
+            if (typeof _dsAutoOperar !== 'undefined' && _dsAutoOperar && typeof _dsSinalAtual !== 'undefined' && _dsSinalAtual) {
+                if (!_dsAguardandoRecon && !_dsEmOperacao) {
+                    console.log('🔁 Voltou do background — retomando dsOperar...');
+                    try { dsOperar(); } catch(_) {}
+                }
+            }
+        }, 1000);
+    });
+
+    // ── 5. Page Show — garante WS vivo ao restaurar aba suspensa (iOS/Safari) ──
+    window.addEventListener('pageshow', (e) => {
+        if (!e.persisted) return;  // só para páginas do cache (bfcache iOS)
+        setTimeout(() => {
+            if (typeof bot !== 'undefined' && bot.running && bot._wssUrl &&
+                (!bot.ws || bot.ws.readyState !== WebSocket.OPEN)) {
+                console.log('📡 pageshow bfcache — reconectando...');
+                try { initWebSocket(bot._wssUrl); } catch(_) {}
+            }
+        }, 500);
+    });
+
+    console.log('🛡️ Anti-Suspend ativo: watchdog 5s + heartbeat 20s + audio + pageshow');
+})();
+
 // ══ DASHBOARD MOBILE — sync de dados e controles ══════════════
 (function() {
   function mobSync() {
@@ -18717,19 +18848,34 @@ function dmAtualizarEspelho() {
     if (offMsg) offMsg.style.display = ativo ? 'none' : 'block';
     if (ativo) {
         const secPronto = (typeof _sec !== 'undefined') && _sec.pronto && _sec.ws && _sec.ws.readyState === WebSocket.OPEN;
-        const stEl   = document.getElementById('dm-esp-status');
-        const btnSec = document.getElementById('dm-btn-conectar-sec');
+        const stEl = document.getElementById('dm-esp-status');
         if (stEl) {
             if (secPronto) {
                 stEl.innerHTML = `✅ SEC conectada | Banca: <b style="color:#fbbf24">$${parseFloat(_sec.saldo||0).toFixed(2)}</b>`;
                 stEl.style.color = '#fbbf24'; stEl.style.borderColor = 'rgba(255,189,46,0.4)';
-                if (btnSec) { btnSec.textContent = '✅ Conta SEC conectada — clique para reconfigurar'; btnSec.style.borderColor = 'rgba(0,255,136,0.4)'; btnSec.style.color = '#00ff88'; }
             } else {
                 stEl.textContent = '⚠️ Conta SEC não conectada.';
                 stEl.style.color = '#f44'; stEl.style.borderColor = 'rgba(255,79,109,0.3)';
-                if (btnSec) { btnSec.textContent = '💳 Conectar / Configurar Conta SEC'; btnSec.style.borderColor = 'rgba(255,189,46,0.5)'; btnSec.style.color = '#fbbf24'; }
             }
         }
+        // Preenche badges com configs reais da conta SEC (_mcConfig + _sec)
+        const mc = (typeof _mcConfig !== 'undefined') ? _mcConfig : {};
+        const secObj = (typeof _sec !== 'undefined') ? _sec : {};
+        const _s = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
+        const seqAtv   = secObj.gatilhoSeqAtivo   || false;
+        const perdAtv  = secObj.gatilhoPerdaAtivo  || false;
+        const seqLim   = secObj.limiteSeqLoss  || 5;
+        const perdLim  = Math.abs(secObj.limitePerda || 10);
+        _s('dm-cfg-seq-val',   seqLim);
+        _s('dm-cfg-perda-val', `$${perdLim.toFixed(2)}`);
+        _s('dm-cfg-stake', mc.stake    ? `$${mc.stake.toFixed(2)}`   : '--');
+        _s('dm-cfg-sw',    mc.stopWin  ? `$${mc.stopWin.toFixed(2)}` : '--');
+        _s('dm-cfg-sl',    mc.stopLoss ? `$${mc.stopLoss.toFixed(2)}`: '--');
+        _s('dm-cfg-mgr',   mc.gerenciamento || '--');
+        const seqBadgeEl  = document.getElementById('dm-cfg-seq-badge');
+        const perdBadgeEl = document.getElementById('dm-cfg-perda-badge');
+        if (seqBadgeEl)  { seqBadgeEl.textContent  = seqAtv  ? 'ON' : 'OFF'; seqBadgeEl.style.color  = seqAtv  ? '#fbbf24' : '#555'; seqBadgeEl.style.background  = seqAtv  ? 'rgba(251,191,36,0.15)' : 'rgba(100,100,100,0.3)'; }
+        if (perdBadgeEl) { perdBadgeEl.textContent = perdAtv ? 'ON' : 'OFF'; perdBadgeEl.style.color = perdAtv ? '#fbbf24' : '#555'; perdBadgeEl.style.background = perdAtv ? 'rgba(251,191,36,0.15)' : 'rgba(100,100,100,0.3)'; }
     }
 }
 
@@ -18766,23 +18912,21 @@ async function dmOperar() {
     }
     _dmAguardandoRecon = false;
 
-    let swLim  = parseFloat(document.getElementById('dm-stopwin')?.value)  || 999;
-    const slLim = parseFloat(document.getElementById('dm-stoploss')?.value) || 999;
-
     const espAtivo  = document.getElementById('dm-esp-ativo')?.checked;
     const secPronto = (typeof _sec !== 'undefined') && _sec.pronto && _sec.ws && _sec.ws.readyState === WebSocket.OPEN;
+    const _mc       = (typeof _mcConfig !== 'undefined') ? _mcConfig : {};
 
-    // Usa meta JC-SEC quando disponível
+    // Quando modo espelho ativo, usa SW/SL da conta SEC (_mcConfig); senão usa inputs próprios
+    let swLim  = (espAtivo && _mc.stopWin  > 0) ? _mc.stopWin  : (parseFloat(document.getElementById('dm-stopwin')?.value)  || 999);
+    const slLim = (espAtivo && _mc.stopLoss > 0) ? _mc.stopLoss : (parseFloat(document.getElementById('dm-stoploss')?.value) || 999);
+
+    // Usa meta JC-SEC quando disponível (sobrescreve SW)
     try {
         const _jcR = await fetch('/jc-sec-meta').then(r => r.json()).catch(() => null);
         if (_jcR && _jcR.ativo && _jcR.meta_hoje > 0) {
             const metaJC = parseFloat(_jcR.meta_hoje.toFixed(2));
             swLim = metaJC;
-            const swEl = document.getElementById('dm-stopwin');
-            if (swEl && Math.abs(parseFloat(swEl.value) - metaJC) > 0.001) {
-                dmLog(`💹 <b style="color:#00ffcc">JC-SEC ativo</b> — Stop Win = $${metaJC.toFixed(2)}`, '#00ffcc');
-                swEl.value = metaJC.toFixed(2);
-            }
+            dmLog(`💹 <b style="color:#00ffcc">JC-SEC ativo</b> — Stop Win = $${metaJC.toFixed(2)}`, '#00ffcc');
         }
     } catch(_) {}
 
@@ -18798,7 +18942,7 @@ async function dmOperar() {
         const _bncSW   = parseFloat((_bncRaw||'').replace(/[^0-9.]/g,'')) || 0;
         const _wSW     = _dmEspWins + _dmWins;
         const _lSW     = _dmEspLosses + _dmLosses;
-        const _mgrNmSW = document.getElementById('dm-mgr')?.value || 'DM Sniper';
+        const _mgrNmSW = (espAtivo && _mc.gerenciamento) ? _mc.gerenciamento : (document.getElementById('dm-mgr')?.value || 'DM Sniper');
         const _estSW   = `DM Sniper barr=${_dmSinalAtual?.barrier||'?'}`;
         stopWinExibirModal(_dmLucroCheck, _wSW, _lSW, _bncSW, _estSW, _mgrNmSW);
         jcSecOnMetaBatida(_dmLucroCheck, _wSW, _lSW, _bncSW, _estSW, _mgrNmSW);
@@ -18837,18 +18981,25 @@ async function dmOperar() {
     else if (espAtivo && !_dmUsandoSec)        dmLog('🏦 <b style="color:#39e6ff">Conta principal</b> — monitorando gatilho', '#39e6ff');
     if (espAtivo && !secPronto)                dmLog('⚠️ Espelho ativo mas SEC não conectada', '#ffbd2e');
 
-    const baseStake  = parseFloat(document.getElementById('dm-entrada')?.value) || 0.35;
+    // Stake: quando na SEC usa stake da _mcConfig; senão usa input próprio
+    const baseStake  = (_dmUsandoSec && espAtivo && _mc.stake > 0) ? _mc.stake
+                     : (parseFloat(document.getElementById('dm-entrada')?.value) || 0.35);
     const payoutCfg  = 0.85;
     const ct         = _dmSinalAtual.contract_type;
     const barr       = _dmSinalAtual.barrier;
-    const maNome     = document.getElementById('dm-mgr')?.value;
-    // SEC usa MA próprio (dívida independente); principal usa gerenciador escolhido
+    // Gerenciamento: quando na SEC usa _mcConfig.gerenciamento; senão usa select próprio
+    const maNome     = (_dmUsandoSec && espAtivo && _mc.gerenciamento) ? _mc.gerenciamento
+                     : (document.getElementById('dm-mgr')?.value);
     const usarMA     = (maNome === '📐 MA-Adaptativo') && !_dmUsandoSec;
     let stake;
     if (_dmUsandoSec) {
-        // Conta SEC: sempre usa MA-Adaptativo com dívida própria (_dmMaDivSec)
-        stake = _dmMaGetStakeSec(baseStake, barr, payoutCfg);
-        if (_dmMaAtivoSec) {
+        // Conta SEC: usa gerenciamento próprio (_dmSecMgr) ou MA-Adaptativo SEC
+        if (_dmSecMgr) {
+            stake = _dmSecMgr.getStake();
+        } else {
+            stake = _dmMaGetStakeSec(baseStake, barr, payoutCfg);
+        }
+        if (_dmMaAtivoSec && !_dmSecMgr) {
             const payout = _dmMaPayout(barr, payoutCfg);
             dmLog(`📐 <b style="color:#60a5fa">MA-SEC</b> barr=${barr} payout=${(payout*100).toFixed(0)}% dívida=$${_dmMaDivSec.toFixed(2)} → stake=$${stake.toFixed(2)}`, '#60a5fa');
         }
@@ -18963,19 +19114,25 @@ async function dmOperar() {
                 })();
             }
 
-            // Lógica espelho
+            // Lógica espelho — usa configs reais da conta SEC (_sec + _mcConfig)
             if (espAtivo && secPronto) {
+                const _secObj  = (typeof _sec !== 'undefined') ? _sec : {};
+                const _mcObj   = (typeof _mcConfig !== 'undefined') ? _mcConfig : {};
                 if (!_dmUsandoSec) {
-                    if (!won) { _dmEspLossSeq++; _dmEspPerdaAc += Math.abs(profit); } else _dmEspLossSeq = 0;
-                    const seqAtv  = document.getElementById('dm-esp-seq-ativo')?.checked;
-                    const perdAtv = document.getElementById('dm-esp-perda-ativo')?.checked;
-                    const lossLim = parseInt(document.getElementById('dm-esp-seq-qtd')?.value || 3);
-                    const perdLim = parseFloat(document.getElementById('dm-esp-perda-val')?.value || 5);
+                    if (!won) { _dmEspLossSeq++; _dmEspPerdaAc += Math.abs(profit); } else { _dmEspLossSeq = 0; }
+                    // Usa gatilhos configurados na conta SEC (_sec), não inputs próprios do DM
+                    const seqAtv  = _secObj.gatilhoSeqAtivo  || false;
+                    const perdAtv = _secObj.gatilhoPerdaAtivo || false;
+                    const lossLim = _secObj.limiteSeqLoss     || 5;
+                    const perdLim = Math.abs(_secObj.limitePerda || 10);
                     if ((seqAtv && _dmEspLossSeq >= lossLim) || (perdAtv && _dmEspPerdaAc >= perdLim)) {
                         _dmUsandoSec = true;
                         if (!_dmSecMgr) {
-                            const mn = document.getElementById('dm-mgr')?.value;
-                            _dmSecMgr = (mn && mn !== 'flat' && typeof GerenciadorUnificado !== 'undefined') ? new GerenciadorUnificado(mn, { stake: baseStake }) : null;
+                            // Cria gerenciador com _mcConfig.gerenciamento e stake da SEC
+                            const mn = _mcObj.gerenciamento || document.getElementById('dm-mgr')?.value;
+                            const stk = _mcObj.stake || baseStake;
+                            _dmSecMgr = (mn && mn !== 'flat' && mn !== '📐 MA-Adaptativo' && typeof GerenciadorUnificado !== 'undefined')
+                                ? new GerenciadorUnificado(mn, { stake: stk }) : null;
                         }
                         dmLog(`🔀 <b style="color:#60a5fa">TRIGGER SEC</b> — próxima na conta espelho${_dmMaDiv > 0.01 ? ` (dívida: $${_dmMaDiv.toFixed(2)})` : ''}`, '#60a5fa');
                     }
@@ -18984,14 +19141,17 @@ async function dmOperar() {
                     if (won && _dmEspLucro >= -0.01) {
                         _dmUsandoSec = false; _dmSecMgr = null; _dmEspLossSeq = 0; _dmEspPerdaAc = 0;
                         _dmMaDivSec = 0; _dmMaAtivoSec = false;
+                        // Recria gerenciador principal com gerenciamento do select próprio
                         const mn = document.getElementById('dm-mgr')?.value;
                         if (mn && mn !== 'flat' && typeof GerenciadorUnificado !== 'undefined') _dmMgr = new GerenciadorUnificado(mn, { stake: baseStake });
                         dmLog(`✅ SEC recuperada ($+${_dmEspLucro.toFixed(2)}) — voltando à conta principal`, '#00ff88');
                     } else if (!won) {
-                        // LOSS na SEC: aumenta dívida, permanece na SEC para recuperar
+                        // LOSS na SEC: atualiza gerenciador e continua
+                        if (_dmSecMgr) _dmSecMgr.update(false, profit);
                         dmLog(`🔄 SEC LOSS $${_dmEspLucro.toFixed(2)}${_dmMaDivSec > 0.01 ? ` | dívida $${_dmMaDivSec.toFixed(2)}` : ''} — recuperando...`, '#f44');
                     } else {
                         // WIN mas lucro ainda negativo — continua na SEC
+                        if (_dmSecMgr) _dmSecMgr.update(true, profit);
                         dmLog(`🔄 SEC WIN mas ainda negativa: $${_dmEspLucro.toFixed(2)} — continua`, '#fbbf24');
                     }
                 }
