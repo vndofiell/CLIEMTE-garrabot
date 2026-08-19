@@ -7099,6 +7099,10 @@ async function _secConectar() {
         }, 25000);
     };
     _sec.ws.onmessage = (msg) => {
+        // ── DM Pro: roteia proposta/buy/poc para o callback pendente ──
+        if (typeof _dmRotear === 'function' && _dmPendingWs === _sec.ws) {
+            if (_dmRotear(msg)) return;
+        }
         const d = JSON.parse(msg.data);
 
         if (d.error) {
@@ -7832,6 +7836,10 @@ function initWebSocket(wssUrl) {
     };
 
     bot.ws.onmessage = (msg) => {
+        // ── DM Pro: roteia proposta/buy/poc para o callback pendente ──
+        if (typeof _dmRotear === 'function' && _dmPendingWs === bot.ws) {
+            if (_dmRotear(msg)) return;
+        }
         const data = JSON.parse(msg.data);
         if (data.error) {
             print("⚠️ ERRO API: " + data.error.message, "log-loss");
@@ -18444,6 +18452,73 @@ let _dmMatrixRAF   = null;
 let _dmMatrixDrops = [];
 let _dmTimer       = null;     // intervalo de auto-scan
 
+// ── Interceptor fixo DM Pro — roteia proposal/buy/POC sem substituir onmessage ──
+function _dmRotear(msg) {
+    if (!_dmPendingReqId && !_dmPendingCid) return false;
+    let d;
+    try { d = JSON.parse(msg.data); } catch(_) { return false; }
+
+    // Proposta: verifica req_id
+    if (d.msg_type === 'proposal' && _dmPendingReqId && d.req_id === _dmPendingReqId) {
+        _dmPendingReqId = null;
+        if (d.error) {
+            if (_dmPendingTimer) { clearTimeout(_dmPendingTimer); _dmPendingTimer = null; }
+            _dmPendingCid = null; _dmPendingWs = null; _dmPendingCb = null;
+            _dmEmOperacao = false;
+            dmLog(`⚠️ Proposta recusada: ${d.error.message}`, '#f44');
+            if (_dmAutoOperar) setTimeout(async () => { if (!_dmAutoOperar) return; dmAtualizar(); setTimeout(() => { if (_dmSinalAtual) dmOperar(); }, 1000); }, 2000);
+            else dmBotaoOperar(true);
+            return true;
+        }
+        const pid = d.proposal?.id;
+        if (pid) {
+            dmLog('✅ Aceita — comprando...', '#00ff88');
+            _dmPendingWs.send(JSON.stringify({ buy: pid, price: parseFloat(d.proposal.ask_price) }));
+        } else {
+            if (_dmPendingTimer) { clearTimeout(_dmPendingTimer); _dmPendingTimer = null; }
+            _dmPendingCid = null; _dmPendingWs = null; _dmPendingCb = null;
+            _dmEmOperacao = false;
+            dmLog('⚠️ Proposta sem ID', '#f44');
+            if (_dmAutoOperar) setTimeout(async () => { if (!_dmAutoOperar) return; dmAtualizar(); setTimeout(() => { if (_dmSinalAtual) dmOperar(); }, 1000); }, 2000);
+            else dmBotaoOperar(true);
+        }
+        return true;
+    }
+
+    // Compra confirmada: registra contract_id
+    if (d.msg_type === 'buy' && !_dmPendingCid) {
+        if (d.error) {
+            if (_dmPendingTimer) { clearTimeout(_dmPendingTimer); _dmPendingTimer = null; }
+            _dmPendingReqId = null; _dmPendingWs = null; _dmPendingCb = null;
+            _dmEmOperacao = false;
+            dmLog(`⚠️ Compra recusada: ${d.error.message}`, '#f44');
+            if (_dmAutoOperar) setTimeout(async () => { if (!_dmAutoOperar) return; dmAtualizar(); setTimeout(() => { if (_dmSinalAtual) dmOperar(); }, 1000); }, 2000);
+            else dmBotaoOperar(true);
+            return true;
+        }
+        const cid = d.buy?.contract_id;
+        if (cid) {
+            _dmPendingCid = cid;
+            dmLog(`🎯 #${cid} — aguardando...`, '#ffbd2e');
+            _dmPendingWs.send(JSON.stringify({ proposal_open_contract: 1, contract_id: cid, subscribe: 1 }));
+            return true;
+        }
+        return false;
+    }
+
+    // Resultado do contrato
+    if (d.msg_type === 'proposal_open_contract' && d.proposal_open_contract) {
+        const poc = d.proposal_open_contract;
+        if (!_dmPendingCid || poc.contract_id !== _dmPendingCid) return false; // não é o nosso
+        if (!poc.is_sold) return true; // ainda aberto — consumiu a mensagem mas aguarda
+        // Contrato fechado: chama callback
+        if (typeof _dmPendingCb === 'function') _dmPendingCb(poc);
+        return true;
+    }
+
+    return false;
+}
+
 function dmAbrirModal() {
     const m = document.getElementById('dm-modal');
     if (!m) return;
@@ -18747,6 +18822,11 @@ let _dmEspLucro       = 0;
 let _dmSinalAtual     = null;
 let _dmAguardandoRecon= false;
 let _dmEmOperacao     = false;
+let _dmPendingReqId   = null;   // req_id da proposta aguardada
+let _dmPendingCid     = null;   // contract_id da compra aguardada
+let _dmPendingWs      = null;   // ws em que a operação foi enviada
+let _dmPendingTimer   = null;   // timer de timeout da operação
+let _dmPendingCb      = null;   // callback chamado quando resultado chega
 let _dmMaxWinSeq      = 0;
 let _dmMaxLossSeq     = 0;
 let _dmMaxStake       = 0;
@@ -19115,53 +19195,35 @@ async function dmOperar() {
         contract_type:ct, currency:'USD', duration:1, duration_unit:'t',
         underlying_symbol:ativ, barrier:String(barr) };
 
-    const _origMsg = wsUsar.onmessage;
-    let _dmCid = null, _dmTravado = null, _dmCidComprado = false;
+    // ── Registra operação pendente (handler fixo _dmRotear intercepta as respostas) ──
+    _dmPendingReqId = reqId;
+    _dmPendingCid   = null;
+    _dmPendingWs    = wsUsar;
 
+    // Timer de proposta: 25s; se contrato já comprado aguarda mais 60s
+    if (_dmPendingTimer) clearTimeout(_dmPendingTimer);
     const _rec = (motivo) => {
-        if (_dmTravado) { clearTimeout(_dmTravado); _dmTravado = null; }
-        wsUsar.onmessage = _origMsg;
+        if (_dmPendingTimer) { clearTimeout(_dmPendingTimer); _dmPendingTimer = null; }
+        _dmPendingReqId = null; _dmPendingCid = null; _dmPendingWs = null; _dmPendingCb = null;
         _dmEmOperacao = false;
         dmLog(`⚠️ ${motivo}`, '#f44');
         if (_dmAutoOperar) setTimeout(async () => { if (!_dmAutoOperar) return; dmAtualizar(); setTimeout(() => { if (_dmSinalAtual) dmOperar(); }, 1000); }, 2000);
         else dmBotaoOperar(true);
     };
-
-    // Timer de proposta: 25s; se já comprou o contrato reinicia por 60s esperando resultado
-    _dmTravado = setTimeout(() => {
-        if (_dmCidComprado) {
-            // Contrato já foi comprado — aguarda mais 60s pelo resultado antes de abortar
-            dmLog(`⏳ Contrato #${_dmCid} ainda aberto — aguardando mais 60s...`, '#fbbf24');
-            _dmTravado = setTimeout(() => _rec('Timeout 60s — contrato sem resposta'), 60000);
+    _dmPendingTimer = setTimeout(() => {
+        if (_dmPendingCid) {
+            dmLog(`⏳ Contrato #${_dmPendingCid} ainda aberto — aguardando mais 60s...`, '#fbbf24');
+            _dmPendingTimer = setTimeout(() => _rec('Timeout 60s — contrato sem resposta'), 60000);
         } else {
             _rec('Timeout 25s');
         }
     }, 25000);
 
-    wsUsar.onmessage = (msg) => {
-        const d = JSON.parse(msg.data);
-        if (d.msg_type === 'proposal' && d.req_id === reqId) {
-            if (d.error) { _rec('Proposta recusada: ' + d.error.message); return; }
-            const pid = d.proposal?.id;
-            if (pid) { dmLog('✅ Aceita — comprando...', '#00ff88'); wsUsar.send(JSON.stringify({ buy:pid, price:stake })); }
-            else _rec('Proposta sem ID');
-            return;
-        }
-        if (d.msg_type === 'buy') {
-            if (d.error) { _rec('Compra recusada: ' + d.error.message); return; }
-            const cid = d.buy?.contract_id;
-            if (cid) { _dmCid = cid; _dmCidComprado = true; dmLog(`🎯 #${cid} — aguardando...`, '#ffbd2e'); wsUsar.send(JSON.stringify({ proposal_open_contract:1, contract_id:cid, subscribe:1 })); }
-            else _rec('Compra sem contract_id');
-            return;
-        }
-        if (d.msg_type === 'proposal_open_contract' && d.proposal_open_contract) {
-            const poc = d.proposal_open_contract;
-            if (_dmCid && poc.contract_id !== _dmCid) { _origMsg(msg); return; }
-            if (!poc.is_sold) { _origMsg(msg); return; }
-            if (_dmTravado) { clearTimeout(_dmTravado); _dmTravado = null; }
-            wsUsar.onmessage = _origMsg;
-            _dmEmOperacao = false;
-            const profit = parseFloat(poc.profit), won = profit > 0;
+    _dmPendingCb = (poc) => {
+        if (_dmPendingTimer) { clearTimeout(_dmPendingTimer); _dmPendingTimer = null; }
+        _dmPendingReqId = null; _dmPendingCid = null; _dmPendingWs = null; _dmPendingCb = null;
+        _dmEmOperacao = false;
+        const profit = parseFloat(poc.profit), won = profit > 0;
 
             // Atualiza dívida MA do lado correto: SEC independente da principal
             if (_dmUsandoSec) {
@@ -19258,13 +19320,11 @@ async function dmOperar() {
                 dmAtualizarEspelho();
             }
 
-            if (_dmAutoOperar) {
-                setTimeout(async () => { if (!_dmAutoOperar) return; dmAtualizar(); setTimeout(() => { if (_dmSinalAtual && _dmAutoOperar) dmOperar(); }, 1000); }, 1500);
-            } else dmBotaoOperar(true);
-            return;
-        }
-        _origMsg(msg);
+        if (_dmAutoOperar) {
+            setTimeout(async () => { if (!_dmAutoOperar) return; dmAtualizar(); setTimeout(() => { if (_dmSinalAtual && _dmAutoOperar) dmOperar(); }, 1000); }, 1500);
+        } else dmBotaoOperar(true);
     };
+
     wsUsar.send(JSON.stringify(payload));
 }
 // ── FIM DIGIT MATRIX SNIPER PRO ───────────────────────────────────────────
