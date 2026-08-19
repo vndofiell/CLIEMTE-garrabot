@@ -2139,8 +2139,8 @@
           </div>
         </div>
 
-        <!-- Log + Stats lado a lado -->
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+        <!-- Log + Stats lado a lado — controlado pelo mesmo toggle do Mapa -->
+        <div id="dm-logstats-body" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
           <div style="border:1px solid #0b4b35;background:linear-gradient(180deg,#04100a,#020806);border-radius:6px;padding:12px;">
             <div style="font-size:0.62rem;color:#00ff88;letter-spacing:1px;margin-bottom:8px;">📋 LOG MATRIX</div>
             <pre id="dm-log" style="margin:0;max-height:200px;overflow-y:auto;white-space:pre-wrap;color:#4ca77e;font-size:0.67rem;line-height:1.5;"></pre>
@@ -18561,16 +18561,14 @@ async function dmSalvarConfig() {
 }
 
 function dmToggleMapa() {
-    const body = document.getElementById('dm-mapa-body');
-    const btn  = document.getElementById('dm-mapa-btn');
+    const body     = document.getElementById('dm-mapa-body');
+    const logStats = document.getElementById('dm-logstats-body');
+    const btn      = document.getElementById('dm-mapa-btn');
     if (!body || !btn) return;
-    if (body.style.display === 'none') {
-        body.style.display = 'block';
-        btn.innerHTML = '▲ OCULTAR';
-    } else {
-        body.style.display = 'none';
-        btn.innerHTML = '▼ MOSTRAR';
-    }
+    const ocultar = body.style.display !== 'none';
+    body.style.display     = ocultar ? 'none' : 'block';
+    if (logStats) logStats.style.display = ocultar ? 'none' : 'grid';
+    btn.innerHTML = ocultar ? '▼ MOSTRAR' : '▲ OCULTAR';
 }
 
 // ── Operação real — Digit Matrix PRO ─────────────────────────────────────
