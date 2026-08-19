@@ -2111,20 +2111,32 @@
 
         <!-- Mapa dos 10 dígitos -->
         <div style="border:1px solid #0b4b35;background:linear-gradient(180deg,#04100a,#020806);border-radius:6px;padding:12px;margin-bottom:10px;">
-          <div style="font-size:0.62rem;color:#00ff88;letter-spacing:1px;margin-bottom:8px;">📊 MAPA DOS 10 DÍGITOS</div>
-          <table style="width:100%;border-collapse:collapse;font-size:0.7rem;">
-            <thead>
-              <tr style="color:#54d99b;">
-                <th style="padding:6px;border-bottom:1px solid #0a392b;text-align:center;">Dígito</th>
-                <th style="padding:6px;border-bottom:1px solid #0a392b;text-align:center;">Freq.</th>
-                <th style="padding:6px;border-bottom:1px solid #0a392b;text-align:center;">Total</th>
-                <th style="padding:6px;border-bottom:1px solid #0a392b;text-align:center;">10T</th>
-                <th style="padding:6px;border-bottom:1px solid #0a392b;text-align:center;">20T</th>
-                <th style="padding:6px;border-bottom:1px solid #0a392b;text-align:center;">Estado</th>
-              </tr>
-            </thead>
-            <tbody id="dm-matrix-table"></tbody>
-          </table>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+            <div style="font-size:0.62rem;color:#00ff88;letter-spacing:1px;">📊 MAPA DOS 10 DÍGITOS</div>
+            <button onclick="dmToggleMapa()" id="dm-mapa-btn"
+                style="background:rgba(255,255,255,0.05);border:1px solid #0b4b35;color:#57606a;
+                       font-family:'Share Tech Mono';font-size:0.55rem;padding:2px 8px;border-radius:3px;
+                       cursor:pointer;letter-spacing:1px;transition:all 0.15s;"
+                onmouseover="this.style.borderColor='#00ff88';this.style.color='#00ff88';"
+                onmouseout="this.style.borderColor='#0b4b35';this.style.color='#57606a';">
+              ▲ OCULTAR
+            </button>
+          </div>
+          <div id="dm-mapa-body" style="overflow-x:auto;">
+            <table style="width:100%;border-collapse:collapse;font-size:0.7rem;">
+              <thead>
+                <tr style="color:#54d99b;">
+                  <th style="padding:6px;border-bottom:1px solid #0a392b;text-align:center;">Dígito</th>
+                  <th style="padding:6px;border-bottom:1px solid #0a392b;text-align:center;">Freq.</th>
+                  <th style="padding:6px;border-bottom:1px solid #0a392b;text-align:center;">Total</th>
+                  <th style="padding:6px;border-bottom:1px solid #0a392b;text-align:center;">10T</th>
+                  <th style="padding:6px;border-bottom:1px solid #0a392b;text-align:center;">20T</th>
+                  <th style="padding:6px;border-bottom:1px solid #0a392b;text-align:center;">Estado</th>
+                </tr>
+              </thead>
+              <tbody id="dm-matrix-table"></tbody>
+            </table>
+          </div>
         </div>
 
         <!-- Log + Stats lado a lado -->
@@ -18547,6 +18559,20 @@ async function dmSalvarConfig() {
         if (logEl) logEl.textContent += `Erro ao salvar: ${e.message}\n`;
     }
 }
+
+function dmToggleMapa() {
+    const body = document.getElementById('dm-mapa-body');
+    const btn  = document.getElementById('dm-mapa-btn');
+    if (!body || !btn) return;
+    if (body.style.display === 'none') {
+        body.style.display = 'block';
+        btn.innerHTML = '▲ OCULTAR';
+    } else {
+        body.style.display = 'none';
+        btn.innerHTML = '▼ MOSTRAR';
+    }
+}
+
 // ── Operação real — Digit Matrix PRO ─────────────────────────────────────
 let _dmMgr            = null;
 let _dmSecMgr         = null;
