@@ -18972,16 +18972,19 @@ async function dmOperar() {
                         dmLog(`🔀 <b style="color:#60a5fa">TRIGGER SEC</b> — próxima na conta espelho${_dmMaDiv > 0.01 ? ` (dívida: $${_dmMaDiv.toFixed(2)})` : ''}`, '#60a5fa');
                     }
                 } else {
-                    // Na SEC: só retorna à principal quando lucro da SEC >= 0
-                    if (_dmEspLucro >= -0.01) {
+                    // Na SEC: só volta à principal se GANHOU a última entrada E lucro SEC >= 0
+                    if (won && _dmEspLucro >= -0.01) {
                         _dmUsandoSec = false; _dmSecMgr = null; _dmEspLossSeq = 0; _dmEspPerdaAc = 0;
-                        _dmMaDivSec = 0; _dmMaAtivoSec = false;   // zera dívida da SEC
+                        _dmMaDivSec = 0; _dmMaAtivoSec = false;
                         const mn = document.getElementById('dm-mgr')?.value;
                         if (mn && mn !== 'flat' && typeof GerenciadorUnificado !== 'undefined') _dmMgr = new GerenciadorUnificado(mn, { stake: baseStake });
-                        dmLog(`✅ SEC positiva ($${_dmEspLucro >= 0 ? '+' : ''}$${_dmEspLucro.toFixed(2)}) — voltando à conta principal`, '#00ff88');
+                        dmLog(`✅ SEC recuperada ($+${_dmEspLucro.toFixed(2)}) — voltando à conta principal`, '#00ff88');
+                    } else if (!won) {
+                        // LOSS na SEC: aumenta dívida, permanece na SEC para recuperar
+                        dmLog(`🔄 SEC LOSS $${_dmEspLucro.toFixed(2)}${_dmMaDivSec > 0.01 ? ` | dívida $${_dmMaDivSec.toFixed(2)}` : ''} — recuperando...`, '#f44');
                     } else {
-                        // SEC ainda negativa — permanece recuperando
-                        dmLog(`🔄 SEC: $${_dmEspLucro.toFixed(2)} ainda negativa${_dmMaDivSec > 0.01 ? ` | dívida $${_dmMaDivSec.toFixed(2)}` : ''} — continua`, '#fbbf24');
+                        // WIN mas lucro ainda negativo — continua na SEC
+                        dmLog(`🔄 SEC WIN mas ainda negativa: $${_dmEspLucro.toFixed(2)} — continua`, '#fbbf24');
                     }
                 }
                 dmAtualizarEspelho();
