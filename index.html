@@ -2209,7 +2209,7 @@
             <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">
               <div style="border:1px solid rgba(0,255,136,0.3);border-radius:4px;padding:2px 7px;font-size:0.65rem;color:#00ff88;">✅ <span id="dm-stat-wins">0</span></div>
               <div style="border:1px solid rgba(255,79,109,0.3);border-radius:4px;padding:2px 7px;font-size:0.65rem;color:#ff4f6d;">🔁 <span id="dm-stat-loss">0</span></div>
-              <div style="border:1px solid rgba(0,255,136,0.35);border-radius:4px;padding:2px 7px;font-size:0.65rem;color:#00ff88;">💰 <span id="dm-stat-lucro">+$0.00</span></div>
+              <div style="border:1px solid rgba(0,255,136,0.35);border-radius:4px;padding:2px 7px;font-size:0.65rem;color:#00ff88;">💰 <span id="dm-stat-lucro">+$0.00</span> <span id="dm-stat-lucro-brl" style="color:#57606a;font-size:0.58rem;"></span></div>
               <div style="border:1px solid rgba(57,230,255,0.35);border-radius:4px;padding:2px 7px;font-size:0.65rem;color:#39e6ff;">⚡ <span id="dm-stat-prox">$--</span></div>
             </div>
           </div>
@@ -2256,7 +2256,7 @@
               <div style="display:flex;gap:6px;flex-wrap:wrap;">
                 <div style="border:1px solid rgba(0,255,136,0.3);border-radius:4px;padding:2px 7px;font-size:0.65rem;color:#00ff88;">✅ <span id="dm-esp-wins">0</span></div>
                 <div style="border:1px solid rgba(255,79,109,0.3);border-radius:4px;padding:2px 7px;font-size:0.65rem;color:#ff4f6d;">🔁 <span id="dm-esp-loss">0</span></div>
-                <div style="border:1px solid rgba(255,189,46,0.35);border-radius:4px;padding:2px 7px;font-size:0.65rem;color:#fbbf24;">💰 <span id="dm-esp-lucro">+$0.00</span></div>
+                <div style="border:1px solid rgba(255,189,46,0.35);border-radius:4px;padding:2px 7px;font-size:0.65rem;color:#fbbf24;">💰 <span id="dm-esp-lucro">+$0.00</span> <span id="dm-esp-lucro-brl" style="color:#57606a;font-size:0.58rem;"></span></div>
               </div>
             </div>
             <div id="dm-esp-off-msg" style="font-size:0.6rem;color:#555;margin-top:8px;">
@@ -18669,13 +18669,19 @@ function dmAtualizarStats() {
                : _dmMgr ? _dmMgr.getStake()
                : (parseFloat(document.getElementById('dm-entrada')?.value) || 0.35);
     const _s = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
+    const cot = parseFloat(window._cotacaoBRL || 0);
+    const _brl = (usd) => cot > 0 ? `R$${(Math.abs(usd) * cot).toFixed(2)}` : '';
+    const _sinal = (v) => v >= 0 ? '+' : '-';
+
     _s('dm-stat-wins',  _dmWins);
     _s('dm-stat-loss',  _dmLosses);
     _s('dm-stat-lucro', (_dmLucro >= 0 ? '+' : '') + '$' + _dmLucro.toFixed(2));
+    _s('dm-stat-lucro-brl', _brl(_dmLucro) ? `(${_sinal(_dmLucro)}${_brl(_dmLucro)})` : '');
     _s('dm-stat-prox',  '$' + prox.toFixed(2));
     _s('dm-esp-wins',   _dmEspWins);
     _s('dm-esp-loss',   _dmEspLosses);
     _s('dm-esp-lucro',  (_dmEspLucro >= 0 ? '+' : '') + '$' + _dmEspLucro.toFixed(2));
+    _s('dm-esp-lucro-brl', _brl(_dmEspLucro) ? `(${_sinal(_dmEspLucro)}${_brl(_dmEspLucro)})` : '');
 }
 
 function dmBotaoOperar(ativo) {
