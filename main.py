@@ -9052,7 +9052,8 @@ def contas_sec_config_post():
                 atual = json.load(f)
     except Exception:
         pass
-    for k in ("gerenciamento", "stake", "stopWin", "stopLoss", "limitePerda"):
+    for k in ("gerenciamento", "stake", "stopWin", "stopLoss", "limitePerda",
+              "limiteSeqLoss", "gatilhoSeqAtivo", "gatilhoPerdaAtivo", "mgrCfgs"):
         if k in dados:
             atual[k] = dados[k]
     try:

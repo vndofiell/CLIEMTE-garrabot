@@ -2225,38 +2225,58 @@
               </label>
             </div>
             <div id="dm-esp-campos" style="display:none;flex-direction:column;gap:8px;">
-              <!-- Badges de configuração da conta SEC (somente leitura — editar em Conta Secundária) -->
+              <!-- Gatilhos editáveis inline -->
               <div style="display:flex;gap:6px;margin-bottom:2px;">
                 <!-- Gatilho Losses -->
                 <div style="flex:1;background:rgba(0,0,0,0.3);border:1px solid rgba(255,189,46,0.2);border-radius:4px;padding:4px 7px;">
-                  <div style="font-size:0.5rem;color:#6b7280;letter-spacing:1px;margin-bottom:2px;">LOSSES P/ ATIVAR</div>
-                  <div style="display:flex;align-items:center;justify-content:space-between;">
-                    <span id="dm-cfg-seq-val" style="font-size:0.82rem;font-weight:bold;color:#fbbf24;">--</span>
-                    <span id="dm-cfg-seq-badge" style="font-size:0.55rem;padding:1px 4px;border-radius:3px;background:rgba(100,100,100,0.3);color:#555;">OFF</span>
+                  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px;">
+                    <span style="font-size:0.5rem;color:#6b7280;letter-spacing:1px;">LOSSES P/ ATIVAR</span>
+                    <span id="dm-cfg-seq-badge" style="font-size:0.55rem;padding:1px 4px;border-radius:3px;background:rgba(100,100,100,0.3);color:#555;cursor:pointer;" onclick="dmToggleGatilhoSeq()">OFF</span>
                   </div>
+                  <input id="dm-cfg-seq-val" type="number" min="1" max="50" step="1" value="5"
+                      style="width:100%;background:transparent;border:none;border-bottom:1px solid rgba(255,189,46,0.4);
+                             color:#fbbf24;font-size:0.82rem;font-weight:bold;font-family:'Share Tech Mono',monospace;
+                             padding:0;outline:none;box-sizing:border-box;"
+                      onchange="dmSalvarEspelhoInline()">
                 </div>
                 <!-- Gatilho Perda -->
                 <div style="flex:1;background:rgba(0,0,0,0.3);border:1px solid rgba(255,189,46,0.2);border-radius:4px;padding:4px 7px;">
-                  <div style="font-size:0.5rem;color:#6b7280;letter-spacing:1px;margin-bottom:2px;">PERDA P/ ATIVAR</div>
-                  <div style="display:flex;align-items:center;justify-content:space-between;">
-                    <span id="dm-cfg-perda-val" style="font-size:0.82rem;font-weight:bold;color:#fbbf24;">--</span>
-                    <span id="dm-cfg-perda-badge" style="font-size:0.55rem;padding:1px 4px;border-radius:3px;background:rgba(100,100,100,0.3);color:#555;">OFF</span>
+                  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px;">
+                    <span style="font-size:0.5rem;color:#6b7280;letter-spacing:1px;">PERDA P/ ATIVAR</span>
+                    <span id="dm-cfg-perda-badge" style="font-size:0.55rem;padding:1px 4px;border-radius:3px;background:rgba(100,100,100,0.3);color:#555;cursor:pointer;" onclick="dmToggleGatilhoPerda()">OFF</span>
                   </div>
+                  <input id="dm-cfg-perda-val" type="number" min="0.5" step="0.5" value="5"
+                      style="width:100%;background:transparent;border:none;border-bottom:1px solid rgba(255,189,46,0.4);
+                             color:#fbbf24;font-size:0.82rem;font-weight:bold;font-family:'Share Tech Mono',monospace;
+                             padding:0;outline:none;box-sizing:border-box;"
+                      onchange="dmSalvarEspelhoInline()">
                 </div>
               </div>
-              <!-- Badges Entrada / Stop Win / Stop Loss da SEC -->
+              <!-- Entrada / Stop Win / Stop Loss editáveis -->
               <div style="display:flex;gap:6px;">
                 <div style="flex:1;background:rgba(0,0,0,0.3);border:1px solid rgba(0,255,204,0.2);border-radius:4px;padding:4px 7px;">
                   <div style="font-size:0.5rem;color:#6b7280;letter-spacing:1px;margin-bottom:2px;">ENTRADA</div>
-                  <span id="dm-cfg-stake" style="font-size:0.78rem;font-weight:bold;color:#00ffcc;">--</span>
+                  <input id="dm-cfg-stake" type="number" min="0.35" step="0.01" value="0.35"
+                      style="width:100%;background:transparent;border:none;border-bottom:1px solid rgba(0,255,204,0.3);
+                             color:#00ffcc;font-size:0.78rem;font-weight:bold;font-family:'Share Tech Mono',monospace;
+                             padding:0;outline:none;box-sizing:border-box;"
+                      onchange="dmSalvarEspelhoInline()">
                 </div>
                 <div style="flex:1;background:rgba(0,0,0,0.3);border:1px solid rgba(74,222,128,0.2);border-radius:4px;padding:4px 7px;">
                   <div style="font-size:0.5rem;color:#6b7280;letter-spacing:1px;margin-bottom:2px;">STOP WIN</div>
-                  <span id="dm-cfg-sw" style="font-size:0.78rem;font-weight:bold;color:#4ade80;">--</span>
+                  <input id="dm-cfg-sw" type="number" min="0.5" step="0.5" value="5.60"
+                      style="width:100%;background:transparent;border:none;border-bottom:1px solid rgba(74,222,128,0.3);
+                             color:#4ade80;font-size:0.78rem;font-weight:bold;font-family:'Share Tech Mono',monospace;
+                             padding:0;outline:none;box-sizing:border-box;"
+                      onchange="dmSalvarEspelhoInline()">
                 </div>
                 <div style="flex:1;background:rgba(0,0,0,0.3);border:1px solid rgba(248,113,113,0.2);border-radius:4px;padding:4px 7px;">
                   <div style="font-size:0.5rem;color:#6b7280;letter-spacing:1px;margin-bottom:2px;">STOP LOSS</div>
-                  <span id="dm-cfg-sl" style="font-size:0.78rem;font-weight:bold;color:#f87171;">--</span>
+                  <input id="dm-cfg-sl" type="number" min="0.5" step="0.5" value="100"
+                      style="width:100%;background:transparent;border:none;border-bottom:1px solid rgba(248,113,113,0.3);
+                             color:#f87171;font-size:0.78rem;font-weight:bold;font-family:'Share Tech Mono',monospace;
+                             padding:0;outline:none;box-sizing:border-box;"
+                      onchange="dmSalvarEspelhoInline()">
                 </div>
               </div>
               <!-- Gerenciamento da SEC -->
@@ -2264,12 +2284,21 @@
                 <div style="font-size:0.5rem;color:#6b7280;letter-spacing:1px;margin-bottom:2px;">GERENCIAMENTO SEC</div>
                 <span id="dm-cfg-mgr" style="font-size:0.72rem;font-weight:bold;color:#60a5fa;">--</span>
               </div>
-              <button onclick="abrirModalMultiContas()" style="width:100%;padding:5px;
-                  background:rgba(255,189,46,0.08);border:1px solid rgba(255,189,46,0.3);
-                  color:#fbbf24;font-family:'Share Tech Mono',monospace;font-size:0.62rem;
-                  letter-spacing:1px;cursor:pointer;border-radius:3px;">
-                ⚙ CONFIGURAR CONTA SECUNDÁRIA
-              </button>
+              <!-- Botão Salvar + botão modal -->
+              <div style="display:flex;gap:6px;">
+                <button onclick="dmSalvarEspelhoInline(true)" style="flex:1;padding:5px;
+                    background:rgba(0,255,136,0.1);border:1px solid rgba(0,255,136,0.4);
+                    color:#00ff88;font-family:'Share Tech Mono',monospace;font-size:0.62rem;
+                    letter-spacing:1px;cursor:pointer;border-radius:3px;">
+                  💾 SALVAR
+                </button>
+                <button onclick="abrirModalMultiContas()" style="flex:1;padding:5px;
+                    background:rgba(255,189,46,0.08);border:1px solid rgba(255,189,46,0.3);
+                    color:#fbbf24;font-family:'Share Tech Mono',monospace;font-size:0.62rem;
+                    letter-spacing:1px;cursor:pointer;border-radius:3px;">
+                  ⚙ MAIS OPÇÕES
+                </button>
+              </div>
               <div id="dm-esp-status" style="font-size:0.6rem;color:#57606a;background:rgba(0,0,0,0.3);
                   border:1px solid #1a3a25;border-radius:4px;padding:5px 8px;line-height:1.6;">
                 Conta secundária: verificando...
@@ -18858,25 +18887,87 @@ function dmAtualizarEspelho() {
                 stEl.style.color = '#f44'; stEl.style.borderColor = 'rgba(255,79,109,0.3)';
             }
         }
-        // Preenche badges com configs reais da conta SEC (_mcConfig + _sec)
+        // Preenche inputs editáveis com configs reais da conta SEC (_mcConfig + _sec)
         const mc = (typeof _mcConfig !== 'undefined') ? _mcConfig : {};
         const secObj = (typeof _sec !== 'undefined') ? _sec : {};
-        const _s = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
+        const _sv = (id, v) => { const e = document.getElementById(id); if (e) { if (e.tagName === 'INPUT') e.value = v; else e.textContent = v; } };
         const seqAtv   = secObj.gatilhoSeqAtivo   || false;
         const perdAtv  = secObj.gatilhoPerdaAtivo  || false;
         const seqLim   = secObj.limiteSeqLoss  || 5;
         const perdLim  = Math.abs(secObj.limitePerda || 10);
-        _s('dm-cfg-seq-val',   seqLim);
-        _s('dm-cfg-perda-val', `$${perdLim.toFixed(2)}`);
-        _s('dm-cfg-stake', mc.stake    ? `$${mc.stake.toFixed(2)}`   : '--');
-        _s('dm-cfg-sw',    mc.stopWin  ? `$${mc.stopWin.toFixed(2)}` : '--');
-        _s('dm-cfg-sl',    mc.stopLoss ? `$${mc.stopLoss.toFixed(2)}`: '--');
-        _s('dm-cfg-mgr',   mc.gerenciamento || '--');
+        _sv('dm-cfg-seq-val',   seqLim);
+        _sv('dm-cfg-perda-val', perdLim.toFixed(2));
+        _sv('dm-cfg-stake', mc.stake    ? mc.stake.toFixed(2)    : '0.35');
+        _sv('dm-cfg-sw',    mc.stopWin  ? mc.stopWin.toFixed(2)  : '5.60');
+        _sv('dm-cfg-sl',    mc.stopLoss ? mc.stopLoss.toFixed(2) : '100');
+        const _s = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
+        _s('dm-cfg-mgr', mc.gerenciamento || '--');
         const seqBadgeEl  = document.getElementById('dm-cfg-seq-badge');
         const perdBadgeEl = document.getElementById('dm-cfg-perda-badge');
         if (seqBadgeEl)  { seqBadgeEl.textContent  = seqAtv  ? 'ON' : 'OFF'; seqBadgeEl.style.color  = seqAtv  ? '#fbbf24' : '#555'; seqBadgeEl.style.background  = seqAtv  ? 'rgba(251,191,36,0.15)' : 'rgba(100,100,100,0.3)'; }
         if (perdBadgeEl) { perdBadgeEl.textContent = perdAtv ? 'ON' : 'OFF'; perdBadgeEl.style.color = perdAtv ? '#fbbf24' : '#555'; perdBadgeEl.style.background = perdAtv ? 'rgba(251,191,36,0.15)' : 'rgba(100,100,100,0.3)'; }
     }
+}
+
+// ── Salva configs do espelho inline direto no backend ──────────────────────
+function dmSalvarEspelhoInline(mostrarFeedback) {
+    const seqVal  = parseFloat(document.getElementById('dm-cfg-seq-val')?.value)  || 5;
+    const perdVal = parseFloat(document.getElementById('dm-cfg-perda-val')?.value) || 5;
+    const stake   = parseFloat(document.getElementById('dm-cfg-stake')?.value)    || 0.35;
+    const sw      = parseFloat(document.getElementById('dm-cfg-sw')?.value)       || 5.60;
+    const sl      = parseFloat(document.getElementById('dm-cfg-sl')?.value)       || 100;
+    // Atualiza _sec e _mcConfig em memória
+    if (typeof _sec !== 'undefined') {
+        _sec.limiteSeqLoss = Math.max(1, Math.round(seqVal));
+        _sec.limitePerda   = -Math.abs(perdVal);
+    }
+    if (typeof _mcConfig !== 'undefined') {
+        _mcConfig.stake    = Math.max(0.35, stake);
+        _mcConfig.stopWin  = Math.max(0.5,  sw);
+        _mcConfig.stopLoss = Math.max(0.5,  sl);
+    }
+    const payload = {
+        stake:             Math.max(0.35, stake),
+        stopWin:           Math.max(0.5,  sw),
+        stopLoss:          Math.max(0.5,  sl),
+        limiteSeqLoss:     Math.max(1, Math.round(seqVal)),
+        limitePerda:       Math.abs(perdVal),
+        gatilhoSeqAtivo:   (typeof _sec !== 'undefined') ? !!_sec.gatilhoSeqAtivo   : false,
+        gatilhoPerdaAtivo: (typeof _sec !== 'undefined') ? !!_sec.gatilhoPerdaAtivo : false,
+    };
+    try { localStorage.setItem('mc_sec_config', JSON.stringify(payload)); } catch(_) {}
+    fetch('/contas/sec-config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    }).then(() => {
+        if (mostrarFeedback) {
+            const stEl = document.getElementById('dm-esp-status');
+            if (stEl) {
+                const _orig = stEl.innerHTML;
+                stEl.innerHTML = '<span style="color:#00ff88">✅ Configurações salvas!</span>';
+                setTimeout(() => { stEl.innerHTML = _orig; }, 2000);
+            }
+        }
+    }).catch(() => {});
+}
+
+// ── Toggle gatilho losses inline ───────────────────────────────────────────
+function dmToggleGatilhoSeq() {
+    if (typeof _sec === 'undefined') return;
+    _sec.gatilhoSeqAtivo = !_sec.gatilhoSeqAtivo;
+    const b = document.getElementById('dm-cfg-seq-badge');
+    if (b) { const on = _sec.gatilhoSeqAtivo; b.textContent = on ? 'ON' : 'OFF'; b.style.color = on ? '#fbbf24' : '#555'; b.style.background = on ? 'rgba(251,191,36,0.15)' : 'rgba(100,100,100,0.3)'; }
+    dmSalvarEspelhoInline(false);
+}
+
+// ── Toggle gatilho perda inline ─────────────────────────────────────────────
+function dmToggleGatilhoPerda() {
+    if (typeof _sec === 'undefined') return;
+    _sec.gatilhoPerdaAtivo = !_sec.gatilhoPerdaAtivo;
+    const b = document.getElementById('dm-cfg-perda-badge');
+    if (b) { const on = _sec.gatilhoPerdaAtivo; b.textContent = on ? 'ON' : 'OFF'; b.style.color = on ? '#fbbf24' : '#555'; b.style.background = on ? 'rgba(251,191,36,0.15)' : 'rgba(100,100,100,0.3)'; }
+    dmSalvarEspelhoInline(false);
 }
 
 async function dmOperar() {
