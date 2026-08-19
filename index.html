@@ -18805,7 +18805,8 @@ async function dmOperar() {
                 wins: _wSW, losses: _lSW,
                 max_win_consec: _dmMaxWinSeq, max_loss_consec: _dmMaxLossSeq,
                 max_stake: _dmMaxStake, modo: _mgrNmSW, estrategia: _estSW,
-                conta: (_dmUsandoSec) ? 'SECUNDARIA' : 'PRINCIPAL'
+                // Sempre SECUNDARIA — DM PRO opera na conta SEC (passa pelo filtro modo ESPELHO)
+                conta: 'SECUNDARIA'
             });
             if (tgAtual.enabled && tgAtual.stopwin && tgAtual.token && tgAtual.chat_id)
                 fetch('/tg-send', { method:'POST', headers:{'Content-Type':'application/json'}, body: _swBody }).catch(()=>{});
@@ -18947,7 +18948,8 @@ async function dmOperar() {
                     entrada: stake, prox_stake: proxStake,
                     max_win_consec: _dmMaxWinSeq, max_loss_consec: _dmMaxLossSeq, max_stake: _dmMaxStake,
                     modo: maNome || 'DM Sniper', estrategia: `${ct} barr=${barr}`,
-                    conta: _dmUsandoSec ? 'SECUNDARIA' : 'PRINCIPAL',
+                    // Sempre SECUNDARIA — DM PRO opera via conta SEC (passa pelo filtro modo ESPELHO)
+                    conta: 'SECUNDARIA',
                 };
                 if (tgAtual && tgAtual.enabled && tgAtual.resultados && tgAtual.token && tgAtual.chat_id)
                     fetch('/tg-send', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ token: tgAtual.token, chat_id: tgAtual.chat_id, ..._dmPayload }) }).catch(()=>{});
