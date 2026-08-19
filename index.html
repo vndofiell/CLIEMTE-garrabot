@@ -18829,8 +18829,8 @@ function dmAtualizarStats() {
                : _dmMgr ? _dmMgr.getStake()
                : (parseFloat(document.getElementById('dm-entrada')?.value) || 0.35);
     const _s = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
-    const cot = parseFloat(window._cotacaoBRL || 0);
-    const _brl = (usd) => cot > 0 ? `R$${(Math.abs(usd) * cot).toFixed(2)}` : '';
+    const cot = parseFloat(_cotacaoBRL || window._cotacaoBRL || 0);
+    const _brl = (usd) => cot > 0 ? `R$${(Math.abs(usd) * cot).toFixed(2).replace('.', ',')}` : '';
     const _sinal = (v) => v >= 0 ? '+' : '-';
 
     _s('dm-stat-wins',  _dmWins);
@@ -19116,7 +19116,7 @@ async function dmOperar() {
         underlying_symbol:ativ, barrier:String(barr) };
 
     const _origMsg = wsUsar.onmessage;
-    let _dmCid = null, _dmTravado = null;
+    let _dmCid = null, _dmTravado = null, _dmCidComprado = false;
 
     const _rec = (motivo) => {
         if (_dmTravado) { clearTimeout(_dmTravado); _dmTravado = null; }
@@ -19127,7 +19127,16 @@ async function dmOperar() {
         else dmBotaoOperar(true);
     };
 
-    _dmTravado = setTimeout(() => _rec('Timeout 25s'), 25000);
+    // Timer de proposta: 25s; se já comprou o contrato reinicia por 60s esperando resultado
+    _dmTravado = setTimeout(() => {
+        if (_dmCidComprado) {
+            // Contrato já foi comprado — aguarda mais 60s pelo resultado antes de abortar
+            dmLog(`⏳ Contrato #${_dmCid} ainda aberto — aguardando mais 60s...`, '#fbbf24');
+            _dmTravado = setTimeout(() => _rec('Timeout 60s — contrato sem resposta'), 60000);
+        } else {
+            _rec('Timeout 25s');
+        }
+    }, 25000);
 
     wsUsar.onmessage = (msg) => {
         const d = JSON.parse(msg.data);
@@ -19141,7 +19150,7 @@ async function dmOperar() {
         if (d.msg_type === 'buy') {
             if (d.error) { _rec('Compra recusada: ' + d.error.message); return; }
             const cid = d.buy?.contract_id;
-            if (cid) { _dmCid = cid; dmLog(`🎯 #${cid} — aguardando...`, '#ffbd2e'); wsUsar.send(JSON.stringify({ proposal_open_contract:1, contract_id:cid, subscribe:1 })); }
+            if (cid) { _dmCid = cid; _dmCidComprado = true; dmLog(`🎯 #${cid} — aguardando...`, '#ffbd2e'); wsUsar.send(JSON.stringify({ proposal_open_contract:1, contract_id:cid, subscribe:1 })); }
             else _rec('Compra sem contract_id');
             return;
         }
