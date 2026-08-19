@@ -5,6 +5,7 @@ import threading
 import time
 import json
 import os
+import datetime as _dt_brt_mod
 import io as _io
 import re
 import subprocess as _subprocess
@@ -12,6 +13,15 @@ import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 import requests
 from flask import Flask, jsonify, request
+
+# ── Hora no fuso de Brasília (UTC-3) — independe da timezone do servidor ──
+def _hora_brt(fmt: str = "%H:%M") -> str:
+    try:
+        from zoneinfo import ZoneInfo
+        return _dt_brt_mod.datetime.now(ZoneInfo("America/Sao_Paulo")).strftime(fmt)
+    except Exception:
+        brt = _dt_brt_mod.datetime.utcnow() - _dt_brt_mod.timedelta(hours=3)
+        return brt.strftime(fmt)
 
 app = Flask(__name__)
 
@@ -2124,7 +2134,7 @@ def tg_send():
                 f"💵 Stake Máx: ${max_stake:.2f}\n\n"
                 f"🤖 {estrategia.upper()}\n"
                 f"⚙️ {modo.upper()}\n\n"
-                f"🕐 {time.strftime('%H:%M')}"
+                f"🕐 {_hora_brt()}"
             )
             img = _assets_path("Meta Batida.png")
             if not _tg_enviar_foto(tok, cid, msg, img, max_width=400):
@@ -2174,7 +2184,7 @@ def tg_send():
             f"🎯  Estratégia: {estrategia}\n\n"
             f"🏦  Banca: ${banca:.2f}  /  R${banca_brl_str}\n"
             f"📈  Lucro Total: {profit_usd_str}  /  {profit_brl_str}\n\n"
-            f"🕐  {time.strftime('%H:%M')}"
+            f"🕐  {_hora_brt()}"
         )
         img = _assets_path(img_nome)
         if not _tg_enviar_foto(tok, cid, msg, img, max_width=320):
@@ -4993,8 +5003,7 @@ def wa_send():
 
     def _enviar():
         try:
-            from datetime import datetime
-            hora = datetime.now().strftime("%H:%M")
+            hora = _hora_brt()
 
             # ── Modo Virtual (LV acumulando) — notificação simples ──
             if d.get("virtual"):
@@ -5033,7 +5042,7 @@ def wa_send():
                     f"💵 Stake Máx: ${max_stake:.2f}\n\n"
                     f"🤖 {estrategia}\n"
                     f"⚙️ {modo}\n\n"
-                    f"🕐 {time.strftime('%H:%M')}"
+                    f"🕐 {_hora_brt()}"
                 )
             else:
                 win        = bool(d.get("win", False))
@@ -5074,7 +5083,7 @@ def wa_send():
                     f"🎯  Estratégia: {estrategia}\n\n"
                     f"🏦  Banca: ${banca:.2f}  /  R${banca_brl_str}\n"
                     f"📈  Lucro Total: {profit_usd_str}  /  {profit_brl_str}\n\n"
-                    f"🕐  {time.strftime('%H:%M')}"
+                    f"🕐  {_hora_brt()}"
                 )
             enviar_notificacao_wa(msg)
         except Exception as e:
