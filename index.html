@@ -18592,8 +18592,10 @@ let _dmMaxLossSeq     = 0;
 let _dmMaxStake       = 0;
 let _dmCurWinSeq      = 0;
 let _dmCurLossSeq     = 0;
-let _dmMaDiv          = 0;
+let _dmMaDiv          = 0;   // dívida MA da conta PRINCIPAL
 let _dmMaAtivo        = false;
+let _dmMaDivSec       = 0;   // dívida MA da conta SECUNDÁRIA (independente)
+let _dmMaAtivoSec     = false;
 
 function _dmMaPayout(barrier, payoutCfg) {
     const base = parseFloat(payoutCfg) || 0.85;
@@ -18602,6 +18604,7 @@ function _dmMaPayout(barrier, payoutCfg) {
     return parseFloat(Math.min(base + adj, 0.95).toFixed(4));
 }
 
+// Stake para a conta PRINCIPAL
 function _dmMaGetStake(baseStake, barrier, payoutCfg) {
     if (_dmMaDiv <= 0.01) { _dmMaAtivo = false; return baseStake; }
     _dmMaAtivo = true;
@@ -18610,6 +18613,16 @@ function _dmMaGetStake(baseStake, barrier, payoutCfg) {
     return Math.max(baseStake, Math.min(stake, 500));
 }
 
+// Stake para a conta SECUNDÁRIA (dívida própria, independente da principal)
+function _dmMaGetStakeSec(baseStake, barrier, payoutCfg) {
+    if (_dmMaDivSec <= 0.01) { _dmMaAtivoSec = false; return baseStake; }
+    _dmMaAtivoSec = true;
+    const payout = _dmMaPayout(barrier, payoutCfg);
+    const stake  = parseFloat(((_dmMaDivSec + baseStake) / payout).toFixed(2));
+    return Math.max(baseStake, Math.min(stake, 500));
+}
+
+// Atualiza dívida da conta PRINCIPAL
 function _dmMaUpdate(won, profit, baseStake) {
     if (won) {
         _dmMaDiv = Math.max(0, parseFloat((_dmMaDiv - Math.abs(profit)).toFixed(2)));
@@ -18617,6 +18630,17 @@ function _dmMaUpdate(won, profit, baseStake) {
     } else {
         _dmMaDiv = parseFloat((_dmMaDiv + Math.abs(profit)).toFixed(2));
         _dmMaAtivo = true;
+    }
+}
+
+// Atualiza dívida da conta SECUNDÁRIA
+function _dmMaUpdateSec(won, profit, baseStake) {
+    if (won) {
+        _dmMaDivSec = Math.max(0, parseFloat((_dmMaDivSec - Math.abs(profit)).toFixed(2)));
+        if (_dmMaDivSec < 0.02) { _dmMaDivSec = 0; _dmMaAtivoSec = false; }
+    } else {
+        _dmMaDivSec = parseFloat((_dmMaDivSec + Math.abs(profit)).toFixed(2));
+        _dmMaAtivoSec = true;
     }
 }
 
@@ -18756,7 +18780,9 @@ async function dmOperar() {
         }
     } catch(_) {}
 
-    const _dmLucroCheck = (espAtivo && secPronto) ? _dmEspLucro : _dmLucro;
+    const _dmLucroCheck = (espAtivo && secPronto && _dmUsandoSec) ? _dmEspLucro
+                        : (espAtivo && secPronto) ? (_dmEspLucro + _dmLucro)
+                        : _dmLucro;
     if (_dmLucroCheck >= swLim) {
         dmLog(`🏆 STOP WIN! Lucro: +$${_dmLucroCheck.toFixed(2)}`, '#ffd700');
         _dmAutoOperar = false;
@@ -18767,8 +18793,26 @@ async function dmOperar() {
         const _wSW     = _dmEspWins + _dmWins;
         const _lSW     = _dmEspLosses + _dmLosses;
         const _mgrNmSW = document.getElementById('dm-mgr')?.value || 'DM Sniper';
-        stopWinExibirModal(_dmLucroCheck, _wSW, _lSW, _bncSW, `DM Sniper barr=${_dmSinalAtual?.barrier||'?'}`, _mgrNmSW);
-        jcSecOnMetaBatida(_dmLucroCheck, _wSW, _lSW, _bncSW, `DM Sniper barr=${_dmSinalAtual?.barrier||'?'}`, _mgrNmSW);
+        const _estSW   = `DM Sniper barr=${_dmSinalAtual?.barrier||'?'}`;
+        stopWinExibirModal(_dmLucroCheck, _wSW, _lSW, _bncSW, _estSW, _mgrNmSW);
+        jcSecOnMetaBatida(_dmLucroCheck, _wSW, _lSW, _bncSW, _estSW, _mgrNmSW);
+        // ── Notificação TG + WA de Stop Win ──────────────────────────────
+        fetch('/tg-config').then(r => r.ok ? r.json() : null).then(tgAtual => {
+            if (!tgAtual) tgAtual = (typeof _tgCfg !== 'undefined') ? _tgCfg : {};
+            const _swBody = JSON.stringify({
+                token: tgAtual.token || '', chat_id: tgAtual.chat_id || '',
+                stop_win: true, lucro: _dmLucroCheck, banca: _bncSW,
+                wins: _wSW, losses: _lSW,
+                max_win_consec: _dmMaxWinSeq, max_loss_consec: _dmMaxLossSeq,
+                max_stake: _dmMaxStake, modo: _mgrNmSW, estrategia: _estSW,
+                conta: (_dmUsandoSec) ? 'SECUNDARIA' : 'PRINCIPAL'
+            });
+            if (tgAtual.enabled && tgAtual.stopwin && tgAtual.token && tgAtual.chat_id)
+                fetch('/tg-send', { method:'POST', headers:{'Content-Type':'application/json'}, body: _swBody }).catch(()=>{});
+            const waAtivo = (typeof _waNotifAtivo !== 'undefined') ? _waNotifAtivo : false;
+            if (waAtivo)
+                fetch('/wa-send', { method:'POST', headers:{'Content-Type':'application/json'}, body: _swBody }).catch(()=>{});
+        }).catch(()=>{});
         _dmEmOperacao = false;
         return;
     }
@@ -18791,9 +18835,18 @@ async function dmOperar() {
     const ct         = _dmSinalAtual.contract_type;
     const barr       = _dmSinalAtual.barrier;
     const maNome     = document.getElementById('dm-mgr')?.value;
-    const usarMA     = (maNome === '📐 MA-Adaptativo') || _dmUsandoSec;
+    // SEC usa MA próprio (dívida independente); principal usa gerenciador escolhido
+    const usarMA     = (maNome === '📐 MA-Adaptativo') && !_dmUsandoSec;
     let stake;
-    if (usarMA) {
+    if (_dmUsandoSec) {
+        // Conta SEC: sempre usa MA-Adaptativo com dívida própria (_dmMaDivSec)
+        stake = _dmMaGetStakeSec(baseStake, barr, payoutCfg);
+        if (_dmMaAtivoSec) {
+            const payout = _dmMaPayout(barr, payoutCfg);
+            dmLog(`📐 <b style="color:#60a5fa">MA-SEC</b> barr=${barr} payout=${(payout*100).toFixed(0)}% dívida=$${_dmMaDivSec.toFixed(2)} → stake=$${stake.toFixed(2)}`, '#60a5fa');
+        }
+    } else if (usarMA) {
+        // Conta principal com MA-Adaptativo
         stake = _dmMaGetStake(baseStake, barr, payoutCfg);
         if (_dmMaAtivo) {
             const payout = _dmMaPayout(barr, payoutCfg);
@@ -18852,9 +18905,14 @@ async function dmOperar() {
             _dmEmOperacao = false;
             const profit = parseFloat(poc.profit), won = profit > 0;
 
-            if (maNome === '📐 MA-Adaptativo' || _dmUsandoSec) _dmMaUpdate(won, profit, baseStake);
-            if (_dmUsandoSec && _dmSecMgr) _dmSecMgr.updateResult(won);
-            else if (_dmMgr) _dmMgr.updateResult(won);
+            // Atualiza dívida MA do lado correto: SEC independente da principal
+            if (_dmUsandoSec) {
+                _dmMaUpdateSec(won, profit, baseStake);
+                if (_dmSecMgr) _dmSecMgr.updateResult(won);
+            } else {
+                if (maNome === '📐 MA-Adaptativo') _dmMaUpdate(won, profit, baseStake);
+                if (_dmMgr) _dmMgr.updateResult(won);
+            }
 
             if (espAtivo && secPronto && _dmUsandoSec) {
                 if (won) { _dmEspWins++; _dmEspLucro += profit; } else { _dmEspLosses++; _dmEspLucro += profit; }
@@ -18862,9 +18920,10 @@ async function dmOperar() {
                 if (won) { _dmWins++; _dmLucro += profit; } else { _dmLosses++; _dmLucro += profit; }
             }
 
-            const proxStake = usarMA
-                ? _dmMaGetStake(baseStake, barr, payoutCfg)
-                : ((_dmUsandoSec && _dmSecMgr) ? _dmSecMgr.getStake() : (_dmMgr ? _dmMgr.getStake() : baseStake));
+            const proxStake = _dmUsandoSec
+                ? _dmMaGetStakeSec(baseStake, barr, payoutCfg)
+                : (usarMA ? _dmMaGetStake(baseStake, barr, payoutCfg)
+                    : (_dmMgr ? _dmMgr.getStake() : baseStake));
 
             if (stake > _dmMaxStake) _dmMaxStake = stake;
             if (won) { _dmCurWinSeq++; _dmCurLossSeq = 0; if (_dmCurWinSeq > _dmMaxWinSeq) _dmMaxWinSeq = _dmCurWinSeq; }
@@ -18913,14 +18972,16 @@ async function dmOperar() {
                         dmLog(`🔀 <b style="color:#60a5fa">TRIGGER SEC</b> — próxima na conta espelho${_dmMaDiv > 0.01 ? ` (dívida: $${_dmMaDiv.toFixed(2)})` : ''}`, '#60a5fa');
                     }
                 } else {
-                    if (won && _dmEspLucro >= -0.01) {
+                    // Na SEC: só retorna à principal quando lucro da SEC >= 0
+                    if (_dmEspLucro >= -0.01) {
                         _dmUsandoSec = false; _dmSecMgr = null; _dmEspLossSeq = 0; _dmEspPerdaAc = 0;
-                        _dmMaDiv = 0; _dmMaAtivo = false;
+                        _dmMaDivSec = 0; _dmMaAtivoSec = false;   // zera dívida da SEC
                         const mn = document.getElementById('dm-mgr')?.value;
                         if (mn && mn !== 'flat' && typeof GerenciadorUnificado !== 'undefined') _dmMgr = new GerenciadorUnificado(mn, { stake: baseStake });
                         dmLog(`✅ SEC positiva ($${_dmEspLucro >= 0 ? '+' : ''}$${_dmEspLucro.toFixed(2)}) — voltando à conta principal`, '#00ff88');
-                    } else if (won) {
-                        dmLog(`🔄 SEC ganhou mas ainda negativa: $${_dmEspLucro.toFixed(2)} — continua na SEC`, '#fbbf24');
+                    } else {
+                        // SEC ainda negativa — permanece recuperando
+                        dmLog(`🔄 SEC: $${_dmEspLucro.toFixed(2)} ainda negativa${_dmMaDivSec > 0.01 ? ` | dívida $${_dmMaDivSec.toFixed(2)}` : ''} — continua`, '#fbbf24');
                     }
                 }
                 dmAtualizarEspelho();
