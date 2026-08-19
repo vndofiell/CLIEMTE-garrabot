@@ -18747,6 +18747,7 @@ let _dmEspLucro       = 0;
 let _dmSinalAtual     = null;
 let _dmAguardandoRecon= false;
 let _dmEmOperacao     = false;
+let _dmEmOperacaoTs   = 0;   // timestamp do início da operação — watchdog usa isso
 let _dmMaxWinSeq      = 0;
 let _dmMaxLossSeq     = 0;
 let _dmMaxStake       = 0;
@@ -18972,8 +18973,17 @@ function dmToggleGatilhoPerda() {
 
 async function dmOperar() {
     if (!_dmSinalAtual) return;
-    if (_dmEmOperacao) return;
+    // Watchdog: se _dmEmOperacao ficou true há mais de 90s sem resultado, reseta
+    if (_dmEmOperacao) {
+        if (_dmEmOperacaoTs > 0 && (Date.now() - _dmEmOperacaoTs) > 90000) {
+            dmLog('⚠️ Watchdog: operação travada detectada — resetando estado', '#f44');
+            _dmEmOperacao = false; _dmEmOperacaoTs = 0;
+        } else {
+            return;
+        }
+    }
     _dmEmOperacao = true;
+    _dmEmOperacaoTs = Date.now();
 
     const _espAtivoChk  = document.getElementById('dm-esp-ativo')?.checked;
     const _secProntoChk = (typeof _sec !== 'undefined') && _sec.pronto && _sec.ws && _sec.ws.readyState === WebSocket.OPEN;
@@ -18981,7 +18991,7 @@ async function dmOperar() {
     const _wsOk = _wsNecessario && _wsNecessario.readyState === WebSocket.OPEN;
 
     if (!_wsOk) {
-        _dmEmOperacao = false;
+        _dmEmOperacao = false; _dmEmOperacaoTs = 0;
         if (_espAtivoChk && _dmUsandoSec) {
             dmLog('⚠️ Conta SEC desconectada — aguardando reconexão...', '#f44');
         } else {
@@ -19060,7 +19070,7 @@ async function dmOperar() {
             if (waAtivo)
                 fetch('/wa-send', { method:'POST', headers:{'Content-Type':'application/json'}, body: _swBody }).catch(()=>{});
         }).catch(()=>{});
-        _dmEmOperacao = false;
+        _dmEmOperacao = false; _dmEmOperacaoTs = 0;
         return;
     }
     if (_dmLucroCheck <= -slLim) {
@@ -19068,7 +19078,7 @@ async function dmOperar() {
         _dmAutoOperar = false;
         const _btnAutoSL = document.getElementById('dm-btn-auto-op');
         if (_btnAutoSL) { _btnAutoSL.textContent = '🤖 AUTO'; _btnAutoSL.style.color = '#2a6a40'; _btnAutoSL.style.borderColor = '#1a3a25'; }
-        _dmEmOperacao = false;
+        _dmEmOperacao = false; _dmEmOperacaoTs = 0;
         return;
     }
 
@@ -19126,7 +19136,7 @@ async function dmOperar() {
     const _rec = (motivo) => {
         if (_dmTravado) { clearTimeout(_dmTravado); _dmTravado = null; }
         wsUsar.onmessage = _origMsg;
-        _dmEmOperacao = false;
+        _dmEmOperacao = false; _dmEmOperacaoTs = 0;
         dmLog(`⚠️ ${motivo}`, '#f44');
         if (_dmAutoOperar) setTimeout(async () => { if (!_dmAutoOperar) return; dmAtualizar(); setTimeout(() => { if (_dmSinalAtual) dmOperar(); }, 1000); }, 2000);
         else dmBotaoOperar(true);
@@ -19163,9 +19173,10 @@ async function dmOperar() {
             const poc = d.proposal_open_contract;
             if (_dmCid && poc.contract_id !== _dmCid) { _origMsg(msg); return; }
             if (!poc.is_sold) { _origMsg(msg); return; }
+            // Cancela SEMPRE o timer antes de restaurar o handler — evita _rec tardio
             if (_dmTravado) { clearTimeout(_dmTravado); _dmTravado = null; }
             wsUsar.onmessage = _origMsg;
-            _dmEmOperacao = false;
+            _dmEmOperacao = false; _dmEmOperacaoTs = 0;
             const profit = parseFloat(poc.profit), won = profit > 0;
 
             // Atualiza dívida MA do lado correto: SEC independente da principal
