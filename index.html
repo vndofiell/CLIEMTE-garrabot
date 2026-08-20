@@ -18899,8 +18899,27 @@ function dmAtualizarEspelho() {
         _sv('dm-cfg-seq-val',   seqLim);
         _sv('dm-cfg-perda-val', perdLim.toFixed(2));
         _sv('dm-cfg-stake', mc.stake    ? mc.stake.toFixed(2)    : '0.35');
-        _sv('dm-cfg-sw',    mc.stopWin  ? mc.stopWin.toFixed(2)  : '5.60');
         _sv('dm-cfg-sl',    mc.stopLoss ? mc.stopLoss.toFixed(2) : '100');
+        // Stop Win: se JC-SEC ativo → mostra meta do dia; senão mostra valor configurado
+        const swEl = document.getElementById('dm-cfg-sw');
+        if (swEl) {
+            fetch('/jc-sec-meta', { signal: AbortSignal.timeout(3000) })
+                .then(r => r.json())
+                .then(m => {
+                    if (m.ativo && m.meta_hoje > 0) {
+                        swEl.value = m.meta_hoje.toFixed(2);
+                        swEl.title = `💹 Controlado pela planilha JC (meta do dia $${m.meta_hoje.toFixed(2)})`;
+                        swEl.style.borderBottomColor = 'rgba(251,191,36,0.7)';
+                        swEl.style.color = '#fbbf24';
+                    } else {
+                        swEl.value = mc.stopWin ? mc.stopWin.toFixed(2) : '5.60';
+                        swEl.title = '';
+                        swEl.style.borderBottomColor = '';
+                        swEl.style.color = '#4ade80';
+                    }
+                })
+                .catch(() => { swEl.value = mc.stopWin ? mc.stopWin.toFixed(2) : '5.60'; });
+        }
         const _s = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
         _s('dm-cfg-mgr', mc.gerenciamento || '--');
         const seqBadgeEl  = document.getElementById('dm-cfg-seq-badge');
