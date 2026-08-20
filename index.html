@@ -18470,6 +18470,30 @@ function dmAbrirModal() {
     if (!m) return;
     m.style.display = 'flex';
     _dmIniciarMatrix();
+
+    // ── Carrega configurações salvas do servidor e popula os campos ──────────
+    fetch('/api/digit-matrix/config', { signal: AbortSignal.timeout(3000) })
+        .then(r => r.json())
+        .then(j => {
+            if (!j.ok || !j.config) return;
+            const cfg = j.config;
+            const scoreEl    = document.getElementById('dm-score-min');
+            const underEl    = document.getElementById('dm-under-barr');
+            const overEl     = document.getElementById('dm-over-barr');
+            const assetEl    = document.getElementById('dm-asset');
+            const intervalEl = document.getElementById('dm-interval');
+            if (scoreEl    && cfg.score_minimo    != null) scoreEl.value    = cfg.score_minimo;
+            if (underEl    && cfg.under_barreira  != null) underEl.value    = cfg.under_barreira;
+            if (overEl     && cfg.over_barreira   != null) overEl.value     = cfg.over_barreira;
+            if (assetEl    && cfg.ativo && cfg.ativo !== 'AUTO') {
+                for (const opt of assetEl.options) { if (opt.value === cfg.ativo) { opt.selected = true; break; } }
+            }
+            if (intervalEl && cfg.intervalo_ms != null) {
+                for (const opt of intervalEl.options) { if (opt.value == cfg.intervalo_ms) { opt.selected = true; break; } }
+            }
+        })
+        .catch(() => {});
+
     // Semeia o motor com os últimos dígitos já acumulados pelo bot
     const _dmAsset = document.getElementById('dm-asset')?.value || 'R_100';
     const _recentes = (typeof bot !== 'undefined' && bot._digitRecentes) ? bot._digitRecentes.slice() : [];
@@ -18718,9 +18742,11 @@ function dmPararAuto() {
 
 async function dmSalvarConfig() {
     const body = {
-        score_minimo:    parseInt(document.getElementById('dm-score-min')?.value  || 82),
+        score_minimo:    parseInt(document.getElementById('dm-score-min')?.value  || 70),
         under_barreira:  parseInt(document.getElementById('dm-under-barr')?.value || 6),
-        over_barreira:   parseInt(document.getElementById('dm-over-barr')?.value  || 3)
+        over_barreira:   parseInt(document.getElementById('dm-over-barr')?.value  || 3),
+        ativo:           document.getElementById('dm-asset')?.value || 'R_100',
+        intervalo_ms:    parseInt(document.getElementById('dm-interval')?.value   || 1500),
     };
     try {
         const r = await fetch('/api/digit-matrix/config', {

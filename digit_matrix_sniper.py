@@ -723,7 +723,7 @@ def register_digit_matrix(
             return jsonify({"ok": True, "config": engine.public_config()})
         data = request.get_json(silent=True) or {}
         if "score_minimo" in data:
-            data["score_minimo"] = int(_clamp(_safe_float(data["score_minimo"], 82), 50, 100))
+            data["score_minimo"] = int(_clamp(_safe_float(data["score_minimo"], 70), 50, 100))
         if "under_barreira" in data:
             b = _safe_int(data["under_barreira"], 6)
             if b not in ALLOWED_UNDER:
@@ -734,7 +734,12 @@ def register_digit_matrix(
             if b not in ALLOWED_OVER:
                 return jsonify({"ok": False, "error": "Over inválido. Use 3..8."}), 400
             data["over_barreira"] = b
-        allowed = set(DEFAULT_CONFIG)
+        # Campos extras (ativo, intervalo) — salva diretamente sem validação rígida
+        if "ativo" in data and isinstance(data["ativo"], str):
+            engine.config["ativo"] = data["ativo"].strip() or "R_100"
+        if "intervalo_ms" in data:
+            engine.config["intervalo_ms"] = max(500, int(_safe_int(data["intervalo_ms"], 1500)))
+        allowed = set(DEFAULT_CONFIG) | {"ativo", "intervalo_ms"}
         for k, v in data.items():
             if k in allowed: engine.config[k] = v
         engine.save_config()
