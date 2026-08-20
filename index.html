@@ -4826,19 +4826,21 @@ function cfgSalvar() {
                 lista:      bot.rotacao.lista,
                 idxAtual:   bot.rotacao.idxAtual,
             },
-            edcFiltro: bot._edcFiltroAtivo || false,
+            edcFiltro:    bot._edcFiltroAtivo || false,
+            _modoIaLivre: bot._modoIaLivre   || false,
         };
         localStorage.setItem(CFG_KEY, JSON.stringify(cfg));
+        // Persiste também no servidor (sobrevive a recarregamentos e outros dispositivos)
+        fetch('/bot-config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(cfg)
+        }).catch(() => {});
     } catch(_) {}
 }
 
-function cfgCarregar() {
-    try {
-        const raw = localStorage.getItem(CFG_KEY);
-        if (!raw) return;
-        const cfg = JSON.parse(raw);
-
-        // Valores numricos
+function _cfgAplicar(cfg) {
+        // Valores numéricos
         if (cfg.stake    > 0)  { bot.stake = bot.initialStake = cfg.stake; }
         if (cfg.stopWin  > 0)  { bot.stopWin  = cfg.stopWin; }
         if (cfg.stopLoss > 0)  { bot.stopLoss = cfg.stopLoss; }
@@ -4846,7 +4848,7 @@ function cfgCarregar() {
         // Estratégia — só restaura se o Modo IA Livre não estiver ativo
         if (cfg.estrategia && ESTRATEGIAS[cfg.estrategia] && !cfg._modoIaLivre) {
             bot.estrategia = cfg.estrategia;
-            // Restaura parmetros internos de cada estratégia (inclui barrier_over/under/rep_gatilho)
+            // Restaura parâmetros internos de cada estratégia (inclui barrier_over/under/rep_gatilho)
             if (cfg.estrategias) {
                 for (const [k, v] of Object.entries(cfg.estrategias)) {
                     if (ESTRATEGIAS[k]) {
@@ -4874,7 +4876,7 @@ function cfgCarregar() {
                     }
                 }
             }
-            // Atualiza boto — mostra barreiras corretas para dupla/gatilho_duplo/garra_dupla
+            // Atualiza botão — mostra barreiras corretas para dupla/gatilho_duplo/garra_dupla
             const est = ESTRATEGIAS[cfg.estrategia];
             let lblEst = est.desc.substring(0, 28);
             if (est.tipo === 'dupla')              lblEst = `Over ${est.barrier_over} + Under ${est.barrier_under}`;
@@ -4942,7 +4944,7 @@ function cfgCarregar() {
 
         // Atualiza header com valores restaurados
         updateHeader();
-        print(`💾 Configurações restauradas — Entrada: $${bot.initialStake.toFixed(2)} | StopWin: $${bot.stopWin} | StopLoss: $${bot.stopLoss}`, 'log-info');
+        print(`💾 Configurações restauradas — Entrada: $${bot.initialStake.toFixed(2)} | StopWin: $${bot.stopWin < 999 ? bot.stopWin : '—'} | StopLoss: $${bot.stopLoss < 999 ? bot.stopLoss : '—'}`, 'log-info');
 
         // Restaura Modo IA Livre se estava ativo
         if (cfg._modoIaLivre) {
@@ -4960,7 +4962,30 @@ function cfgCarregar() {
 
         // Restaura configurações da conta secundária no boot
         mcCarregarConfig();
+}
 
+function cfgCarregar() {
+    // 1. Tenta carregar do SERVIDOR primeiro (persiste entre reinicializações e dispositivos)
+    fetch('/bot-config', { signal: AbortSignal.timeout(4000) })
+        .then(r => r.json())
+        .then(cfg => {
+            if (cfg && (cfg.stake > 0 || cfg.estrategia || cfg.gerenciamento)) {
+                _cfgAplicar(cfg);
+                // Atualiza também o localStorage com os dados do servidor
+                try { localStorage.setItem(CFG_KEY, JSON.stringify(cfg)); } catch(_) {}
+            } else {
+                _cfgCarregarLocal();
+            }
+        })
+        .catch(() => _cfgCarregarLocal());
+}
+
+function _cfgCarregarLocal() {
+    try {
+        const raw = localStorage.getItem(CFG_KEY);
+        if (!raw) return;
+        const cfg = JSON.parse(raw);
+        _cfgAplicar(cfg);
     } catch(_) {}
 }
 
@@ -9309,13 +9334,9 @@ function toggleModoIaLivre(forcar) {
         print('🔒 Modo IA Livre DESATIVADO — estratégia fixa restaurada.', 'log-info');
     }
 
-    // Persiste na chave principal (mesma do cfgSalvar/cfgCarregar)
-    try {
-        const raw = localStorage.getItem(CFG_KEY) || '{}';
-        const c   = JSON.parse(raw);
-        c._modoIaLivre = ativo;
-        localStorage.setItem(CFG_KEY, JSON.stringify(c));
-    } catch(_) {}
+    // Persiste via cfgSalvar (localStorage + servidor)
+    bot._modoIaLivre = ativo;
+    cfgSalvar();
 }
 
 

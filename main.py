@@ -9019,6 +9019,66 @@ def contas_fechar_navegador():
 
 
 # ─────────────────────────────────────────────────────────
+# BOT PRINCIPAL — Configurações persistidas no servidor
+# ─────────────────────────────────────────────────────────
+BOT_CFG_ARQUIVO = os.path.join(_BASE_DIR, "bot_config.json")
+
+@app.route('/bot-config', methods=['GET'])
+def bot_config_get():
+    """Retorna as últimas configurações salvas do bot principal."""
+    padrao = {
+        "stake": 0.35,
+        "stopWin": 10.0,
+        "stopLoss": 100.0,
+        "estrategia": "🎯 DIGITUNDER 5",
+        "gerenciamento": "🔄 Martingale",
+        "mgr_cfg": {},
+        "mgr_cfgs": {},
+        "estrategias": {},
+        "lv": {},
+        "tickRecovery": {},
+        "bloqHist": {},
+        "rotacao": {},
+        "edcFiltro": False,
+        "modo": "NORMAL",
+    }
+    try:
+        if os.path.exists(BOT_CFG_ARQUIVO):
+            with open(BOT_CFG_ARQUIVO, "r", encoding="utf-8") as f:
+                dados = json.load(f)
+            if isinstance(dados, dict):
+                padrao.update(dados)
+    except Exception:
+        pass
+    return jsonify(padrao)
+
+@app.route('/bot-config', methods=['POST'])
+def bot_config_post():
+    """Salva as configurações do bot principal no servidor."""
+    dados = request.get_json(force=True, silent=True) or {}
+    atual = {}
+    try:
+        if os.path.exists(BOT_CFG_ARQUIVO):
+            with open(BOT_CFG_ARQUIVO, "r", encoding="utf-8") as f:
+                atual = json.load(f)
+    except Exception:
+        pass
+    campos = (
+        "stake", "stopWin", "stopLoss", "estrategia", "gerenciamento",
+        "mgr_cfg", "mgr_cfgs", "estrategias", "lv", "tickRecovery",
+        "bloqHist", "rotacao", "edcFiltro", "modo", "_modoIaLivre",
+    )
+    for k in campos:
+        if k in dados:
+            atual[k] = dados[k]
+    try:
+        with open(BOT_CFG_ARQUIVO, "w", encoding="utf-8") as f:
+            json.dump(atual, f, indent=2, ensure_ascii=False)
+    except Exception as e:
+        return jsonify({"ok": False, "erro": str(e)})
+    return jsonify({"ok": True})
+
+# ─────────────────────────────────────────────────────────
 # CONTA SECUNDÁRIA — Configurações independentes (Gerenciamento, Stake, Stops)
 # ─────────────────────────────────────────────────────────
 SEC_CFG_ARQUIVO = os.path.join(_BASE_DIR, "sec_config.json")
