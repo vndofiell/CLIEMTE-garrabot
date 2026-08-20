@@ -18071,10 +18071,14 @@ async function dsOperar() {
     if (_dsEmOperacao) return;   // já tem operação em curso — ignora
     _dsEmOperacao = true;        // trava IMEDIATAMENTE antes de qualquer await
 
-    // Decide qual WebSocket verificar: SEC tem prioridade quando _dsUsandoSec=true
+    // Decide qual WebSocket usar: SEC tem prioridade quando _dsUsandoSec=true
+    // Fallback: se bot.ws não disponível mas _sec.ws sim, usa _sec.ws (modo ESPELHO)
     const _espAtivoChk = document.getElementById('ds-esp-ativo')?.checked;
     const _secProntoChk = (typeof _sec !== 'undefined') && _sec.pronto && _sec.ws && _sec.ws.readyState === WebSocket.OPEN;
-    const _wsNecessario = (_espAtivoChk && _dsUsandoSec && _secProntoChk) ? _sec.ws : bot?.ws;
+    const _botWsOk = bot?.ws && bot.ws.readyState === WebSocket.OPEN;
+    const _wsNecessario = (_espAtivoChk && _dsUsandoSec && _secProntoChk)
+        ? _sec.ws
+        : (_botWsOk ? bot.ws : (_secProntoChk ? _sec.ws : bot?.ws));
     const _wsOk = _wsNecessario && _wsNecessario.readyState === WebSocket.OPEN;
 
     if (!_wsOk) {
@@ -19051,9 +19055,14 @@ async function dmOperar() {
     _dmEmOperacao = true;
     _dmEmOperacaoTs = Date.now();
 
+    // Decide qual WebSocket usar: SEC tem prioridade quando _dmUsandoSec=true
+    // Fallback: se bot.ws não disponível mas _sec.ws sim, usa _sec.ws (modo ESPELHO)
     const _espAtivoChk  = document.getElementById('dm-esp-ativo')?.checked;
     const _secProntoChk = (typeof _sec !== 'undefined') && _sec.pronto && _sec.ws && _sec.ws.readyState === WebSocket.OPEN;
-    const _wsNecessario = (_espAtivoChk && _dmUsandoSec && _secProntoChk) ? _sec.ws : bot?.ws;
+    const _botWsOk = bot?.ws && bot.ws.readyState === WebSocket.OPEN;
+    const _wsNecessario = (_espAtivoChk && _dmUsandoSec && _secProntoChk)
+        ? _sec.ws
+        : (_botWsOk ? bot.ws : (_secProntoChk ? _sec.ws : bot?.ws));
     const _wsOk = _wsNecessario && _wsNecessario.readyState === WebSocket.OPEN;
 
     if (!_wsOk) {
