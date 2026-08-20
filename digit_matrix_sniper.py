@@ -734,12 +734,20 @@ def register_digit_matrix(
             if b not in ALLOWED_OVER:
                 return jsonify({"ok": False, "error": "Over inválido. Use 3..8."}), 400
             data["over_barreira"] = b
-        # Campos extras (ativo, intervalo) — salva diretamente sem validação rígida
+        # Campos extras (ativo, intervalo, operação) — salva diretamente
         if "ativo" in data and isinstance(data["ativo"], str):
             engine.config["ativo"] = data["ativo"].strip() or "R_100"
         if "intervalo_ms" in data:
             engine.config["intervalo_ms"] = max(500, int(_safe_int(data["intervalo_ms"], 1500)))
-        allowed = set(DEFAULT_CONFIG) | {"ativo", "intervalo_ms"}
+        if "entrada_usd" in data:
+            engine.config["entrada_usd"] = max(0.35, _safe_float(data["entrada_usd"], 0.35))
+        if "take_profit_usd" in data:
+            engine.config["take_profit_usd"] = max(0, _safe_float(data["take_profit_usd"], 10))
+        if "stop_loss_usd" in data:
+            engine.config["stop_loss_usd"] = max(0, _safe_float(data["stop_loss_usd"], 100))
+        if "gerenciamento" in data and isinstance(data["gerenciamento"], str):
+            engine.config["gerenciamento"] = data["gerenciamento"].strip() or "flat"
+        allowed = set(DEFAULT_CONFIG) | {"ativo", "intervalo_ms", "entrada_usd", "take_profit_usd", "stop_loss_usd", "gerenciamento"}
         for k, v in data.items():
             if k in allowed: engine.config[k] = v
         engine.save_config()

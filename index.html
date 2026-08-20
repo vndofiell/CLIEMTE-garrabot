@@ -2161,25 +2161,28 @@
               <div>
                 <div style="font-size:0.55rem;color:#57606a;margin-bottom:3px;">ENTRADA ($)</div>
                 <input id="dm-entrada" type="number" value="0.35" min="0.35" step="0.01"
+                    onchange="dmSalvarConfig()"
                     style="width:100%;background:#030e08;border:1px solid rgba(0,255,136,0.4);
                            color:#00ff88;font-family:'Share Tech Mono';font-size:0.72rem;padding:4px 6px;border-radius:4px;">
               </div>
               <div>
                 <div style="font-size:0.55rem;color:#57606a;margin-bottom:3px;">STOP WIN ($)</div>
                 <input id="dm-stopwin" type="number" value="10" min="0" step="0.1"
+                    onchange="dmSalvarConfig()"
                     style="width:100%;background:#030e08;border:1px solid rgba(0,255,136,0.4);
                            color:#4ade80;font-family:'Share Tech Mono';font-size:0.72rem;padding:4px 6px;border-radius:4px;">
               </div>
               <div>
                 <div style="font-size:0.55rem;color:#57606a;margin-bottom:3px;">STOP LOSS ($)</div>
                 <input id="dm-stoploss" type="number" value="100" min="0" step="0.1"
+                    onchange="dmSalvarConfig()"
                     style="width:100%;background:#030e08;border:1px solid rgba(255,79,109,0.4);
                            color:#ff4f6d;font-family:'Share Tech Mono';font-size:0.72rem;padding:4px 6px;border-radius:4px;">
               </div>
             </div>
             <div style="margin-bottom:10px;">
               <div style="font-size:0.55rem;color:#57606a;margin-bottom:3px;">GERENCIAMENTO</div>
-              <select id="dm-mgr" onchange="dmOnMgrChange()" style="width:100%;background:#030e08;
+              <select id="dm-mgr" onchange="dmOnMgrChange(); dmSalvarConfig();" style="width:100%;background:#030e08;
                   border:1px solid rgba(0,255,136,0.5);color:#00ff88;
                   font-family:'Share Tech Mono';font-size:0.68rem;padding:5px 7px;border-radius:4px;">
                 <option value="flat">💰 Stake Fixa</option>
@@ -18486,6 +18489,10 @@ function dmAbrirModal() {
             const overEl     = document.getElementById('dm-over-barr');
             const assetEl    = document.getElementById('dm-asset');
             const intervalEl = document.getElementById('dm-interval');
+            const entradaEl  = document.getElementById('dm-entrada');
+            const stopwinEl  = document.getElementById('dm-stopwin');
+            const stoplossEl = document.getElementById('dm-stoploss');
+            const mgrEl      = document.getElementById('dm-mgr');
             if (scoreEl    && cfg.score_minimo    != null) scoreEl.value    = cfg.score_minimo;
             if (underEl    && cfg.under_barreira  != null) underEl.value    = cfg.under_barreira;
             if (overEl     && cfg.over_barreira   != null) overEl.value     = cfg.over_barreira;
@@ -18494,6 +18501,14 @@ function dmAbrirModal() {
             }
             if (intervalEl && cfg.intervalo_ms != null) {
                 for (const opt of intervalEl.options) { if (opt.value == cfg.intervalo_ms) { opt.selected = true; break; } }
+            }
+            // configs de operação
+            if (entradaEl  && cfg.entrada_usd     > 0)   entradaEl.value  = cfg.entrada_usd;
+            if (stopwinEl  && cfg.take_profit_usd >= 0)   stopwinEl.value  = cfg.take_profit_usd;
+            if (stoplossEl && cfg.stop_loss_usd   > 0)    stoplossEl.value = cfg.stop_loss_usd;
+            if (mgrEl      && cfg.gerenciamento) {
+                for (const opt of mgrEl.options) { if (opt.value === cfg.gerenciamento) { opt.selected = true; break; } }
+                dmOnMgrChange();   // recria o gerenciador com os valores restaurados
             }
         })
         .catch(() => {});
@@ -18751,6 +18766,11 @@ async function dmSalvarConfig() {
         over_barreira:   parseInt(document.getElementById('dm-over-barr')?.value  || 3),
         ativo:           document.getElementById('dm-asset')?.value || 'R_100',
         intervalo_ms:    parseInt(document.getElementById('dm-interval')?.value   || 1500),
+        // configs de operação
+        entrada_usd:     parseFloat(document.getElementById('dm-entrada')?.value   || 0.35),
+        take_profit_usd: parseFloat(document.getElementById('dm-stopwin')?.value   || 10),
+        stop_loss_usd:   parseFloat(document.getElementById('dm-stoploss')?.value  || 100),
+        gerenciamento:   document.getElementById('dm-mgr')?.value || 'flat',
     };
     try {
         const r = await fetch('/api/digit-matrix/config', {
