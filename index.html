@@ -2290,6 +2290,19 @@
             </div>
           </div>
 
+          <!-- Risco Adaptativo (Digit Matrix) -->
+          <div id="dm-adpt-box" style="border:1px solid rgba(100,200,255,0.2);background:rgba(100,200,255,0.04);
+               border-radius:6px;padding:10px 12px;grid-column:1 / -1;cursor:pointer;
+               display:flex;align-items:center;justify-content:space-between;gap:10px;"
+               onclick="abrirModalAdaptativo()">
+            <div>
+              <span id="dm-adpt-emoji" style="font-size:0.78rem;">🟢</span>
+              <span id="dm-adpt-modo" style="font-size:0.72rem;font-weight:bold;color:#64c8ff;letter-spacing:1px;"> RISCO ADAPTATIVO</span>
+              <span id="dm-adpt-desc" style="font-size:0.58rem;color:#57606a;margin-left:8px;">DESLIGADO — clique para configurar</span>
+            </div>
+            <span style="font-size:0.55rem;color:#57606a;letter-spacing:1px;">▸ CONFIGURAR</span>
+          </div>
+
           <!-- Coluna direita: Modo Espelho (Conta SEC) -->
           <div style="border:1px solid rgba(255,189,46,0.25);background:linear-gradient(180deg,#04100a,#020806);border-radius:6px;padding:12px;">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
@@ -2631,6 +2644,19 @@
             </div>
           </div>
           <!-- Coluna direita: Modo Espelho -->
+          <!-- Risco Adaptativo (Digit Sniper) -->
+          <div id="ds-adpt-box" style="background:rgba(100,200,255,0.04);border:1px solid rgba(100,200,255,0.2);
+               border-radius:6px;padding:10px 12px;margin-bottom:10px;cursor:pointer;
+               display:flex;align-items:center;justify-content:space-between;gap:10px;"
+               onclick="abrirModalAdaptativo()">
+            <div>
+              <span id="ds-adpt-emoji" style="font-size:0.78rem;">🟢</span>
+              <span id="ds-adpt-modo" style="font-size:0.72rem;font-weight:bold;color:#64c8ff;letter-spacing:1px;"> RISCO ADAPTATIVO</span>
+              <span id="ds-adpt-desc" style="font-size:0.58rem;color:#57606a;margin-left:8px;">DESLIGADO — clique para configurar</span>
+            </div>
+            <span style="font-size:0.55rem;color:#57606a;letter-spacing:1px;">▸ CONFIGURAR</span>
+          </div>
+
           <div style="background:rgba(0,0,0,0.35);border:1px solid rgba(255,189,46,0.25);border-radius:6px;padding:12px;">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
               <div style="font-size:0.6rem;color:#fbbf24;letter-spacing:1px;">▸ MODO ESPELHO (CONTA SEC.)</div>
@@ -2908,6 +2934,19 @@
                   background:#444;transition:all 0.25s;transform:translateX(0px);"></div>
             </div>
           </div>
+        </div>
+
+        <!-- ── RISCO ADAPTATIVO (Cyber Sort) ── -->
+        <div id="cs-adpt-box" style="background:rgba(100,200,255,0.04);border:1px solid rgba(100,200,255,0.2);
+             border-radius:6px;padding:10px 14px;margin-bottom:8px;
+             display:flex;align-items:center;justify-content:space-between;gap:10px;cursor:pointer;"
+             onclick="abrirModalAdaptativo()">
+          <div>
+            <span id="cs-adpt-emoji" style="font-size:0.8rem;">🟢</span>
+            <span id="cs-adpt-modo" style="font-size:0.75rem;font-weight:bold;color:#64c8ff;letter-spacing:1px;"> RISCO ADAPTATIVO</span>
+            <span id="cs-adpt-desc" style="font-size:0.6rem;color:#57606a;margin-left:8px;">DESLIGADO — clique para configurar</span>
+          </div>
+          <span style="font-size:0.55rem;color:#57606a;letter-spacing:1px;">▸ CONFIGURAR</span>
         </div>
 
         <!-- ── LOSS VIRTUAL + MODO ESPELHO ── -->
@@ -19759,25 +19798,40 @@ const _ADPT_MODOS = {
     'DEFENSIVO':  { emoji: '🛡️', cor: '#c084fc',  desc: 'Proteção máxima',        borda: 'rgba(168,85,247,0.4)' },
 };
 
-/** Atualiza o botão do painel esquerdo com o modo atual */
+/** Atualiza o botão do painel esquerdo e todos os badges dos módulos */
 function _adaptativoAtualizarBtn(modo) {
     const m    = (modo || 'DESLIGADO').toUpperCase();
     const info = _ADPT_MODOS[m] || _ADPT_MODOS['DESLIGADO'];
-    const btn  = document.getElementById('btn-adaptativo');
-    const lbl  = document.getElementById('lbl-adaptativo');
+
+    // ── Painel esquerdo principal ─────────────────────────────────────────────
+    const btn = document.getElementById('btn-adaptativo');
+    const lbl = document.getElementById('lbl-adaptativo');
     if (btn) {
         btn.style.borderColor = info.borda;
         btn.style.color       = info.cor;
-        // primeiro filho é o text node do emoji+modo
         if (btn.firstChild && btn.firstChild.nodeType === 3)
             btn.firstChild.textContent = info.emoji + ' ' + m + ' ';
     }
     if (lbl) { lbl.textContent = info.desc; lbl.style.color = info.cor; }
-    // Destaque no modal
+
+    // ── Badges nos módulos Cyber Sort, Digit Matrix, Digit Sniper ────────────
+    const prefixes = ['cs', 'dm', 'ds'];
+    prefixes.forEach(p => {
+        const box   = document.getElementById(p + '-adpt-box');
+        const emj   = document.getElementById(p + '-adpt-emoji');
+        const txt   = document.getElementById(p + '-adpt-modo');
+        const desc  = document.getElementById(p + '-adpt-desc');
+        if (box)  box.style.borderColor  = info.borda;
+        if (emj)  emj.textContent        = info.emoji;
+        if (txt)  { txt.textContent = ' ' + m; txt.style.color = info.cor; }
+        if (desc) desc.textContent = info.desc + ' — clique para configurar';
+    });
+
+    // ── Destaque no modal ─────────────────────────────────────────────────────
     document.querySelectorAll('.adpt-btn').forEach(b => {
         const sel = b.dataset.modo === m;
-        b.style.opacity    = sel ? '1' : '0.55';
-        b.style.outline    = sel ? ('2px solid ' + info.borda) : 'none';
+        b.style.opacity = sel ? '1' : '0.55';
+        b.style.outline = sel ? ('2px solid ' + info.borda) : 'none';
     });
 }
 
