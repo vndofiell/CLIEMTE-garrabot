@@ -2325,6 +2325,31 @@
               font-family:'Share Tech Mono';line-height:1.6;color:#4ca77e;"></div>
         </div>
 
+        <!-- TROCA AUTOMÁTICA DE ESTRATÉGIA -->
+        <div style="margin-top:10px;background:rgba(0,0,0,0.35);border:1px solid rgba(0,255,136,0.3);border-radius:6px;padding:10px 12px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+            <div style="font-size:0.6rem;color:#00ff88;letter-spacing:1px;">🔀 TROCA AUTO DE ESTRATÉGIA (NA SEC)</div>
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+              <input type="checkbox" id="dm-troca-ativo"
+                  onchange="_estratTroca.ativo=this.checked; const dsChk=document.getElementById('ds-troca-ativo'); if(dsChk) dsChk.checked=this.checked; this.nextElementSibling.textContent=this.checked?'ON':'OFF'; this.nextElementSibling.style.color=this.checked?'#00ff88':'#555';"
+                  style="accent-color:#00ff88;width:14px;height:14px;">
+              <span style="font-size:0.6rem;color:#555;letter-spacing:1px;">OFF</span>
+            </label>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+            <div style="font-size:0.6rem;color:#57606a;">Losses na SEC p/ trocar:</div>
+            <input id="dm-troca-losses" type="number" value="2" min="1" max="20"
+                onchange="_estratTroca.lossesParaTrocar=Math.max(1,parseInt(this.value)||2); const dsEl=document.getElementById('ds-troca-losses'); if(dsEl) dsEl.value=this.value;"
+                style="width:50px;background:#030e08;border:1px solid rgba(0,255,136,0.4);
+                       color:#00ff88;font-family:'Share Tech Mono';font-size:0.72rem;
+                       padding:3px 6px;border-radius:3px;text-align:center;">
+            <div style="font-size:0.58rem;color:#555;">→ troca p/ <b style="color:#facc15">Sniper Pro</b> | WIN volta ao DM</div>
+          </div>
+          <div id="dm-troca-status" style="margin-top:6px;font-size:0.58rem;color:#555;font-family:'Share Tech Mono';">
+            Desativado — ative para trocar automaticamente para o Digit Sniper Pro
+          </div>
+        </div>
+
       </div><!-- /inner box -->
     </div><!-- /dm-modal -->
 
@@ -2587,6 +2612,31 @@
           <div style="font-size:0.6rem;color:#57606a;letter-spacing:1px;margin-bottom:6px;">▸ LOG DE OPERAÇÕES</div>
           <div id="ds-op-log" style="height:90px;overflow-y:auto;font-size:0.62rem;
               font-family:'Share Tech Mono';line-height:1.6;color:#888;"></div>
+        </div>
+
+        <!-- TROCA AUTOMÁTICA DE ESTRATÉGIA -->
+        <div style="margin-top:10px;background:rgba(0,0,0,0.35);border:1px solid rgba(250,204,21,0.3);border-radius:6px;padding:10px 12px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+            <div style="font-size:0.6rem;color:#facc15;letter-spacing:1px;">🔀 TROCA AUTO DE ESTRATÉGIA (NA SEC)</div>
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+              <input type="checkbox" id="ds-troca-ativo"
+                  onchange="_estratTroca.ativo=this.checked; this.nextElementSibling.textContent=this.checked?'ON':'OFF'; this.nextElementSibling.style.color=this.checked?'#facc15':'#555';"
+                  style="accent-color:#facc15;width:14px;height:14px;">
+              <span style="font-size:0.6rem;color:#555;letter-spacing:1px;">OFF</span>
+            </label>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+            <div style="font-size:0.6rem;color:#57606a;">Losses na SEC p/ trocar:</div>
+            <input id="ds-troca-losses" type="number" value="2" min="1" max="20"
+                onchange="_estratTroca.lossesParaTrocar=Math.max(1,parseInt(this.value)||2);"
+                style="width:50px;background:#0a0a12;border:1px solid rgba(250,204,21,0.4);
+                       color:#facc15;font-family:'Share Tech Mono';font-size:0.72rem;
+                       padding:3px 6px;border-radius:3px;text-align:center;">
+            <div style="font-size:0.58rem;color:#555;">→ troca p/ <b style="color:#00ff88">Matrix Pro</b> | WIN volta ao DS</div>
+          </div>
+          <div id="ds-troca-status" style="margin-top:6px;font-size:0.58rem;color:#555;font-family:'Share Tech Mono';">
+            Desativado — ative para trocar automaticamente para o Digit Matrix Pro
+          </div>
         </div>
       </div>
     </div>
@@ -17917,6 +17967,117 @@ function dsToggleRanking() {
     }
 }
 
+// ══════════════════════════════════════════════════════════════════════════
+// TROCA AUTOMÁTICA DE ESTRATÉGIA NA SEC — compartilhado entre DS e DM
+// ══════════════════════════════════════════════════════════════════════════
+const _estratTroca = {
+    ativo:          false,   // toggle geral ativado?
+    lossesParaTrocar: 2,     // N losses na SEC para trocar de estratégia
+    _lossesNaSec:   0,       // contador de losses na estratégia atual na SEC
+    _estratOrigem:  null,    // 'DS' | 'DM' — qual estratégia estava ativa antes de trocar
+    _trocado:       false,   // true = já está operando na estratégia alternativa
+};
+
+/**
+ * Registra um resultado na SEC para a lógica de troca de estratégia.
+ * @param {boolean} won       — ganhou ou perdeu
+ * @param {string}  origem    — 'DS' ou 'DM' (qual estratégia chamou)
+ * @param {number}  profitSec — lucro acumulado da SEC (usado para resetar ao voltar)
+ */
+function _estratTrocaRegistrar(won, origem) {
+    if (!_estratTroca.ativo) return;
+
+    if (!_estratTroca._trocado) {
+        // ── Ainda na estratégia original ────────────────────────────────
+        if (!won) {
+            _estratTroca._lossesNaSec++;
+            _estratTrocaAtualizarStatus(`🔴 ${_estratTroca._lossesNaSec}/${_estratTroca.lossesParaTrocar} losses na SEC — aguardando gatilho de troca`);
+            if (_estratTroca._lossesNaSec >= _estratTroca.lossesParaTrocar) {
+                // Aciona a troca
+                _estratTroca._estratOrigem = origem;
+                _estratTroca._trocado      = true;
+                _estratTroca._lossesNaSec  = 0;
+                const destino = origem === 'DS' ? 'DM' : 'DS';
+                _estratTrocaAtualizarStatus(`🔀 TROCADO para ${destino === 'DM' ? 'Digit Matrix Pro' : 'Digit Sniper Pro'} — aguardando WIN para voltar`);
+                _estratTrocaAtivarDestino(destino, origem);
+            }
+        } else {
+            _estratTroca._lossesNaSec = 0;  // WIN → reseta contador
+            _estratTrocaAtualizarStatus(`✅ WIN — contador zerado (0/${_estratTroca.lossesParaTrocar})`);
+        }
+    } else {
+        // ── Operando na estratégia alternativa ──────────────────────────
+        if (won) {
+            // WIN na alternativa → volta para a original
+            const original = _estratTroca._estratOrigem;
+            _estratTroca._trocado      = false;
+            _estratTroca._lossesNaSec  = 0;
+            _estratTroca._estratOrigem = null;
+            _estratTrocaAtualizarStatus(`✅ WIN — voltando para ${original === 'DS' ? 'Digit Sniper Pro' : 'Digit Matrix Pro'}`);
+            _estratTrocaVoltarOriginal(original);
+        } else {
+            _estratTrocaAtualizarStatus(`🔄 Na estratégia alternativa — aguardando WIN para voltar`);
+        }
+    }
+}
+
+function _estratTrocaAtualizarStatus(msg) {
+    ['ds-troca-status', 'dm-troca-status'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = msg;
+    });
+}
+
+function _estratTrocaAtivarDestino(destino, origem) {
+    if (destino === 'DM') {
+        // Pausa DS e ativa DM
+        if (_dsAutoOperar) { _dsAutoOperar = false; dsStopAuto(); }
+        const logFn = typeof dsLog === 'function' ? dsLog : () => {};
+        logFn(`🔀 <b style="color:#00ff88">TROCA AUTO</b> — ${_estratTroca._lossesNaSec+_estratTroca.lossesParaTrocar} losses → ativando <b>Digit Matrix Pro</b>`, '#00ff88');
+        // Abre DM se não estiver aberto e ativa AUTO-OPERAR nele
+        const dmModal = document.getElementById('dm-modal');
+        if (!dmModal || dmModal.style.display === 'none') {
+            if (typeof dmAbrirModal === 'function') dmAbrirModal();
+        }
+        setTimeout(() => {
+            if (!_dmAutoOperar && typeof dmToggleAutoOperar === 'function') dmToggleAutoOperar();
+            const logDm = typeof dmLog === 'function' ? dmLog : () => {};
+            logDm(`🔀 <b style="color:#facc15">TROCA AUTO (de DS)</b> — ativado após ${_estratTroca.lossesParaTrocar} losses | volta ao WIN`, '#facc15');
+        }, 600);
+    } else {
+        // Pausa DM e ativa DS
+        if (_dmAutoOperar) { _dmAutoOperar = false; if (typeof dmPararAuto === 'function') dmPararAuto(); }
+        const logFn = typeof dmLog === 'function' ? dmLog : () => {};
+        logFn(`🔀 <b style="color:#facc15">TROCA AUTO</b> — ${_estratTroca.lossesParaTrocar} losses → ativando <b>Digit Sniper Pro</b>`, '#facc15');
+        // Abre DS se não estiver aberto e ativa AUTO-OPERAR nele
+        const dsModal = document.getElementById('ds-modal');
+        if (!dsModal || dsModal.style.display === 'none') {
+            if (typeof dsAbrirModal === 'function') dsAbrirModal();
+        }
+        setTimeout(() => {
+            if (!_dsAutoOperar && typeof dsToggleAutoOperar === 'function') dsToggleAutoOperar();
+            const logDs = typeof dsLog === 'function' ? dsLog : () => {};
+            logDs(`🔀 <b style="color:#00ff88">TROCA AUTO (de DM)</b> — ativado após ${_estratTroca.lossesParaTrocar} losses | volta ao WIN`, '#00ff88');
+        }, 600);
+    }
+}
+
+function _estratTrocaVoltarOriginal(original) {
+    if (original === 'DS') {
+        // Estava no DS → troca foi para DM → volta para DS
+        if (_dmAutoOperar) { _dmAutoOperar = false; if (typeof dmPararAuto === 'function') dmPararAuto(); }
+        if (!_dsAutoOperar && typeof dsToggleAutoOperar === 'function') dsToggleAutoOperar();
+        const logDs = typeof dsLog === 'function' ? dsLog : () => {};
+        logDs(`✅ <b style="color:#00ff41">TROCA AUTO</b> — WIN no DM → voltando ao <b>Digit Sniper Pro</b>`, '#00ff41');
+    } else {
+        // Estava no DM → troca foi para DS → volta para DM
+        if (_dsAutoOperar) { _dsAutoOperar = false; if (typeof dsStopAuto === 'function') dsStopAuto(); }
+        if (!_dmAutoOperar && typeof dmToggleAutoOperar === 'function') dmToggleAutoOperar();
+        const logDm = typeof dmLog === 'function' ? dmLog : () => {};
+        logDm(`✅ <b style="color:#00ff88">TROCA AUTO</b> — WIN no DS → voltando ao <b>Digit Matrix Pro</b>`, '#00ff88');
+    }
+}
+
 // ── Operação real ─────────────────────────────────────────────────────────
 let _dsMgr            = null;
 let _dsSecMgr         = null;
@@ -18375,7 +18536,9 @@ async function dsOperar() {
                         dsLog(`🔀 <b style="color:#60a5fa">TRIGGER SEC</b> — próxima na conta espelho${_dsMaDiv > 0.01 ? ` (dívida pendente: $${_dsMaDiv.toFixed(2)})` : ''}`, '#60a5fa');
                     }
                 } else {
-                    // Conta SEC: após qualquer resultado, verifica se lucro da SEC ficou >= 0
+                    // Conta SEC: registra resultado para troca automática de estratégia
+                    _estratTrocaRegistrar(won, 'DS');
+                    // Após qualquer resultado, verifica se lucro da SEC ficou >= 0
                     if (won) {
                         // Critério de saída: lucro real da SEC >= 0 (não está mais negativo)
                         if (_dsEspLucro >= -0.01) {
@@ -19348,7 +19511,9 @@ async function dmOperar() {
                         dmLog(`🔀 <b style="color:#60a5fa">TRIGGER SEC</b> — próxima na conta espelho${_dmMaDiv > 0.01 ? ` (dívida: $${_dmMaDiv.toFixed(2)})` : ''}`, '#60a5fa');
                     }
                 } else {
-                    // Na SEC: só volta à principal se GANHOU a última entrada E lucro SEC >= 0
+                    // Na SEC: registra resultado para troca automática de estratégia
+                    _estratTrocaRegistrar(won, 'DM');
+                    // Só volta à principal se GANHOU a última entrada E lucro SEC >= 0
                     if (won && _dmEspLucro >= -0.01) {
                         _dmUsandoSec = false; _dmSecMgr = null; _dmEspLossSeq = 0; _dmEspPerdaAc = 0;
                         _dmMaDivSec = 0; _dmMaAtivoSec = false;
