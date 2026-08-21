@@ -1728,6 +1728,72 @@
 </div>
 
 <!-- ══════════════════════════════════════
+     MODAL — RISCO ADAPTATIVO
+════════════════════════════════════════ -->
+<div id="modal-adaptativo" class="modal-overlay">
+  <div class="modal-box" style="max-width:380px; padding:22px 18px;">
+    <div class="modal-title" style="color:#64c8ff; font-size:1rem; letter-spacing:2px; margin-bottom:4px;">🧠 RISCO ADAPTATIVO</div>
+    <div style="font-family:'Share Tech Mono'; font-size:0.7rem; color:#57606a; margin-bottom:18px; text-align:center;">
+      Proteção inteligente sobre stake e entradas
+    </div>
+
+    <!-- Opções de modo -->
+    <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:18px;">
+
+      <button class="adpt-btn" data-modo="DESLIGADO" onclick="adaptativoSelecionarModo('DESLIGADO')"
+        style="background:rgba(0,255,0,0.06); border:1px solid rgba(0,255,0,0.35); color:#4ade80;
+               font-family:'Share Tech Mono'; font-size:0.82rem; padding:10px 14px; border-radius:6px;
+               cursor:pointer; text-align:left; line-height:1.5;">
+        🟢 <b>DESLIGADO</b>
+        <span style="display:block; font-size:0.68rem; color:#57606a; margin-top:2px;">
+          Stake passa sem ajuste — comportamento original
+        </span>
+      </button>
+
+      <button class="adpt-btn" data-modo="MODERADO" onclick="adaptativoSelecionarModo('MODERADO')"
+        style="background:rgba(255,189,46,0.06); border:1px solid rgba(255,189,46,0.35); color:#ffbd2e;
+               font-family:'Share Tech Mono'; font-size:0.82rem; padding:10px 14px; border-radius:6px;
+               cursor:pointer; text-align:left; line-height:1.5;">
+        🟡 <b>MODERADO</b>
+        <span style="display:block; font-size:0.68rem; color:#57606a; margin-top:2px;">
+          Ajustes suaves ±20% por drawdown e losses seguidos
+        </span>
+      </button>
+
+      <button class="adpt-btn" data-modo="INTELIGENTE" onclick="adaptativoSelecionarModo('INTELIGENTE')"
+        style="background:rgba(100,200,255,0.06); border:1px solid rgba(100,200,255,0.35); color:#64c8ff;
+               font-family:'Share Tech Mono'; font-size:0.82rem; padding:10px 14px; border-radius:6px;
+               cursor:pointer; text-align:left; line-height:1.5;">
+        🧠 <b>INTELIGENTE</b>
+        <span style="display:block; font-size:0.68rem; color:#57606a; margin-top:2px;">
+          Score multicamada: sinal + payout + drawdown + gale
+        </span>
+      </button>
+
+      <button class="adpt-btn" data-modo="DEFENSIVO" onclick="adaptativoSelecionarModo('DEFENSIVO')"
+        style="background:rgba(168,85,247,0.06); border:1px solid rgba(168,85,247,0.35); color:#c084fc;
+               font-family:'Share Tech Mono'; font-size:0.82rem; padding:10px 14px; border-radius:6px;
+               cursor:pointer; text-align:left; line-height:1.5;">
+        🛡️ <b>DEFENSIVO</b>
+        <span style="display:block; font-size:0.68rem; color:#57606a; margin-top:2px;">
+          Máxima proteção — pode bloquear entradas de risco
+        </span>
+      </button>
+
+    </div>
+
+    <!-- Status ao vivo -->
+    <div id="adpt-status-box" style="background:rgba(100,200,255,0.04); border:1px solid rgba(100,200,255,0.15);
+         border-radius:6px; padding:10px 12px; font-family:'Share Tech Mono'; font-size:0.68rem;
+         color:#57606a; margin-bottom:16px; display:none;">
+      <div id="adpt-status-txt">Carregando status...</div>
+    </div>
+
+    <button class="modal-cancel" onclick="fecharModal('modal-adaptativo')" style="width:100%;">✕ Fechar</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
      MODAL — TELEGRAM
 ════════════════════════════════════════ -->
 <div id="modal-telegram" class="modal-overlay">
@@ -1825,6 +1891,13 @@
     <button class="cmd-btn active-green" id="btn-gerenciamento" onclick="abrirModalGerenciamento()">
         🔄 Martingale
         <span class="cmd-label" id="lbl-gerenciamento">Clique para mudar</span>
+    </button>
+
+    <div class="cmd-section">▸ RISCO ADAPTATIVO</div>
+    <button class="cmd-btn" id="btn-adaptativo" onclick="abrirModalAdaptativo()"
+        style="border-color:rgba(100,200,255,0.4); color:#64c8ff;">
+        🟢 DESLIGADO
+        <span class="cmd-label" id="lbl-adaptativo" style="color:#57606a;">Proteção desativada</span>
     </button>
 
     <div class="cmd-section">▸ PROTEÇÃO</div>
@@ -4810,6 +4883,8 @@ let bot = {
     },
     _rotacaoBloqContador: 0,  // contador de ticks bloqueados no ativo atual
     _metaEncerrada: false,    // true = meta/stop-win atingida → sistema encerrado, nenhuma operação nova
+    // ── Risco Adaptativo ─────────────────────────────────────────────────────
+    modoAdaptativo: 'DESLIGADO',   // DESLIGADO | MODERADO | INTELIGENTE | DEFENSIVO
 };
 
 /**
@@ -4893,8 +4968,9 @@ function cfgSalvar() {
                 lista:      bot.rotacao.lista,
                 idxAtual:   bot.rotacao.idxAtual,
             },
-            edcFiltro:    bot._edcFiltroAtivo || false,
-            _modoIaLivre: bot._modoIaLivre   || false,
+            edcFiltro:       bot._edcFiltroAtivo || false,
+            _modoIaLivre:    bot._modoIaLivre    || false,
+            modoAdaptativo:  bot.modoAdaptativo  || 'DESLIGADO',
         };
         localStorage.setItem(CFG_KEY, JSON.stringify(cfg));
         // Persiste também no servidor (sobrevive a recarregamentos e outros dispositivos)
@@ -5012,6 +5088,18 @@ function _cfgAplicar(cfg) {
         // Atualiza header com valores restaurados
         updateHeader();
         print(`💾 Configurações restauradas — Entrada: $${bot.initialStake.toFixed(2)} | StopWin: $${bot.stopWin < 999 ? bot.stopWin : '—'} | StopLoss: $${bot.stopLoss < 999 ? bot.stopLoss : '—'}`, 'log-info');
+
+        // Restaura modo adaptativo
+        if (cfg.modoAdaptativo) {
+            bot.modoAdaptativo = cfg.modoAdaptativo;
+            _adaptativoAtualizarBtn(cfg.modoAdaptativo);
+            // Sincroniza o modo no servidor
+            fetch('/adaptive-config', {
+                method: 'POST',
+                headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({ modo: cfg.modoAdaptativo })
+            }).catch(() => {});
+        }
 
         // Restaura Modo IA Livre se estava ativo
         if (cfg._modoIaLivre) {
@@ -7960,6 +8048,14 @@ function initWebSocket(wssUrl) {
                 if (!bot.saldoMostrado) {
                     bot.saldoMostrado = true;
                     print("💰 SALDO: $" + parseFloat(saldo).toFixed(2), "log-info");
+                    // Inicializa o motor adaptativo com o saldo real
+                    if (bot.modoAdaptativo && bot.modoAdaptativo !== 'DESLIGADO') {
+                        fetch('/adaptive-iniciar', {
+                            method: 'POST',
+                            headers: {'Content-Type':'application/json'},
+                            body: JSON.stringify({ saldo: parseFloat(saldo) })
+                        }).catch(() => {});
+                    }
                 }
             }
         }
@@ -8966,6 +9062,8 @@ function initWebSocket(wssUrl) {
                 if (bot.mgr && bot.mgr.modo === "💹 Juros Compostos") {
                     jcRegistrarResultado(wonReal ? 'WIN' : 'LOSS', stakePorLado, totalProfit, bot.mgr._jcBanca);
                 }
+                // ── Adaptive Risk: registra resultado DUPLA ───────────────
+                _adaptativoRegistrarResultado(wonReal ? 'WIN' : 'LOSS', totalProfit);
                 // ── EDC: feedback rico DUPLA ──────────────────────────────
                 _edcFeedback(wonReal, totalProfit, true);
                 // ── Secundária: verifica se deve ativar/desativar espelhamento ──
@@ -9029,6 +9127,8 @@ function initWebSocket(wssUrl) {
                 if (bot.mgr && bot.mgr.modo === "💹 Juros Compostos") {
                     jcRegistrarResultado(won ? 'WIN' : 'LOSS', bot.stake, profit, bot.mgr._jcBanca);
                 }
+                // ── Adaptive Risk: registra resultado NORMAL ──────────────
+                _adaptativoRegistrarResultado(won ? 'WIN' : 'LOSS', profit);
                 // ── EDC: feedback rico normal ─────────────────────────────
                 _edcFeedback(won, profit, false);
                 // ── Secundária: verifica se deve ativar/desativar espelhamento ──
@@ -19647,6 +19747,107 @@ async function dmOperar() {
 // ── FIM DIGIT MATRIX SNIPER PRO ───────────────────────────────────────────
 
 // ── FIM Modal Filtros ─────────────────────────────────────────────────────
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// RISCO ADAPTATIVO — funções JavaScript de integração
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const _ADPT_MODOS = {
+    'DESLIGADO':  { emoji: '🟢', cor: '#4ade80',  desc: 'Proteção desativada',    borda: 'rgba(0,255,0,0.4)' },
+    'MODERADO':   { emoji: '🟡', cor: '#ffbd2e',  desc: 'Ajustes suaves ±20%',    borda: 'rgba(255,189,46,0.4)' },
+    'INTELIGENTE':{ emoji: '🧠', cor: '#64c8ff',  desc: 'Score multicamada ativo', borda: 'rgba(100,200,255,0.4)' },
+    'DEFENSIVO':  { emoji: '🛡️', cor: '#c084fc',  desc: 'Proteção máxima',        borda: 'rgba(168,85,247,0.4)' },
+};
+
+/** Atualiza o botão do painel esquerdo com o modo atual */
+function _adaptativoAtualizarBtn(modo) {
+    const m    = (modo || 'DESLIGADO').toUpperCase();
+    const info = _ADPT_MODOS[m] || _ADPT_MODOS['DESLIGADO'];
+    const btn  = document.getElementById('btn-adaptativo');
+    const lbl  = document.getElementById('lbl-adaptativo');
+    if (btn) {
+        btn.style.borderColor = info.borda;
+        btn.style.color       = info.cor;
+        // primeiro filho é o text node do emoji+modo
+        if (btn.firstChild && btn.firstChild.nodeType === 3)
+            btn.firstChild.textContent = info.emoji + ' ' + m + ' ';
+    }
+    if (lbl) { lbl.textContent = info.desc; lbl.style.color = info.cor; }
+    // Destaque no modal
+    document.querySelectorAll('.adpt-btn').forEach(b => {
+        const sel = b.dataset.modo === m;
+        b.style.opacity    = sel ? '1' : '0.55';
+        b.style.outline    = sel ? ('2px solid ' + info.borda) : 'none';
+    });
+}
+
+/** Abre o modal do Risco Adaptativo e carrega status ao vivo */
+function abrirModalAdaptativo() {
+    document.getElementById('modal-adaptativo').style.display = 'flex';
+    _adaptativoAtualizarBtn(bot.modoAdaptativo);
+    const box = document.getElementById('adpt-status-box');
+    const txt = document.getElementById('adpt-status-txt');
+    if (box && txt) {
+        box.style.display = 'block';
+        txt.textContent = 'Consultando servidor...';
+        fetch('/adaptive-status')
+            .then(r => r.json())
+            .then(d => {
+                const s = d.status || {};
+                const dd = (s.drawdown_pct || 0).toFixed(1);
+                const ddCor = parseFloat(dd) > 5 ? '#f87171' : '#4ade80';
+                txt.innerHTML =
+                    `Modo: <b style="color:#64c8ff">${s.modo||'—'}</b> &nbsp;|&nbsp; ` +
+                    `Banca: <b>$${(s.saldo_atual||0).toFixed(2)}</b> &nbsp;|&nbsp; ` +
+                    `DD: <b style="color:${ddCor}">${dd}%</b><br>` +
+                    `W: <b style="color:#4ade80">${s.wins||0}</b> &nbsp; ` +
+                    `L: <b style="color:#f87171">${s.losses||0}</b> &nbsp; ` +
+                    `WR: <b>${(s.winrate_recente||50).toFixed(1)}%</b> &nbsp;|&nbsp; ` +
+                    `Ops: <b>${s.operacoes||0}</b><br>` +
+                    (s.bloqueado
+                        ? `<span style="color:#f87171">🚫 COOLDOWN: ${s.cooldown_restante}s — ${s.bloqueado_motivo}</span>`
+                        : `<span style="color:#4ade80">✅ Motor operacional</span>`);
+            })
+            .catch(() => { txt.textContent = 'Servidor offline ou não respondeu.'; });
+    }
+}
+
+/** Seleciona um modo adaptativo e persiste */
+function adaptativoSelecionarModo(modo) {
+    bot.modoAdaptativo = modo;
+    _adaptativoAtualizarBtn(modo);
+    fetch('/adaptive-config', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ modo: modo })
+    }).catch(() => {});
+    cfgSalvar();
+    const info = _ADPT_MODOS[modo] || _ADPT_MODOS['DESLIGADO'];
+    print(`🧠 RISCO ADAPTATIVO → <b style="color:${info.cor}">${info.emoji} ${modo}</b> — ${info.desc}`, 'log-info');
+    fecharModal('modal-adaptativo');
+}
+
+/**
+ * Registra resultado de uma operação no motor adaptativo (chamado após WIN/LOSS).
+ */
+function _adaptativoRegistrarResultado(resultado, lucro) {
+    if (!bot.modoAdaptativo || bot.modoAdaptativo === 'DESLIGADO') return;
+    const saldo = parseFloat(
+        (document.getElementById('hd-balance') || {}).textContent?.replace('$','').replace(',','')
+    ) || 0;
+    fetch('/adaptive-resultado', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({
+            resultado: resultado,
+            lucro:     lucro,
+            saldo:     saldo,
+            gale:      (bot.mgr && bot.mgr._nivelGale) || 0,
+        })
+    }).catch(() => {});
+}
+
+
 </script>
 
 </body>
