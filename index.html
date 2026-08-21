@@ -1730,7 +1730,7 @@
 <!-- ══════════════════════════════════════
      MODAL — RISCO ADAPTATIVO
 ════════════════════════════════════════ -->
-<div id="modal-adaptativo" class="modal-overlay">
+<div id="modal-adaptativo" class="modal-overlay" style="z-index:9998;">
   <div class="modal-box" style="max-width:380px; padding:22px 18px;">
     <div class="modal-title" style="color:#64c8ff; font-size:1rem; letter-spacing:2px; margin-bottom:4px;">🧠 RISCO ADAPTATIVO</div>
     <div style="font-family:'Share Tech Mono'; font-size:0.7rem; color:#57606a; margin-bottom:18px; text-align:center;">
@@ -19828,7 +19828,9 @@ function _adaptativoAtualizarBtn(modo) {
 
 /** Abre o modal do Risco Adaptativo e carrega status ao vivo */
 function abrirModalAdaptativo() {
-    document.getElementById('modal-adaptativo').style.display = 'flex';
+    const el = document.getElementById('modal-adaptativo');
+    el.style.display  = 'flex';
+    el.style.zIndex   = '9998';   // sempre na frente de qualquer outro modal
     _adaptativoAtualizarBtn(bot.modoAdaptativo);
     const box = document.getElementById('adpt-status-box');
     const txt = document.getElementById('adpt-status-txt');
