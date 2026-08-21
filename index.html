@@ -17862,21 +17862,25 @@ function csOperar() {
                         _csBip(600, 0.2);
                     }
                 } else {
-                    // Está na conta secundária — verifica se ganhou para voltar à principal
+                    // Está na conta secundária — só volta à principal se GANHOU E lucro SEC >= 0
                     if (won) {
-                        _csUsandoSec   = false;
-                        _csSecMgr      = null;
-                        _csEspLossSeq  = 0;
-                        _csEspPerdaAc  = 0;
-                        // Reseta gerenciador da conta principal para stake base
-                        if (_csMgr) {
+                        if (_csEspLucro >= -0.01) {
+                            // SEC recuperada (lucro zerado ou positivo) — volta à principal
+                            _csUsandoSec   = false;
+                            _csSecMgr      = null;
+                            _csEspLossSeq  = 0;
+                            _csEspPerdaAc  = 0;
+                            // Reseta gerenciador da conta principal para stake base
                             const _csMgrNome2 = document.getElementById('cs-mgr')?.value;
                             if (_csMgrNome2 && _csMgrNome2 !== 'flat') {
                                 _csMgr = new GerenciadorUnificado(_csMgrNome2, { stake: baseStake });
                             }
+                            _csLogOp(`✅ <b style="color:#00ff41">SEC RECUPERADA ($${_csEspLucro >= 0 ? '+' : ''}${_csEspLucro.toFixed(2)})</b> — retomando conta principal | stake reiniciada $${baseStake.toFixed(2)}`, '#00ff41');
+                            _csBip(1000, 0.4);
+                        } else {
+                            // Ganhou mas lucro da SEC ainda negativo — permanece recuperando
+                            _csLogOp(`🔄 <b style="color:#fbbf24">SEC ganhou mas ainda negativa: $${_csEspLucro.toFixed(2)}</b> — continua na SEC para recuperar`, '#fbbf24');
                         }
-                        _csLogOp(`✅ <b style="color:#00ff41">SEC GANHOU</b> — retomando conta principal | stake reiniciada $${baseStake.toFixed(2)}`, '#00ff41');
-                        _csBip(1000, 0.4);
                     }
                 }
                 _csAtualizarStatusEspelho();
