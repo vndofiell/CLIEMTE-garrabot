@@ -18134,6 +18134,16 @@ function _estratTrocaVoltarOriginal(original) {
     }
 }
 
+/** Reseta completamente o estado interno da troca automática.
+ *  Deve ser chamado sempre que a SEC encerrar uma sessão (volta à conta principal). */
+function _estratTrocaResetSessao() {
+    _estratTroca._lossesNaSec  = 0;
+    _estratTroca._trocado      = false;
+    _estratTroca._estratOrigem = null;
+    _estratTroca._modoAlternativo = null;
+    _estratTrocaAtualizarStatus(`— aguardando nova sessão na SEC`);
+}
+
 function _estratTrocaAtualizarBanner(painel) {
     // Atualiza badge visual dentro do painel ativo
     const ativo = _estratTroca._trocado;
@@ -18630,6 +18640,7 @@ async function dsOperar() {
                             // SEC positiva ou zerada — volta para conta principal
                             _dsUsandoSec = false; _dsSecMgr = null; _dsEspLossSeq = 0; _dsEspPerdaAc = 0;
                             _dsMaDiv = 0; _dsMaAtivo = false;
+                            _estratTrocaResetSessao();   // reseta contador de losses e modo alternativo
                             const mn = document.getElementById('ds-mgr')?.value;
                             if (mn && mn !== 'flat' && typeof GerenciadorUnificado !== 'undefined') _dsMgr = new GerenciadorUnificado(mn, { stake: baseStake });
                             dsLog(`✅ SEC positiva ($${_dsEspLucro >= 0 ? '+' : ''}$${_dsEspLucro.toFixed(2)}) — voltando à conta principal`, '#00ff41');
@@ -19603,6 +19614,7 @@ async function dmOperar() {
                     if (won && _dmEspLucro >= -0.01) {
                         _dmUsandoSec = false; _dmSecMgr = null; _dmEspLossSeq = 0; _dmEspPerdaAc = 0;
                         _dmMaDivSec = 0; _dmMaAtivoSec = false;
+                        _estratTrocaResetSessao();   // reseta contador de losses e modo alternativo
                         // Recria gerenciador principal com gerenciamento do select próprio
                         const mn = document.getElementById('dm-mgr')?.value;
                         if (mn && mn !== 'flat' && typeof GerenciadorUnificado !== 'undefined') _dmMgr = new GerenciadorUnificado(mn, { stake: baseStake });
