@@ -8078,12 +8078,18 @@ function initWebSocket(wssUrl) {
                 if (!bot.saldoMostrado) {
                     bot.saldoMostrado = true;
                     print("💰 SALDO: $" + parseFloat(saldo).toFixed(2), "log-info");
-                    // Inicializa o motor adaptativo com o saldo real
+                    // Inicializa estado local do motor adaptativo com o saldo real
+                    const _saldoNum = parseFloat(saldo) || 0;
+                    if (_saldoNum > 0) {
+                        _adptState.saldo = _saldoNum;
+                        _adptState.pico  = _saldoNum;
+                    }
+                    // Inicializa motor no servidor (apenas quando ativo)
                     if (bot.modoAdaptativo && bot.modoAdaptativo !== 'DESLIGADO') {
                         fetch('/adaptive-iniciar', {
                             method: 'POST',
                             headers: {'Content-Type':'application/json'},
-                            body: JSON.stringify({ saldo: parseFloat(saldo) })
+                            body: JSON.stringify({ saldo: _saldoNum })
                         }).catch(() => {});
                     }
                 }
@@ -17687,11 +17693,32 @@ function csOperar() {
     // Stake via gerenciamento ou campo direto
     const baseStake = parseFloat(document.getElementById('cs-stake').value) || 0.35;
     // Quando na conta secundária usa gerenciador próprio (sempre começa em baseStake)
-    const stake     = (_csUsandoSec && _csSecMgr) ? _csSecMgr.getStake()
+    let stake       = (_csUsandoSec && _csSecMgr) ? _csSecMgr.getStake()
                     : (_csMgr ? _csMgr.getStake() : baseStake);
     const ativo     = document.getElementById('cs-ativo').value || 'R_100';
     const ct        = _csSinalAtual.contract_type;
     const barr      = _csSinalAtual.barrier;
+
+    // ── RISCO ADAPTATIVO ─────────────────────────────────────────────────────
+    const _csAdptModo = (typeof bot !== 'undefined' && bot.modoAdaptativo) ? bot.modoAdaptativo : 'DESLIGADO';
+    if (_csAdptModo !== 'DESLIGADO') {
+        const _csAdptRes = _adaptativoCalcularStakeLocal(stake, _csAdptModo, barr);
+        if (!_csAdptRes.permitir) {
+            _csLogOp(`🚫 <b style="color:#f87171">ADAPTIVE BLOQUEOU</b> | ${_csAdptRes.motivo}`, '#f87171');
+            if (_csAutoOperar && _csAtivo) setTimeout(() => { if (_csAtivo) csExecutar(); }, 3000);
+            else _csBotaoOperar(true);
+            return;
+        }
+        stake = _csAdptRes.stake;
+        _csLogOp(
+            `🧠 <b style="color:#64c8ff">ADAPTIVE</b> ${_csAdptModo} | ` +
+            `Score=${_csAdptRes.score} | Stake=$${stake.toFixed(2)} | Fator=${_csAdptRes.fator} | ` +
+            `DD=${_csAdptRes.drawdown.toFixed(1)}% | LossSeq=${_csAdptRes.lossSeq}`,
+            '#64c8ff'
+        );
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
     const reqId     = Math.floor(Math.random() * 90000) + 10000;
 
     _csLogOp(`🚀 <b style="color:#00ffff">${ct}</b> barr=<b style="color:#ffbd2e">${barr}</b> $${stake.toFixed(2)} | ${ativo}`, '#ccc');
@@ -18616,6 +18643,28 @@ async function dsOperar() {
     } else {
         stake = _dsMgr ? _dsMgr.getStake() : baseStake;
     }
+
+    // ── RISCO ADAPTATIVO ─────────────────────────────────────────────────────
+    const _dsAdptModo = (typeof bot !== 'undefined' && bot.modoAdaptativo) ? bot.modoAdaptativo : 'DESLIGADO';
+    if (_dsAdptModo !== 'DESLIGADO') {
+        const _dsAdptRes = _adaptativoCalcularStakeLocal(stake, _dsAdptModo, barr);
+        if (!_dsAdptRes.permitir) {
+            dsLog(`🚫 <b style="color:#f87171">ADAPTIVE BLOQUEOU</b> | ${_dsAdptRes.motivo}`, '#f87171');
+            _dsEmOperacao = false;
+            if (_dsAutoOperar) setTimeout(async () => { if (!_dsAutoOperar) return; await dsScan(); if (_dsSinalAtual) dsOperar(); }, 3000);
+            else dsBotaoOperar(true);
+            return;
+        }
+        stake = _dsAdptRes.stake;
+        dsLog(
+            `🧠 <b style="color:#64c8ff">ADAPTIVE</b> ${_dsAdptModo} | ` +
+            `Score=${_dsAdptRes.score} | Stake=$${stake.toFixed(2)} | Fator=${_dsAdptRes.fator} | ` +
+            `DD=${_dsAdptRes.drawdown.toFixed(1)}% | LossSeq=${_dsAdptRes.lossSeq}`,
+            '#64c8ff'
+        );
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
     const ativ  = document.getElementById('ds-asset')?.value || 'R_100';
     const reqId = Math.floor(Math.random() * 90000) + 10000;
 
@@ -19608,6 +19657,27 @@ async function dmOperar() {
         stake = _dmMgr ? _dmMgr.getStake() : baseStake;
     }
 
+    // ── RISCO ADAPTATIVO ─────────────────────────────────────────────────────
+    const _dmAdptModo = (typeof bot !== 'undefined' && bot.modoAdaptativo) ? bot.modoAdaptativo : 'DESLIGADO';
+    if (_dmAdptModo !== 'DESLIGADO') {
+        const _dmAdptRes = _adaptativoCalcularStakeLocal(stake, _dmAdptModo, barr);
+        if (!_dmAdptRes.permitir) {
+            dmLog(`🚫 <b style="color:#f87171">ADAPTIVE BLOQUEOU</b> | ${_dmAdptRes.motivo}`, '#f87171');
+            _dmEmOperacao = false; _dmEmOperacaoTs = 0;
+            if (_dmAutoOperar) setTimeout(async () => { if (!_dmAutoOperar) return; dmAtualizar(); setTimeout(() => { if (_dmSinalAtual) dmOperar(); }, 1000); }, 3000);
+            else dmBotaoOperar(true);
+            return;
+        }
+        stake = _dmAdptRes.stake;
+        dmLog(
+            `🧠 <b style="color:#64c8ff">ADAPTIVE</b> ${_dmAdptModo} | ` +
+            `Score=${_dmAdptRes.score} | Stake=$${stake.toFixed(2)} | Fator=${_dmAdptRes.fator} | ` +
+            `DD=${_dmAdptRes.drawdown.toFixed(1)}% | LossSeq=${_dmAdptRes.lossSeq}`,
+            '#64c8ff'
+        );
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
     const ativ  = document.getElementById('dm-asset')?.value || 'R_100';
     const reqId = Math.floor(Math.random() * 90000) + 10000;
 
@@ -19789,6 +19859,129 @@ const _ADPT_MODOS = {
     'DEFENSIVO':  { emoji: '🛡️', cor: '#c084fc',  desc: 'Proteção máxima',        borda: 'rgba(168,85,247,0.4)' },
 };
 
+// ── Estado local do motor adaptativo (sincronizado com o servidor) ──────────
+const _adptState = {
+    lossSeq:  0,    // losses consecutivos
+    winSeq:   0,    // wins consecutivos
+    drawdown: 0.0,  // drawdown atual em %
+    saldo:    0.0,  // último saldo conhecido
+    pico:     0.0,  // pico de banca
+    ops:      0,    // operações registradas
+};
+
+/**
+ * Mantém o estado local sincronizado após cada WIN/LOSS.
+ * Chamado por _adaptativoRegistrarResultado() que já existe.
+ */
+function _adptStateAtualizar(resultado, lucro, saldo) {
+    if (resultado === 'WIN') {
+        _adptState.winSeq++;
+        _adptState.lossSeq = 0;
+    } else {
+        _adptState.lossSeq++;
+        _adptState.winSeq = 0;
+    }
+    if (saldo > 0) {
+        _adptState.saldo = saldo;
+        if (saldo > _adptState.pico) _adptState.pico = saldo;
+    }
+    if (_adptState.pico > 0)
+        _adptState.drawdown = Math.max(0, (_adptState.pico - _adptState.saldo) / _adptState.pico * 100);
+    _adptState.ops++;
+}
+
+/**
+ * Motor adaptativo local — calcula stake e decide se permite entrada,
+ * usando o estado em memória (_adptState) sem chamada de rede.
+ *
+ * Retorna: { permitir, stake, fator, score, motivo, drawdown, lossSeq }
+ */
+function _adaptativoCalcularStakeLocal(stakeBase, modo, barr) {
+    const m   = (modo || 'DESLIGADO').toUpperCase();
+    const st  = _adptState;
+    const cfg = { stakeMin: 0.35, stakeMax: 10.0, bloquearAposLosses: 5,
+                  drawdownBloqueio: 10.0, drawdownDefensivo: 5.0,
+                  maxLossesSeguidos: 3, scoreMin: 40, scoreDefensivo: 60 };
+
+    // Fallback: tenta pegar config do servidor se disponível
+    try {
+        const _ec = ADAPTIVE_ENGINE_CONFIG;
+        if (_ec) {
+            cfg.stakeMin          = _ec.stake_min            || cfg.stakeMin;
+            cfg.stakeMax          = _ec.stake_max            || cfg.stakeMax;
+            cfg.bloquearAposLosses= _ec.bloquear_apos_losses || cfg.bloquearAposLosses;
+            cfg.drawdownBloqueio  = (_ec.drawdown_bloqueio   || 0.10) * 100;
+            cfg.drawdownDefensivo = (_ec.drawdown_defensivo  || 0.05) * 100;
+            cfg.maxLossesSeguidos = _ec.max_losses_seguidos  || cfg.maxLossesSeguidos;
+            cfg.scoreMin          = _ec.score_min_operar     || cfg.scoreMin;
+            cfg.scoreDefensivo    = _ec.score_defensivo      || cfg.scoreDefensivo;
+        }
+    } catch(_) {}
+
+    const dd      = st.drawdown;
+    const lossSeq = st.lossSeq;
+
+    // ── Score base simplificado ───────────────────────────────────────────────
+    let score = 65; // base neutra
+    if (lossSeq >= 4) score -= 30;
+    else if (lossSeq >= 3) score -= 20;
+    else if (lossSeq >= 2) score -= 10;
+    else if (lossSeq >= 1) score -= 5;
+    if (dd >= 8) score -= 25;
+    else if (dd >= 5) score -= 15;
+    else if (dd >= 3) score -= 8;
+    if (st.winSeq >= 3) score += 5;
+    score = Math.max(0, Math.min(100, score));
+
+    // ── Verificações de bloqueio ──────────────────────────────────────────────
+    if (lossSeq >= cfg.bloquearAposLosses)
+        return { permitir: false, stake: cfg.stakeMin, fator: 0, score,
+                 motivo: `🚫 ${lossSeq} losses consecutivos (limite: ${cfg.bloquearAposLosses})`,
+                 drawdown: dd, lossSeq };
+
+    if (dd >= cfg.drawdownBloqueio)
+        return { permitir: false, stake: cfg.stakeMin, fator: 0, score,
+                 motivo: `🚫 Drawdown ${dd.toFixed(1)}% ≥ limite ${cfg.drawdownBloqueio}%`,
+                 drawdown: dd, lossSeq };
+
+    if (m === 'DEFENSIVO' && lossSeq >= cfg.maxLossesSeguidos)
+        return { permitir: false, stake: cfg.stakeMin, fator: 0, score,
+                 motivo: `🛡️ DEFENSIVO — ${lossSeq} losses consecutivos`,
+                 drawdown: dd, lossSeq };
+
+    if ((m === 'INTELIGENTE' || m === 'DEFENSIVO') && score < cfg.scoreMin)
+        return { permitir: false, stake: cfg.stakeMin, fator: 0, score,
+                 motivo: `🚫 Score ${score.toFixed(0)} < mínimo ${cfg.scoreMin}`,
+                 drawdown: dd, lossSeq };
+
+    // ── Cálculo do fator ──────────────────────────────────────────────────────
+    let fator = 1.0;
+    if (m === 'MODERADO') {
+        if (dd >= cfg.drawdownDefensivo) fator *= 0.70;
+        else if (lossSeq >= cfg.maxLossesSeguidos) fator *= 0.80;
+        else if (st.winSeq >= 3) fator *= 1.05;
+    } else if (m === 'INTELIGENTE') {
+        if (score >= 80) fator *= 1.05;
+        else if (score < cfg.scoreDefensivo) fator *= 0.80;
+        if (dd >= cfg.drawdownDefensivo) fator *= 0.70;
+        if (lossSeq >= 2) fator *= Math.pow(0.80, lossSeq - 1);
+    } else if (m === 'DEFENSIVO') {
+        fator = score >= 75 ? 0.85 : score >= 60 ? 0.75 : 0.70;
+        if (dd >= cfg.drawdownDefensivo) fator *= 0.70;
+    }
+    fator = Math.max(0.50, Math.min(1.10, fator));
+
+    const stakeAjustada = Math.max(cfg.stakeMin, Math.min(stakeBase * fator, cfg.stakeMax));
+    const stakeFinal    = Math.round(stakeAjustada * 100) / 100;
+
+    return { permitir: true, stake: stakeFinal, fator: Math.round(fator * 1000) / 1000,
+             score: Math.round(score * 10) / 10, motivo: '',
+             drawdown: dd, lossSeq };
+}
+
+// Variável para armazenar a config do servidor (atualizada ao abrir o modal)
+let ADAPTIVE_ENGINE_CONFIG = null;
+
 /** Atualiza o botão do painel esquerdo e todos os badges dos módulos */
 function _adaptativoAtualizarBtn(modo) {
     const m    = (modo || 'DESLIGADO').toUpperCase();
@@ -19832,6 +20025,13 @@ function abrirModalAdaptativo() {
     el.style.display  = 'flex';
     el.style.zIndex   = '9998';   // sempre na frente de qualquer outro modal
     _adaptativoAtualizarBtn(bot.modoAdaptativo);
+
+    // Carrega config do servidor para motor local ficar sincronizado
+    fetch('/adaptive-config')
+        .then(r => r.json())
+        .then(d => { if (d.config) ADAPTIVE_ENGINE_CONFIG = d.config; })
+        .catch(() => {});
+
     const box = document.getElementById('adpt-status-box');
     const txt = document.getElementById('adpt-status-txt');
     if (box && txt) {
@@ -19878,10 +20078,12 @@ function adaptativoSelecionarModo(modo) {
  * Registra resultado de uma operação no motor adaptativo (chamado após WIN/LOSS).
  */
 function _adaptativoRegistrarResultado(resultado, lucro) {
-    if (!bot.modoAdaptativo || bot.modoAdaptativo === 'DESLIGADO') return;
     const saldo = parseFloat(
         (document.getElementById('hd-balance') || {}).textContent?.replace('$','').replace(',','')
     ) || 0;
+    // Atualiza estado local SEMPRE (independente do modo) para manter drawdown/lossSeq corretos
+    _adptStateAtualizar(resultado, lucro, saldo);
+    if (!bot.modoAdaptativo || bot.modoAdaptativo === 'DESLIGADO') return;
     fetch('/adaptive-resultado', {
         method: 'POST',
         headers: {'Content-Type':'application/json'},
