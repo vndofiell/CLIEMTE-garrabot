@@ -14,6 +14,33 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 import requests
 from flask import Flask, jsonify, request
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# ADAPTIVE RISK ENGINE — Motor de Risco Adaptativo
+# ═══════════════════════════════════════════════════════════════════════════════
+from adaptive_risk import AdaptiveRiskEngine, AdaptiveConfig
+
+# Configuração padrão do motor (sobrescrita via /bot-config ou /adaptive-config)
+ADAPTIVE_CONFIG = AdaptiveConfig(
+    modo                 = "DESLIGADO",
+    stake_min            = 0.35,
+    stake_max            = 10.00,
+    risco_max_pct        = 0.03,
+    max_losses_seguidos  = 3,
+    drawdown_defensivo   = 0.05,
+    drawdown_bloqueio    = 0.10,
+    janela_resultados    = 20,
+    reducao_loss         = 0.80,
+    reducao_drawdown     = 0.70,
+    aumento_win          = 1.05,
+    recovery_max_pct     = 0.30,
+    score_min_operar     = 40.0,
+    score_defensivo      = 60.0,
+    bloquear_apos_losses = 5,
+    cooldown_segundos    = 60,
+)
+
+ADAPTIVE_ENGINE = AdaptiveRiskEngine(ADAPTIVE_CONFIG)
+
 # ── Hora no fuso de Brasília (UTC-3) — independe da timezone do servidor ──
 def _hora_brt(fmt: str = "%H:%M") -> str:
     try:
@@ -9041,6 +9068,21 @@ def bot_config_get():
         "rotacao": {},
         "edcFiltro": False,
         "modo": "NORMAL",
+        # ── Sistema Adaptativo ────────────────────────────────────────────────
+        "modoAdaptativo": "DESLIGADO",
+        "adaptativoConfig": {
+            "stake_min":            0.35,
+            "stake_max":            10.00,
+            "risco_max_pct":        0.03,
+            "max_losses_seguidos":  3,
+            "drawdown_defensivo":   0.05,
+            "drawdown_bloqueio":    0.10,
+            "janela_resultados":    20,
+            "score_min_operar":     40,
+            "score_defensivo":      60,
+            "bloquear_apos_losses": 5,
+            "cooldown_segundos":    60,
+        },
     }
     try:
         if os.path.exists(BOT_CFG_ARQUIVO):
@@ -9067,16 +9109,246 @@ def bot_config_post():
         "stake", "stopWin", "stopLoss", "estrategia", "gerenciamento",
         "mgr_cfg", "mgr_cfgs", "estrategias", "lv", "tickRecovery",
         "bloqHist", "rotacao", "edcFiltro", "modo", "_modoIaLivre",
+        # Sistema Adaptativo
+        "modoAdaptativo", "adaptativoConfig",
     )
     for k in campos:
         if k in dados:
             atual[k] = dados[k]
+
+    # ── Aplica modo adaptativo no engine se enviado ───────────────────────────
+    if "modoAdaptativo" in dados:
+        ADAPTIVE_ENGINE.set_mode(dados["modoAdaptativo"])
+
+    # ── Aplica configurações adaptativas no engine se enviadas ────────────────
+    if "adaptativoConfig" in dados and isinstance(dados["adaptativoConfig"], dict):
+        ac = dados["adaptativoConfig"]
+        cfg = ADAPTIVE_ENGINE.config
+        if "stake_min"            in ac: cfg.stake_min            = float(ac["stake_min"])
+        if "stake_max"            in ac: cfg.stake_max            = float(ac["stake_max"])
+        if "risco_max_pct"        in ac: cfg.risco_max_pct        = float(ac["risco_max_pct"])
+        if "max_losses_seguidos"  in ac: cfg.max_losses_seguidos  = int(ac["max_losses_seguidos"])
+        if "drawdown_defensivo"   in ac: cfg.drawdown_defensivo   = float(ac["drawdown_defensivo"])
+        if "drawdown_bloqueio"    in ac: cfg.drawdown_bloqueio    = float(ac["drawdown_bloqueio"])
+        if "janela_resultados"    in ac: cfg.janela_resultados    = int(ac["janela_resultados"])
+        if "score_min_operar"     in ac: cfg.score_min_operar     = float(ac["score_min_operar"])
+        if "score_defensivo"      in ac: cfg.score_defensivo      = float(ac["score_defensivo"])
+        if "bloquear_apos_losses" in ac: cfg.bloquear_apos_losses = int(ac["bloquear_apos_losses"])
+        if "cooldown_segundos"    in ac: cfg.cooldown_segundos    = int(ac["cooldown_segundos"])
     try:
         with open(BOT_CFG_ARQUIVO, "w", encoding="utf-8") as f:
             json.dump(atual, f, indent=2, ensure_ascii=False)
     except Exception as e:
         return jsonify({"ok": False, "erro": str(e)})
     return jsonify({"ok": True})
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# ADAPTIVE RISK — Rotas da API
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@app.route('/adaptive-config', methods=['GET', 'POST'])
+def adaptive_config():
+    """
+    GET  — Retorna a configuração atual do motor adaptativo.
+    POST — Atualiza a configuração e/ou o modo do motor.
+
+    Payload POST (todos opcionais):
+      modo                 : "DESLIGADO" | "MODERADO" | "INTELIGENTE" | "DEFENSIVO"
+      saldo                : float  — inicializa o motor com esse saldo
+      stake_min            : float
+      stake_max            : float
+      risco_max_pct        : float
+      max_losses_seguidos  : int
+      drawdown_defensivo   : float
+      drawdown_bloqueio    : float
+      janela_resultados    : int
+      score_min_operar     : float
+      score_defensivo      : float
+      bloquear_apos_losses : int
+      cooldown_segundos    : int
+    """
+    if request.method == 'GET':
+        cfg = ADAPTIVE_ENGINE.config
+        return jsonify({
+            "ok":   True,
+            "modo": cfg.modo,
+            "config": {
+                "stake_min":            cfg.stake_min,
+                "stake_max":            cfg.stake_max,
+                "risco_max_pct":        cfg.risco_max_pct,
+                "max_losses_seguidos":  cfg.max_losses_seguidos,
+                "drawdown_defensivo":   cfg.drawdown_defensivo,
+                "drawdown_bloqueio":    cfg.drawdown_bloqueio,
+                "janela_resultados":    cfg.janela_resultados,
+                "score_min_operar":     cfg.score_min_operar,
+                "score_defensivo":      cfg.score_defensivo,
+                "bloquear_apos_losses": cfg.bloquear_apos_losses,
+                "cooldown_segundos":    cfg.cooldown_segundos,
+            },
+        })
+
+    # POST
+    dados = request.get_json(force=True, silent=True) or {}
+    cfg   = ADAPTIVE_ENGINE.config
+
+    if "modo" in dados:
+        ADAPTIVE_ENGINE.set_mode(str(dados["modo"]))
+
+    if "saldo" in dados:
+        ADAPTIVE_ENGINE.iniciar(float(dados["saldo"]))
+
+    mapa = {
+        "stake_min":            (float, "stake_min"),
+        "stake_max":            (float, "stake_max"),
+        "risco_max_pct":        (float, "risco_max_pct"),
+        "max_losses_seguidos":  (int,   "max_losses_seguidos"),
+        "drawdown_defensivo":   (float, "drawdown_defensivo"),
+        "drawdown_bloqueio":    (float, "drawdown_bloqueio"),
+        "janela_resultados":    (int,   "janela_resultados"),
+        "score_min_operar":     (float, "score_min_operar"),
+        "score_defensivo":      (float, "score_defensivo"),
+        "bloquear_apos_losses": (int,   "bloquear_apos_losses"),
+        "cooldown_segundos":    (int,   "cooldown_segundos"),
+    }
+    for chave, (tipo, attr) in mapa.items():
+        if chave in dados:
+            setattr(cfg, attr, tipo(dados[chave]))
+
+    print(
+        f"[Adaptive] ✅ Config atualizada | Modo={cfg.modo} | "
+        f"StakeMin={cfg.stake_min} | StakeMax={cfg.stake_max}"
+    )
+    return jsonify({"ok": True, "modo": cfg.modo})
+
+
+@app.route('/adaptive-iniciar', methods=['POST'])
+def adaptive_iniciar():
+    """
+    Inicializa (ou reinicia) o motor com o saldo atual da conta.
+    Deve ser chamado assim que o saldo for descoberto após login na Deriv.
+
+    Payload: { saldo: float }
+    """
+    dados = request.get_json(force=True, silent=True) or {}
+    saldo = dados.get("saldo")
+    if saldo is None:
+        return jsonify({"ok": False, "erro": "Campo 'saldo' obrigatório."}), 400
+    try:
+        ADAPTIVE_ENGINE.iniciar(float(saldo))
+        print(f"[Adaptive] 🚀 Motor inicializado | Saldo={saldo:.2f}")
+        return jsonify({"ok": True, "saldo": float(saldo), "modo": ADAPTIVE_ENGINE.config.modo})
+    except Exception as e:
+        return jsonify({"ok": False, "erro": str(e)}), 400
+
+
+@app.route('/adaptive-stake', methods=['POST'])
+def adaptive_stake_route():
+    """
+    Calcula a stake adaptada para uma operação antes de enviá-la à Deriv.
+
+    Payload:
+      stake_base       (float, obrigatório) — stake do gerenciamento nativo
+      gerenciamento    (str)   — martingale | soros | fixa | loss_recovery | ...
+      gale             (int)   — nível de gale atual (0 = nova entrada)
+      qualidade_sinal  (float) — score do sinal (0–100, padrão 50)
+      payout           (float) — payout esperado (ex.: 0.85, padrão 0.80)
+      volatilidade     (float) — volatilidade do mercado (0–100, padrão 50)
+      regime           (str)   — LATERAL | TENDENCIA | INDEFINIDO
+
+    Resposta:
+      permitir       (bool)  — se a entrada está autorizada
+      stake          (float) — stake ajustada
+      score          (float) — score calculado
+      modo           (str)   — modo ativo
+      fator          (float) — fator aplicado
+      motivo         (str)   — motivo do bloqueio (se houver)
+      drawdown       (float) — drawdown atual em %
+      losses_seguidos(int)   — losses consecutivos atuais
+    """
+    dados = request.get_json(force=True, silent=True) or {}
+    stake_base = dados.get("stake_base")
+    if stake_base is None:
+        return jsonify({"ok": False, "erro": "Campo 'stake_base' obrigatório."}), 400
+
+    resultado = ADAPTIVE_ENGINE.calcular_stake(
+        stake_base      = float(stake_base),
+        gerenciamento   = str(dados.get("gerenciamento", "fixa")),
+        gale            = int(dados.get("gale", 0)),
+        qualidade_sinal = float(dados.get("qualidade_sinal", 50)),
+        payout          = float(dados.get("payout", 0.80)),
+        volatilidade    = float(dados.get("volatilidade", 50)),
+        regime          = str(dados.get("regime", "")),
+    )
+
+    print(
+        f"[Adaptive] 🧠 Modo={resultado['modo']} | "
+        f"Score={resultado['score']} | "
+        f"Stake={resultado['stake']:.2f} | "
+        f"Fator={resultado['fator']} | "
+        f"DD={resultado['drawdown']:.2f}% | "
+        f"LossSeq={resultado['losses_seguidos']} | "
+        f"Permitir={resultado['permitir']}"
+    )
+    if not resultado["permitir"]:
+        print(f"[Adaptive] 🚫 BLOQUEADO | Motivo: {resultado['motivo']}")
+
+    return jsonify(resultado)
+
+
+@app.route('/adaptive-resultado', methods=['POST'])
+def adaptive_resultado():
+    """
+    Registra o resultado de uma operação finalizada no motor adaptativo.
+    DEVE ser chamado após cada WIN ou LOSS.
+
+    Payload:
+      resultado (str, obrigatório) — "WIN" | "LOSS"
+      lucro     (float)            — valor do lucro/prejuízo (positivo em WIN)
+      saldo     (float)            — saldo atual após o resultado
+      gale      (int)              — nível de gale da operação
+    """
+    dados     = request.get_json(force=True, silent=True) or {}
+    resultado = str(dados.get("resultado", "")).upper()
+    if resultado not in ("WIN", "LOSS"):
+        return jsonify({"ok": False, "erro": "resultado deve ser 'WIN' ou 'LOSS'"}), 400
+
+    ADAPTIVE_ENGINE.registrar_resultado(
+        resultado = resultado,
+        lucro     = float(dados.get("lucro", 0)),
+        saldo     = float(dados.get("saldo", 0)),
+        gale      = int(dados.get("gale", 0)),
+    )
+
+    status = ADAPTIVE_ENGINE.status()
+    print(
+        f"[Adaptive] {'✅' if resultado == 'WIN' else '❌'} {resultado} registrado | "
+        f"WR={status['winrate_recente']:.1f}% | DD={status['drawdown_pct']:.2f}% | "
+        f"LossSeq={status['losses_seguidos']} | WinSeq={status['wins_seguidos']}"
+    )
+    return jsonify({"ok": True, "status": status})
+
+
+@app.route('/adaptive-status', methods=['GET'])
+def adaptive_status():
+    """
+    Retorna snapshot completo do estado do motor adaptativo.
+    Útil para exibição no painel de administração / dashboard do bot.
+    """
+    return jsonify({"ok": True, "status": ADAPTIVE_ENGINE.status()})
+
+
+@app.route('/adaptive-resetar', methods=['POST'])
+def adaptive_resetar():
+    """
+    Reseta o estado do motor adaptativo.
+    Payload opcional: { saldo: float } — se omitido, reutiliza o saldo_inicial.
+    """
+    dados = request.get_json(force=True, silent=True) or {}
+    saldo = dados.get("saldo")
+    ADAPTIVE_ENGINE.resetar(float(saldo) if saldo is not None else None)
+    print(f"[Adaptive] 🔄 Motor resetado | Saldo={ADAPTIVE_ENGINE.state.saldo_inicial:.2f}")
+    return jsonify({"ok": True, "status": ADAPTIVE_ENGINE.status()})
+
 
 # ─────────────────────────────────────────────────────────
 # CONTA SECUNDÁRIA — Configurações independentes (Gerenciamento, Stake, Stops)
@@ -9771,6 +10043,20 @@ def garra_dupla_resultado():
             "stake_inferior": _garra_dupla_state["stake_inferior"],
         }
 
+    # ── Adaptive Risk: registra resultado da janela correspondente ───────────
+    lucro  = float(dados.get("lucro", 0))
+    saldo  = float(dados.get("saldo", 0))
+    gale_j = int(
+        config_snapshot["gale_superior"] if tipo == "superior"
+        else config_snapshot["gale_inferior"]
+    )
+    ADAPTIVE_ENGINE.registrar_resultado(
+        resultado = resultado,
+        lucro     = lucro,
+        saldo     = saldo,
+        gale      = gale_j,
+    )
+
     return jsonify({"ok": True, "config_atual": config_snapshot})
 
 
@@ -9980,6 +10266,14 @@ def bf5_resultado():
             "stake":      _bf5_state["stake"],
             "nivel_gale": _bf5_state["nivel_gale"],
         }
+
+    # ── Adaptive Risk: registra resultado ────────────────────────────────────
+    ADAPTIVE_ENGINE.registrar_resultado(
+        resultado = resultado,
+        lucro     = float(dados.get("lucro", 0)),
+        saldo     = float(dados.get("saldo", 0)),
+        gale      = config_snapshot["nivel_gale"],
+    )
 
     return jsonify({"ok": True, "config_atual": config_snapshot})
 
@@ -10225,6 +10519,17 @@ def garra_trend_registrar():
         return jsonify({"ok": False, "erro": "Campo 'resultado' (WIN/LOSS) obrigatório."}), 400
 
     _garra_trend_engine.registrar_operacao(dados)
+
+    # ── Adaptive Risk: alimenta o motor com o resultado real ─────────────────
+    res_str = str(dados.get("resultado", "")).upper()
+    if res_str in ("WIN", "LOSS"):
+        ADAPTIVE_ENGINE.registrar_resultado(
+            resultado = res_str,
+            lucro     = float(dados.get("lucro", 0)),
+            saldo     = float(dados.get("saldo", 0)),
+            gale      = int(dados.get("gale", 0)),
+        )
+
     return jsonify({"ok": True, "mensagem": "Resultado gravado na IA Estatística do GarraTrend Pro."})
 
 
