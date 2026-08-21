@@ -2083,7 +2083,17 @@
             <span style="color:#00ff88;font-size:0.9rem;letter-spacing:2px;">🧬 DIGIT MATRIX SNIPER PRO</span>
             <div style="font-size:0.6rem;color:#57606a;letter-spacing:1px;margin-top:2px;">ANÁLISE MULTI-JANELA · SCORE 0–100 · EXAUSTÃO · FREQUÊNCIA · HISTÓRICO</div>
           </div>
-          <div style="display:flex;align-items:center;gap:10px;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <!-- Botão Risco Adaptativo no cabeçalho -->
+            <button id="dm-adpt-btn" onclick="abrirModalAdaptativo()"
+                title="Risco Adaptativo — clique para configurar"
+                style="background:rgba(100,200,255,0.08);border:1px solid rgba(100,200,255,0.35);
+                       color:#64c8ff;font-family:'Share Tech Mono',monospace;font-size:0.6rem;
+                       padding:3px 10px;border-radius:3px;cursor:pointer;letter-spacing:1px;
+                       display:flex;align-items:center;gap:5px;white-space:nowrap;">
+              <span id="dm-adpt-emoji">🟢</span>
+              <span id="dm-adpt-modo" style="font-weight:bold;">ADAPT.</span>
+            </button>
             <span id="dm-live-badge" style="font-size:0.62rem;color:#00ff88;border:1px solid rgba(0,255,136,0.4);
                 padding:3px 8px;border-radius:3px;letter-spacing:1px;">● MONITORANDO</span>
             <button onclick="dmFecharModal()"
@@ -2290,19 +2300,6 @@
             </div>
           </div>
 
-          <!-- Risco Adaptativo (Digit Matrix) -->
-          <div id="dm-adpt-box" style="border:1px solid rgba(100,200,255,0.2);background:rgba(100,200,255,0.04);
-               border-radius:6px;padding:10px 12px;grid-column:1 / -1;cursor:pointer;
-               display:flex;align-items:center;justify-content:space-between;gap:10px;"
-               onclick="abrirModalAdaptativo()">
-            <div>
-              <span id="dm-adpt-emoji" style="font-size:0.78rem;">🟢</span>
-              <span id="dm-adpt-modo" style="font-size:0.72rem;font-weight:bold;color:#64c8ff;letter-spacing:1px;"> RISCO ADAPTATIVO</span>
-              <span id="dm-adpt-desc" style="font-size:0.58rem;color:#57606a;margin-left:8px;">DESLIGADO — clique para configurar</span>
-            </div>
-            <span style="font-size:0.55rem;color:#57606a;letter-spacing:1px;">▸ CONFIGURAR</span>
-          </div>
-
           <!-- Coluna direita: Modo Espelho (Conta SEC) -->
           <div style="border:1px solid rgba(255,189,46,0.25);background:linear-gradient(180deg,#04100a,#020806);border-radius:6px;padding:12px;">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
@@ -2467,7 +2464,17 @@
             <span style="color:#facc15;font-size:0.9rem;letter-spacing:2px;">🎯 DIGIT SNIPER PRO</span>
             <div style="font-size:0.6rem;color:#57606a;letter-spacing:1px;margin-top:2px;">SCANNER ESTATÍSTICO · EXAUSTÃO · PAYOUT · FILTRO DE RISCO</div>
           </div>
-          <div style="display:flex;align-items:center;gap:10px;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <!-- Botão Risco Adaptativo no cabeçalho -->
+            <button id="ds-adpt-btn" onclick="abrirModalAdaptativo()"
+                title="Risco Adaptativo — clique para configurar"
+                style="background:rgba(100,200,255,0.08);border:1px solid rgba(100,200,255,0.35);
+                       color:#64c8ff;font-family:'Share Tech Mono',monospace;font-size:0.6rem;
+                       padding:3px 10px;border-radius:3px;cursor:pointer;letter-spacing:1px;
+                       display:flex;align-items:center;gap:5px;white-space:nowrap;">
+              <span id="ds-adpt-emoji">🟢</span>
+              <span id="ds-adpt-modo" style="font-weight:bold;">ADAPT.</span>
+            </button>
             <span id="ds-live-badge" style="font-size:0.62rem;color:#00ff41;border:1px solid rgba(0,255,65,0.4);
                 padding:3px 8px;border-radius:3px;letter-spacing:1px;">● MONITORANDO</span>
             <button onclick="dsFecharModal()"
@@ -2644,19 +2651,6 @@
             </div>
           </div>
           <!-- Coluna direita: Modo Espelho -->
-          <!-- Risco Adaptativo (Digit Sniper) -->
-          <div id="ds-adpt-box" style="background:rgba(100,200,255,0.04);border:1px solid rgba(100,200,255,0.2);
-               border-radius:6px;padding:10px 12px;margin-bottom:10px;cursor:pointer;
-               display:flex;align-items:center;justify-content:space-between;gap:10px;"
-               onclick="abrirModalAdaptativo()">
-            <div>
-              <span id="ds-adpt-emoji" style="font-size:0.78rem;">🟢</span>
-              <span id="ds-adpt-modo" style="font-size:0.72rem;font-weight:bold;color:#64c8ff;letter-spacing:1px;"> RISCO ADAPTATIVO</span>
-              <span id="ds-adpt-desc" style="font-size:0.58rem;color:#57606a;margin-left:8px;">DESLIGADO — clique para configurar</span>
-            </div>
-            <span style="font-size:0.55rem;color:#57606a;letter-spacing:1px;">▸ CONFIGURAR</span>
-          </div>
-
           <div style="background:rgba(0,0,0,0.35);border:1px solid rgba(255,189,46,0.25);border-radius:6px;padding:12px;">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
               <div style="font-size:0.6rem;color:#fbbf24;letter-spacing:1px;">▸ MODO ESPELHO (CONTA SEC.)</div>
@@ -2780,6 +2774,16 @@
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;">
           <span style="color:#00ff41;font-size:0.9rem;letter-spacing:2px;">⚙ CYBER SORT / DIGIT PATTERN SCANNER</span>
           <div style="display:flex;align-items:center;gap:8px;">
+            <!-- Botão Risco Adaptativo no cabeçalho -->
+            <button id="cs-adpt-btn" onclick="abrirModalAdaptativo()"
+                title="Risco Adaptativo — clique para configurar"
+                style="background:rgba(100,200,255,0.08);border:1px solid rgba(100,200,255,0.35);
+                       color:#64c8ff;font-family:'Share Tech Mono',monospace;font-size:0.6rem;
+                       padding:3px 10px;border-radius:3px;cursor:pointer;letter-spacing:1px;
+                       display:flex;align-items:center;gap:5px;white-space:nowrap;">
+              <span id="cs-adpt-emoji">🟢</span>
+              <span id="cs-adpt-modo" style="font-weight:bold;">ADAPT.</span>
+            </button>
             <button id="cs-btn-mute" onclick="csMuteToggle()" title="Mutar/desmutar sons"
                 style="background:rgba(0,255,65,0.08);border:1px solid rgba(0,255,65,0.35);color:#00ff41;
                        font-size:0.72rem;padding:4px 10px;cursor:pointer;font-family:'Share Tech Mono',monospace;
@@ -2934,19 +2938,6 @@
                   background:#444;transition:all 0.25s;transform:translateX(0px);"></div>
             </div>
           </div>
-        </div>
-
-        <!-- ── RISCO ADAPTATIVO (Cyber Sort) ── -->
-        <div id="cs-adpt-box" style="background:rgba(100,200,255,0.04);border:1px solid rgba(100,200,255,0.2);
-             border-radius:6px;padding:10px 14px;margin-bottom:8px;
-             display:flex;align-items:center;justify-content:space-between;gap:10px;cursor:pointer;"
-             onclick="abrirModalAdaptativo()">
-          <div>
-            <span id="cs-adpt-emoji" style="font-size:0.8rem;">🟢</span>
-            <span id="cs-adpt-modo" style="font-size:0.75rem;font-weight:bold;color:#64c8ff;letter-spacing:1px;"> RISCO ADAPTATIVO</span>
-            <span id="cs-adpt-desc" style="font-size:0.6rem;color:#57606a;margin-left:8px;">DESLIGADO — clique para configurar</span>
-          </div>
-          <span style="font-size:0.55rem;color:#57606a;letter-spacing:1px;">▸ CONFIGURAR</span>
         </div>
 
         <!-- ── LOSS VIRTUAL + MODO ESPELHO ── -->
@@ -19814,17 +19805,17 @@ function _adaptativoAtualizarBtn(modo) {
     }
     if (lbl) { lbl.textContent = info.desc; lbl.style.color = info.cor; }
 
-    // ── Badges nos módulos Cyber Sort, Digit Matrix, Digit Sniper ────────────
-    const prefixes = ['cs', 'dm', 'ds'];
-    prefixes.forEach(p => {
-        const box   = document.getElementById(p + '-adpt-box');
-        const emj   = document.getElementById(p + '-adpt-emoji');
-        const txt   = document.getElementById(p + '-adpt-modo');
-        const desc  = document.getElementById(p + '-adpt-desc');
-        if (box)  box.style.borderColor  = info.borda;
-        if (emj)  emj.textContent        = info.emoji;
-        if (txt)  { txt.textContent = ' ' + m; txt.style.color = info.cor; }
-        if (desc) desc.textContent = info.desc + ' — clique para configurar';
+    // ── Botões no cabeçalho dos módulos (cs / dm / ds) ───────────────────────
+    ['cs', 'dm', 'ds'].forEach(p => {
+        const btn = document.getElementById(p + '-adpt-btn');
+        const emj = document.getElementById(p + '-adpt-emoji');
+        const txt = document.getElementById(p + '-adpt-modo');
+        if (btn) {
+            btn.style.borderColor = info.borda;
+            btn.style.color       = info.cor;
+        }
+        if (emj) emj.textContent = info.emoji;
+        if (txt) { txt.textContent = ' ' + m; txt.style.color = info.cor; }
     });
 
     // ── Destaque no modal ─────────────────────────────────────────────────────
