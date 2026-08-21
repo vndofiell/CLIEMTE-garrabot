@@ -7986,14 +7986,19 @@ function initWebSocket(wssUrl) {
                 _rotacaoAtualizarBtn();     // atualiza ativo atual da rotação
 
                 // ── Digit Matrix PRO: alimenta motor com cada tick do bot ──
-                if (document.getElementById('dm-modal')?.style.display !== 'none') {
-                    const _dmAsset = document.getElementById('dm-asset')?.value || 'R_100';
+                // Sempre alimenta quando: modal aberto OU troca automática ativa (DS usa análise DM)
+                const _dmModalAberto = document.getElementById('dm-modal')?.style.display !== 'none';
+                const _dmTrocaAtiva  = (typeof _estratTroca !== 'undefined') && _estratTroca.ativo && _estratTroca._trocado && _estratTroca._modoAlternativo === 'DM';
+                if (_dmModalAberto || _dmTrocaAtiva) {
+                    const _dmAsset = document.getElementById('dm-asset')?.value
+                                  || document.getElementById('ds-asset')?.value
+                                  || 'R_100';
                     fetch('/api/digit-matrix/ticks', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ asset: _dmAsset, digits: [_dDigit] })
                     }).then(r => r.json()).then(j => {
-                        if (j.ok && j.analysis) dmRender(j.analysis);
+                        if (j.ok && j.analysis && _dmModalAberto) dmRender(j.analysis);
                     }).catch(() => {});
                 }
 
@@ -15202,14 +15207,15 @@ function _aplicarConfigSec() {
     const slEl = document.getElementById('mc-sec-stoploss');
     if (stakeEl) stakeEl.value = _mcConfig.stake.toFixed(2);
     if (slEl) slEl.value = _mcConfig.stopLoss.toFixed(1);
-    // Stop Win: se JC sec ativo → mostra meta do dia; senão mostra valor configurado
+    // Stop Win: se JC sec tem meta calculada (banca configurada) → mostra meta; senão mostra valor configurado
     if (swEl) {
         fetch('/jc-sec-meta', { signal: AbortSignal.timeout(3000) })
             .then(r => r.json())
             .then(m => {
-                if (m.ativo && m.meta_hoje > 0) {
+                if (m.meta_hoje > 0) {
                     swEl.value = m.meta_hoje.toFixed(2);
-                    swEl.title = `💹 Controlado pela planilha JC (meta do dia $${m.meta_hoje.toFixed(2)})`;
+                    const status = m.ativo ? '💹 JC ativo' : '💹 JC configurado';
+                    swEl.title = `${status} — meta do dia $${m.meta_hoje.toFixed(2)}`;
                     swEl.style.borderColor = 'rgba(251,191,36,0.7)';
                     swEl.style.color = '#fbbf24';
                 } else {
@@ -18095,9 +18101,20 @@ function _estratTrocaAtualizarStatus(msg) {
 
 function _estratTrocaAtivarDestino(destino, origem) {
     // Tudo acontece DENTRO do painel que originou a troca — sem abrir outro modal.
-    // Apenas muda o modo de scan: DS usa análise do DM ou DM usa análise do DS.
-    _estratTroca._modoAlternativo = destino;   // 'DM' = DS usará sinal do Matrix; 'DS' = DM usará sinal do Sniper
-    if (origem === 'DS') {
+    _estratTroca._modoAlternativo = destino;
+
+    // Pré-alimenta o motor do Matrix com os ticks já acumulados — evita "AGUARDANDO" inicial
+    if (destino === 'DM') {
+        const _asset  = document.getElementById('ds-asset')?.value || 'R_100';
+        const _ticks  = (typeof bot !== 'undefined' && bot._digitRecentes && bot._digitRecentes.length > 0)
+                        ? bot._digitRecentes.slice() : [];
+        if (_ticks.length > 0) {
+            fetch('/api/digit-matrix/ticks', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ asset: _asset, digits: _ticks })
+            }).catch(() => {});
+        }
         dsLog(`🔀 <b style="color:#00ff88">TROCA AUTO</b> — ${_estratTroca.lossesParaTrocar} losses → usando análise <b>Digit Matrix Pro</b> aqui dentro`, '#00ff88');
         _estratTrocaAtualizarBanner('DS');
     } else {
@@ -19202,15 +19219,16 @@ function dmAtualizarEspelho() {
         _sv('dm-cfg-perda-val', perdLim.toFixed(2));
         _sv('dm-cfg-stake', mc.stake    ? mc.stake.toFixed(2)    : '0.35');
         _sv('dm-cfg-sl',    mc.stopLoss ? mc.stopLoss.toFixed(2) : '100');
-        // Stop Win: se JC-SEC ativo → mostra meta do dia; senão mostra valor configurado
+        // Stop Win: se JC-SEC tem meta calculada (banca configurada) → mostra meta; senão mostra valor configurado
         const swEl = document.getElementById('dm-cfg-sw');
         if (swEl) {
             fetch('/jc-sec-meta', { signal: AbortSignal.timeout(3000) })
                 .then(r => r.json())
                 .then(m => {
-                    if (m.ativo && m.meta_hoje > 0) {
+                    if (m.meta_hoje > 0) {
                         swEl.value = m.meta_hoje.toFixed(2);
-                        swEl.title = `💹 Controlado pela planilha JC (meta do dia $${m.meta_hoje.toFixed(2)})`;
+                        const status = m.ativo ? '💹 JC ativo' : '💹 JC configurado';
+                        swEl.title = `${status} — meta do dia $${m.meta_hoje.toFixed(2)}`;
                         swEl.style.borderBottomColor = 'rgba(251,191,36,0.7)';
                         swEl.style.color = '#fbbf24';
                     } else {
