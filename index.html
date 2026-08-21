@@ -2614,13 +2614,20 @@
               font-family:'Share Tech Mono';line-height:1.6;color:#888;"></div>
         </div>
 
+        <!-- BANNER troca ativa -->
+        <div id="ds-troca-banner" style="display:none;margin-bottom:8px;padding:6px 10px;
+            border:1px solid rgba(0,255,136,0.5);border-radius:4px;
+            background:rgba(0,255,136,0.07);font-family:'Share Tech Mono';
+            font-size:0.65rem;color:#00ff88;letter-spacing:1px;text-align:center;font-weight:bold;">
+        </div>
+
         <!-- TROCA AUTOMÁTICA DE ESTRATÉGIA -->
         <div style="margin-top:10px;background:rgba(0,0,0,0.35);border:1px solid rgba(250,204,21,0.3);border-radius:6px;padding:10px 12px;">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
             <div style="font-size:0.6rem;color:#facc15;letter-spacing:1px;">🔀 TROCA AUTO DE ESTRATÉGIA (NA SEC)</div>
             <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
               <input type="checkbox" id="ds-troca-ativo"
-                  onchange="_estratTroca.ativo=this.checked; this.nextElementSibling.textContent=this.checked?'ON':'OFF'; this.nextElementSibling.style.color=this.checked?'#facc15':'#555';"
+                  onchange="_estratTroca.ativo=this.checked; this.nextElementSibling.textContent=this.checked?'ON':'OFF'; this.nextElementSibling.style.color=this.checked?'#facc15':'#555'; if(!this.checked){_estratTroca._trocado=false;_estratTroca._modoAlternativo=null;_estratTrocaAtualizarBanner('DS');}"
                   style="accent-color:#facc15;width:14px;height:14px;">
               <span style="font-size:0.6rem;color:#555;letter-spacing:1px;">OFF</span>
             </label>
@@ -2628,14 +2635,21 @@
           <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
             <div style="font-size:0.6rem;color:#57606a;">Losses na SEC p/ trocar:</div>
             <input id="ds-troca-losses" type="number" value="2" min="1" max="20"
-                onchange="_estratTroca.lossesParaTrocar=Math.max(1,parseInt(this.value)||2);"
+                onchange="_estratTroca.lossesParaTrocar=Math.max(1,parseInt(this.value)||2); const dmEl=document.getElementById('dm-troca-losses'); if(dmEl) dmEl.value=this.value;"
                 style="width:50px;background:#0a0a12;border:1px solid rgba(250,204,21,0.4);
                        color:#facc15;font-family:'Share Tech Mono';font-size:0.72rem;
                        padding:3px 6px;border-radius:3px;text-align:center;">
-            <div style="font-size:0.58rem;color:#555;">→ troca p/ <b style="color:#00ff88">Matrix Pro</b> | WIN volta ao DS</div>
+            <div style="font-size:0.58rem;color:#555;">→ análise troca p/ <b style="color:#00ff88">Matrix Pro</b> | WIN volta ao Sniper</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:6px;">
+            <div style="font-size:0.58rem;color:#57606a;">Score mín. Matrix p/ entrar:</div>
+            <input id="ds-score-min" type="number" value="70" min="50" max="100"
+                style="width:50px;background:#0a0a12;border:1px solid rgba(250,204,21,0.3);
+                       color:#facc15;font-family:'Share Tech Mono';font-size:0.72rem;
+                       padding:3px 6px;border-radius:3px;text-align:center;">
           </div>
           <div id="ds-troca-status" style="margin-top:6px;font-size:0.58rem;color:#555;font-family:'Share Tech Mono';">
-            Desativado — ative para trocar automaticamente para o Digit Matrix Pro
+            Desativado — ative para trocar análise para Digit Matrix Pro após N losses na SEC
           </div>
         </div>
       </div>
@@ -17822,9 +17836,59 @@ function _dsPararMatrix() {
 }
 
 async function dsScan() {
-    const asset   = document.getElementById('ds-asset')?.value   || 'R_100';
-    const payout  = parseFloat(document.getElementById('ds-payout')?.value) || 0.85;
+    const asset    = document.getElementById('ds-asset')?.value   || 'R_100';
+    const payout   = parseFloat(document.getElementById('ds-payout')?.value) || 0.85;
     const reasonEl = document.getElementById('ds-reason');
+
+    // ── Troca automática: usa análise do Digit Matrix Pro quando ativo ────────
+    if (_estratTroca.ativo && _estratTroca._trocado && _estratTroca._modoAlternativo === 'DM') {
+        try {
+            const r = await fetch(`/api/digit-matrix/state?asset=${encodeURIComponent(asset)}`, {
+                signal: AbortSignal.timeout(5000)
+            });
+            const j = await r.json();
+            if (j.ok && j.analysis) {
+                // Converte resultado do DM para o formato que dsRender/dsOperar espera
+                const best = j.analysis.best || j.analysis.under || j.analysis.over;
+                if (best && j.analysis.status === 'SINAL') {
+                    const scoreMin = parseInt(document.getElementById('ds-score-min')?.value || 70);
+                    const dsJ = {
+                        digitos:    (j.analysis.digits || []).slice(-50),
+                        frequencias: Object.fromEntries((j.analysis.matrix || []).map(m => [m.digit, m.count])),
+                        janela:     50,
+                        melhor: {
+                            entrada:  best.score >= scoreMin,
+                            tipo:     best.contract,
+                            barreira: best.barrier,
+                            score:    parseFloat(best.score.toFixed(1)),
+                            status:   best.score >= scoreMin ? 'ENTRADA LIBERADA' : 'AGUARDANDO',
+                            motivo:   `Matrix Pro — score ${best.score.toFixed(1)} | regime: ${j.analysis.regime || '—'}`,
+                            gatilho:  best.trigger ?? '—',
+                            taxa20:   parseFloat(best.favorable_pct?.toFixed(1) ?? 0),
+                            taxa50:   parseFloat(best.favorable_pct?.toFixed(1) ?? 0),
+                            payout:   payout,
+                            entropia: parseFloat(best.distribution_score?.toFixed(3) ?? 0),
+                        }
+                    };
+                    dsRender(dsJ);
+                } else {
+                    // Sem sinal no DM — mostra aguardando
+                    const dsJ = {
+                        digitos: (j.analysis.digits || []).slice(-50),
+                        frequencias: Object.fromEntries((j.analysis.matrix || []).map(m => [m.digit, m.count])),
+                        janela: 50,
+                        melhor: { entrada: false, score: 0, status: 'AGUARDANDO', motivo: `Matrix Pro — ${j.analysis.reason || 'sem sinal'}` }
+                    };
+                    dsRender(dsJ);
+                }
+            }
+        } catch(e) {
+            if (reasonEl) reasonEl.textContent = 'Matrix: ' + e.message;
+        }
+        return;
+    }
+
+    // ── Modo normal: análise do Digit Sniper Pro ──────────────────────────────
     try {
         const r = await fetch('/digit-sniper/analisar', {
             method: 'POST',
@@ -17971,11 +18035,12 @@ function dsToggleRanking() {
 // TROCA AUTOMÁTICA DE ESTRATÉGIA NA SEC — compartilhado entre DS e DM
 // ══════════════════════════════════════════════════════════════════════════
 const _estratTroca = {
-    ativo:          false,   // toggle geral ativado?
-    lossesParaTrocar: 2,     // N losses na SEC para trocar de estratégia
-    _lossesNaSec:   0,       // contador de losses na estratégia atual na SEC
-    _estratOrigem:  null,    // 'DS' | 'DM' — qual estratégia estava ativa antes de trocar
-    _trocado:       false,   // true = já está operando na estratégia alternativa
+    ativo:            false,  // toggle geral ativado?
+    lossesParaTrocar: 2,      // N losses na SEC para trocar de estratégia
+    _lossesNaSec:     0,      // contador de losses na estratégia atual na SEC
+    _estratOrigem:    null,   // 'DS' | 'DM' — qual estratégia estava ativa antes de trocar
+    _trocado:         false,  // true = já está operando na estratégia alternativa
+    _modoAlternativo: null,   // 'DM' | 'DS' | null — qual análise alternativa usar
 };
 
 /**
@@ -18029,52 +18094,55 @@ function _estratTrocaAtualizarStatus(msg) {
 }
 
 function _estratTrocaAtivarDestino(destino, origem) {
-    if (destino === 'DM') {
-        // Pausa DS e ativa DM
-        if (_dsAutoOperar) { _dsAutoOperar = false; dsStopAuto(); }
-        const logFn = typeof dsLog === 'function' ? dsLog : () => {};
-        logFn(`🔀 <b style="color:#00ff88">TROCA AUTO</b> — ${_estratTroca._lossesNaSec+_estratTroca.lossesParaTrocar} losses → ativando <b>Digit Matrix Pro</b>`, '#00ff88');
-        // Abre DM se não estiver aberto e ativa AUTO-OPERAR nele
-        const dmModal = document.getElementById('dm-modal');
-        if (!dmModal || dmModal.style.display === 'none') {
-            if (typeof dmAbrirModal === 'function') dmAbrirModal();
-        }
-        setTimeout(() => {
-            if (!_dmAutoOperar && typeof dmToggleAutoOperar === 'function') dmToggleAutoOperar();
-            const logDm = typeof dmLog === 'function' ? dmLog : () => {};
-            logDm(`🔀 <b style="color:#facc15">TROCA AUTO (de DS)</b> — ativado após ${_estratTroca.lossesParaTrocar} losses | volta ao WIN`, '#facc15');
-        }, 600);
+    // Tudo acontece DENTRO do painel que originou a troca — sem abrir outro modal.
+    // Apenas muda o modo de scan: DS usa análise do DM ou DM usa análise do DS.
+    _estratTroca._modoAlternativo = destino;   // 'DM' = DS usará sinal do Matrix; 'DS' = DM usará sinal do Sniper
+    if (origem === 'DS') {
+        dsLog(`🔀 <b style="color:#00ff88">TROCA AUTO</b> — ${_estratTroca.lossesParaTrocar} losses → usando análise <b>Digit Matrix Pro</b> aqui dentro`, '#00ff88');
+        _estratTrocaAtualizarBanner('DS');
     } else {
-        // Pausa DM e ativa DS
-        if (_dmAutoOperar) { _dmAutoOperar = false; if (typeof dmPararAuto === 'function') dmPararAuto(); }
-        const logFn = typeof dmLog === 'function' ? dmLog : () => {};
-        logFn(`🔀 <b style="color:#facc15">TROCA AUTO</b> — ${_estratTroca.lossesParaTrocar} losses → ativando <b>Digit Sniper Pro</b>`, '#facc15');
-        // Abre DS se não estiver aberto e ativa AUTO-OPERAR nele
-        const dsModal = document.getElementById('ds-modal');
-        if (!dsModal || dsModal.style.display === 'none') {
-            if (typeof dsAbrirModal === 'function') dsAbrirModal();
-        }
-        setTimeout(() => {
-            if (!_dsAutoOperar && typeof dsToggleAutoOperar === 'function') dsToggleAutoOperar();
-            const logDs = typeof dsLog === 'function' ? dsLog : () => {};
-            logDs(`🔀 <b style="color:#00ff88">TROCA AUTO (de DM)</b> — ativado após ${_estratTroca.lossesParaTrocar} losses | volta ao WIN`, '#00ff88');
-        }, 600);
+        dmLog(`🔀 <b style="color:#facc15">TROCA AUTO</b> — ${_estratTroca.lossesParaTrocar} losses → usando análise <b>Digit Sniper Pro</b> aqui dentro`, '#facc15');
+        _estratTrocaAtualizarBanner('DM');
     }
 }
 
 function _estratTrocaVoltarOriginal(original) {
+    _estratTroca._modoAlternativo = null;   // volta ao modo normal
     if (original === 'DS') {
-        // Estava no DS → troca foi para DM → volta para DS
-        if (_dmAutoOperar) { _dmAutoOperar = false; if (typeof dmPararAuto === 'function') dmPararAuto(); }
-        if (!_dsAutoOperar && typeof dsToggleAutoOperar === 'function') dsToggleAutoOperar();
-        const logDs = typeof dsLog === 'function' ? dsLog : () => {};
-        logDs(`✅ <b style="color:#00ff41">TROCA AUTO</b> — WIN no DM → voltando ao <b>Digit Sniper Pro</b>`, '#00ff41');
+        dsLog(`✅ <b style="color:#00ff41">TROCA AUTO</b> — WIN → voltando à análise <b>Digit Sniper Pro</b>`, '#00ff41');
+        _estratTrocaAtualizarBanner('DS');
     } else {
-        // Estava no DM → troca foi para DS → volta para DM
-        if (_dsAutoOperar) { _dsAutoOperar = false; if (typeof dsStopAuto === 'function') dsStopAuto(); }
-        if (!_dmAutoOperar && typeof dmToggleAutoOperar === 'function') dmToggleAutoOperar();
-        const logDm = typeof dmLog === 'function' ? dmLog : () => {};
-        logDm(`✅ <b style="color:#00ff88">TROCA AUTO</b> — WIN no DS → voltando ao <b>Digit Matrix Pro</b>`, '#00ff88');
+        dmLog(`✅ <b style="color:#00ff88">TROCA AUTO</b> — WIN → voltando à análise <b>Digit Matrix Pro</b>`, '#00ff88');
+        _estratTrocaAtualizarBanner('DM');
+    }
+}
+
+function _estratTrocaAtualizarBanner(painel) {
+    // Atualiza badge visual dentro do painel ativo
+    const ativo = _estratTroca._trocado;
+    const modo  = _estratTroca._modoAlternativo;
+    if (painel === 'DS') {
+        const el = document.getElementById('ds-troca-banner');
+        if (!el) return;
+        if (ativo && modo === 'DM') {
+            el.style.display = 'block';
+            el.textContent = '🔀 USANDO ANÁLISE: Digit Matrix Pro';
+            el.style.color = '#00ff88';
+            el.style.borderColor = 'rgba(0,255,136,0.5)';
+        } else {
+            el.style.display = ativo ? 'none' : 'none';
+        }
+    } else {
+        const el = document.getElementById('dm-troca-banner');
+        if (!el) return;
+        if (ativo && modo === 'DS') {
+            el.style.display = 'block';
+            el.textContent = '🔀 USANDO ANÁLISE: Digit Sniper Pro';
+            el.style.color = '#facc15';
+            el.style.borderColor = 'rgba(250,204,21,0.5)';
+        } else {
+            el.style.display = 'none';
+        }
     }
 }
 
