@@ -5020,11 +5020,12 @@ function _cfgAplicar(cfg) {
         }
 
         // Restaura modo de operação (NORMAL / ESPELHO) — sem abrir o overlay de seleção
+        // e sem abrir o modal da conta secundária automaticamente (silencioso=true)
         if (cfg.modo && (cfg.modo === 'NORMAL' || cfg.modo === 'ESPELHO')) {
             window._modoAtual = cfg.modo;
             const lbl = document.getElementById('lbl-trocar-modo');
             if (lbl) lbl.textContent = 'Atual: ' + cfg.modo;
-            configurarInterfacePorModo(cfg.modo);
+            configurarInterfacePorModo(cfg.modo, true);
         }
 
         // Restaura configurações da conta secundária no boot
@@ -16095,7 +16096,7 @@ function reabrirModo() {
     if (typeof window._iniciarMatrix === 'function') window._iniciarMatrix();
 }
 
-function configurarInterfacePorModo(modo) {
+function configurarInterfacePorModo(modo, silencioso) {
     const btnSecundario = document.getElementById('btn-multi-contas');
     if (modo === 'NORMAL') {
         console.log('[*] Modo Normal ativado.');
@@ -16103,7 +16104,9 @@ function configurarInterfacePorModo(modo) {
     } else if (modo === 'ESPELHO') {
         console.log('[*] Modo Espelhamento ativado.');
         if (btnSecundario) btnSecundario.style.display = '';
-        if (typeof abrirModalMultiContas === 'function') {
+        // Só abre o modal automaticamente quando o usuário escolhe o modo manualmente
+        // (silencioso=true = restauração de config no boot — não abre o modal)
+        if (!silencioso && typeof abrirModalMultiContas === 'function') {
             setTimeout(abrirModalMultiContas, 600);
         }
     }
