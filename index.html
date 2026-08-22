@@ -3377,7 +3377,7 @@
         width:100%; height:100%;
         background:rgba(0,0,0,0.95); z-index:1200;
         justify-content:center; align-items:flex-start;
-        padding:20px 8px 40px; overflow-y:auto;">
+        padding:12px 8px 20px; overflow-y:auto;">
 
       <canvas id="dbs-matrix-canvas" style="
           position:fixed;top:0;left:0;width:100%;height:100%;
@@ -3386,218 +3386,199 @@
       <div style="
           position:relative;z-index:1;
           background:rgba(2,4,18,0.97); border:1px solid #6366f1;
-          border-radius:8px; padding:22px 24px 24px;
+          border-radius:8px; padding:14px 16px 16px;
           box-shadow:0 0 36px rgba(99,102,241,0.35);
           font-family:'Share Tech Mono',monospace;
-          width:100%;max-width:760px;">
+          width:100%;max-width:1180px;">
 
-        <!-- Header -->
-        <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px;gap:10px;flex-wrap:wrap;">
+        <!-- ══ HEADER ══════════════════════════════════════════════════════════ -->
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px;gap:10px;flex-wrap:wrap;">
           <div>
-            <div style="font-size:1.05rem;font-weight:bold;color:#a5b4fc;letter-spacing:1px;">
-              🎰 DIGIT BARRIER 356
-            </div>
-            <div style="font-size:0.62rem;color:#6366f1;letter-spacing:2px;margin-top:2px;">
-              SCANNER MULTI-ATIVO × MULTI-BARREIRA — EDC POWERED
-            </div>
+            <div style="font-size:1rem;font-weight:bold;color:#a5b4fc;letter-spacing:1px;">🎰 DIGIT BARRIER 356</div>
+            <div style="font-size:0.58rem;color:#6366f1;letter-spacing:2px;margin-top:1px;">SCANNER MULTI-ATIVO × MULTI-BARREIRA — EDC POWERED</div>
           </div>
-          <!-- Mini painel de banca (espelha o header principal) -->
-          <div id="dbs-banca-mini" style="
-              display:flex;gap:6px;flex-wrap:wrap;align-items:center;
+          <!-- Mini painel de banca -->
+          <div id="dbs-banca-mini" style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;
               background:rgba(0,0,0,0.4);border:1px solid rgba(99,102,241,0.3);
-              border-radius:6px;padding:6px 10px;font-size:0.65rem;
-              font-family:'Share Tech Mono',monospace;">
+              border-radius:6px;padding:5px 9px;font-size:0.62rem;">
             <span style="color:#6b7280;letter-spacing:1px;margin-right:2px;">MAIN</span>
-            <span style="background:rgba(0,255,136,0.08);border:1px solid rgba(0,255,136,0.25);border-radius:4px;padding:3px 7px;color:#00ff88;">
-              💰 <span id="dbs-banca-saldo">--</span>
-            </span>
-            <span id="dbs-banca-profit-box" style="background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.3);border-radius:4px;padding:3px 7px;color:#a5b4fc;">
-              📈 <span id="dbs-banca-profit">$0.00</span> <span id="dbs-banca-profit-brl" style="font-size:0.6rem;opacity:0.7;">(R$0,00)</span>
-            </span>
-            <span style="background:rgba(0,255,136,0.06);border:1px solid rgba(0,255,136,0.2);border-radius:4px;padding:3px 7px;color:#00ff88;">
-              ✅ <span id="dbs-banca-wins">0</span>
-            </span>
-            <span style="background:rgba(248,113,113,0.06);border:1px solid rgba(248,113,113,0.2);border-radius:4px;padding:3px 7px;color:#f87171;">
-              🔁 <span id="dbs-banca-losses">0</span>
-            </span>
-            <span style="background:rgba(251,191,36,0.06);border:1px solid rgba(251,191,36,0.2);border-radius:4px;padding:3px 7px;">
-              🎯 <span id="dbs-banca-taxa" style="color:#fbbf24;font-weight:bold;">--%</span>
-            </span>
-            <span style="background:rgba(0,255,255,0.05);border:1px solid rgba(0,255,255,0.2);border-radius:4px;padding:3px 7px;color:#0ff;">
-              ⚡ <span id="dbs-banca-stake">$--</span>
-            </span>
+            <span style="background:rgba(0,255,136,0.08);border:1px solid rgba(0,255,136,0.25);border-radius:4px;padding:2px 6px;color:#00ff88;">💰 <span id="dbs-banca-saldo">--</span></span>
+            <span id="dbs-banca-profit-box" style="background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.3);border-radius:4px;padding:2px 6px;color:#a5b4fc;">📈 <span id="dbs-banca-profit">$0.00</span> <span id="dbs-banca-profit-brl" style="font-size:0.58rem;opacity:0.7;">(R$0,00)</span></span>
+            <span style="background:rgba(0,255,136,0.06);border:1px solid rgba(0,255,136,0.2);border-radius:4px;padding:2px 6px;color:#00ff88;">✅ <span id="dbs-banca-wins">0</span></span>
+            <span style="background:rgba(248,113,113,0.06);border:1px solid rgba(248,113,113,0.2);border-radius:4px;padding:2px 6px;color:#f87171;">🔁 <span id="dbs-banca-losses">0</span></span>
+            <span style="background:rgba(251,191,36,0.06);border:1px solid rgba(251,191,36,0.2);border-radius:4px;padding:2px 6px;">🎯 <span id="dbs-banca-taxa" style="color:#fbbf24;font-weight:bold;">--%</span></span>
+            <span style="background:rgba(0,255,255,0.05);border:1px solid rgba(0,255,255,0.2);border-radius:4px;padding:2px 6px;color:#0ff;">⚡ <span id="dbs-banca-stake">$--</span></span>
           </div>
-          <button onclick="dbsFecharModal()" style="
-              background:none;border:1px solid rgba(255,68,68,0.4);
-              border-radius:4px;color:#f87171;font-size:0.75rem;
-              padding:4px 10px;cursor:pointer;white-space:nowrap;">✕ FECHAR</button>
+          <button onclick="dbsFecharModal()" style="background:none;border:1px solid rgba(255,68,68,0.4);border-radius:4px;color:#f87171;font-size:0.72rem;padding:4px 10px;cursor:pointer;white-space:nowrap;">✕ FECHAR</button>
         </div>
 
-        <!-- Estatísticas do scan -->
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
-          <div style="background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.25);border-radius:5px;padding:7px 12px;font-size:0.7rem;color:#a5b4fc;">
-            🔢 COMBOS: <b id="dbs-stat-total">30</b>
-          </div>
-          <div style="background:rgba(0,255,136,0.06);border:1px solid rgba(0,255,136,0.2);border-radius:5px;padding:7px 12px;font-size:0.7rem;color:#00ff88;">
-            ✅ OPERAR: <b id="dbs-stat-operar">--</b>
-          </div>
-          <div style="background:rgba(248,113,113,0.06);border:1px solid rgba(248,113,113,0.2);border-radius:5px;padding:7px 12px;font-size:0.7rem;color:#f87171;">
-            ⛔ AGUARDAR: <b id="dbs-stat-aguardar">--</b>
-          </div>
-          <div style="background:rgba(251,191,36,0.06);border:1px solid rgba(251,191,36,0.2);border-radius:5px;padding:7px 12px;font-size:0.7rem;color:#fbbf24;">
-            🏆 TOP CONF.: <b id="dbs-stat-top">--%</b>
-          </div>
+        <!-- ══ STATS SCAN ══════════════════════════════════════════════════════ -->
+        <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:10px;">
+          <div style="background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.25);border-radius:5px;padding:5px 10px;font-size:0.68rem;color:#a5b4fc;">🔢 COMBOS: <b id="dbs-stat-total">30</b></div>
+          <div style="background:rgba(0,255,136,0.06);border:1px solid rgba(0,255,136,0.2);border-radius:5px;padding:5px 10px;font-size:0.68rem;color:#00ff88;">✅ OPERAR: <b id="dbs-stat-operar">--</b></div>
+          <div style="background:rgba(248,113,113,0.06);border:1px solid rgba(248,113,113,0.2);border-radius:5px;padding:5px 10px;font-size:0.68rem;color:#f87171;">⛔ AGUARDAR: <b id="dbs-stat-aguardar">--</b></div>
+          <div style="background:rgba(251,191,36,0.06);border:1px solid rgba(251,191,36,0.2);border-radius:5px;padding:5px 10px;font-size:0.68rem;color:#fbbf24;">🏆 TOP CONF.: <b id="dbs-stat-top">--%</b></div>
         </div>
 
-        <!-- TOP 1 destaque -->
-        <div id="dbs-top1-box" style="display:none;
-            background:rgba(99,102,241,0.12);border:2px solid #6366f1;
-            border-radius:7px;padding:12px 16px;margin-bottom:14px;">
-          <div style="font-size:0.6rem;color:#6366f1;letter-spacing:2px;margin-bottom:6px;">🏆 MELHOR OPORTUNIDADE</div>
-          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+        <!-- ══ LAYOUT 2 COLUNAS ════════════════════════════════════════════════ -->
+        <div style="display:grid;grid-template-columns:340px 1fr;gap:14px;align-items:start;">
+
+          <!-- ╔══ COLUNA ESQUERDA — configurações + log ══╗ -->
+          <div style="display:flex;flex-direction:column;gap:10px;">
+
+            <!-- TOP 1 destaque -->
+            <div id="dbs-top1-box" style="display:none;
+                background:rgba(99,102,241,0.12);border:2px solid #6366f1;
+                border-radius:7px;padding:10px 13px;">
+              <div style="font-size:0.58rem;color:#6366f1;letter-spacing:2px;margin-bottom:5px;">🏆 MELHOR OPORTUNIDADE</div>
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;flex-wrap:wrap;">
+                <div>
+                  <span id="dbs-top1-tipo" style="font-size:0.95rem;font-weight:bold;color:#a5b4fc;">—</span>
+                  <span style="color:#555;margin:0 5px;">|</span>
+                  <span style="font-size:0.72rem;color:#c4b5fd;">BARR. <span id="dbs-top1-barreira" style="color:#fbbf24;font-weight:bold;">—</span></span>
+                  <span style="color:#555;margin:0 5px;">|</span>
+                  <span id="dbs-top1-ativo" style="font-size:0.72rem;color:#00ff88;font-weight:bold;">—</span>
+                </div>
+                <div style="font-size:1.15rem;font-weight:bold;color:#00ff88;"><span id="dbs-top1-conf">—</span>%</div>
+              </div>
+              <div id="dbs-top1-motivo" style="font-size:0.6rem;color:#6b7280;margin-top:5px;line-height:1.4;">—</div>
+            </div>
+
+            <!-- Gerenciamento de banca -->
+            <div style="background:rgba(0,0,0,0.3);border:1px solid rgba(99,102,241,0.2);border-radius:6px;padding:10px 12px;">
+              <div style="font-size:0.58rem;color:#6366f1;letter-spacing:2px;margin-bottom:8px;">⚙️ GERENCIAMENTO DE BANCA</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px;">
+                <div>
+                  <div style="font-size:0.53rem;color:#6b7280;margin-bottom:3px;">ENTRADA ($)</div>
+                  <input id="dbs-entrada" type="number" value="0.35" min="0.35" step="0.01" oninput="dbsOnMgrChange()"
+                      style="width:100%;background:#0d0f1a;border:1px solid rgba(99,102,241,0.4);color:#a5b4fc;
+                             font-family:'Share Tech Mono';font-size:0.7rem;padding:4px 5px;border-radius:4px;box-sizing:border-box;">
+                </div>
+                <div>
+                  <div style="font-size:0.53rem;color:#6b7280;margin-bottom:3px;">STOP WIN ($)</div>
+                  <input id="dbs-stopwin" type="number" value="10" min="0" step="0.1"
+                      style="width:100%;background:#0d0f1a;border:1px solid rgba(0,255,136,0.35);color:#00ff88;
+                             font-family:'Share Tech Mono';font-size:0.7rem;padding:4px 5px;border-radius:4px;box-sizing:border-box;">
+                </div>
+                <div>
+                  <div style="font-size:0.53rem;color:#6b7280;margin-bottom:3px;">STOP LOSS ($)</div>
+                  <input id="dbs-stoploss" type="number" value="20" min="0" step="0.1"
+                      style="width:100%;background:#0d0f1a;border:1px solid rgba(248,113,113,0.35);color:#f87171;
+                             font-family:'Share Tech Mono';font-size:0.7rem;padding:4px 5px;border-radius:4px;box-sizing:border-box;">
+                </div>
+              </div>
+              <div style="margin-bottom:8px;">
+                <div style="font-size:0.53rem;color:#6b7280;margin-bottom:3px;">GERENCIAMENTO</div>
+                <select id="dbs-mgr" onchange="dbsOnMgrChange()" style="width:100%;background:#0d0f1a;
+                    border:1px solid rgba(168,85,247,0.5);color:#c084fc;
+                    font-family:'Share Tech Mono';font-size:0.67rem;padding:5px 6px;border-radius:4px;">
+                  <option value="flat">💰 Stake Fixa</option>
+                  <option value="📐 MA-Adaptativo">📐 MA-Adaptativo</option>
+                  <option value="🔄 Martingale">🔄 Martingale</option>
+                  <option value="⚡ SorosGale">⚡ SorosGale</option>
+                  <option value="📉 Loss Recovery">📉 Loss Recovery</option>
+                  <option value="🛡️ Recovery Conservador">🛡️ Recovery Conservador</option>
+                  <option value="📐 QSR">📐 QSR</option>
+                  <option value="📊 Masaniello">📊 Masaniello</option>
+                </select>
+              </div>
+              <!-- Stats sessão -->
+              <div style="display:flex;gap:5px;flex-wrap:wrap;">
+                <div style="border:1px solid rgba(0,255,136,0.3);border-radius:4px;padding:2px 7px;font-size:0.63rem;color:#00ff88;">✅ <span id="dbs-mgr-wins">0</span></div>
+                <div style="border:1px solid rgba(248,113,113,0.3);border-radius:4px;padding:2px 7px;font-size:0.63rem;color:#f87171;">🔁 <span id="dbs-mgr-losses">0</span></div>
+                <div style="border:1px solid rgba(251,191,36,0.3);border-radius:4px;padding:2px 7px;font-size:0.63rem;color:#fbbf24;">💰 <span id="dbs-mgr-lucro">+$0.00</span></div>
+                <div style="border:1px solid rgba(168,85,247,0.3);border-radius:4px;padding:2px 7px;font-size:0.63rem;color:#c084fc;">⚡ <span id="dbs-mgr-prox">$--</span></div>
+              </div>
+            </div>
+
+            <!-- Botão OPERAR -->
+            <button id="dbs-btn-operar-top1" onclick="dbsOperarTop1()" disabled style="
+                width:100%;padding:10px;
+                background:rgba(99,102,241,0.2);border:1px solid #6366f1;
+                border-radius:5px;color:#a5b4fc;font-size:0.82rem;
+                font-family:'Share Tech Mono',monospace;cursor:not-allowed;
+                letter-spacing:1px;opacity:0.5;">⚡ OPERAR COM TOP 1</button>
+
+            <!-- Histórico de operações -->
             <div>
-              <span id="dbs-top1-tipo" style="font-size:1rem;font-weight:bold;color:#a5b4fc;">—</span>
-              <span style="color:#555;margin:0 6px;">|</span>
-              <span style="font-size:0.75rem;color:#c4b5fd;">BARREIRA <span id="dbs-top1-barreira" style="color:#fbbf24;font-weight:bold;">—</span></span>
-              <span style="color:#555;margin:0 6px;">|</span>
-              <span style="font-size:0.75rem;color:#c4b5fd;"><span id="dbs-top1-ativo" style="color:#00ff88;font-weight:bold;">—</span></span>
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;">
+                <span style="font-size:0.6rem;color:#6b7280;letter-spacing:1px;">📋 HISTÓRICO DE OPERAÇÕES</span>
+                <button onclick="dbsLimparLog()" style="background:none;border:1px solid rgba(255,68,68,0.25);border-radius:3px;color:#f87171;font-size:0.56rem;padding:2px 6px;cursor:pointer;">🗑 LIMPAR</button>
+              </div>
+              <div id="dbs-log" style="height:130px;overflow-y:auto;
+                  background:rgba(0,0,0,0.35);border:1px solid rgba(99,102,241,0.2);
+                  border-radius:5px;padding:5px 7px;font-size:0.6rem;
+                  font-family:'Share Tech Mono',monospace;color:#6b7280;">
+                <span style="color:#374151;">— Nenhuma operação registrada —</span>
+              </div>
             </div>
-            <div style="font-size:1.2rem;font-weight:bold;color:#00ff88;">
-              <span id="dbs-top1-conf">—</span>%
+
+            <!-- Controles scan + threshold -->
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+              <button id="dbs-btn-scan" onclick="dbsScan()" style="
+                  flex:1;min-width:100px;padding:8px;
+                  background:rgba(99,102,241,0.15);border:1px solid #6366f1;
+                  border-radius:5px;color:#a5b4fc;font-size:0.78rem;
+                  font-family:'Share Tech Mono',monospace;cursor:pointer;letter-spacing:1px;">🔍 ESCANEAR</button>
+              <label style="display:flex;align-items:center;gap:5px;font-size:0.65rem;color:#6b7280;cursor:pointer;">
+                <input type="checkbox" id="dbs-auto-scan" style="accent-color:#6366f1;width:13px;height:13px;">
+                Auto-scan (30s)
+              </label>
+              <label style="display:flex;align-items:center;gap:5px;font-size:0.65rem;color:#00ff88;cursor:pointer;" title="Entra automaticamente quando um combo aprovado aparecer">
+                <input type="checkbox" id="dbs-auto-operar" style="accent-color:#00ff88;width:13px;height:13px;">
+                ⚡ Auto-operar
+              </label>
+            </div>
+
+            <!-- Threshold EDC -->
+            <div style="display:flex;align-items:center;gap:7px;
+                background:rgba(0,0,0,0.3);border:1px solid rgba(99,102,241,0.2);
+                border-radius:5px;padding:5px 9px;flex-wrap:wrap;">
+              <span style="font-size:0.6rem;color:#6b7280;letter-spacing:1px;white-space:nowrap;">⚙️ THRESHOLD:</span>
+              <input type="range" id="dbs-threshold-slider" min="50" max="95" value="75" step="1"
+                  oninput="dbsThresholdAtualizar(this.value)"
+                  style="flex:1;min-width:80px;accent-color:#6366f1;cursor:pointer;">
+              <span id="dbs-threshold-val" style="font-size:0.72rem;color:#a5b4fc;font-weight:bold;min-width:30px;text-align:center;">75%</span>
+              <button onclick="dbsThresholdSalvar()" style="background:rgba(99,102,241,0.2);border:1px solid #6366f1;
+                  border-radius:4px;color:#a5b4fc;font-size:0.6rem;padding:3px 7px;cursor:pointer;white-space:nowrap;">💾 SALVAR</button>
+            </div>
+
+            <!-- Status -->
+            <div id="dbs-status" style="font-size:0.65rem;color:#6b7280;min-height:20px;
+                background:rgba(0,0,0,0.3);border-radius:4px;padding:4px 7px;">
+              Aguardando scan…
+            </div>
+
+          </div>
+          <!-- ╚══ FIM COLUNA ESQUERDA ══╝ -->
+
+          <!-- ╔══ COLUNA DIREITA — ranking completo ══╗ -->
+          <div>
+            <div style="font-size:0.6rem;color:#6b7280;letter-spacing:1px;margin-bottom:6px;">RANKING COMPLETO (30 COMBOS)</div>
+            <div style="overflow-x:auto;max-height:calc(100vh - 180px);overflow-y:auto;
+                border:1px solid rgba(99,102,241,0.15);border-radius:6px;">
+              <table style="width:100%;border-collapse:collapse;font-size:0.67rem;">
+                <thead style="position:sticky;top:0;z-index:2;background:rgba(2,4,18,0.98);">
+                  <tr style="color:#6366f1;border-bottom:1px solid rgba(99,102,241,0.3);">
+                    <th style="text-align:left;padding:6px 7px;">#</th>
+                    <th style="text-align:left;padding:6px 7px;">ATIVO</th>
+                    <th style="text-align:left;padding:6px 7px;">CONTRATO</th>
+                    <th style="text-align:center;padding:6px 7px;">BARR.</th>
+                    <th style="text-align:right;padding:6px 7px;">CONF.</th>
+                    <th style="text-align:center;padding:6px 7px;">FLUXO</th>
+                    <th style="text-align:center;padding:6px 7px;">STATUS</th>
+                    <th style="text-align:center;padding:6px 7px;">TICKS</th>
+                  </tr>
+                </thead>
+                <tbody id="dbs-ranking-body" style="color:#c9d1d9;"></tbody>
+              </table>
             </div>
           </div>
-          <div id="dbs-top1-motivo" style="font-size:0.62rem;color:#6b7280;margin-top:6px;line-height:1.5;">—</div>
+          <!-- ╚══ FIM COLUNA DIREITA ══╝ -->
 
-          <!-- ── Painel de Gerenciamento DBS ───────────────────────────── -->
-          <div style="margin-top:10px;border-top:1px solid rgba(99,102,241,0.2);padding-top:10px;">
-            <div style="font-size:0.58rem;color:#6366f1;letter-spacing:2px;margin-bottom:8px;">⚙️ GERENCIAMENTO DE BANCA</div>
-            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;margin-bottom:8px;">
-              <div>
-                <div style="font-size:0.55rem;color:#6b7280;margin-bottom:3px;">ENTRADA ($)</div>
-                <input id="dbs-entrada" type="number" value="0.35" min="0.35" step="0.01"
-                    oninput="dbsOnMgrChange()"
-                    style="width:100%;background:#0d0f1a;border:1px solid rgba(99,102,241,0.4);
-                           color:#a5b4fc;font-family:'Share Tech Mono';font-size:0.72rem;
-                           padding:4px 6px;border-radius:4px;box-sizing:border-box;">
-              </div>
-              <div>
-                <div style="font-size:0.55rem;color:#6b7280;margin-bottom:3px;">STOP WIN ($)</div>
-                <input id="dbs-stopwin" type="number" value="10" min="0" step="0.1"
-                    style="width:100%;background:#0d0f1a;border:1px solid rgba(0,255,136,0.35);
-                           color:#00ff88;font-family:'Share Tech Mono';font-size:0.72rem;
-                           padding:4px 6px;border-radius:4px;box-sizing:border-box;">
-              </div>
-              <div>
-                <div style="font-size:0.55rem;color:#6b7280;margin-bottom:3px;">STOP LOSS ($)</div>
-                <input id="dbs-stoploss" type="number" value="20" min="0" step="0.1"
-                    style="width:100%;background:#0d0f1a;border:1px solid rgba(248,113,113,0.35);
-                           color:#f87171;font-family:'Share Tech Mono';font-size:0.72rem;
-                           padding:4px 6px;border-radius:4px;box-sizing:border-box;">
-              </div>
-            </div>
-            <div style="margin-bottom:8px;">
-              <div style="font-size:0.55rem;color:#6b7280;margin-bottom:3px;">GERENCIAMENTO</div>
-              <select id="dbs-mgr" onchange="dbsOnMgrChange()" style="width:100%;background:#0d0f1a;
-                  border:1px solid rgba(168,85,247,0.5);color:#c084fc;
-                  font-family:'Share Tech Mono';font-size:0.68rem;padding:5px 7px;border-radius:4px;">
-                <option value="flat">💰 Stake Fixa</option>
-                <option value="📐 MA-Adaptativo">📐 MA-Adaptativo</option>
-                <option value="🔄 Martingale">🔄 Martingale</option>
-                <option value="⚡ SorosGale">⚡ SorosGale</option>
-                <option value="📉 Loss Recovery">📉 Loss Recovery</option>
-                <option value="🛡️ Recovery Conservador">🛡️ Recovery Conservador</option>
-                <option value="📐 QSR">📐 QSR</option>
-                <option value="📊 Masaniello">📊 Masaniello</option>
-              </select>
-            </div>
-            <!-- Stats da sessão DBS -->
-            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
-              <div style="border:1px solid rgba(0,255,136,0.3);border-radius:4px;padding:2px 8px;font-size:0.65rem;color:#00ff88;">✅ <span id="dbs-mgr-wins">0</span></div>
-              <div style="border:1px solid rgba(248,113,113,0.3);border-radius:4px;padding:2px 8px;font-size:0.65rem;color:#f87171;">🔁 <span id="dbs-mgr-losses">0</span></div>
-              <div style="border:1px solid rgba(251,191,36,0.3);border-radius:4px;padding:2px 8px;font-size:0.65rem;color:#fbbf24;">💰 <span id="dbs-mgr-lucro">+$0.00</span></div>
-              <div style="border:1px solid rgba(168,85,247,0.3);border-radius:4px;padding:2px 8px;font-size:0.65rem;color:#c084fc;">⚡ <span id="dbs-mgr-prox">$--</span></div>
-            </div>
-          </div>
+        </div>
+        <!-- ══ FIM LAYOUT 2 COLUNAS ══ -->
 
-          <button id="dbs-btn-operar-top1" onclick="dbsOperarTop1()" disabled style="
-              margin-top:2px;width:100%;padding:9px;
-              background:rgba(99,102,241,0.2);border:1px solid #6366f1;
-              border-radius:5px;color:#a5b4fc;font-size:0.82rem;
-              font-family:'Share Tech Mono',monospace;cursor:not-allowed;
-              letter-spacing:1px;opacity:0.5;">⚡ OPERAR COM TOP 1</button>
-        </div>
-
-        <!-- Log de operações DBS -->
-        <div style="margin-bottom:6px;font-size:0.62rem;color:#6b7280;letter-spacing:1px;display:flex;align-items:center;justify-content:space-between;">
-          <span>📋 HISTÓRICO DE OPERAÇÕES DBS</span>
-          <button onclick="dbsLimparLog()" style="background:none;border:1px solid rgba(255,68,68,0.25);border-radius:3px;color:#f87171;font-size:0.58rem;padding:2px 7px;cursor:pointer;">🗑 LIMPAR</button>
-        </div>
-        <div id="dbs-log" style="
-            max-height:80px;overflow-y:auto;margin-bottom:12px;
-            background:rgba(0,0,0,0.35);border:1px solid rgba(99,102,241,0.2);
-            border-radius:5px;padding:5px 8px;font-size:0.62rem;
-            font-family:'Share Tech Mono',monospace;color:#6b7280;">
-          <span style="color:#374151;">— Nenhuma operação registrada —</span>
-        </div>
-
-        <!-- Tabela de ranking -->
-        <div style="margin-bottom:10px;font-size:0.62rem;color:#6b7280;letter-spacing:1px;">
-          RANKING COMPLETO (30 COMBOS)
-        </div>
-        <div style="overflow-x:auto;margin-bottom:14px;">
-          <table style="width:100%;border-collapse:collapse;font-size:0.68rem;">
-            <thead>
-              <tr style="color:#6366f1;border-bottom:1px solid rgba(99,102,241,0.3);">
-                <th style="text-align:left;padding:5px 6px;">#</th>
-                <th style="text-align:left;padding:5px 6px;">ATIVO</th>
-                <th style="text-align:left;padding:5px 6px;">CONTRATO</th>
-                <th style="text-align:center;padding:5px 6px;">BARR.</th>
-                <th style="text-align:right;padding:5px 6px;">CONF.</th>
-                <th style="text-align:center;padding:5px 6px;">FLUXO</th>
-                <th style="text-align:center;padding:5px 6px;">STATUS</th>
-                <th style="text-align:center;padding:5px 6px;">TICKS</th>
-              </tr>
-            </thead>
-            <tbody id="dbs-ranking-body" style="color:#c9d1d9;"></tbody>
-          </table>
-        </div>
-
-        <!-- Log e controle -->
-        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
-          <button id="dbs-btn-scan" onclick="dbsScan()" style="
-              flex:1;min-width:120px;padding:9px;
-              background:rgba(99,102,241,0.15);border:1px solid #6366f1;
-              border-radius:5px;color:#a5b4fc;font-size:0.82rem;
-              font-family:'Share Tech Mono',monospace;cursor:pointer;
-              letter-spacing:1px;">🔍 ESCANEAR</button>
-          <label style="display:flex;align-items:center;gap:6px;font-size:0.68rem;color:#6b7280;cursor:pointer;">
-            <input type="checkbox" id="dbs-auto-scan" style="accent-color:#6366f1;width:13px;height:13px;">
-            Auto-scan (30s)
-          </label>
-          <label style="display:flex;align-items:center;gap:6px;font-size:0.68rem;color:#00ff88;cursor:pointer;" title="Entra automaticamente quando um combo aprovado pelo EDC aparecer">
-            <input type="checkbox" id="dbs-auto-operar" style="accent-color:#00ff88;width:13px;height:13px;">
-            ⚡ Auto-operar
-          </label>
-        </div>
-        <!-- Controle de threshold EDC -->
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;
-            background:rgba(0,0,0,0.3);border:1px solid rgba(99,102,241,0.2);
-            border-radius:5px;padding:6px 10px;flex-wrap:wrap;">
-          <span style="font-size:0.62rem;color:#6b7280;letter-spacing:1px;white-space:nowrap;">⚙️ THRESHOLD EDC:</span>
-          <input type="range" id="dbs-threshold-slider" min="50" max="95" value="75" step="1"
-              oninput="dbsThresholdAtualizar(this.value)"
-              style="flex:1;min-width:100px;accent-color:#6366f1;cursor:pointer;">
-          <span id="dbs-threshold-val" style="font-size:0.75rem;color:#a5b4fc;font-weight:bold;min-width:32px;text-align:center;">75%</span>
-          <button onclick="dbsThresholdSalvar()" style="
-              background:rgba(99,102,241,0.2);border:1px solid #6366f1;
-              border-radius:4px;color:#a5b4fc;font-size:0.62rem;
-              padding:3px 8px;cursor:pointer;white-space:nowrap;">💾 SALVAR</button>
-        </div>
-        <div id="dbs-status" style="
-            font-size:0.68rem;color:#6b7280;min-height:22px;
-            background:rgba(0,0,0,0.3);border-radius:4px;padding:5px 8px;">
-          Aguardando scan…
-        </div>
       </div>
     </div>
 
