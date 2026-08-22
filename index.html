@@ -18499,7 +18499,7 @@ function _ltsOnNovoTick() {
     if (document.getElementById('lts-btn-analisar')?.textContent.includes('ANALISANDO')) return;
 
     const digito = (typeof bot !== 'undefined') ? bot._ultimoDigito : undefined;
-    if (digito === undefined || digito === null) return;
+    if (typeof digito !== 'number') return;  // protege contra undefined/null/NaN — inclui o 0 corretamente
 
     // Só registra a 1ª vez que cada dígito aparece nesta rodada
     if (!_ltsSlotsVisto[digito]) {
@@ -18629,18 +18629,35 @@ function ltsOnMgrChange() {
 }
 
 // ── Sinal — mesmo algoritmo do Cyber Sort mas sobre ticks reais ──────────────
+// ── Análise de volume UNDER/OVER sobre os 10 dígitos capturados ─────────────
+// Conta quantos dos 10 dígitos são < 5 (UNDER) e quantos são >= 5 (OVER).
+// O lado com mais volume define o contrato.
+// Empate → UNDER (conservador).
 function _ltsGerarSinal(original) {
-    const metade   = Math.floor(original.length / 2);
-    const grandes  = original.slice(0, metade).filter(v => v > 4).length;
-    const pequenos = metade - grandes;
-    const diff     = Math.abs(grandes - pequenos);
-    const conf     = Math.round(50 + (diff / Math.max(metade, 1)) * 50);
-    if (grandes >= pequenos) {
-        return { contract_type: 'DIGITUNDER', barrier: '5', conf,
-            desc: `${grandes} dígitos grandes (>4) na 1ª metade → Under<5` };
+    const under = original.filter(v => v < 5).length;  // dígitos 0,1,2,3,4
+    const over  = original.filter(v => v >= 5).length; // dígitos 5,6,7,8,9
+    const total = original.length;
+
+    // Confiança proporcional à diferença entre os dois lados (50%–100%)
+    const diff  = Math.abs(under - over);
+    const conf  = Math.round(50 + (diff / total) * 50);
+
+    if (under >= over) {
+        // Mais dígitos pequenos (0–4) saíram → tendência UNDER
+        return {
+            contract_type: 'DIGITUNDER',
+            barrier: '5',
+            conf,
+            desc: `📊 Volume: ${under} dígitos <5 (UNDER) vs ${over} dígitos ≥5 (OVER) → mais UNDER → DIGITUNDER 5`
+        };
     } else {
-        return { contract_type: 'DIGITOVER', barrier: '4', conf,
-            desc: `${pequenos} dígitos pequenos (≤4) na 1ª metade → Over>4` };
+        // Mais dígitos grandes (5–9) saíram → tendência OVER
+        return {
+            contract_type: 'DIGITOVER',
+            barrier: '4',
+            conf,
+            desc: `📊 Volume: ${over} dígitos ≥5 (OVER) vs ${under} dígitos <5 (UNDER) → mais OVER → DIGITOVER 4`
+        };
     }
 }
 
@@ -18932,7 +18949,15 @@ async function ltsExecutar() {
         _ltsLogAnalise(`✅ ${swaps} trocas · ${comparacoes} comparações`, '#ff4fa3');
         _ltsBip(1000, 0.3);
 
-        // Gera sinal com base nos ticks REAIS originais (não na lista ordenada)
+        // ── Análise de volume UNDER vs OVER ───────────────────────────────────
+        const _volUnder = listaOriginal.filter(v => v < 5).length;
+        const _volOver  = listaOriginal.filter(v => v >= 5).length;
+        const _ladoStr  = _volUnder >= _volOver
+            ? `<b style="color:#00ff41">UNDER domina (${_volUnder} vs ${_volOver})</b>`
+            : `<b style="color:#ff4444">OVER domina (${_volOver} vs ${_volUnder})</b>`;
+        _ltsLogAnalise(`📊 Volume: ${_ladoStr} — definindo contrato...`, '#ccc');
+
+        // Gera sinal baseado no volume dos 10 dígitos capturados
         _ltsSinalAtual = _ltsGerarSinal(listaOriginal);
         document.getElementById('lts-sinal-contrato').textContent = _ltsSinalAtual.contract_type;
         document.getElementById('lts-sinal-barreira').textContent = _ltsSinalAtual.barrier;
@@ -18940,7 +18965,7 @@ async function ltsExecutar() {
         document.getElementById('lts-sinal-desc').textContent     = _ltsSinalAtual.desc;
         document.getElementById('lts-sinal-box').style.display    = 'block';
         _ltsLogAnalise(
-            `📡 <b style="color:#00ffff">${_ltsSinalAtual.contract_type}</b> barr=<b style="color:#ffbd2e">${_ltsSinalAtual.barrier}</b> conf=${_ltsSinalAtual.conf}%`,
+            `📡 <b style="color:#00ffff">${_ltsSinalAtual.contract_type}</b> barr=<b style="color:#ffbd2e">${_ltsSinalAtual.barrier}</b> conf=<b style="color:#ff4fa3">${_ltsSinalAtual.conf}%</b>`,
             '#ccc'
         );
 
