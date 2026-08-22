@@ -18629,34 +18629,36 @@ function ltsOnMgrChange() {
 }
 
 // ── Sinal — mesmo algoritmo do Cyber Sort mas sobre ticks reais ──────────────
-// ── Análise de volume UNDER/OVER sobre os 10 dígitos capturados ─────────────
-// Conta quantos dos 10 dígitos são < 5 (UNDER) e quantos são >= 5 (OVER).
-// O lado com mais volume define o contrato.
-// Empate → UNDER (conservador).
+// ── Análise de volume UNDER/OVER sobre os 9 dígitos capturados (1–9) ─────────
+// Barreira SEMPRE = 5 (tanto UNDER quanto OVER).
+// UNDER 5 → aposta que o dígito final será < 5  (ganha com 1,2,3,4)
+// OVER  5 → aposta que o dígito final será > 5  (ganha com 6,7,8,9)
+// Conta dígitos 1–4 (UNDER) vs 6–9 (OVER). O 5 é neutro e não conta.
+// O lado com mais volume define o contrato. Empate → UNDER (conservador).
 function _ltsGerarSinal(original) {
-    const under = original.filter(v => v < 5).length;  // dígitos 0,1,2,3,4
-    const over  = original.filter(v => v >= 5).length; // dígitos 5,6,7,8,9
-    const total = original.length;
+    const under = original.filter(v => v >= 1 && v <= 4).length; // dígitos 1,2,3,4
+    const over  = original.filter(v => v >= 6 && v <= 9).length; // dígitos 6,7,8,9
+    const neutro = original.filter(v => v === 5).length;          // dígito 5 é neutro
+    const total  = original.length;
 
-    // Confiança proporcional à diferença entre os dois lados (50%–100%)
-    const diff  = Math.abs(under - over);
-    const conf  = Math.round(50 + (diff / total) * 50);
+    // Confiança proporcional à diferença (50%–100%)
+    const diff = Math.abs(under - over);
+    const base = Math.max(total - neutro, 1);
+    const conf = Math.round(50 + (diff / base) * 50);
 
     if (under >= over) {
-        // Mais dígitos pequenos (0–4) saíram → tendência UNDER
         return {
             contract_type: 'DIGITUNDER',
             barrier: '5',
             conf,
-            desc: `📊 Volume: ${under} dígitos <5 (UNDER) vs ${over} dígitos ≥5 (OVER) → mais UNDER → DIGITUNDER 5`
+            desc: `📊 Volume: ${under} dígitos 1–4 (UNDER) vs ${over} dígitos 6–9 (OVER) [${neutro} neutros] → DIGITUNDER 5`
         };
     } else {
-        // Mais dígitos grandes (5–9) saíram → tendência OVER
         return {
             contract_type: 'DIGITOVER',
-            barrier: '4',
+            barrier: '5',
             conf,
-            desc: `📊 Volume: ${over} dígitos ≥5 (OVER) vs ${under} dígitos <5 (UNDER) → mais OVER → DIGITOVER 4`
+            desc: `📊 Volume: ${over} dígitos 6–9 (OVER) vs ${under} dígitos 1–4 (UNDER) [${neutro} neutros] → DIGITOVER 5`
         };
     }
 }
@@ -18949,13 +18951,14 @@ async function ltsExecutar() {
         _ltsLogAnalise(`✅ ${swaps} trocas · ${comparacoes} comparações`, '#ff4fa3');
         _ltsBip(1000, 0.3);
 
-        // ── Análise de volume UNDER vs OVER ───────────────────────────────────
-        const _volUnder = listaOriginal.filter(v => v < 5).length;
-        const _volOver  = listaOriginal.filter(v => v >= 5).length;
-        const _ladoStr  = _volUnder >= _volOver
-            ? `<b style="color:#00ff41">UNDER domina (${_volUnder} vs ${_volOver})</b>`
-            : `<b style="color:#ff4444">OVER domina (${_volOver} vs ${_volUnder})</b>`;
-        _ltsLogAnalise(`📊 Volume: ${_ladoStr} — definindo contrato...`, '#ccc');
+        // ── Análise de volume UNDER vs OVER (barreira 5 em ambos os casos) ────
+        const _volUnder  = listaOriginal.filter(v => v >= 1 && v <= 4).length;
+        const _volOver   = listaOriginal.filter(v => v >= 6 && v <= 9).length;
+        const _volNeutro = listaOriginal.filter(v => v === 5).length;
+        const _ladoStr   = _volUnder >= _volOver
+            ? `<b style="color:#00ff41">UNDER domina (${_volUnder} vs ${_volOver}) [${_volNeutro} neutros]</b>`
+            : `<b style="color:#ff4444">OVER domina (${_volOver} vs ${_volUnder}) [${_volNeutro} neutros]</b>`;
+        _ltsLogAnalise(`📊 Volume: ${_ladoStr} → barreira 5`, '#ccc');
 
         // Gera sinal baseado no volume dos 10 dígitos capturados
         _ltsSinalAtual = _ltsGerarSinal(listaOriginal);
