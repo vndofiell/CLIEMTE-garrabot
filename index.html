@@ -9684,16 +9684,7 @@ function initWebSocket(wssUrl) {
                     const congeladoMsg = (bot.mgr._raCongelado) ? ' 🧊 CONGELADO' : '';
                     print(`🔁PERDEU | -$${Math.abs(profit).toFixed(2)} | Próxima entrada: $${bot.stake.toFixed(2)} | ${bot.mgr.status()}${congeladoMsg}`, "log-loss");
                 }
-                // ── DBS: atualiza resultado da última operação no log + gerenciamento ──
-                if (bot._dbsUltimoPayload) {
-                    const _dbsP = bot._dbsUltimoPayload;
-                    _dbsP.resultado = won ? 'WIN' : 'LOSS';
-                    if (_dbsLog.length > 0) { _dbsLog[0].resultado = _dbsP.resultado; _dbsLog[0].cor = won ? '#00ff88' : '#f87171'; _dbsLog[0].ico = won ? '✅' : '❌'; }
-                    _dbsRenderLog();
-                    // Registra no gerenciador DBS para atualizar stake/stops
-                    if (typeof dbsMgrRegistrarResultado === 'function') dbsMgrRegistrarResultado(won, profit);
-                    bot._dbsUltimoPayload = null;
-                }
+                // (resultado DBS tratado pelo handler próprio em bot.operarComSinal)
                 // Atualiza banca imediatamente com estimativa (saldo anterior + lucro do trade)
                 // if (bot._lastBalance !== undefined) bot._lastBalance += profit;
                 // updateHeader(bot._lastBalance);
@@ -19683,22 +19674,28 @@ function dbsMgrAtualizarStats() {
     s('dbs-mgr-prox',   '$' + prox.toFixed(2));
 }
 
+// ── Trava própria do DBS (independente do bot.running e bot._buying) ─────────
+let _dbsEmOperacao = false;
+let _dbsReqIdAtivo = null;
+
 // ── Função de compra direta pelo DBS (executa via WebSocket igual ao buy()) ──
 bot.operarComSinal = function(payload) {
     if (!bot.ws || bot.ws.readyState !== WebSocket.OPEN) {
-        console.warn('[DBS] WebSocket não conectado — operação cancelada.');
+        const st = document.getElementById('dbs-status');
+        if (st) st.textContent = '⚠️ WebSocket não conectado. Reconecte o bot.';
         return;
     }
-    if (bot._buying) {
-        console.warn('[DBS] Bot já está em operação — aguardando.');
+    if (_dbsEmOperacao) {
+        console.warn('[DBS] Operação DBS já em curso — aguardando resultado.');
         return;
     }
-    // Usa stake do gerenciador DBS se configurado, senão usa o do bot principal
-    const stake = dbsMgrGetStake();
-    bot.stake   = stake;
+
+    // Usa stake do gerenciador DBS
+    const stake  = dbsMgrGetStake();
     const reqId  = Math.floor(Math.random() * 90000) + 10000;
-    bot._pendingReqId = reqId;
-    bot._buying  = true;
+
+    _dbsEmOperacao    = true;
+    _dbsReqIdAtivo    = reqId;
 
     const proposal = {
         proposal:           1,
@@ -19713,13 +19710,80 @@ bot.operarComSinal = function(payload) {
         barrier:            String(payload.barreira),
     };
 
-    _secEspelhar(proposal);
+    // Intercepta apenas a proposta + buy deste reqId, sem interferir no bot principal
+    const _origOnMsg = bot.ws.onmessage;
+    bot.ws.onmessage = function(msg) {
+        try {
+            const d = JSON.parse(msg.data);
+
+            // Proposta DBS recebida — compra imediatamente
+            if (d.msg_type === 'proposal' && d.req_id === reqId) {
+                if (d.error) {
+                    print(`⚠️ DBS proposta recusada: ${d.error.message}`, 'log-loss');
+                    _dbsEmOperacao = false;
+                    _dbsReqIdAtivo = null;
+                    bot.ws.onmessage = _origOnMsg;
+                    return;
+                }
+                const pid = d.proposal && d.proposal.id;
+                if (pid) bot.ws.send(json({ buy: pid, price: stake }));
+                return; // não propaga proposta DBS para o handler normal
+            }
+
+            // Resultado do contrato DBS — detecta pelo lucro e encerra trava
+            if (d.msg_type === 'proposal_open_contract' && d.proposal_open_contract?.is_sold && _dbsEmOperacao) {
+                const profit = parseFloat(d.proposal_open_contract.profit || 0);
+                const won    = profit > 0;
+                _dbsEmOperacao = false;
+                _dbsReqIdAtivo = null;
+                bot.ws.onmessage = _origOnMsg;
+
+                // Registra resultado no log e gerenciador DBS
+                if (bot._dbsUltimoPayload) {
+                    bot._dbsUltimoPayload.resultado = won ? 'WIN' : 'LOSS';
+                    if (_dbsLog.length > 0) {
+                        _dbsLog[0].resultado = bot._dbsUltimoPayload.resultado;
+                        _dbsLog[0].cor = won ? '#00ff88' : '#f87171';
+                        _dbsLog[0].ico = won ? '✅' : '❌';
+                    }
+                    _dbsRenderLog();
+                    if (typeof dbsMgrRegistrarResultado === 'function') dbsMgrRegistrarResultado(won, profit);
+                    bot._dbsUltimoPayload = null;
+                }
+
+                const st = document.getElementById('dbs-status');
+                if (st) st.textContent = `${won ? '✅ WIN' : '❌ LOSS'} | ${payload.tipo_contrato} B:${payload.barreira} ${payload.ativo} | ${profit >= 0 ? '+' : ''}$${profit.toFixed(2)}`;
+
+                // Dispara próximo auto-scan após resultado
+                const autoChk = document.getElementById('dbs-auto-operar');
+                if (autoChk && autoChk.checked) {
+                    setTimeout(() => dbsScan(), 2000);
+                }
+                // Propaga para o handler original (atualiza saldo etc.)
+                _origOnMsg(msg);
+                return;
+            }
+        } catch(_) {}
+        _origOnMsg(msg);
+    };
+
     bot.ws.send(json(proposal));
     print(`⚡ DBS → <b>${payload.tipo_contrato}</b> barreira=<b>${payload.barreira}</b> | ativo=<b>${payload.ativo}</b> | stake=$${stake} | origem=${payload.origem || 'DBS356'}`, 'log-info');
 
     // Registra entrada no log do DBS
-    bot._dbsUltimoPayload = { tipo: payload.tipo_contrato, barreira: payload.barreira, ativo: payload.ativo, confianca: payload.confianca || _dbsTop1?.confianca || '—' };
-    dbsRegistrarLog({ tipo: payload.tipo_contrato, barreira: payload.barreira, ativo: payload.ativo, confianca: payload.confianca || _dbsTop1?.confianca || '—' });
+    const confianca = payload.confianca || _dbsTop1?.confianca || '—';
+    bot._dbsUltimoPayload = { tipo: payload.tipo_contrato, barreira: payload.barreira, ativo: payload.ativo, confianca };
+    dbsRegistrarLog({ tipo: payload.tipo_contrato, barreira: payload.barreira, ativo: payload.ativo, confianca });
+
+    // Watchdog: se em 30s não receber resultado, libera a trava
+    setTimeout(() => {
+        if (_dbsEmOperacao && _dbsReqIdAtivo === reqId) {
+            console.warn('[DBS] Watchdog: operação sem resposta em 30s — liberando trava.');
+            _dbsEmOperacao = false;
+            _dbsReqIdAtivo = null;
+            bot.ws.onmessage = _origOnMsg;
+        }
+    }, 30000);
 };
 
 // ── Controle de Threshold EDC ─────────────────────────────────────────────────
