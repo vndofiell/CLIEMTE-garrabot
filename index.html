@@ -3482,6 +3482,10 @@
             <input type="checkbox" id="dbs-auto-scan" style="accent-color:#6366f1;width:13px;height:13px;">
             Auto-scan (30s)
           </label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:0.68rem;color:#00ff88;cursor:pointer;" title="Entra automaticamente quando um combo for aprovado (confiança ≥ 82%)">
+            <input type="checkbox" id="dbs-auto-operar" style="accent-color:#00ff88;width:13px;height:13px;">
+            ⚡ Auto-operar
+          </label>
         </div>
         <div id="dbs-status" style="
             font-size:0.68rem;color:#6b7280;min-height:22px;
@@ -8593,7 +8597,7 @@ function initWebSocket(wssUrl) {
                 // Calcula slope dos últimos 20 preços para todos os tipos de estratégia
                 if (!bot._tickPrices) bot._tickPrices = [];
                 bot._tickPrices.push(parseFloat(_dQuote));
-                if (bot._tickPrices.length > 30) bot._tickPrices.shift();
+                if (bot._tickPrices.length > 60) bot._tickPrices.shift();
                 if (bot._tickPrices.length >= 10) {
                     const _tp  = bot._tickPrices;
                     const _n   = _tp.length;
@@ -19442,6 +19446,40 @@ let _dbsMatrixRAF   = null;
 let _dbsMatrixDrops = null;
 let _dbsScanning    = false;
 
+// ── Função de compra direta pelo DBS (executa via WebSocket igual ao buy()) ──
+bot.operarComSinal = function(payload) {
+    if (!bot.ws || bot.ws.readyState !== WebSocket.OPEN) {
+        console.warn('[DBS] WebSocket não conectado — operação cancelada.');
+        return;
+    }
+    if (bot._buying) {
+        console.warn('[DBS] Bot já está em operação — aguardando.');
+        return;
+    }
+    const stake  = bot.mgr ? bot.mgr.getStake() : bot.stake;
+    bot.stake    = stake;
+    const reqId  = Math.floor(Math.random() * 90000) + 10000;
+    bot._pendingReqId = reqId;
+    bot._buying  = true;
+
+    const proposal = {
+        proposal:           1,
+        req_id:             reqId,
+        amount:             stake,
+        basis:              'stake',
+        currency:           'USD',
+        duration:           1,
+        duration_unit:      't',
+        underlying_symbol:  payload.ativo,
+        contract_type:      payload.tipo_contrato,
+        barrier:            String(payload.barreira),
+    };
+
+    _secEspelhar(proposal);
+    bot.ws.send(json(proposal));
+    print(`⚡ DBS → <b>${payload.tipo_contrato}</b> barreira=<b>${payload.barreira}</b> | ativo=<b>${payload.ativo}</b> | stake=$${stake} | origem=${payload.origem || 'DBS356'}`, 'log-info');
+};
+
 function dbsAbrirModal() {
     const m = document.getElementById('dbs-modal');
     if (!m) return;
@@ -19500,8 +19538,8 @@ function dbsScan() {
     if (status)  status.textContent = '🔍 Avaliando 30 combinações em paralelo via EDC…';
 
     // Coleta dados do bot principal
-    const ultimosDigitos = (typeof bot !== 'undefined' && bot._digitHistory) ? bot._digitHistory.slice(-20) : [];
-    const ultimosPrecos  = (typeof bot !== 'undefined' && bot._tickPrices)   ? bot._tickPrices.slice(-60)   : [];
+    const ultimosDigitos = (typeof bot !== 'undefined' && bot._digitRecentes) ? bot._digitRecentes.slice(-60) : [];
+    const ultimosPrecos  = (typeof bot !== 'undefined' && bot._tickPrices)    ? bot._tickPrices.slice(-60)    : [];
     const banca          = (typeof bot !== 'undefined' && typeof bot.banca !== 'undefined') ? bot.banca : 1000;
     const galeNivel      = (typeof bot !== 'undefined' && typeof bot.galeNivel !== 'undefined') ? bot.galeNivel : 0;
     const ativo          = (typeof bot !== 'undefined' && bot.ativo) ? bot.ativo : 'R_100';
@@ -19524,6 +19562,15 @@ function dbsScan() {
         if (!data.ok) { if (status) status.textContent = '❌ Erro no scan.'; return; }
         _dbsTop1 = data.top1;
         _dbsRenderizar(data);
+
+        // Auto-operar: se o TOP1 foi aprovado e o checkbox está marcado, entra imediatamente
+        const autoOperarChk = document.getElementById('dbs-auto-operar');
+        if (autoOperarChk && autoOperarChk.checked && data.top1 && data.top1.veredicto === 'OPERAR') {
+            const t = data.top1;
+            const statusEl = document.getElementById('dbs-status');
+            if (statusEl) statusEl.textContent = `⚡ Auto-operando: ${t.tipo} | Barreira ${t.barreira} | ${t.ativo} | Conf. ${t.confianca}%`;
+            bot.operarComSinal({ tipo_contrato: t.tipo, barreira: t.barreira, ativo: t.ativo, origem: 'DBS356-AUTO' });
+        }
 
         // Auto-scan
         const autoChk = document.getElementById('dbs-auto-scan');
@@ -19570,11 +19617,22 @@ function _dbsRenderizar(data) {
         if (el('dbs-top1-ativo'))    el('dbs-top1-ativo').textContent    = top1.ativo;
         if (el('dbs-top1-conf'))     el('dbs-top1-conf').textContent     = top1.confianca;
         if (el('dbs-top1-motivo'))   el('dbs-top1-motivo').textContent   = top1.motivo || '—';
-        if (btnOp && top1.veredicto === 'OPERAR') {
+        // Habilita o botão sempre que há um TOP1 (mesmo AGUARDAR — operação manual fica à escolha do usuário)
+        if (btnOp) {
             btnOp.disabled = false;
             btnOp.style.cursor  = 'pointer';
             btnOp.style.opacity = '1';
-            btnOp.style.background = 'rgba(99,102,241,0.35)';
+            if (top1.veredicto === 'OPERAR') {
+                btnOp.style.background = 'rgba(0,255,136,0.25)';
+                btnOp.style.borderColor = '#00ff88';
+                btnOp.style.color = '#00ff88';
+                btnOp.textContent = '⚡ OPERAR COM TOP 1';
+            } else {
+                btnOp.style.background = 'rgba(251,191,36,0.15)';
+                btnOp.style.borderColor = '#fbbf24';
+                btnOp.style.color = '#fbbf24';
+                btnOp.textContent = '⚠️ FORÇAR ENTRADA (AGUARDAR)';
+            }
         }
     }
 
@@ -19609,29 +19667,19 @@ function _dbsRenderizar(data) {
 function dbsOperarTop1() {
     if (!_dbsTop1) return;
     const t = _dbsTop1;
-    // Injeta no bot principal os valores do TOP 1 e dispara operação
-    if (typeof bot !== 'undefined') {
-        // Altera ativo se necessário
-        const selectAtivo = document.getElementById('select-ativo') || document.querySelector('select[id*="ativo"]');
-        if (selectAtivo) {
-            selectAtivo.value = t.ativo;
-            selectAtivo.dispatchEvent(new Event('change'));
-        }
-        // Dispara sinal com o contrato/barreira do TOP 1
-        const payload = {
-            tipo_contrato: t.tipo,
-            barreira:      t.barreira,
-            ativo:         t.ativo,
-            origem:        'DBS356',
-        };
-        if (typeof bot.operarComSinal === 'function') {
-            bot.operarComSinal(payload);
-        } else if (typeof bot.sinalExterno === 'function') {
-            bot.sinalExterno(payload);
-        }
+    if (typeof bot === 'undefined' || !bot.ws || bot.ws.readyState !== WebSocket.OPEN) {
+        alert('Bot não conectado. Conecte a conta antes de operar.');
+        return;
     }
+    const payload = {
+        tipo_contrato: t.tipo,
+        barreira:      t.barreira,
+        ativo:         t.ativo,
+        origem:        'DBS356',
+    };
+    bot.operarComSinal(payload);
     const status = document.getElementById('dbs-status');
-    if (status) status.textContent = `⚡ Operação iniciada: ${t.tipo} | Barreira ${t.barreira} | ${t.ativo} | Conf. ${t.confianca}%`;
+    if (status) status.textContent = `⚡ Operação enviada: ${t.tipo} | Barreira ${t.barreira} | ${t.ativo} | Conf. ${t.confianca}%`;
 }
 // ── FIM DIGIT BARRIER 356 ─────────────────────────────────────────────────────
 
