@@ -2048,6 +2048,12 @@
         🔴 Live Tick Sort
         <span class="cmd-label" style="color:#57606a;">Sort em tempo real</span>
     </button>
+    <button class="cmd-btn" id="btn-digit-barrier-356"
+        onclick="dbsAbrirModal()"
+        style="border-color:rgba(99,102,241,0.55);color:#a5b4fc;font-size:0.78rem;padding:5px 10px;margin-top:4px;">
+        🎰 Digit Barrier 356
+        <span class="cmd-label" style="color:#57606a;">Scanner multi-ativo</span>
+    </button>
     <button class="cmd-btn" id="btn-digit-sniper"
         onclick="dsAbrirModal()"
         style="border-color:rgba(250,204,21,0.5);color:#facc15;font-size:0.78rem;padding:5px 10px;margin-top:4px;">
@@ -3362,6 +3368,126 @@
           </div>
         </div>
 
+      </div>
+    </div>
+
+    <!-- ── MODAL DIGIT BARRIER 356 ──────────────────────────────────────── -->
+    <div id="dbs-modal" style="
+        display:none; position:fixed; top:0; left:0;
+        width:100%; height:100%;
+        background:rgba(0,0,0,0.95); z-index:1200;
+        justify-content:center; align-items:flex-start;
+        padding:20px 8px 40px; overflow-y:auto;">
+
+      <canvas id="dbs-matrix-canvas" style="
+          position:fixed;top:0;left:0;width:100%;height:100%;
+          z-index:0;pointer-events:none;opacity:0.15;"></canvas>
+
+      <div style="
+          position:relative;z-index:1;
+          background:rgba(2,4,18,0.97); border:1px solid #6366f1;
+          border-radius:8px; padding:22px 24px 24px;
+          box-shadow:0 0 36px rgba(99,102,241,0.35);
+          font-family:'Share Tech Mono',monospace;
+          width:100%;max-width:760px;">
+
+        <!-- Header -->
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+          <div>
+            <div style="font-size:1.05rem;font-weight:bold;color:#a5b4fc;letter-spacing:1px;">
+              🎰 DIGIT BARRIER 356
+            </div>
+            <div style="font-size:0.62rem;color:#6366f1;letter-spacing:2px;margin-top:2px;">
+              SCANNER MULTI-ATIVO × MULTI-BARREIRA — EDC POWERED
+            </div>
+          </div>
+          <button onclick="dbsFecharModal()" style="
+              background:none;border:1px solid rgba(255,68,68,0.4);
+              border-radius:4px;color:#f87171;font-size:0.75rem;
+              padding:4px 10px;cursor:pointer;">✕ FECHAR</button>
+        </div>
+
+        <!-- Estatísticas do scan -->
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+          <div style="background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.25);border-radius:5px;padding:7px 12px;font-size:0.7rem;color:#a5b4fc;">
+            🔢 COMBOS: <b id="dbs-stat-total">30</b>
+          </div>
+          <div style="background:rgba(0,255,136,0.06);border:1px solid rgba(0,255,136,0.2);border-radius:5px;padding:7px 12px;font-size:0.7rem;color:#00ff88;">
+            ✅ OPERAR: <b id="dbs-stat-operar">--</b>
+          </div>
+          <div style="background:rgba(248,113,113,0.06);border:1px solid rgba(248,113,113,0.2);border-radius:5px;padding:7px 12px;font-size:0.7rem;color:#f87171;">
+            ⛔ AGUARDAR: <b id="dbs-stat-aguardar">--</b>
+          </div>
+          <div style="background:rgba(251,191,36,0.06);border:1px solid rgba(251,191,36,0.2);border-radius:5px;padding:7px 12px;font-size:0.7rem;color:#fbbf24;">
+            🏆 TOP CONF.: <b id="dbs-stat-top">--%</b>
+          </div>
+        </div>
+
+        <!-- TOP 1 destaque -->
+        <div id="dbs-top1-box" style="display:none;
+            background:rgba(99,102,241,0.12);border:2px solid #6366f1;
+            border-radius:7px;padding:12px 16px;margin-bottom:14px;">
+          <div style="font-size:0.6rem;color:#6366f1;letter-spacing:2px;margin-bottom:6px;">🏆 MELHOR OPORTUNIDADE</div>
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+            <div>
+              <span id="dbs-top1-tipo" style="font-size:1rem;font-weight:bold;color:#a5b4fc;">—</span>
+              <span style="color:#555;margin:0 6px;">|</span>
+              <span style="font-size:0.75rem;color:#c4b5fd;">BARREIRA <span id="dbs-top1-barreira" style="color:#fbbf24;font-weight:bold;">—</span></span>
+              <span style="color:#555;margin:0 6px;">|</span>
+              <span style="font-size:0.75rem;color:#c4b5fd;"><span id="dbs-top1-ativo" style="color:#00ff88;font-weight:bold;">—</span></span>
+            </div>
+            <div style="font-size:1.2rem;font-weight:bold;color:#00ff88;">
+              <span id="dbs-top1-conf">—</span>%
+            </div>
+          </div>
+          <div id="dbs-top1-motivo" style="font-size:0.62rem;color:#6b7280;margin-top:6px;line-height:1.5;">—</div>
+          <button id="dbs-btn-operar-top1" onclick="dbsOperarTop1()" disabled style="
+              margin-top:10px;width:100%;padding:9px;
+              background:rgba(99,102,241,0.2);border:1px solid #6366f1;
+              border-radius:5px;color:#a5b4fc;font-size:0.82rem;
+              font-family:'Share Tech Mono',monospace;cursor:not-allowed;
+              letter-spacing:1px;opacity:0.5;">⚡ OPERAR COM TOP 1</button>
+        </div>
+
+        <!-- Tabela de ranking -->
+        <div style="margin-bottom:10px;font-size:0.62rem;color:#6b7280;letter-spacing:1px;">
+          RANKING COMPLETO (30 COMBOS)
+        </div>
+        <div style="overflow-x:auto;margin-bottom:14px;">
+          <table style="width:100%;border-collapse:collapse;font-size:0.68rem;">
+            <thead>
+              <tr style="color:#6366f1;border-bottom:1px solid rgba(99,102,241,0.3);">
+                <th style="text-align:left;padding:5px 6px;">#</th>
+                <th style="text-align:left;padding:5px 6px;">ATIVO</th>
+                <th style="text-align:left;padding:5px 6px;">CONTRATO</th>
+                <th style="text-align:center;padding:5px 6px;">BARR.</th>
+                <th style="text-align:right;padding:5px 6px;">CONF.</th>
+                <th style="text-align:center;padding:5px 6px;">STATUS</th>
+                <th style="text-align:center;padding:5px 6px;">TICKS</th>
+              </tr>
+            </thead>
+            <tbody id="dbs-ranking-body" style="color:#c9d1d9;"></tbody>
+          </table>
+        </div>
+
+        <!-- Log e controle -->
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px;">
+          <button id="dbs-btn-scan" onclick="dbsScan()" style="
+              flex:1;min-width:120px;padding:9px;
+              background:rgba(99,102,241,0.15);border:1px solid #6366f1;
+              border-radius:5px;color:#a5b4fc;font-size:0.82rem;
+              font-family:'Share Tech Mono',monospace;cursor:pointer;
+              letter-spacing:1px;">🔍 ESCANEAR</button>
+          <label style="display:flex;align-items:center;gap:6px;font-size:0.68rem;color:#6b7280;cursor:pointer;">
+            <input type="checkbox" id="dbs-auto-scan" style="accent-color:#6366f1;width:13px;height:13px;">
+            Auto-scan (30s)
+          </label>
+        </div>
+        <div id="dbs-status" style="
+            font-size:0.68rem;color:#6b7280;min-height:22px;
+            background:rgba(0,0,0,0.3);border-radius:4px;padding:5px 8px;">
+          Aguardando scan…
+        </div>
       </div>
     </div>
 
@@ -19306,6 +19432,208 @@ function ltsOperar() {
 }
 // ── FIM LIVE TICK SORT ────────────────────────────────────────────────────────
 
+
+// ══════════════════════════════════════════════════════════════════════════════
+// DIGIT BARRIER 356 — Scanner Multi-Ativo × Multi-Barreira (EDC)
+// ══════════════════════════════════════════════════════════════════════════════
+let _dbsTop1        = null;
+let _dbsAutoTimer   = null;
+let _dbsMatrixRAF   = null;
+let _dbsMatrixDrops = null;
+let _dbsScanning    = false;
+
+function dbsAbrirModal() {
+    const m = document.getElementById('dbs-modal');
+    if (!m) return;
+    m.style.display = 'flex';
+    _dbsIniciarMatrix();
+    dbsScan();
+}
+
+function dbsFecharModal() {
+    const m = document.getElementById('dbs-modal');
+    if (m) m.style.display = 'none';
+    _dbsPararMatrix();
+    clearInterval(_dbsAutoTimer);
+    _dbsAutoTimer = null;
+}
+
+// ── Matrix background (índigo) ────────────────────────────────────────────────
+function _dbsIniciarMatrix() {
+    const c = document.getElementById('dbs-matrix-canvas');
+    if (!c) return;
+    _dbsPararMatrix();
+    c.width  = window.innerWidth;
+    c.height = window.innerHeight;
+    const ctx    = c.getContext('2d');
+    const cols   = Math.floor(c.width / 14);
+    _dbsMatrixDrops = Array(cols).fill(1);
+    const CHARS  = '0123456789ABCDEF356UNDEROVER';
+    function _frame() {
+        ctx.fillStyle = 'rgba(2,4,18,0.15)';
+        ctx.fillRect(0, 0, c.width, c.height);
+        ctx.fillStyle = '#6366f1';
+        ctx.font = '11px monospace';
+        _dbsMatrixDrops.forEach((y, i) => {
+            const ch = CHARS[Math.floor(Math.random() * CHARS.length)];
+            ctx.fillText(ch, i * 14, y * 14);
+            if (y * 14 > c.height && Math.random() > 0.975) _dbsMatrixDrops[i] = 0;
+            else _dbsMatrixDrops[i]++;
+        });
+        _dbsMatrixRAF = requestAnimationFrame(_frame);
+    }
+    _dbsMatrixRAF = requestAnimationFrame(_frame);
+}
+
+function _dbsPararMatrix() {
+    if (_dbsMatrixRAF) { cancelAnimationFrame(_dbsMatrixRAF); _dbsMatrixRAF = null; }
+}
+
+// ── Scan principal ────────────────────────────────────────────────────────────
+function dbsScan() {
+    if (_dbsScanning) return;
+    _dbsScanning = true;
+
+    const btnScan = document.getElementById('dbs-btn-scan');
+    const status  = document.getElementById('dbs-status');
+    if (btnScan) { btnScan.textContent = '⏳ ESCANEANDO…'; btnScan.disabled = true; }
+    if (status)  status.textContent = '🔍 Avaliando 30 combinações em paralelo via EDC…';
+
+    // Coleta dados do bot principal
+    const ultimosDigitos = (typeof bot !== 'undefined' && bot._digitHistory) ? bot._digitHistory.slice(-20) : [];
+    const ultimosPrecos  = (typeof bot !== 'undefined' && bot._tickPrices)   ? bot._tickPrices.slice(-60)   : [];
+    const banca          = (typeof bot !== 'undefined' && typeof bot.banca !== 'undefined') ? bot.banca : 1000;
+    const galeNivel      = (typeof bot !== 'undefined' && typeof bot.galeNivel !== 'undefined') ? bot.galeNivel : 0;
+    const ativo          = (typeof bot !== 'undefined' && bot.ativo) ? bot.ativo : 'R_100';
+
+    fetch('/ia/digit-barrier-356', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            ultimos_digitos: ultimosDigitos,
+            ultimos_precos:  ultimosPrecos,
+            banca:           banca,
+            gale_nivel:      galeNivel,
+            ativo:           ativo,
+        })
+    })
+    .then(r => r.json())
+    .then(data => {
+        _dbsScanning = false;
+        if (btnScan) { btnScan.textContent = '🔍 ESCANEAR'; btnScan.disabled = false; }
+        if (!data.ok) { if (status) status.textContent = '❌ Erro no scan.'; return; }
+        _dbsTop1 = data.top1;
+        _dbsRenderizar(data);
+
+        // Auto-scan
+        const autoChk = document.getElementById('dbs-auto-scan');
+        if (autoChk && autoChk.checked) {
+            clearInterval(_dbsAutoTimer);
+            _dbsAutoTimer = setInterval(() => {
+                const m = document.getElementById('dbs-modal');
+                if (!m || m.style.display === 'none') { clearInterval(_dbsAutoTimer); return; }
+                dbsScan();
+            }, 30000);
+        }
+    })
+    .catch(err => {
+        _dbsScanning = false;
+        if (btnScan) { btnScan.textContent = '🔍 ESCANEAR'; btnScan.disabled = false; }
+        if (status) status.textContent = '❌ Falha de rede: ' + err.message;
+    });
+}
+
+// ── Renderizar ranking ────────────────────────────────────────────────────────
+function _dbsRenderizar(data) {
+    const ranking  = data.ranking || [];
+    const top1     = data.top1;
+    const status   = document.getElementById('dbs-status');
+    const tbody    = document.getElementById('dbs-ranking-body');
+    const top1Box  = document.getElementById('dbs-top1-box');
+    const btnOp    = document.getElementById('dbs-btn-operar-top1');
+
+    // Estatísticas
+    const qtOperar   = ranking.filter(r => r.veredicto === 'OPERAR').length;
+    const qtAguardar = ranking.filter(r => r.veredicto === 'AGUARDAR').length;
+    const topConf    = ranking.length > 0 ? ranking[0].confianca : 0;
+    const el = id => document.getElementById(id);
+    if (el('dbs-stat-total'))    el('dbs-stat-total').textContent    = ranking.length;
+    if (el('dbs-stat-operar'))   el('dbs-stat-operar').textContent   = qtOperar;
+    if (el('dbs-stat-aguardar')) el('dbs-stat-aguardar').textContent = qtAguardar;
+    if (el('dbs-stat-top'))      el('dbs-stat-top').textContent      = topConf + '%';
+
+    // TOP 1
+    if (top1 && top1Box) {
+        top1Box.style.display = 'block';
+        if (el('dbs-top1-tipo'))     el('dbs-top1-tipo').textContent     = top1.tipo;
+        if (el('dbs-top1-barreira')) el('dbs-top1-barreira').textContent = top1.barreira;
+        if (el('dbs-top1-ativo'))    el('dbs-top1-ativo').textContent    = top1.ativo;
+        if (el('dbs-top1-conf'))     el('dbs-top1-conf').textContent     = top1.confianca;
+        if (el('dbs-top1-motivo'))   el('dbs-top1-motivo').textContent   = top1.motivo || '—';
+        if (btnOp && top1.veredicto === 'OPERAR') {
+            btnOp.disabled = false;
+            btnOp.style.cursor  = 'pointer';
+            btnOp.style.opacity = '1';
+            btnOp.style.background = 'rgba(99,102,241,0.35)';
+        }
+    }
+
+    // Tabela
+    if (!tbody) return;
+    tbody.innerHTML = '';
+    ranking.forEach((r, i) => {
+        const isTop   = i === 0;
+        const isOp    = r.veredicto === 'OPERAR';
+        const confClr = r.confianca >= 82 ? '#00ff88' : r.confianca >= 70 ? '#fbbf24' : '#f87171';
+        const verdClr = isOp ? '#00ff88' : '#f87171';
+        const rowBg   = isTop ? 'rgba(99,102,241,0.1)' : (i % 2 === 0 ? 'rgba(255,255,255,0.02)' : 'transparent');
+        tbody.innerHTML += `
+        <tr style="background:${rowBg};border-bottom:1px solid rgba(255,255,255,0.04);">
+          <td style="padding:5px 6px;color:#6b7280;">${i + 1}${isTop ? ' 🏆' : ''}</td>
+          <td style="padding:5px 6px;color:#00ff88;font-weight:${isTop ? 'bold' : 'normal'};">${r.ativo}</td>
+          <td style="padding:5px 6px;color:#a5b4fc;">${r.tipo}</td>
+          <td style="padding:5px 6px;text-align:center;color:#fbbf24;">${r.barreira}</td>
+          <td style="padding:5px 6px;text-align:right;color:${confClr};font-weight:bold;">${r.confianca}%</td>
+          <td style="padding:5px 6px;text-align:center;color:${verdClr};font-size:0.62rem;">${r.veredicto}</td>
+          <td style="padding:5px 6px;text-align:center;color:#6b7280;">${r.n_ticks || '—'}</td>
+        </tr>`;
+    });
+
+    if (status) {
+        const ts = new Date().toLocaleTimeString('pt-BR');
+        status.textContent = `✅ Scan concluído às ${ts} — ${ranking.length} combos avaliados, ${qtOperar} prontos para operar.`;
+    }
+}
+
+// ── Operar com TOP 1 ──────────────────────────────────────────────────────────
+function dbsOperarTop1() {
+    if (!_dbsTop1) return;
+    const t = _dbsTop1;
+    // Injeta no bot principal os valores do TOP 1 e dispara operação
+    if (typeof bot !== 'undefined') {
+        // Altera ativo se necessário
+        const selectAtivo = document.getElementById('select-ativo') || document.querySelector('select[id*="ativo"]');
+        if (selectAtivo) {
+            selectAtivo.value = t.ativo;
+            selectAtivo.dispatchEvent(new Event('change'));
+        }
+        // Dispara sinal com o contrato/barreira do TOP 1
+        const payload = {
+            tipo_contrato: t.tipo,
+            barreira:      t.barreira,
+            ativo:         t.ativo,
+            origem:        'DBS356',
+        };
+        if (typeof bot.operarComSinal === 'function') {
+            bot.operarComSinal(payload);
+        } else if (typeof bot.sinalExterno === 'function') {
+            bot.sinalExterno(payload);
+        }
+    }
+    const status = document.getElementById('dbs-status');
+    if (status) status.textContent = `⚡ Operação iniciada: ${t.tipo} | Barreira ${t.barreira} | ${t.ativo} | Conf. ${t.confianca}%`;
+}
+// ── FIM DIGIT BARRIER 356 ─────────────────────────────────────────────────────
 
 
 // ══════════════════════════════════════════════════════════════════════════════

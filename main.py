@@ -10563,6 +10563,121 @@ def quick_sort_simulacao():
     return jsonify({"ok": True, "passos": passos})
 
 
+# ── Digit Barrier 356 — Scanner Multi-Ativo × Multi-Barreira ────────────────
+@app.route('/ia/digit-barrier-356', methods=['POST'])
+def ia_digit_barrier_356():
+    """
+    Avalia 30 combinações (5 ativos × 6 contratos: UNDER/OVER × barreiras 3,5,6)
+    em paralelo usando o DecisionSupervisor (EDC) e retorna o ranking completo
+    + TOP 1 com maior confiança.
+    """
+    dados = request.get_json(force=True, silent=True) or {}
+
+    # Ticks enviados pelo frontend (ativo atual já carregado no bot)
+    ultimos_digitos_atual = dados.get("ultimos_digitos", [])
+    ultimos_precos_atual  = dados.get("ultimos_precos", [])
+    banca                 = float(dados.get("banca", 1000))
+    gale_nivel            = int(dados.get("gale_nivel", 0))
+    ativo_atual           = dados.get("ativo", "R_100").upper()
+
+    ATIVOS     = ["R_10", "R_25", "R_50", "R_75", "R_100"]
+    BARREIRAS  = [3, 5, 6]
+    TIPOS      = ["DIGITUNDER", "DIGITOVER"]
+
+    resultados = []
+    lock       = threading.Lock()
+
+    # Cache de ticks por ativo (evita buscar o mesmo ativo 6x)
+    ticks_cache = {}
+    cache_lock  = threading.Lock()
+
+    def _obter_ticks(ativo):
+        with cache_lock:
+            if ativo in ticks_cache:
+                return ticks_cache[ativo]
+        # Se for o ativo atual do bot, usa os ticks já enviados pelo frontend
+        if ativo == ativo_atual and ultimos_precos_atual:
+            precos  = ultimos_precos_atual
+            digitos = ultimos_digitos_atual
+        else:
+            precos  = _buscar_ticks_ws_sync(ativo, count=60)
+            digitos = [int(str(round(abs(p), 5)).replace(".", "")[-1]) for p in precos] if precos else []
+        with cache_lock:
+            ticks_cache[ativo] = (precos, digitos)
+        return precos, digitos
+
+    def _avaliar_combo(ativo, tipo, barreira):
+        try:
+            precos, digitos = _obter_ticks(ativo)
+            ctx = {
+                "tipo_contrato":   tipo,
+                "barreira":        barreira,
+                "ativo":           ativo,
+                "ultimos_digitos": digitos,
+                "ultimos_precos":  precos,
+                "banca":           banca,
+                "gale_nivel":      gale_nivel,
+                "nome":            f"{tipo}-{barreira}@{ativo}",
+            }
+            rel = _supervisor.avaliar(ctx)
+            entrada = {
+                "ativo":      ativo,
+                "tipo":       tipo,
+                "barreira":   barreira,
+                "confianca":  rel["confianca"],
+                "veredicto":  rel["veredicto"],
+                "notas":      rel["notas"],
+                "motivo":     rel["motivo"],
+                "n_ticks":    len(digitos),
+            }
+        except Exception as exc:
+            entrada = {
+                "ativo":     ativo,
+                "tipo":      tipo,
+                "barreira":  barreira,
+                "confianca": 0,
+                "veredicto": "ERRO",
+                "notas":     {},
+                "motivo":    str(exc),
+                "n_ticks":   0,
+            }
+        with lock:
+            resultados.append(entrada)
+
+    # Primeiro busca ticks de todos os ativos em paralelo (5 threads)
+    def _prefetch(ativo):
+        _obter_ticks(ativo)
+
+    prefetch_threads = [threading.Thread(target=_prefetch, args=(a,), daemon=True)
+                        for a in ATIVOS]
+    for t in prefetch_threads:
+        t.start()
+    for t in prefetch_threads:
+        t.join(timeout=12)
+
+    # Depois avalia as 30 combinações em paralelo
+    combos   = [(a, tp, b) for a in ATIVOS for tp in TIPOS for b in BARREIRAS]
+    threads  = [threading.Thread(target=_avaliar_combo, args=c, daemon=True)
+                for c in combos]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=15)
+
+    # Ordena por confiança descendente
+    resultados.sort(key=lambda x: -x["confianca"])
+
+    top1 = next((r for r in resultados if r["veredicto"] == "OPERAR"), None) or \
+           (resultados[0] if resultados else None)
+
+    return jsonify({
+        "ok":      True,
+        "total":   len(resultados),
+        "ranking": resultados,
+        "top1":    top1,
+    })
+
+
 # ── Digit Sniper PRO ────────────────────────────────────────────────────────
 register_digit_sniper(app, _buscar_ticks_ws_sync)
 
