@@ -3392,7 +3392,7 @@
           width:100%;max-width:760px;">
 
         <!-- Header -->
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px;gap:10px;flex-wrap:wrap;">
           <div>
             <div style="font-size:1.05rem;font-weight:bold;color:#a5b4fc;letter-spacing:1px;">
               🎰 DIGIT BARRIER 356
@@ -3401,10 +3401,36 @@
               SCANNER MULTI-ATIVO × MULTI-BARREIRA — EDC POWERED
             </div>
           </div>
+          <!-- Mini painel de banca (espelha o header principal) -->
+          <div id="dbs-banca-mini" style="
+              display:flex;gap:6px;flex-wrap:wrap;align-items:center;
+              background:rgba(0,0,0,0.4);border:1px solid rgba(99,102,241,0.3);
+              border-radius:6px;padding:6px 10px;font-size:0.65rem;
+              font-family:'Share Tech Mono',monospace;">
+            <span style="color:#6b7280;letter-spacing:1px;margin-right:2px;">MAIN</span>
+            <span style="background:rgba(0,255,136,0.08);border:1px solid rgba(0,255,136,0.25);border-radius:4px;padding:3px 7px;color:#00ff88;">
+              💰 <span id="dbs-banca-saldo">--</span>
+            </span>
+            <span id="dbs-banca-profit-box" style="background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.3);border-radius:4px;padding:3px 7px;color:#a5b4fc;">
+              📈 <span id="dbs-banca-profit">$0.00</span> <span id="dbs-banca-profit-brl" style="font-size:0.6rem;opacity:0.7;">(R$0,00)</span>
+            </span>
+            <span style="background:rgba(0,255,136,0.06);border:1px solid rgba(0,255,136,0.2);border-radius:4px;padding:3px 7px;color:#00ff88;">
+              ✅ <span id="dbs-banca-wins">0</span>
+            </span>
+            <span style="background:rgba(248,113,113,0.06);border:1px solid rgba(248,113,113,0.2);border-radius:4px;padding:3px 7px;color:#f87171;">
+              🔁 <span id="dbs-banca-losses">0</span>
+            </span>
+            <span style="background:rgba(251,191,36,0.06);border:1px solid rgba(251,191,36,0.2);border-radius:4px;padding:3px 7px;">
+              🎯 <span id="dbs-banca-taxa" style="color:#fbbf24;font-weight:bold;">--%</span>
+            </span>
+            <span style="background:rgba(0,255,255,0.05);border:1px solid rgba(0,255,255,0.2);border-radius:4px;padding:3px 7px;color:#0ff;">
+              ⚡ <span id="dbs-banca-stake">$--</span>
+            </span>
+          </div>
           <button onclick="dbsFecharModal()" style="
               background:none;border:1px solid rgba(255,68,68,0.4);
               border-radius:4px;color:#f87171;font-size:0.75rem;
-              padding:4px 10px;cursor:pointer;">✕ FECHAR</button>
+              padding:4px 10px;cursor:pointer;white-space:nowrap;">✕ FECHAR</button>
         </div>
 
         <!-- Estatísticas do scan -->
@@ -3447,6 +3473,19 @@
               border-radius:5px;color:#a5b4fc;font-size:0.82rem;
               font-family:'Share Tech Mono',monospace;cursor:not-allowed;
               letter-spacing:1px;opacity:0.5;">⚡ OPERAR COM TOP 1</button>
+        </div>
+
+        <!-- Log de operações DBS -->
+        <div style="margin-bottom:6px;font-size:0.62rem;color:#6b7280;letter-spacing:1px;display:flex;align-items:center;justify-content:space-between;">
+          <span>📋 HISTÓRICO DE OPERAÇÕES DBS</span>
+          <button onclick="dbsLimparLog()" style="background:none;border:1px solid rgba(255,68,68,0.25);border-radius:3px;color:#f87171;font-size:0.58rem;padding:2px 7px;cursor:pointer;">🗑 LIMPAR</button>
+        </div>
+        <div id="dbs-log" style="
+            max-height:80px;overflow-y:auto;margin-bottom:12px;
+            background:rgba(0,0,0,0.35);border:1px solid rgba(99,102,241,0.2);
+            border-radius:5px;padding:5px 8px;font-size:0.62rem;
+            font-family:'Share Tech Mono',monospace;color:#6b7280;">
+          <span style="color:#374151;">— Nenhuma operação registrada —</span>
         </div>
 
         <!-- Tabela de ranking -->
@@ -9596,6 +9635,14 @@ function initWebSocket(wssUrl) {
                     if (bot._seqLossAtual > bot._maxLossConsec) bot._maxLossConsec = bot._seqLossAtual;
                     const congeladoMsg = (bot.mgr._raCongelado) ? ' 🧊 CONGELADO' : '';
                     print(`🔁PERDEU | -$${Math.abs(profit).toFixed(2)} | Próxima entrada: $${bot.stake.toFixed(2)} | ${bot.mgr.status()}${congeladoMsg}`, "log-loss");
+                }
+                // ── DBS: atualiza resultado da última operação no log ─────────
+                if (bot._dbsUltimoPayload) {
+                    const _dbsP = bot._dbsUltimoPayload;
+                    _dbsP.resultado = won ? 'WIN' : 'LOSS';
+                    if (_dbsLog.length > 0) { _dbsLog[0].resultado = _dbsP.resultado; _dbsLog[0].cor = won ? '#00ff88' : '#f87171'; _dbsLog[0].ico = won ? '✅' : '❌'; }
+                    _dbsRenderLog();
+                    bot._dbsUltimoPayload = null;
                 }
                 // Atualiza banca imediatamente com estimativa (saldo anterior + lucro do trade)
                 // if (bot._lastBalance !== undefined) bot._lastBalance += profit;
@@ -19446,6 +19493,74 @@ let _dbsMatrixRAF   = null;
 let _dbsMatrixDrops = null;
 let _dbsScanning    = false;
 
+// ── Sincroniza mini painel de banca com o header principal ───────────────────
+function dbsSincronizarBanca() {
+    const get = id => document.getElementById(id)?.textContent || '--';
+    const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+
+    set('dbs-banca-saldo',      get('hd-balance'));
+    set('dbs-banca-profit',     get('hd-profit'));
+    set('dbs-banca-profit-brl', get('hd-profit-brl'));
+    set('dbs-banca-wins',       get('hd-wins'));
+    set('dbs-banca-losses',     get('hd-losses'));
+    set('dbs-banca-stake',      get('hd-nextstake'));
+
+    // Taxa com cor dinâmica
+    const taxaVal = get('hd-taxa');
+    const taxaEl  = document.getElementById('dbs-banca-taxa');
+    if (taxaEl) {
+        taxaEl.textContent = taxaVal;
+        const n = parseFloat(taxaVal);
+        taxaEl.style.color = n >= 60 ? '#00ff88' : n >= 45 ? '#fbbf24' : '#f87171';
+    }
+
+    // Cor do profit (verde/vermelho)
+    const profitEl  = document.getElementById('dbs-banca-profit');
+    const profitBox = document.getElementById('dbs-banca-profit-box');
+    if (profitEl && profitBox) {
+        const p = parseFloat(get('hd-profit').replace('$','').replace('+',''));
+        profitEl.style.color = p >= 0 ? '#00ff88' : '#f87171';
+        profitBox.style.borderColor = p >= 0 ? 'rgba(0,255,136,0.3)' : 'rgba(248,113,113,0.3)';
+    }
+}
+
+// ── Log de operações DBS ──────────────────────────────────────────────────────
+let _dbsLog = [];
+
+function dbsRegistrarLog(entry) {
+    const ts  = new Date().toLocaleTimeString('pt-BR');
+    const cor = entry.resultado === 'WIN' ? '#00ff88' : entry.resultado === 'LOSS' ? '#f87171' : '#fbbf24';
+    const ico = entry.resultado === 'WIN' ? '✅' : entry.resultado === 'LOSS' ? '❌' : '⚡';
+    _dbsLog.unshift({ ts, ...entry, cor, ico });
+    if (_dbsLog.length > 30) _dbsLog.pop();
+    _dbsRenderLog();
+}
+
+function _dbsRenderLog() {
+    const el = document.getElementById('dbs-log');
+    if (!el) return;
+    if (_dbsLog.length === 0) {
+        el.innerHTML = '<span style="color:#374151;">— Nenhuma operação registrada —</span>';
+        return;
+    }
+    el.innerHTML = _dbsLog.map(e =>
+        `<div style="border-bottom:1px solid rgba(255,255,255,0.04);padding:2px 0;display:flex;gap:8px;align-items:center;">
+          <span style="color:#4b5563;flex-shrink:0;">${e.ts}</span>
+          <span style="color:${e.cor};flex-shrink:0;">${e.ico}</span>
+          <span style="color:#a5b4fc;flex-shrink:0;">${e.tipo || '—'}</span>
+          <span style="color:#fbbf24;flex-shrink:0;">B:${e.barreira || '—'}</span>
+          <span style="color:#00ff88;flex-shrink:0;">${e.ativo || '—'}</span>
+          <span style="color:#6b7280;flex-shrink:0;">Conf:${e.confianca || '—'}%</span>
+          ${e.resultado ? `<span style="color:${e.cor};margin-left:auto;">${e.resultado}</span>` : ''}
+        </div>`
+    ).join('');
+}
+
+function dbsLimparLog() {
+    _dbsLog = [];
+    _dbsRenderLog();
+}
+
 // ── Função de compra direta pelo DBS (executa via WebSocket igual ao buy()) ──
 bot.operarComSinal = function(payload) {
     if (!bot.ws || bot.ws.readyState !== WebSocket.OPEN) {
@@ -19478,6 +19593,10 @@ bot.operarComSinal = function(payload) {
     _secEspelhar(proposal);
     bot.ws.send(json(proposal));
     print(`⚡ DBS → <b>${payload.tipo_contrato}</b> barreira=<b>${payload.barreira}</b> | ativo=<b>${payload.ativo}</b> | stake=$${stake} | origem=${payload.origem || 'DBS356'}`, 'log-info');
+
+    // Registra entrada no log do DBS
+    bot._dbsUltimoPayload = { tipo: payload.tipo_contrato, barreira: payload.barreira, ativo: payload.ativo, confianca: payload.confianca || _dbsTop1?.confianca || '—' };
+    dbsRegistrarLog({ tipo: payload.tipo_contrato, barreira: payload.barreira, ativo: payload.ativo, confianca: payload.confianca || _dbsTop1?.confianca || '—' });
 };
 
 function dbsAbrirModal() {
@@ -19485,6 +19604,20 @@ function dbsAbrirModal() {
     if (!m) return;
     m.style.display = 'flex';
     _dbsIniciarMatrix();
+    dbsSincronizarBanca();
+    // Atualiza banca a cada 2s enquanto o modal estiver aberto
+    if (!window._dbsBancaTimer) {
+        window._dbsBancaTimer = setInterval(() => {
+            const modal = document.getElementById('dbs-modal');
+            if (!modal || modal.style.display === 'none') {
+                clearInterval(window._dbsBancaTimer);
+                window._dbsBancaTimer = null;
+                return;
+            }
+            dbsSincronizarBanca();
+        }, 2000);
+    }
+    _dbsRenderLog();
     dbsScan();
 }
 
@@ -19494,6 +19627,10 @@ function dbsFecharModal() {
     _dbsPararMatrix();
     clearInterval(_dbsAutoTimer);
     _dbsAutoTimer = null;
+    if (window._dbsBancaTimer) {
+        clearInterval(window._dbsBancaTimer);
+        window._dbsBancaTimer = null;
+    }
 }
 
 // ── Matrix background (índigo) ────────────────────────────────────────────────
