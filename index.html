@@ -3511,7 +3511,7 @@
         </div>
 
         <!-- Log e controle -->
-        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px;">
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
           <button id="dbs-btn-scan" onclick="dbsScan()" style="
               flex:1;min-width:120px;padding:9px;
               background:rgba(99,102,241,0.15);border:1px solid #6366f1;
@@ -3522,10 +3522,24 @@
             <input type="checkbox" id="dbs-auto-scan" style="accent-color:#6366f1;width:13px;height:13px;">
             Auto-scan (30s)
           </label>
-          <label style="display:flex;align-items:center;gap:6px;font-size:0.68rem;color:#00ff88;cursor:pointer;" title="Entra automaticamente quando um combo for aprovado (confiança ≥ 82%)">
+          <label style="display:flex;align-items:center;gap:6px;font-size:0.68rem;color:#00ff88;cursor:pointer;" title="Entra automaticamente quando um combo aprovado pelo EDC aparecer">
             <input type="checkbox" id="dbs-auto-operar" style="accent-color:#00ff88;width:13px;height:13px;">
             ⚡ Auto-operar
           </label>
+        </div>
+        <!-- Controle de threshold EDC -->
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;
+            background:rgba(0,0,0,0.3);border:1px solid rgba(99,102,241,0.2);
+            border-radius:5px;padding:6px 10px;flex-wrap:wrap;">
+          <span style="font-size:0.62rem;color:#6b7280;letter-spacing:1px;white-space:nowrap;">⚙️ THRESHOLD EDC:</span>
+          <input type="range" id="dbs-threshold-slider" min="50" max="95" value="75" step="1"
+              oninput="dbsThresholdAtualizar(this.value)"
+              style="flex:1;min-width:100px;accent-color:#6366f1;cursor:pointer;">
+          <span id="dbs-threshold-val" style="font-size:0.75rem;color:#a5b4fc;font-weight:bold;min-width:32px;text-align:center;">75%</span>
+          <button onclick="dbsThresholdSalvar()" style="
+              background:rgba(99,102,241,0.2);border:1px solid #6366f1;
+              border-radius:4px;color:#a5b4fc;font-size:0.62rem;
+              padding:3px 8px;cursor:pointer;white-space:nowrap;">💾 SALVAR</button>
         </div>
         <div id="dbs-status" style="
             font-size:0.68rem;color:#6b7280;min-height:22px;
@@ -19600,11 +19614,48 @@ bot.operarComSinal = function(payload) {
     dbsRegistrarLog({ tipo: payload.tipo_contrato, barreira: payload.barreira, ativo: payload.ativo, confianca: payload.confianca || _dbsTop1?.confianca || '—' });
 };
 
+// ── Controle de Threshold EDC ─────────────────────────────────────────────────
+function dbsThresholdAtualizar(val) {
+    const el = document.getElementById('dbs-threshold-val');
+    if (el) el.textContent = val + '%';
+}
+
+function dbsThresholdSalvar() {
+    const slider = document.getElementById('dbs-threshold-slider');
+    const val = slider ? parseInt(slider.value) : 75;
+    fetch('/dbs/threshold', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ threshold: val })
+    }).then(r => r.json()).then(d => {
+        const st = document.getElementById('dbs-status');
+        if (d.ok) {
+            if (st) st.textContent = `✅ Threshold EDC salvo: ${d.threshold}% — escaneando novamente…`;
+            dbsScan();
+        } else {
+            if (st) st.textContent = '❌ Erro ao salvar threshold: ' + (d.erro || '');
+        }
+    }).catch(() => {});
+}
+
+function _dbsCarregarThreshold() {
+    fetch('/dbs/threshold')
+        .then(r => r.json())
+        .then(d => {
+            if (!d.ok) return;
+            const slider = document.getElementById('dbs-threshold-slider');
+            const val    = document.getElementById('dbs-threshold-val');
+            if (slider) slider.value = d.threshold;
+            if (val)    val.textContent = d.threshold + '%';
+        }).catch(() => {});
+}
+
 function dbsAbrirModal() {
     const m = document.getElementById('dbs-modal');
     if (!m) return;
     m.style.display = 'flex';
     _dbsIniciarMatrix();
+    _dbsCarregarThreshold();
     dbsSincronizarBanca();
     // Atualiza banca a cada 2s enquanto o modal estiver aberto
     if (!window._dbsBancaTimer) {

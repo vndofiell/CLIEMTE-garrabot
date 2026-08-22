@@ -2418,7 +2418,7 @@ class DecisionSupervisor:
         "volume":      0.10,
         "fluxo":       0.10,
     }
-    THRESHOLD_PADRAO = 82  # confiança mínima para OPERAR
+    THRESHOLD_PADRAO = 75  # confiança mínima para OPERAR
 
     def __init__(self, threshold: int = THRESHOLD_PADRAO):
         self.threshold = threshold
@@ -2464,13 +2464,13 @@ class DecisionSupervisor:
         ativo      = ctx.get("ativo", "")
 
         if not os.path.exists(MEMORY_FILE):
-            return 60  # sem histórico → nota neutra
+            return 75  # sem histórico → nota neutra alta (não penaliza estratégias novas)
 
         try:
             with open(MEMORY_FILE, "r", encoding="utf-8") as f:
                 memoria = json.load(f)
         except Exception:
-            return 60
+            return 75
 
         # Filtra por estratégia (e opcionalmente por ativo)
         relevantes = [
@@ -2478,9 +2478,9 @@ class DecisionSupervisor:
             if e.get("estrategia") == estrategia
             and (not ativo or e.get("contexto") == ativo)
         ]
-        if len(relevantes) < 3:
-            # Menos de 3 amostras → sem dados suficientes, nota neutra
-            return 60
+        if len(relevantes) < 5:
+            # Menos de 5 amostras → sem dados suficientes, nota neutra alta
+            return 75
 
         wins = sum(1 for e in relevantes if e.get("resultado") == "WIN")
         taxa = wins / len(relevantes)
@@ -10707,6 +10707,26 @@ def ia_digit_barrier_356():
         "ranking": resultados,
         "top1":    top1,
     })
+
+
+@app.route('/dbs/threshold', methods=['GET', 'POST'])
+def dbs_threshold():
+    """Lê ou ajusta o threshold do DecisionSupervisor em tempo real."""
+    if request.method == 'GET':
+        return jsonify({"ok": True, "threshold": _supervisor.threshold})
+    dados = request.get_json(force=True, silent=True) or {}
+    novo = dados.get("threshold")
+    if novo is None or not (50 <= int(novo) <= 99):
+        return jsonify({"ok": False, "erro": "threshold deve ser entre 50 e 99"}), 400
+    _supervisor.threshold = int(novo)
+    # Persiste no ect_state.json
+    try:
+        st = _ect_state_ler()
+        st["threshold_supervisor"] = _supervisor.threshold
+        _ect_state_salvar(st)
+    except Exception:
+        pass
+    return jsonify({"ok": True, "threshold": _supervisor.threshold})
 
 
 # ── Digit Sniper PRO ────────────────────────────────────────────────────────
