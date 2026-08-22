@@ -3501,6 +3501,7 @@
                 <th style="text-align:left;padding:5px 6px;">CONTRATO</th>
                 <th style="text-align:center;padding:5px 6px;">BARR.</th>
                 <th style="text-align:right;padding:5px 6px;">CONF.</th>
+                <th style="text-align:center;padding:5px 6px;">FLUXO</th>
                 <th style="text-align:center;padding:5px 6px;">STATUS</th>
                 <th style="text-align:center;padding:5px 6px;">TICKS</th>
               </tr>
@@ -19679,7 +19680,15 @@ function dbsScan() {
     const ultimosPrecos  = (typeof bot !== 'undefined' && bot._tickPrices)    ? bot._tickPrices.slice(-60)    : [];
     const banca          = (typeof bot !== 'undefined' && typeof bot.banca !== 'undefined') ? bot.banca : 1000;
     const galeNivel      = (typeof bot !== 'undefined' && typeof bot.galeNivel !== 'undefined') ? bot.galeNivel : 0;
-    const ativo          = (typeof bot !== 'undefined' && bot.ativo) ? bot.ativo : 'R_100';
+
+    // Ativo: usa o select da UI como fonte primária
+    const _selectAtivo = document.getElementById('ativo') || document.getElementById('select-ativo') || document.querySelector('select[id*="ativo"]');
+    const ativo = (_selectAtivo && _selectAtivo.value) ? _selectAtivo.value.toUpperCase()
+                : (typeof bot !== 'undefined' && bot.ativo) ? bot.ativo
+                : 'R_100';
+
+    // Fluxo direcional — envia o que o bot calculou via slope dos ticks
+    const fluxoMercado = (typeof bot !== 'undefined' && bot._fluxoDir) ? bot._fluxoDir : 'NEUTRO';
 
     fetch('/ia/digit-barrier-356', {
         method: 'POST',
@@ -19690,6 +19699,7 @@ function dbsScan() {
             banca:           banca,
             gale_nivel:      galeNivel,
             ativo:           ativo,
+            fluxo_mercado:   fluxoMercado,
         })
     })
     .then(r => r.json())
@@ -19782,6 +19792,11 @@ function _dbsRenderizar(data) {
         const confClr = r.confianca >= 82 ? '#00ff88' : r.confianca >= 70 ? '#fbbf24' : '#f87171';
         const verdClr = isOp ? '#00ff88' : '#f87171';
         const rowBg   = isTop ? 'rgba(99,102,241,0.1)' : (i % 2 === 0 ? 'rgba(255,255,255,0.02)' : 'transparent');
+        const fluxo   = r.fluxo || '—';
+        const fluxoIco = fluxo === 'CALL' ? '↑' : fluxo === 'PUT' ? '↓' : '→';
+        const fluxoClr = fluxo === 'CALL' ? '#00ff88' : fluxo === 'PUT' ? '#f87171' : '#6b7280';
+        // Destaca se o fluxo é CONTRÁRIO ao contrato (bloqueio duro)
+        const fluxoBloq = (fluxo === 'PUT' && r.tipo === 'DIGITOVER') || (fluxo === 'CALL' && r.tipo === 'DIGITUNDER');
         tbody.innerHTML += `
         <tr style="background:${rowBg};border-bottom:1px solid rgba(255,255,255,0.04);">
           <td style="padding:5px 6px;color:#6b7280;">${i + 1}${isTop ? ' 🏆' : ''}</td>
@@ -19789,6 +19804,7 @@ function _dbsRenderizar(data) {
           <td style="padding:5px 6px;color:#a5b4fc;">${r.tipo}</td>
           <td style="padding:5px 6px;text-align:center;color:#fbbf24;">${r.barreira}</td>
           <td style="padding:5px 6px;text-align:right;color:${confClr};font-weight:bold;">${r.confianca}%</td>
+          <td style="padding:5px 6px;text-align:center;color:${fluxoBloq ? '#f87171' : fluxoClr};font-weight:bold;">${fluxoIco} ${fluxo}</td>
           <td style="padding:5px 6px;text-align:center;color:${verdClr};font-size:0.62rem;">${r.veredicto}</td>
           <td style="padding:5px 6px;text-align:center;color:#6b7280;">${r.n_ticks || '—'}</td>
         </tr>`;

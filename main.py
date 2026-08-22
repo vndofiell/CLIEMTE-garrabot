@@ -10579,10 +10579,13 @@ def ia_digit_barrier_356():
     banca                 = float(dados.get("banca", 1000))
     gale_nivel            = int(dados.get("gale_nivel", 0))
     ativo_atual           = dados.get("ativo", "R_100").upper()
+    # Fluxo enviado pelo frontend (calculado pelo slope dos ticks do bot)
+    fluxo_frontend        = dados.get("fluxo_mercado", "").upper()  # CALL | PUT | NEUTRO | ""
 
     ATIVOS     = ["R_10", "R_25", "R_50", "R_75", "R_100"]
     BARREIRAS  = [3, 5, 6]
     TIPOS      = ["DIGITUNDER", "DIGITOVER"]
+    SLOPE_MIN  = 0.00015  # mesmo limiar do RegimoDetector
 
     resultados = []
     lock       = threading.Lock()
@@ -10590,6 +10593,24 @@ def ia_digit_barrier_356():
     # Cache de ticks por ativo (evita buscar o mesmo ativo 6x)
     ticks_cache = {}
     cache_lock  = threading.Lock()
+
+    def _calcular_fluxo(precos: list) -> str:
+        """Calcula o fluxo direcional (CALL/PUT/NEUTRO) via regressão linear simples."""
+        n = len(precos)
+        if n < 10:
+            return "NEUTRO"
+        xm = (n - 1) / 2.0
+        med = sum(precos) / n
+        num = sum((i - xm) * (precos[i] - med) for i in range(n))
+        den = sum((i - xm) ** 2 for i in range(n))
+        if den == 0:
+            return "NEUTRO"
+        slope = num / den
+        if slope > SLOPE_MIN:
+            return "CALL"
+        elif slope < -SLOPE_MIN:
+            return "PUT"
+        return "NEUTRO"
 
     def _obter_ticks(ativo):
         with cache_lock:
@@ -10609,6 +10630,13 @@ def ia_digit_barrier_356():
     def _avaliar_combo(ativo, tipo, barreira):
         try:
             precos, digitos = _obter_ticks(ativo)
+
+            # Fluxo: usa o do frontend se for o ativo atual, senão calcula pelos ticks do ativo
+            if ativo == ativo_atual and fluxo_frontend in ("CALL", "PUT", "NEUTRO"):
+                fluxo = fluxo_frontend
+            else:
+                fluxo = _calcular_fluxo(precos)
+
             ctx = {
                 "tipo_contrato":   tipo,
                 "barreira":        barreira,
@@ -10617,6 +10645,7 @@ def ia_digit_barrier_356():
                 "ultimos_precos":  precos,
                 "banca":           banca,
                 "gale_nivel":      gale_nivel,
+                "fluxo_mercado":   fluxo,
                 "nome":            f"{tipo}-{barreira}@{ativo}",
             }
             rel = _supervisor.avaliar(ctx)
@@ -10629,6 +10658,7 @@ def ia_digit_barrier_356():
                 "notas":      rel["notas"],
                 "motivo":     rel["motivo"],
                 "n_ticks":    len(digitos),
+                "fluxo":      fluxo,
             }
         except Exception as exc:
             entrada = {
@@ -10640,6 +10670,7 @@ def ia_digit_barrier_356():
                 "notas":     {},
                 "motivo":    str(exc),
                 "n_ticks":   0,
+                "fluxo":     "?",
             }
         with lock:
             resultados.append(entrada)
