@@ -2418,7 +2418,7 @@ class DecisionSupervisor:
         "volume":      0.10,
         "fluxo":       0.10,
     }
-    THRESHOLD_PADRAO = 75  # confiança mínima para OPERAR
+    THRESHOLD_PADRAO = 72  # confiança mínima para OPERAR
 
     def __init__(self, threshold: int = THRESHOLD_PADRAO):
         self.threshold = threshold
@@ -4451,13 +4451,14 @@ def ai_post_mortem():
             log_correcoes.append({"nome": nome_alvo, "campo": campo, "status": f"ERRO: {ex}"})
 
     # ── Ajusta threshold do Conselho se WR crítico ────────
+    # Limite máximo: 80% — acima disso o scanner nunca opera
     threshold_ajustado = None
     avaliacao = relatorio_json.get("avaliacao_geral", "BOA")
-    if avaliacao == "CRITICA" and _supervisor.threshold < 90:
-        _supervisor.threshold = min(_supervisor.threshold + 5, 95)
+    if avaliacao == "CRITICA" and _supervisor.threshold < 80:
+        _supervisor.threshold = min(_supervisor.threshold + 3, 80)
         threshold_ajustado = _supervisor.threshold
-    elif avaliacao == "EXCELENTE" and _supervisor.threshold > 82:
-        _supervisor.threshold = max(_supervisor.threshold - 3, 82)
+    elif avaliacao == "EXCELENTE" and _supervisor.threshold > 72:
+        _supervisor.threshold = max(_supervisor.threshold - 2, 72)
         threshold_ajustado = _supervisor.threshold
 
     # Persiste o threshold ajustado no ect_state.json (sobrevive a reinicializações)

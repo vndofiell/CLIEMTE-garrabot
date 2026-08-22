@@ -3398,16 +3398,16 @@
             <div style="font-size:0.58rem;color:#6366f1;letter-spacing:2px;margin-top:1px;">SCANNER MULTI-ATIVO × MULTI-BARREIRA — EDC POWERED</div>
           </div>
           <!-- Mini painel de banca -->
-          <div id="dbs-banca-mini" style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;
+          <div id="dbs-banca-mini" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;
               background:rgba(0,0,0,0.4);border:1px solid rgba(99,102,241,0.3);
-              border-radius:6px;padding:5px 9px;font-size:0.62rem;">
-            <span style="color:#6b7280;letter-spacing:1px;margin-right:2px;">MAIN</span>
-            <span style="background:rgba(0,255,136,0.08);border:1px solid rgba(0,255,136,0.25);border-radius:4px;padding:2px 6px;color:#00ff88;">💰 <span id="dbs-banca-saldo">--</span></span>
-            <span id="dbs-banca-profit-box" style="background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.3);border-radius:4px;padding:2px 6px;color:#a5b4fc;">📈 <span id="dbs-banca-profit">$0.00</span> <span id="dbs-banca-profit-brl" style="font-size:0.58rem;opacity:0.7;">(R$0,00)</span></span>
-            <span style="background:rgba(0,255,136,0.06);border:1px solid rgba(0,255,136,0.2);border-radius:4px;padding:2px 6px;color:#00ff88;">✅ <span id="dbs-banca-wins">0</span></span>
-            <span style="background:rgba(248,113,113,0.06);border:1px solid rgba(248,113,113,0.2);border-radius:4px;padding:2px 6px;color:#f87171;">🔁 <span id="dbs-banca-losses">0</span></span>
-            <span style="background:rgba(251,191,36,0.06);border:1px solid rgba(251,191,36,0.2);border-radius:4px;padding:2px 6px;">🎯 <span id="dbs-banca-taxa" style="color:#fbbf24;font-weight:bold;">--%</span></span>
-            <span style="background:rgba(0,255,255,0.05);border:1px solid rgba(0,255,255,0.2);border-radius:4px;padding:2px 6px;color:#0ff;">⚡ <span id="dbs-banca-stake">$--</span></span>
+              border-radius:6px;padding:6px 11px;font-size:0.78rem;font-weight:500;">
+            <span style="color:#6b7280;letter-spacing:1px;margin-right:2px;font-size:0.7rem;">MAIN</span>
+            <span style="background:rgba(0,255,136,0.08);border:1px solid rgba(0,255,136,0.25);border-radius:4px;padding:3px 8px;color:#00ff88;font-size:0.78rem;">💰 <span id="dbs-banca-saldo" style="font-weight:bold;">--</span></span>
+            <span id="dbs-banca-profit-box" style="background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.3);border-radius:4px;padding:3px 8px;color:#a5b4fc;font-size:0.78rem;">📈 <span id="dbs-banca-profit" style="font-weight:bold;">$0.00</span> <span id="dbs-banca-profit-brl" style="font-size:0.68rem;opacity:0.75;">(R$0,00)</span></span>
+            <span style="background:rgba(0,255,136,0.06);border:1px solid rgba(0,255,136,0.2);border-radius:4px;padding:3px 8px;color:#00ff88;font-size:0.78rem;">✅ <span id="dbs-banca-wins" style="font-weight:bold;">0</span></span>
+            <span style="background:rgba(248,113,113,0.06);border:1px solid rgba(248,113,113,0.2);border-radius:4px;padding:3px 8px;color:#f87171;font-size:0.78rem;">🔁 <span id="dbs-banca-losses" style="font-weight:bold;">0</span></span>
+            <span style="background:rgba(251,191,36,0.06);border:1px solid rgba(251,191,36,0.2);border-radius:4px;padding:3px 8px;font-size:0.78rem;">🎯 <span id="dbs-banca-taxa" style="color:#fbbf24;font-weight:bold;">--%</span></span>
+            <span style="background:rgba(0,255,255,0.05);border:1px solid rgba(0,255,255,0.2);border-radius:4px;padding:3px 8px;color:#0ff;font-size:0.78rem;">⚡ <span id="dbs-banca-stake" style="font-weight:bold;">$--</span></span>
           </div>
           <button onclick="dbsFecharModal()" style="background:none;border:1px solid rgba(255,68,68,0.4);border-radius:4px;color:#f87171;font-size:0.72rem;padding:4px 10px;cursor:pointer;white-space:nowrap;">✕ FECHAR</button>
         </div>
@@ -3535,10 +3535,10 @@
                 background:rgba(0,0,0,0.3);border:1px solid rgba(99,102,241,0.2);
                 border-radius:5px;padding:5px 9px;flex-wrap:wrap;">
               <span style="font-size:0.6rem;color:#6b7280;letter-spacing:1px;white-space:nowrap;">⚙️ THRESHOLD:</span>
-              <input type="range" id="dbs-threshold-slider" min="50" max="95" value="75" step="1"
+              <input type="range" id="dbs-threshold-slider" min="50" max="85" value="72" step="1"
                   oninput="dbsThresholdAtualizar(this.value)"
                   style="flex:1;min-width:80px;accent-color:#6366f1;cursor:pointer;">
-              <span id="dbs-threshold-val" style="font-size:0.72rem;color:#a5b4fc;font-weight:bold;min-width:30px;text-align:center;">75%</span>
+              <span id="dbs-threshold-val" style="font-size:0.72rem;color:#a5b4fc;font-weight:bold;min-width:30px;text-align:center;">72%</span>
               <button onclick="dbsThresholdSalvar()" style="background:rgba(99,102,241,0.2);border:1px solid #6366f1;
                   border-radius:4px;color:#a5b4fc;font-size:0.6rem;padding:3px 7px;cursor:pointer;white-space:nowrap;">💾 SALVAR</button>
             </div>
