@@ -3467,8 +3467,60 @@
             </div>
           </div>
           <div id="dbs-top1-motivo" style="font-size:0.62rem;color:#6b7280;margin-top:6px;line-height:1.5;">—</div>
+
+          <!-- ── Painel de Gerenciamento DBS ───────────────────────────── -->
+          <div style="margin-top:10px;border-top:1px solid rgba(99,102,241,0.2);padding-top:10px;">
+            <div style="font-size:0.58rem;color:#6366f1;letter-spacing:2px;margin-bottom:8px;">⚙️ GERENCIAMENTO DE BANCA</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;margin-bottom:8px;">
+              <div>
+                <div style="font-size:0.55rem;color:#6b7280;margin-bottom:3px;">ENTRADA ($)</div>
+                <input id="dbs-entrada" type="number" value="0.35" min="0.35" step="0.01"
+                    oninput="dbsOnMgrChange()"
+                    style="width:100%;background:#0d0f1a;border:1px solid rgba(99,102,241,0.4);
+                           color:#a5b4fc;font-family:'Share Tech Mono';font-size:0.72rem;
+                           padding:4px 6px;border-radius:4px;box-sizing:border-box;">
+              </div>
+              <div>
+                <div style="font-size:0.55rem;color:#6b7280;margin-bottom:3px;">STOP WIN ($)</div>
+                <input id="dbs-stopwin" type="number" value="10" min="0" step="0.1"
+                    style="width:100%;background:#0d0f1a;border:1px solid rgba(0,255,136,0.35);
+                           color:#00ff88;font-family:'Share Tech Mono';font-size:0.72rem;
+                           padding:4px 6px;border-radius:4px;box-sizing:border-box;">
+              </div>
+              <div>
+                <div style="font-size:0.55rem;color:#6b7280;margin-bottom:3px;">STOP LOSS ($)</div>
+                <input id="dbs-stoploss" type="number" value="20" min="0" step="0.1"
+                    style="width:100%;background:#0d0f1a;border:1px solid rgba(248,113,113,0.35);
+                           color:#f87171;font-family:'Share Tech Mono';font-size:0.72rem;
+                           padding:4px 6px;border-radius:4px;box-sizing:border-box;">
+              </div>
+            </div>
+            <div style="margin-bottom:8px;">
+              <div style="font-size:0.55rem;color:#6b7280;margin-bottom:3px;">GERENCIAMENTO</div>
+              <select id="dbs-mgr" onchange="dbsOnMgrChange()" style="width:100%;background:#0d0f1a;
+                  border:1px solid rgba(168,85,247,0.5);color:#c084fc;
+                  font-family:'Share Tech Mono';font-size:0.68rem;padding:5px 7px;border-radius:4px;">
+                <option value="flat">💰 Stake Fixa</option>
+                <option value="📐 MA-Adaptativo">📐 MA-Adaptativo</option>
+                <option value="🔄 Martingale">🔄 Martingale</option>
+                <option value="⚡ SorosGale">⚡ SorosGale</option>
+                <option value="📉 Loss Recovery">📉 Loss Recovery</option>
+                <option value="🛡️ Recovery Conservador">🛡️ Recovery Conservador</option>
+                <option value="📐 QSR">📐 QSR</option>
+                <option value="📊 Masaniello">📊 Masaniello</option>
+              </select>
+            </div>
+            <!-- Stats da sessão DBS -->
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
+              <div style="border:1px solid rgba(0,255,136,0.3);border-radius:4px;padding:2px 8px;font-size:0.65rem;color:#00ff88;">✅ <span id="dbs-mgr-wins">0</span></div>
+              <div style="border:1px solid rgba(248,113,113,0.3);border-radius:4px;padding:2px 8px;font-size:0.65rem;color:#f87171;">🔁 <span id="dbs-mgr-losses">0</span></div>
+              <div style="border:1px solid rgba(251,191,36,0.3);border-radius:4px;padding:2px 8px;font-size:0.65rem;color:#fbbf24;">💰 <span id="dbs-mgr-lucro">+$0.00</span></div>
+              <div style="border:1px solid rgba(168,85,247,0.3);border-radius:4px;padding:2px 8px;font-size:0.65rem;color:#c084fc;">⚡ <span id="dbs-mgr-prox">$--</span></div>
+            </div>
+          </div>
+
           <button id="dbs-btn-operar-top1" onclick="dbsOperarTop1()" disabled style="
-              margin-top:10px;width:100%;padding:9px;
+              margin-top:2px;width:100%;padding:9px;
               background:rgba(99,102,241,0.2);border:1px solid #6366f1;
               border-radius:5px;color:#a5b4fc;font-size:0.82rem;
               font-family:'Share Tech Mono',monospace;cursor:not-allowed;
@@ -9651,12 +9703,14 @@ function initWebSocket(wssUrl) {
                     const congeladoMsg = (bot.mgr._raCongelado) ? ' 🧊 CONGELADO' : '';
                     print(`🔁PERDEU | -$${Math.abs(profit).toFixed(2)} | Próxima entrada: $${bot.stake.toFixed(2)} | ${bot.mgr.status()}${congeladoMsg}`, "log-loss");
                 }
-                // ── DBS: atualiza resultado da última operação no log ─────────
+                // ── DBS: atualiza resultado da última operação no log + gerenciamento ──
                 if (bot._dbsUltimoPayload) {
                     const _dbsP = bot._dbsUltimoPayload;
                     _dbsP.resultado = won ? 'WIN' : 'LOSS';
                     if (_dbsLog.length > 0) { _dbsLog[0].resultado = _dbsP.resultado; _dbsLog[0].cor = won ? '#00ff88' : '#f87171'; _dbsLog[0].ico = won ? '✅' : '❌'; }
                     _dbsRenderLog();
+                    // Registra no gerenciador DBS para atualizar stake/stops
+                    if (typeof dbsMgrRegistrarResultado === 'function') dbsMgrRegistrarResultado(won, profit);
                     bot._dbsUltimoPayload = null;
                 }
                 // Atualiza banca imediatamente com estimativa (saldo anterior + lucro do trade)
@@ -19576,6 +19630,78 @@ function dbsLimparLog() {
     _dbsRenderLog();
 }
 
+// ── Gerenciamento DBS ─────────────────────────────────────────────────────────
+let _dbsMgr        = null;
+let _dbsMgrWins    = 0;
+let _dbsMgrLosses  = 0;
+let _dbsMgrLucro   = 0;
+let _dbsMaDiv      = 0;
+let _dbsMaAtivo    = false;
+
+function dbsOnMgrChange() {
+    const nome  = document.getElementById('dbs-mgr')?.value;
+    const stake = parseFloat(document.getElementById('dbs-entrada')?.value) || 0.35;
+    if (nome === '📐 MA-Adaptativo') {
+        _dbsMgr = null;
+        _dbsMaDiv = 0; _dbsMaAtivo = false;
+    } else {
+        _dbsMgr = (nome && nome !== 'flat' && typeof GerenciadorUnificado !== 'undefined')
+            ? new GerenciadorUnificado(nome, { stake }) : null;
+    }
+    dbsMgrAtualizarStats();
+}
+
+function dbsMgrGetStake() {
+    const nome      = document.getElementById('dbs-mgr')?.value;
+    const baseStake = parseFloat(document.getElementById('dbs-entrada')?.value) || 0.35;
+    if (nome === '📐 MA-Adaptativo') {
+        if (_dbsMaDiv <= 0.01) return baseStake;
+        const payout = 0.85;
+        return Math.max(baseStake, parseFloat(((_dbsMaDiv + baseStake) / payout).toFixed(2)));
+    }
+    return _dbsMgr ? _dbsMgr.getStake() : baseStake;
+}
+
+function dbsMgrRegistrarResultado(won, profit) {
+    const nome = document.getElementById('dbs-mgr')?.value;
+    if (nome === '📐 MA-Adaptativo') {
+        if (won) {
+            _dbsMaDiv = Math.max(0, parseFloat((_dbsMaDiv - Math.abs(profit)).toFixed(2)));
+            if (_dbsMaDiv < 0.02) { _dbsMaDiv = 0; _dbsMaAtivo = false; }
+        } else {
+            _dbsMaDiv = parseFloat((_dbsMaDiv + Math.abs(profit)).toFixed(2));
+            _dbsMaAtivo = true;
+        }
+    } else if (_dbsMgr) {
+        _dbsMgr.updateResult(won);
+    }
+    if (won) _dbsMgrWins++; else _dbsMgrLosses++;
+    _dbsMgrLucro = parseFloat((_dbsMgrLucro + profit).toFixed(2));
+    // Stop Win / Stop Loss
+    const sw = parseFloat(document.getElementById('dbs-stopwin')?.value)  || 9999;
+    const sl = parseFloat(document.getElementById('dbs-stoploss')?.value) || 9999;
+    const statusEl = document.getElementById('dbs-status');
+    if (_dbsMgrLucro >= sw) {
+        if (statusEl) statusEl.textContent = `🏆 STOP WIN atingido: +$${_dbsMgrLucro.toFixed(2)} — auto-operar pausado.`;
+        const autoChk = document.getElementById('dbs-auto-operar');
+        if (autoChk) autoChk.checked = false;
+    } else if (_dbsMgrLucro <= -Math.abs(sl)) {
+        if (statusEl) statusEl.textContent = `🛑 STOP LOSS atingido: $${_dbsMgrLucro.toFixed(2)} — auto-operar pausado.`;
+        const autoChk = document.getElementById('dbs-auto-operar');
+        if (autoChk) autoChk.checked = false;
+    }
+    dbsMgrAtualizarStats();
+}
+
+function dbsMgrAtualizarStats() {
+    const prox = dbsMgrGetStake();
+    const s = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
+    s('dbs-mgr-wins',   _dbsMgrWins);
+    s('dbs-mgr-losses', _dbsMgrLosses);
+    s('dbs-mgr-lucro',  (_dbsMgrLucro >= 0 ? '+' : '') + '$' + _dbsMgrLucro.toFixed(2));
+    s('dbs-mgr-prox',   '$' + prox.toFixed(2));
+}
+
 // ── Função de compra direta pelo DBS (executa via WebSocket igual ao buy()) ──
 bot.operarComSinal = function(payload) {
     if (!bot.ws || bot.ws.readyState !== WebSocket.OPEN) {
@@ -19586,8 +19712,9 @@ bot.operarComSinal = function(payload) {
         console.warn('[DBS] Bot já está em operação — aguardando.');
         return;
     }
-    const stake  = bot.mgr ? bot.mgr.getStake() : bot.stake;
-    bot.stake    = stake;
+    // Usa stake do gerenciador DBS se configurado, senão usa o do bot principal
+    const stake = dbsMgrGetStake();
+    bot.stake   = stake;
     const reqId  = Math.floor(Math.random() * 90000) + 10000;
     bot._pendingReqId = reqId;
     bot._buying  = true;
