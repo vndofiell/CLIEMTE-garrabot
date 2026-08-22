@@ -26,7 +26,7 @@ echo.
 :: ── [2/3] Deploy no Oracle ─────────────────────────────────────────────────
 echo  [2/3] Conectando no Oracle e atualizando servidor...
 echo.
-ssh -i "C:\Users\vando\Downloads\ssh-key-2026-07-26.key" -o StrictHostKeyChecking=no ubuntu@158.101.108.207 "cd ~/CLIEMTE-garrabot && git fetch origin && git reset --hard origin/main && pm2 restart garrabot && pm2 status"
+ssh -i "%~dp0ssh-key-2026-07-26.key" -o StrictHostKeyChecking=no ubuntu@158.101.108.207 "cd ~/CLIEMTE-garrabot && git fetch origin && git restore --source=origin/main --staged --worktree $(git ls-files) && pm2 restart garrabot && pm2 status"
 echo.
 
 :: ── [3/3] Concluido ────────────────────────────────────────────────────────
