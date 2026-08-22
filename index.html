@@ -18362,20 +18362,26 @@ function _ltsBip(freq, dur) {
     } catch(e) {}
 }
 
-// ── Fila sequencial de captura — 10 ticks novos, um por um ──────────────────
-// Cada rodada começa do zero: captura os próximos 10 ticks na ordem exata
-// que saem da corretora, colocando cada número no lugar seguinte da fila.
-let _ltsFila       = [];   // ticks capturados nesta rodada (máx 10)
-let _ltsCapturando = false; // true = aguardando novos ticks para preencher a fila
-let _ltsFilaResolve = null; // resolve da Promise que aguarda 10 ticks
+// ── Marcador de presença 0–9 ─────────────────────────────────────────────────
+// 10 slots FIXOS representando os dígitos 0,1,2,3,4,5,6,7,8,9.
+// Monitora os ticks em tempo real: quando cada dígito aparece pela 1ª vez,
+// o slot acende e registra a ordem de aparecimento.
+// Quando todos 10 apareceram → usa essa ordem para o Quick Sort.
+let _ltsSlotsVisto    = new Array(10).fill(false); // slot[d]=true se dígito d já apareceu
+let _ltsOrdemSaida    = [];    // ordem em que cada dígito apareceu (ex: [3,7,1,0,...])
+let _ltsCapturando    = false;
+let _ltsFilaResolve   = null;
+let _ltsUltimoAceso   = -1;   // último dígito que acendeu (para animar)
 
 function _ltsIniciarCaptura() {
-    _ltsFila       = [];
-    _ltsCapturando = true;
+    _ltsSlotsVisto  = new Array(10).fill(false);
+    _ltsOrdemSaida  = [];
+    _ltsCapturando  = true;
+    _ltsUltimoAceso = -1;
     _ltsRenderGridFila();
     const stat = document.getElementById('lts-status');
-    if (stat) stat.textContent = `CAPTURANDO TICKS... 0 / 10`;
-    _ltsLogAnalise('📡 Iniciando captura de 10 novos ticks...', '#ff4fa3');
+    if (stat) stat.textContent = `MONITORANDO... 0 / 10 dígitos`;
+    _ltsLogAnalise('📡 Monitorando dígitos 0–9... aguardando todos aparecerem', '#ff4fa3');
     return new Promise(resolve => { _ltsFilaResolve = resolve; });
 }
 
@@ -18383,29 +18389,40 @@ function _ltsRenderGridFila() {
     const grid = document.getElementById('lts-digit-grid');
     const stat = document.getElementById('lts-status');
     if (!grid) return;
-    // Mostra os capturados + slots vazios até 10
-    const total = 10;
+    // 10 slots fixos: posição i = dígito i (0,1,2,...,9)
     let html = '';
-    for (let i = 0; i < total; i++) {
-        if (i < _ltsFila.length) {
-            // Dígito já capturado — último capturado fica rosa
-            const isLast = (i === _ltsFila.length - 1);
-            const borda  = isLast
-                ? 'border-color:#ff4fa3;box-shadow:0 0 8px rgba(255,79,163,0.6);color:#ff4fa3;'
-                : 'border-color:#30363d;color:#c9d1d9;';
-            html += `<div style="width:40px;height:50px;background:#161b22;border:1px solid;border-radius:6px;
-              display:flex;align-items:center;justify-content:center;font-size:1rem;font-weight:bold;
-              transition:all 0.15s;font-family:'Share Tech Mono',monospace;${borda}" class="lts-box">${_ltsFila[i]}</div>`;
+    for (let d = 0; d <= 9; d++) {
+        const visto   = _ltsSlotsVisto[d];
+        const isRecent = (d === _ltsUltimoAceso);
+        // Cor: verde se WIN (0-4), vermelho se LOSS (5-9), apagado se não visto
+        let estilo;
+        if (!visto) {
+            // Slot apagado — aguardando este dígito sair
+            estilo = 'background:#0d1117;border:1px dashed rgba(255,79,163,0.2);color:rgba(255,79,163,0.18);';
+        } else if (isRecent) {
+            // Último a acender — destaque rosa pulsante
+            estilo = 'background:rgba(255,79,163,0.18);border:2px solid #ff4fa3;box-shadow:0 0 10px rgba(255,79,163,0.7);color:#ff4fa3;';
+        } else if (d < 5) {
+            // WIN (0–4) — verde
+            estilo = 'background:rgba(0,255,65,0.12);border:1px solid rgba(0,255,65,0.55);color:#00ff41;';
         } else {
-            // Slot vazio — aguardando tick
-            html += `<div style="width:40px;height:50px;background:#0d1117;border:1px dashed rgba(255,79,163,0.25);border-radius:6px;
-              display:flex;align-items:center;justify-content:center;font-size:1rem;
-              color:rgba(255,79,163,0.2);font-family:'Share Tech Mono',monospace;" class="lts-box">·</div>`;
+            // LOSS (5–9) — vermelho
+            estilo = 'background:rgba(255,68,68,0.12);border:1px solid rgba(255,68,68,0.55);color:#ff4444;';
         }
+        // Número de ordem de aparecimento (pequeno, acima)
+        const ordemIdx = _ltsOrdemSaida.indexOf(d);
+        const ordemStr = visto ? `<div style="position:absolute;top:2px;right:4px;font-size:0.45rem;color:#555;">${ordemIdx+1}º</div>` : '';
+        html += `<div style="width:40px;height:50px;border-radius:6px;position:relative;
+          display:flex;align-items:center;justify-content:center;font-size:1rem;font-weight:bold;
+          transition:all 0.2s;font-family:'Share Tech Mono',monospace;${estilo}" class="lts-box">
+          ${ordemStr}${d}</div>`;
     }
     grid.innerHTML = html;
     if (stat && _ltsCapturando) {
-        stat.textContent = `CAPTURANDO TICKS... ${_ltsFila.length} / 10`;
+        const faltam = 10 - _ltsOrdemSaida.length;
+        stat.textContent = faltam > 0
+            ? `MONITORANDO... ${_ltsOrdemSaida.length} / 10 dígitos  (faltam: ${faltam})`
+            : `TODOS OS 10 DÍGITOS APARECERAM ✅`;
     }
 }
 
@@ -18473,30 +18490,46 @@ function _ltsRenderGrid(arr, statusTxt, ultimoIdx) {
     if (stat && statusTxt) { stat.textContent = statusTxt; }
 }
 
-// ── Hook chamado a cada tick — alimenta a fila sequencial ───────────────────
+// ── Hook chamado a cada tick — marcador de presença 0–9 ─────────────────────
 function _ltsOnNovoTick() {
     if (!_ltsAtivo) return;
     _ltsAtualizarHist();
 
-    // Só captura se estiver aguardando novos ticks
     if (!_ltsCapturando) return;
-    // Não captura se estiver no meio da animação de sort
     if (document.getElementById('lts-btn-analisar')?.textContent.includes('ANALISANDO')) return;
 
     const digito = (typeof bot !== 'undefined') ? bot._ultimoDigito : undefined;
     if (digito === undefined || digito === null) return;
 
-    _ltsFila.push(digito);
-    _ltsRenderGridFila();
+    // Só registra a 1ª vez que cada dígito aparece nesta rodada
+    if (!_ltsSlotsVisto[digito]) {
+        _ltsSlotsVisto[digito] = true;
+        _ltsOrdemSaida.push(digito);
+        _ltsUltimoAceso = digito;
+        _ltsBip(500 + digito * 50, 0.06);
+        _ltsRenderGridFila();
 
-    if (_ltsFila.length >= 10) {
-        // Fila completa — para de capturar e resolve a Promise
-        _ltsCapturando = false;
-        const stat = document.getElementById('lts-status');
-        if (stat) stat.textContent = `10 TICKS CAPTURADOS ✅ — ORDENANDO...`;
-        _ltsLogAnalise(`✅ Fila completa: [${_ltsFila.join(', ')}]`, '#ff4fa3');
-        if (_ltsFilaResolve) { _ltsFilaResolve(_ltsFila.slice()); _ltsFilaResolve = null; }
+        const faltam = 10 - _ltsOrdemSaida.length;
+        if (faltam > 0) {
+            _ltsLogAnalise(
+                `🎯 Dígito <b style="color:#ff4fa3">${digito}</b> apareceu (${_ltsOrdemSaida.length}º) — faltam ${faltam}`,
+                '#888'
+            );
+        }
+
+        if (_ltsOrdemSaida.length === 10) {
+            // Todos os 10 dígitos apareceram — completo!
+            _ltsCapturando = false;
+            _ltsUltimoAceso = -1;
+            _ltsRenderGridFila();
+            _ltsLogAnalise(
+                `✅ Todos apareceram! Ordem: [${_ltsOrdemSaida.join(', ')}]`,
+                '#ff4fa3'
+            );
+            if (_ltsFilaResolve) { _ltsFilaResolve(_ltsOrdemSaida.slice()); _ltsFilaResolve = null; }
+        }
     }
+    // Dígito repetido — só atualiza histograma (já feito acima), não faz nada no grid
 }
 
 // ── Logs ────────────────────────────────────────────────────────────────────
@@ -18749,7 +18782,9 @@ function ltsFechar() {
     // Cancela captura pendente
     _ltsCapturando  = false;
     _ltsFilaResolve = null;
-    _ltsFila        = [];
+    _ltsSlotsVisto  = new Array(10).fill(false);
+    _ltsOrdemSaida  = [];
+    _ltsUltimoAceso = -1;
     _ltsPararMatrix();
     // Remove hook de tick ao vivo
     if (typeof bot !== 'undefined') bot._ltsHook = null;
@@ -18794,10 +18829,12 @@ function ltsAbrirModal() {
     _ltsEspMaxWinConsec  = 0;
     _ltsEspMaxLossConsec = 0;
     _ltsEspMaxStake      = 0;
-    // Zera fila sequencial
-    _ltsFila        = [];
+    // Zera marcador de presença
+    _ltsSlotsVisto  = new Array(10).fill(false);
+    _ltsOrdemSaida  = [];
     _ltsCapturando  = false;
     _ltsFilaResolve = null;
+    _ltsUltimoAceso = -1;
 
     // Stop Win / Stop Loss da conta secundária
     _ltsStopWin  = (_mcConfig && _mcConfig.stopWin  > 0) ? _mcConfig.stopWin  : 999;
