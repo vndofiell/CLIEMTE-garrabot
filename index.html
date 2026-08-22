@@ -18906,12 +18906,26 @@ async function ltsExecutar() {
             return;
         }
 
-        // ── Captura sequencial: aguarda 10 novos ticks chegarem ─────────────
-        // _ltsIniciarCaptura() retorna uma Promise que resolve quando a fila tem 10
-        const listaOriginal = await _ltsIniciarCaptura();
-        if (!_ltsAtivo) return; // modal fechado durante captura
+        // ── Captura sequencial: aguarda os 9 dígitos aparecerem ─────────────
+        const _listaCapturada = await _ltsIniciarCaptura();
+        if (!_ltsAtivo) return;
+
+        // Guarda cópia IMUTÁVEL para análise — nunca passa por referência
+        const listaOriginal = _listaCapturada.slice();
 
         if (btnAn) { btnAn.disabled = true; btnAn.textContent = '⏳ ANALISANDO...'; }
+
+        // Mostra análise de volume ANTES do sort
+        const _preUnder  = listaOriginal.filter(v => v >= 1 && v <= 4).length;
+        const _preOver   = listaOriginal.filter(v => v >= 6 && v <= 9).length;
+        const _preNeutro = listaOriginal.filter(v => v === 5).length;
+        const _preLado   = _preUnder >= _preOver
+            ? `<b style="color:#00ff41">UNDER domina (${_preUnder} vs ${_preOver})</b>`
+            : `<b style="color:#ff4444">OVER domina (${_preOver} vs ${_preUnder})</b>`;
+        _ltsLogAnalise(
+            `📊 Volume capturado: [${listaOriginal.join(',')}] | ${_preLado} [${_preNeutro} neutros]`,
+            '#ccc'
+        );
 
         _ltsLogAnalise(
             `▶ Quick Sort sobre: [${listaOriginal.join(', ')}]`,
@@ -18951,16 +18965,7 @@ async function ltsExecutar() {
         _ltsLogAnalise(`✅ ${swaps} trocas · ${comparacoes} comparações`, '#ff4fa3');
         _ltsBip(1000, 0.3);
 
-        // ── Análise de volume UNDER vs OVER (barreira 5 em ambos os casos) ────
-        const _volUnder  = listaOriginal.filter(v => v >= 1 && v <= 4).length;
-        const _volOver   = listaOriginal.filter(v => v >= 6 && v <= 9).length;
-        const _volNeutro = listaOriginal.filter(v => v === 5).length;
-        const _ladoStr   = _volUnder >= _volOver
-            ? `<b style="color:#00ff41">UNDER domina (${_volUnder} vs ${_volOver}) [${_volNeutro} neutros]</b>`
-            : `<b style="color:#ff4444">OVER domina (${_volOver} vs ${_volUnder}) [${_volNeutro} neutros]</b>`;
-        _ltsLogAnalise(`📊 Volume: ${_ladoStr} → barreira 5`, '#ccc');
-
-        // Gera sinal baseado no volume dos 10 dígitos capturados
+        // ── Gera sinal baseado no volume — usa a lista ORIGINAL (imutável) ───
         _ltsSinalAtual = _ltsGerarSinal(listaOriginal);
         document.getElementById('lts-sinal-contrato').textContent = _ltsSinalAtual.contract_type;
         document.getElementById('lts-sinal-barreira').textContent = _ltsSinalAtual.barrier;
