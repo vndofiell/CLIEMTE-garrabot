@@ -18362,24 +18362,25 @@ function _ltsBip(freq, dur) {
     } catch(e) {}
 }
 
-// ── Marcador de presença 1–9 (dígito 0 excluído) ────────────────────────────
-// 9 slots FIXOS representando os dígitos 1,2,3,4,5,6,7,8,9.
-// Monitora os ticks em tempo real: quando cada dígito aparece pela 1ª vez,
-// o slot acende e registra a ordem de aparecimento.
-// Quando todos 9 apareceram → usa essa ordem para o Quick Sort.
-const _LTS_DIGITOS  = [1,2,3,4,5,6,7,8,9]; // dígitos monitorados (0 excluído)
+// ── Marcador de presença 1–9 + buffer de todos os ticks (com repetição) ─────
+// 9 slots FIXOS (1–9). Acende ao 1ª aparição. Completa quando todos 9 vieram.
+// _ltsTodosTicksBuf guarda TODOS os ticks recebidos (incluindo repetições)
+// para calcular o volume real UNDER vs OVER.
+const _LTS_DIGITOS  = [1,2,3,4,5,6,7,8,9];
 const _LTS_TOTAL    = _LTS_DIGITOS.length;  // 9
-let _ltsSlotsVisto  = {};   // { d: true } se dígito d já apareceu nesta rodada
-let _ltsOrdemSaida  = [];   // ordem de aparecimento (ex: [3,7,1,5,...])
+let _ltsSlotsVisto  = {};
+let _ltsOrdemSaida  = [];
+let _ltsTodosTicksBuf = []; // TODOS os ticks recebidos durante o monitoramento (com repetição, sem 0)
 let _ltsCapturando  = false;
 let _ltsFilaResolve = null;
 let _ltsUltimoAceso = -1;
 
 function _ltsIniciarCaptura() {
-    _ltsSlotsVisto  = {};
-    _ltsOrdemSaida  = [];
-    _ltsCapturando  = true;
-    _ltsUltimoAceso = -1;
+    _ltsSlotsVisto    = {};
+    _ltsOrdemSaida    = [];
+    _ltsTodosTicksBuf = [];
+    _ltsCapturando    = true;
+    _ltsUltimoAceso   = -1;
     _ltsRenderGridFila();
     const stat = document.getElementById('lts-status');
     if (stat) stat.textContent = `MONITORANDO... 0 / ${_LTS_TOTAL} dígitos`;
@@ -18502,7 +18503,10 @@ function _ltsOnNovoTick() {
     // Ignora o dígito 0
     if (digito === 0) return;
 
-    // Só registra a 1ª vez que cada dígito aparece nesta rodada
+    // Acumula TODOS os ticks no buffer (com repetição) para análise de volume real
+    _ltsTodosTicksBuf.push(digito);
+
+    // Marca 1ª aparição do dígito no slot (para acender o grid)
     if (!_ltsSlotsVisto[digito]) {
         _ltsSlotsVisto[digito] = true;
         _ltsOrdemSaida.push(digito);
@@ -18519,15 +18523,16 @@ function _ltsOnNovoTick() {
         }
 
         if (_ltsOrdemSaida.length === _LTS_TOTAL) {
-            // Todos os 9 dígitos (1–9) apareceram — completo!
+            // Todos os 9 slots acenderam — completo!
             _ltsCapturando = false;
             _ltsUltimoAceso = -1;
             _ltsRenderGridFila();
             _ltsLogAnalise(
-                `✅ Todos os 9 dígitos apareceram! Ordem: [${_ltsOrdemSaida.join(', ')}]`,
+                `✅ Todos os 9 dígitos apareceram! ${_ltsTodosTicksBuf.length} ticks acumulados`,
                 '#ff4fa3'
             );
-            if (_ltsFilaResolve) { _ltsFilaResolve(_ltsOrdemSaida.slice()); _ltsFilaResolve = null; }
+            // Resolve com o buffer COMPLETO (com repetições) para análise de volume
+            if (_ltsFilaResolve) { _ltsFilaResolve(_ltsTodosTicksBuf.slice()); _ltsFilaResolve = null; }
         }
     }
 }
@@ -18799,11 +18804,12 @@ function ltsFechar() {
     _ltsAutoOperar = false;
     _ltsAguardandoReconexao = false;
     // Cancela captura pendente
-    _ltsCapturando  = false;
-    _ltsFilaResolve = null;
-    _ltsSlotsVisto  = {};
-    _ltsOrdemSaida  = [];
-    _ltsUltimoAceso = -1;
+    _ltsCapturando    = false;
+    _ltsFilaResolve   = null;
+    _ltsSlotsVisto    = {};
+    _ltsOrdemSaida    = [];
+    _ltsTodosTicksBuf = [];
+    _ltsUltimoAceso   = -1;
     _ltsPararMatrix();
     // Remove hook de tick ao vivo
     if (typeof bot !== 'undefined') bot._ltsHook = null;
@@ -18849,11 +18855,12 @@ function ltsAbrirModal() {
     _ltsEspMaxLossConsec = 0;
     _ltsEspMaxStake      = 0;
     // Zera marcador de presença (1–9, sem o 0)
-    _ltsSlotsVisto  = {};
-    _ltsOrdemSaida  = [];
-    _ltsCapturando  = false;
-    _ltsFilaResolve = null;
-    _ltsUltimoAceso = -1;
+    _ltsSlotsVisto    = {};
+    _ltsOrdemSaida    = [];
+    _ltsTodosTicksBuf = [];
+    _ltsCapturando    = false;
+    _ltsFilaResolve   = null;
+    _ltsUltimoAceso   = -1;
 
     // Stop Win / Stop Loss da conta secundária
     _ltsStopWin  = (_mcConfig && _mcConfig.stopWin  > 0) ? _mcConfig.stopWin  : 999;
