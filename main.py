@@ -2551,11 +2551,11 @@ class DecisionSupervisor:
 
         return max(0, round(nota))
 
-    # ── Agente 5 — Filtro de Volume (Atividade de Mercado) ───────────────────
+    # ── Agente 5 — Atividade de Tick (amplitude de mercado) ─────────────────
     def _agente_volume(self, ctx: dict) -> int:
         """
-        Mede a força do movimento dos ticks (amplitude média).
-        Em índices sintéticos, 'volume' é a variação tick a tick do preço.
+        Mede a frequência/amplitude dos ticks como proxy de atividade.
+        Índices sintéticos não têm volume real — usamos a variação tick a tick.
         - Mercado parado (avg_move muito baixo) → nota baixa (ruim para Touch/Dupla)
         - Mercado com explosão (avg_move alto)  → nota 100
         - Mercado normal                        → nota 85 (neutro)
@@ -2676,7 +2676,7 @@ class DecisionSupervisor:
             f"📈 Scanner de momentum  : {n['scanner']}/100",
             f"🌡️ Volatilidade do ativo : {n['volatilidade']}/100",
             f"🏦 Segurança de banca   : {n['risco']}/100",
-            f"📊 Volume / Atividade   : {n.get('volume', '—')}/100",
+            f"📈 Atividade de Tick    : {n.get('volume', '—')}/100  (amplitude tick-a-tick)",
             f"{fluxo_icone} Fluxo direcional    : {fluxo_nota}/100",
             f"",
             relatorio["motivo"],

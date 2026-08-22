@@ -18634,36 +18634,38 @@ function ltsOnMgrChange() {
 }
 
 // ── Sinal — mesmo algoritmo do Cyber Sort mas sobre ticks reais ──────────────
-// ── Análise de volume UNDER/OVER sobre os 9 dígitos capturados (1–9) ─────────
-// Barreira SEMPRE = 5 (tanto UNDER quanto OVER).
-// UNDER 5 → aposta que o dígito final será < 5  (ganha com 1,2,3,4)
-// OVER  5 → aposta que o dígito final será > 5  (ganha com 6,7,8,9)
-// Conta dígitos 1–4 (UNDER) vs 6–9 (OVER). O 5 é neutro e não conta.
-// O lado com mais volume define o contrato. Empate → UNDER (conservador).
+// ── Análise de atividade de tick UNDER/OVER (1–9, sem o 0) ──────────────────
+// Nos índices sintéticos não existe volume real. O que medimos é a
+// FREQUÊNCIA DE APARIÇÃO de cada faixa de dígito durante o monitoramento.
+// Dígitos 1–4 → faixa UNDER | Dígito 5 → neutro | Dígitos 6–9 → faixa OVER
+// Barreira SEMPRE = 5.
 function _ltsGerarSinal(original) {
-    const under = original.filter(v => v >= 1 && v <= 4).length; // dígitos 1,2,3,4
-    const over  = original.filter(v => v >= 6 && v <= 9).length; // dígitos 6,7,8,9
-    const neutro = original.filter(v => v === 5).length;          // dígito 5 é neutro
+    const under  = original.filter(v => v >= 1 && v <= 4).length;
+    const over   = original.filter(v => v >= 6 && v <= 9).length;
+    const neutro = original.filter(v => v === 5).length;
     const total  = original.length;
 
-    // Confiança proporcional à diferença (50%–100%)
     const diff = Math.abs(under - over);
     const base = Math.max(total - neutro, 1);
     const conf = Math.round(50 + (diff / base) * 50);
+
+    // Nível de atividade textual
+    const pct    = Math.round(((Math.max(under, over)) / Math.max(base, 1)) * 100);
+    const nivel  = pct >= 65 ? 'ALTA' : pct >= 55 ? 'MÉDIA' : 'BAIXA';
 
     if (under >= over) {
         return {
             contract_type: 'DIGITUNDER',
             barrier: '5',
             conf,
-            desc: `📊 Volume: ${under} dígitos 1–4 (UNDER) vs ${over} dígitos 6–9 (OVER) [${neutro} neutros] → DIGITUNDER 5`
+            desc: `📈 ATIVIDADE TICK: ${nivel} | Faixa 1–4: ${under} ocorr. vs Faixa 6–9: ${over} ocorr. [${neutro} neutros] → DIGITUNDER 5`
         };
     } else {
         return {
             contract_type: 'DIGITOVER',
             barrier: '5',
             conf,
-            desc: `📊 Volume: ${over} dígitos 6–9 (OVER) vs ${under} dígitos 1–4 (UNDER) [${neutro} neutros] → DIGITOVER 5`
+            desc: `📈 ATIVIDADE TICK: ${nivel} | Faixa 6–9: ${over} ocorr. vs Faixa 1–4: ${under} ocorr. [${neutro} neutros] → DIGITOVER 5`
         };
     }
 }
@@ -18922,15 +18924,18 @@ async function ltsExecutar() {
 
         if (btnAn) { btnAn.disabled = true; btnAn.textContent = '⏳ ANALISANDO...'; }
 
-        // Mostra análise de volume ANTES do sort
+        // ── Atividade de tick ANTES do sort ───────────────────────────────────
         const _preUnder  = listaOriginal.filter(v => v >= 1 && v <= 4).length;
         const _preOver   = listaOriginal.filter(v => v >= 6 && v <= 9).length;
         const _preNeutro = listaOriginal.filter(v => v === 5).length;
+        const _preBase   = Math.max(listaOriginal.length - _preNeutro, 1);
+        const _prePct    = Math.round((Math.max(_preUnder, _preOver) / _preBase) * 100);
+        const _preNivel  = _prePct >= 65 ? 'ALTA' : _prePct >= 55 ? 'MÉDIA' : 'BAIXA';
         const _preLado   = _preUnder >= _preOver
-            ? `<b style="color:#00ff41">UNDER domina (${_preUnder} vs ${_preOver})</b>`
-            : `<b style="color:#ff4444">OVER domina (${_preOver} vs ${_preUnder})</b>`;
+            ? `<b style="color:#00ff41">Faixa 1–4 lidera (${_preUnder} vs ${_preOver})</b>`
+            : `<b style="color:#ff4444">Faixa 6–9 lidera (${_preOver} vs ${_preUnder})</b>`;
         _ltsLogAnalise(
-            `📊 Volume capturado: [${listaOriginal.join(',')}] | ${_preLado} [${_preNeutro} neutros]`,
+            `📈 ATIVIDADE TICK: <b style="color:#ff4fa3">${_preNivel}</b> (amplitude: ${_prePct}%) | ${_preLado} [${_preNeutro} neutros] | ${listaOriginal.length} ticks`,
             '#ccc'
         );
 
