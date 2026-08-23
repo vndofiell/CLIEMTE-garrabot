@@ -2470,15 +2470,17 @@ class Titan3Engine:
       - Usa "pressão de dígitos": % dos últimos 30 favoráveis ao contrato
     """
 
-    THRESHOLD_PADRAO = 85
-    # Consenso: divergência máxima entre janelas para não bloquear
-    MAX_DIVERGENCIA_CONSENSO = 15  # pontos percentuais entre janela curta e longa
+    THRESHOLD_PADRAO = 72
+    # Consenso: cada janela deve ter pelo menos este % de favoráveis
+    MIN_PCT_JANELA = 55.0   # abaixo de 55% em qualquer janela → bloquear
+    # Consenso: divergência máxima entre janelas curta e longa
+    MAX_DIVERGENCIA_CONSENSO = 20  # pp — acima disso o mercado está instável
     # Reversão: se janela_5 cair >= este valor vs. janela_30 → BLOQUEAR
-    LIMIAR_REVERSAO = 20
+    LIMIAR_REVERSAO = 25
     # Loss streak máximo antes de cooldown
     MAX_LOSS_STREAK = 2
-    # Ticks de cooldown após loss_streak atingido
-    COOLDOWN_TICKS = {1: 10, 2: 25, 3: 999}  # perdas → ticks de espera
+    # Ticks de cooldown após loss_streak atingido (em segundos)
+    COOLDOWN_TICKS = {2: 30, 3: 120, 4: 999}
     # Histórico mínimo para bloquear por win rate
     MIN_HISTORICO_BLOQUEIO = 20
     # Win rate mínimo no histórico do combo (abaixo → BLOQUEAR)
@@ -2681,7 +2683,13 @@ class Titan3Engine:
     def avaliar(self, ctx: dict) -> dict:
         """
         Executa o pipeline TITAN 3.0.
-        Retorna relatório completo com hard_blocks, consenso, veredicto e motivo.
+        Hard-blocks corretos para DIGITOVER/UNDER:
+        - AMOSTRA:   < 50 dígitos
+        - CONSENSO:  alguma janela < 55% favorável  OU  divergência > 20pp
+        - REVERSAO:  últimos 5T caíram ≥ 25pp vs 30T
+        - HISTORICO: win rate < 40% com ≥ 20 ops
+        - COOLDOWN:  2+ losses seguidos em cooldown
+        O threshold de 72% é aplicado ao EDC SCORE (não à freq. bruta de dígitos).
         """
         tipo     = ctx.get("tipo_contrato", "DIGITUNDER").upper()
         barreira = int(ctx.get("barreira", 5))
@@ -2692,34 +2700,44 @@ class Titan3Engine:
         stake    = float(ctx.get("stake_usd", ctx.get("stake", 0.35)))
         nivel_g  = int(ctx.get("nivel_gale", 0))
 
-        hard_blocks   = []   # lista de bloqueios ativos
-        motivos_bloco = []   # descrições legíveis
+        hard_blocks   = []
+        motivos_bloco = []
 
-        # ── 1. AMOSTRA MÍNIMA ────────────────────────────────────────────────
+        # ── 1. AMOSTRA MÍNIMA (50 dígitos) ──────────────────────────────────
         n_digitos = len(digitos)
         if n_digitos < 50:
             hard_blocks.append("AMOSTRA")
             motivos_bloco.append(f"Amostra insuficiente ({n_digitos}/50 dígitos)")
 
         # ── 2. CONSENSO TRIPLO ───────────────────────────────────────────────
+        # Regras corretas para contratos DIGIT (distribuição base ~60% para barr. 6):
+        #   a) Cada janela deve ter >= MIN_PCT_JANELA favoráveis
+        #   b) Divergência entre janelas <= MAX_DIVERGENCIA_CONSENSO pp
         cons = self._consenso(digitos, tipo, barreira)
-        if cons["divergencia"] > self.MAX_DIVERGENCIA_CONSENSO:
+
+        # a) Pressão mínima em todas as janelas
+        pcts = [cons["pct10"], cons["pct30"], cons["pct100"]]
+        min_pct = min(pcts)
+        if min_pct < self.MIN_PCT_JANELA:
+            hard_blocks.append("CONSENSO")
+            motivos_bloco.append(
+                f"Pressão insuficiente: janela mínima {min_pct}% < {self.MIN_PCT_JANELA}% "
+                f"(10T:{cons['pct10']}% | 30T:{cons['pct30']}% | 100T:{cons['pct100']}%)"
+            )
+        # b) Divergência entre janelas (instabilidade)
+        elif cons["divergencia"] > self.MAX_DIVERGENCIA_CONSENSO:
             hard_blocks.append("CONSENSO")
             motivos_bloco.append(
                 f"Divergência entre janelas: {cons['divergencia']}pp "
                 f"(10T:{cons['pct10']}% | 30T:{cons['pct30']}% | 100T:{cons['pct100']}%)"
             )
 
-        # ── 3. CONFIANÇA BRUTA (maior janela disponível) ──────────────────────
-        # Usamos pct100 como proxy de confiança bruta
-        confianca_bruta = cons["pct100"] if n_digitos >= 50 else cons["pct30"]
-        if confianca_bruta < self.threshold:
-            hard_blocks.append("THRESHOLD")
-            motivos_bloco.append(
-                f"Confiança bruta {confianca_bruta}% < threshold {self.threshold}%"
-            )
+        # confianca_bruta = média ponderada das janelas (informativo, não bloqueia diretamente)
+        confianca_bruta = round(
+            cons["pct10"] * 0.20 + cons["pct30"] * 0.35 + cons["pct100"] * 0.45, 1
+        )
 
-        # ── 4. REVERSÃO ──────────────────────────────────────────────────────
+        # ── 3. REVERSÃO ──────────────────────────────────────────────────────
         reversao = self._detectar_reversao(digitos, tipo, barreira)
         if reversao:
             hard_blocks.append("REVERSAO")
@@ -2729,7 +2747,7 @@ class Titan3Engine:
             p30 = round(self._pct_favoravel(j30, tipo, barreira) * 100, 1)
             motivos_bloco.append(f"Reversão detectada: últimos 5T={p5}% vs 30T={p30}%")
 
-        # ── 5. HISTÓRICO ESPECÍFICO DO COMBO ─────────────────────────────────
+        # ── 4. HISTÓRICO ESPECÍFICO DO COMBO ─────────────────────────────────
         nota_hist, n_hist, wr_hist, hist_bloqueado = self._nota_historico_combo(
             ativo, tipo, barreira
         )
@@ -2739,7 +2757,7 @@ class Titan3Engine:
                 f"Win rate histórico {wr_hist}% em {n_hist} ops — abaixo do mínimo"
             )
 
-        # ── 6. LOSS STREAK + COOLDOWN ─────────────────────────────────────────
+        # ── 5. LOSS STREAK + COOLDOWN ─────────────────────────────────────────
         tick_ts = int(time.time())
         em_cd, cd_rest, streak = self._verificar_cooldown(ativo, tipo, barreira, tick_ts)
         if em_cd:
@@ -2748,12 +2766,11 @@ class Titan3Engine:
                 f"Cooldown ativo: {streak} losses seguidos — aguardar ~{cd_rest}s"
             )
 
-        # ── 7. NOTAS EDC PONDERADAS (sem fluxo direcional inválido) ──────────
+        # ── 6. EDC SCORE PONDERADO ────────────────────────────────────────────
         pressao = self._pressao_digitos(digitos, tipo, barreira)
         vol     = self._nota_volatilidade(ativo, tipo, barreira)
         risco   = self._nota_risco(nivel_g, banca, stake)
 
-        # EDC score: médio ponderado dos 4 agentes válidos para DIGIT
         notas = {
             "consenso_10t":  round(cons["pct10"]),
             "consenso_30t":  round(cons["pct30"]),
@@ -2764,16 +2781,19 @@ class Titan3Engine:
             "risco":         risco,
             "historico":     nota_hist,
         }
+        # Pressão: mapeia freq. bruta para score. Ex: 70% favoráveis → pressao=70
+        # EDC combina pressão (momento), estabilidade (consistência),
+        # histórico (aprendizado), volatilidade e risco
         edc_score = round(
-            notas["pressao"]    * 0.30 +
+            notas["pressao"]      * 0.35 +
             notas["estabilidade"] * 0.20 +
-            notas["historico"]  * 0.25 +
+            notas["historico"]    * 0.25 +
             notas["volatilidade"] * 0.10 +
-            notas["risco"]      * 0.15,
+            notas["risco"]        * 0.10,
             1
         )
 
-        # ── VEREDICTO FINAL ───────────────────────────────────────────────────
+        # ── VEREDICTO FINAL — threshold aplicado ao EDC SCORE ────────────────
         bloqueado = len(hard_blocks) > 0
         veredicto = "AGUARDAR" if bloqueado else ("OPERAR" if edc_score >= self.threshold else "AGUARDAR")
 
