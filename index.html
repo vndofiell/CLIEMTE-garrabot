@@ -3446,7 +3446,16 @@
 
             <!-- Gerenciamento de banca -->
             <div style="background:rgba(0,0,0,0.3);border:1px solid rgba(99,102,241,0.2);border-radius:6px;padding:10px 12px;">
-              <div style="font-size:0.58rem;color:#6366f1;letter-spacing:2px;margin-bottom:8px;">⚙️ GERENCIAMENTO DE BANCA</div>
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:6px;flex-wrap:wrap;">
+                <span style="font-size:0.58rem;color:#6366f1;letter-spacing:2px;">⚙️ GERENCIAMENTO DE BANCA</span>
+                <!-- Badge JC: aparece apenas quando JC está ativo -->
+                <div id="dbs-jc-badge" style="display:none;background:rgba(0,255,100,0.08);border:1px solid rgba(0,255,100,0.4);
+                    border-radius:4px;padding:2px 7px;font-size:0.58rem;color:#00ff64;white-space:nowrap;cursor:pointer;"
+                    onclick="dbsJcAplicarMeta()" title="Clique para aplicar meta JC como Stop Win">
+                  💹 JC DIA <span id="dbs-jc-dia">1</span> — META: $<span id="dbs-jc-meta">0.00</span>
+                  <span style="color:#6b7280;font-size:0.53rem;"> ▸ APLICAR</span>
+                </div>
+              </div>
               <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px;">
                 <div>
                   <div style="font-size:0.53rem;color:#6b7280;margin-bottom:3px;">ENTRADA ($)</div>
@@ -3455,7 +3464,11 @@
                              font-family:'Share Tech Mono';font-size:0.7rem;padding:4px 5px;border-radius:4px;box-sizing:border-box;">
                 </div>
                 <div>
-                  <div style="font-size:0.53rem;color:#6b7280;margin-bottom:3px;">STOP WIN ($)</div>
+                  <div style="display:flex;align-items:center;gap:3px;margin-bottom:3px;">
+                    <span style="font-size:0.53rem;color:#6b7280;">STOP WIN ($)</span>
+                    <span id="dbs-stopwin-jc-lbl" style="display:none;font-size:0.48rem;color:#00ff64;background:rgba(0,255,100,0.12);
+                        border-radius:2px;padding:1px 3px;">💹 JC</span>
+                  </div>
                   <input id="dbs-stopwin" type="number" value="10" min="0" step="0.1"
                       style="width:100%;background:#0d0f1a;border:1px solid rgba(0,255,136,0.35);color:#00ff88;
                              font-family:'Share Tech Mono';font-size:0.7rem;padding:4px 5px;border-radius:4px;box-sizing:border-box;">
@@ -19754,13 +19767,62 @@ bot.operarComSinal = function(payload) {
                 const st = document.getElementById('dbs-status');
                 if (st) st.textContent = `${won ? '✅ WIN' : '❌ LOSS'} | ${payload.tipo_contrato} B:${payload.barreira} ${payload.ativo} | ${profit >= 0 ? '+' : ''}$${profit.toFixed(2)}`;
 
+                // Propaga para o handler original (atualiza saldo etc.)
+                _origOnMsg(msg);
+
+                // ── Stop Win DBS com Juros Compostos ─────────────────────────
+                const _swLim = parseFloat(document.getElementById('dbs-stopwin')?.value)  || 9999;
+                const _slLim = parseFloat(document.getElementById('dbs-stoploss')?.value) || 9999;
+
+                if (_dbsMgrLucro >= _swLim) {
+                    // Para auto-operar
+                    const autoChk2 = document.getElementById('dbs-auto-operar');
+                    if (autoChk2) autoChk2.checked = false;
+                    const autoScan2 = document.getElementById('dbs-auto-scan');
+                    if (autoScan2) autoScan2.checked = false;
+
+                    const saldo = parseFloat(document.getElementById('hd-balance')?.textContent?.replace('$','').replace(',','')) || 0;
+                    const _mgrNome = document.getElementById('dbs-mgr')?.value || 'DBS356';
+
+                    // Verifica se JC está ativo
+                    fetch('/jc-meta').then(r => r.json()).then(m => {
+                        if (st) st.textContent = `🏆 STOP WIN DBS atingido: +$${_dbsMgrLucro.toFixed(2)} — operações pausadas.`;
+                        if (m.ativo && m.meta_hoje > 0) {
+                            // JC ativo → registra o dia e exibe troféu
+                            if (typeof tgEnviarStopWin === 'function') tgEnviarStopWin();
+                            if (typeof jcOnMetaBatida === 'function') {
+                                jcOnMetaBatida(_dbsMgrLucro, _dbsMgrWins, _dbsMgrLosses, saldo, 'DIGIT BARRIER 356', _mgrNome);
+                            }
+                        } else {
+                            // JC inativo → modal padrão de stop win
+                            if (typeof tgEnviarStopWin === 'function') tgEnviarStopWin();
+                            if (typeof stopWinExibirModal === 'function') {
+                                stopWinExibirModal(_dbsMgrLucro, _dbsMgrWins, _dbsMgrLosses, saldo, 'DIGIT BARRIER 356', _mgrNome);
+                            }
+                        }
+                    }).catch(() => {
+                        if (typeof tgEnviarStopWin === 'function') tgEnviarStopWin();
+                        if (typeof stopWinExibirModal === 'function') {
+                            stopWinExibirModal(_dbsMgrLucro, _dbsMgrWins, _dbsMgrLosses, saldo, 'DIGIT BARRIER 356', _mgrNome);
+                        }
+                    });
+                    return; // não agenda próximo scan
+                }
+
+                if (_dbsMgrLucro <= -Math.abs(_slLim)) {
+                    const autoChk3 = document.getElementById('dbs-auto-operar');
+                    if (autoChk3) autoChk3.checked = false;
+                    const autoScan3 = document.getElementById('dbs-auto-scan');
+                    if (autoScan3) autoScan3.checked = false;
+                    if (st) st.textContent = `🛑 STOP LOSS DBS atingido: $${_dbsMgrLucro.toFixed(2)} — operações pausadas.`;
+                    return; // não agenda próximo scan
+                }
+
                 // Dispara próximo auto-scan após resultado
                 const autoChk = document.getElementById('dbs-auto-operar');
                 if (autoChk && autoChk.checked) {
                     setTimeout(() => dbsScan(), 2000);
                 }
-                // Propaga para o handler original (atualiza saldo etc.)
-                _origOnMsg(msg);
                 return;
             }
         } catch(_) {}
@@ -19822,12 +19884,65 @@ function _dbsCarregarThreshold() {
         }).catch(() => {});
 }
 
+// ── Integração Juros Compostos no DBS ────────────────────────────────────────
+// Consulta /jc-meta, exibe o badge de JC e preenche Stop Win automaticamente
+function _dbsCarregarJC() {
+    fetch('/jc-meta')
+        .then(r => r.json())
+        .then(m => {
+            const badge  = document.getElementById('dbs-jc-badge');
+            const diaEl  = document.getElementById('dbs-jc-dia');
+            const metaEl = document.getElementById('dbs-jc-meta');
+            const jcLbl  = document.getElementById('dbs-stopwin-jc-lbl');
+            const swInp  = document.getElementById('dbs-stopwin');
+
+            if (m.ativo && m.meta_hoje > 0) {
+                // Mostra badge com dia e meta
+                if (diaEl)  diaEl.textContent  = m.dia_atual || 1;
+                if (metaEl) metaEl.textContent  = parseFloat(m.meta_hoje).toFixed(2);
+                if (badge)  badge.style.display = 'flex';
+                // Aplica meta como Stop Win e marca label JC
+                if (swInp) {
+                    swInp.value = parseFloat(m.meta_hoje).toFixed(2);
+                    swInp.style.borderColor = 'rgba(0,255,100,0.6)';
+                }
+                if (jcLbl) jcLbl.style.display = 'inline';
+                // Exibe no status
+                const st = document.getElementById('dbs-status');
+                if (st) st.textContent = `💹 JC ativo — Stop Win = meta do dia $${parseFloat(m.meta_hoje).toFixed(2)} (Dia ${m.dia_atual} | Banca $${parseFloat(m.banca_atual || 0).toFixed(2)})`;
+            } else {
+                // JC inativo — esconde badge, restaura estilo do campo
+                if (badge)  badge.style.display = 'none';
+                if (jcLbl)  jcLbl.style.display = 'none';
+                if (swInp)  swInp.style.borderColor = 'rgba(0,255,136,0.35)';
+            }
+        }).catch(() => {});
+}
+
+// Botão "APLICAR" no badge JC — reaplica meta do dia no campo Stop Win
+function dbsJcAplicarMeta() {
+    fetch('/jc-meta')
+        .then(r => r.json())
+        .then(m => {
+            if (!m.ativo || !m.meta_hoje) return;
+            const swInp = document.getElementById('dbs-stopwin');
+            const metaEl = document.getElementById('dbs-jc-meta');
+            const diaEl  = document.getElementById('dbs-jc-dia');
+            if (swInp)  swInp.value          = parseFloat(m.meta_hoje).toFixed(2);
+            if (metaEl) metaEl.textContent   = parseFloat(m.meta_hoje).toFixed(2);
+            if (diaEl)  diaEl.textContent    = m.dia_atual || 1;
+            const st = document.getElementById('dbs-status');
+            if (st) st.textContent = `💹 Meta JC aplicada: Stop Win = $${parseFloat(m.meta_hoje).toFixed(2)} (Dia ${m.dia_atual})`;
+        }).catch(() => {});
+}
+
 function dbsAbrirModal() {
     const m = document.getElementById('dbs-modal');
     if (!m) return;
     m.style.display = 'flex';
     _dbsIniciarMatrix();
     _dbsCarregarThreshold();
+    _dbsCarregarJC();        // ← carrega meta JC e preenche Stop Win se JC ativo
     dbsSincronizarBanca();
     // Atualiza banca a cada 2s enquanto o modal estiver aberto
     if (!window._dbsBancaTimer) {
