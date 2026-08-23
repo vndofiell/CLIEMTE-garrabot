@@ -3426,15 +3426,11 @@
           <!-- ╔══ COLUNA ESQUERDA — configurações + log ══╗ -->
           <div style="display:flex;flex-direction:column;gap:10px;">
 
-            <!-- TOP 1 destaque — TITAN 3.0 -->
+            <!-- TOP 1 destaque -->
             <div id="dbs-top1-box" style="display:none;
                 background:rgba(99,102,241,0.12);border:2px solid #6366f1;
                 border-radius:7px;padding:10px 13px;">
-              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;">
-                <span style="font-size:0.58rem;color:#6366f1;letter-spacing:2px;">🏆 MELHOR OPORTUNIDADE</span>
-                <span style="font-size:0.5rem;color:#4b5563;letter-spacing:1px;">TITAN 3.0</span>
-              </div>
-              <!-- Linha 1: tipo | barreira | ativo | EDC score -->
+              <div style="font-size:0.58rem;color:#6366f1;letter-spacing:2px;margin-bottom:5px;">🏆 MELHOR OPORTUNIDADE</div>
               <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;flex-wrap:wrap;">
                 <div>
                   <span id="dbs-top1-tipo" style="font-size:0.95rem;font-weight:bold;color:#a5b4fc;">—</span>
@@ -3443,30 +3439,8 @@
                   <span style="color:#555;margin:0 5px;">|</span>
                   <span id="dbs-top1-ativo" style="font-size:0.72rem;color:#00ff88;font-weight:bold;">—</span>
                 </div>
-                <div style="text-align:right;">
-                  <div style="font-size:1.15rem;font-weight:bold;color:#00ff88;"><span id="dbs-top1-conf">—</span>%</div>
-                  <div style="font-size:0.52rem;color:#6b7280;">EDC score</div>
-                </div>
+                <div style="font-size:1.15rem;font-weight:bold;color:#00ff88;"><span id="dbs-top1-conf">—</span>%</div>
               </div>
-              <!-- Linha 2: CONSENSO triplo -->
-              <div id="dbs-top1-consenso" style="display:none;margin-top:7px;
-                  background:rgba(0,0,0,0.25);border-radius:5px;padding:6px 8px;">
-                <div style="font-size:0.52rem;color:#6366f1;letter-spacing:1px;margin-bottom:4px;">CONSENSO</div>
-                <div style="display:flex;gap:5px;flex-wrap:wrap;">
-                  <span style="background:rgba(0,255,136,0.08);border:1px solid rgba(0,255,136,0.2);border-radius:3px;padding:2px 6px;font-size:0.62rem;color:#00ff88;">10T: <b id="dbs-c10">—</b>%</span>
-                  <span style="background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.3);border-radius:3px;padding:2px 6px;font-size:0.62rem;color:#a5b4fc;">30T: <b id="dbs-c30">—</b>%</span>
-                  <span style="background:rgba(168,85,247,0.08);border:1px solid rgba(168,85,247,0.3);border-radius:3px;padding:2px 6px;font-size:0.62rem;color:#c084fc;">100T: <b id="dbs-c100">—</b>%</span>
-                  <span style="background:rgba(251,191,36,0.06);border:1px solid rgba(251,191,36,0.2);border-radius:3px;padding:2px 6px;font-size:0.62rem;color:#fbbf24;">EST: <b id="dbs-cest">—</b>%</span>
-                </div>
-              </div>
-              <!-- Linha 3: flags de status -->
-              <div id="dbs-top1-flags" style="display:none;margin-top:5px;display:flex;gap:4px;flex-wrap:wrap;">
-                <span id="dbs-flag-rev"  style="font-size:0.57rem;border-radius:3px;padding:2px 5px;display:none;">—</span>
-                <span id="dbs-flag-hist" style="font-size:0.57rem;border-radius:3px;padding:2px 5px;display:none;">—</span>
-                <span id="dbs-flag-cd"   style="font-size:0.57rem;border-radius:3px;padding:2px 5px;display:none;">—</span>
-                <span id="dbs-flag-amostra" style="font-size:0.57rem;border-radius:3px;padding:2px 5px;display:none;">—</span>
-              </div>
-              <!-- Linha 4: motivo principal -->
               <div id="dbs-top1-motivo" style="font-size:0.6rem;color:#6b7280;margin-top:5px;line-height:1.4;">—</div>
             </div>
 
@@ -19787,21 +19761,6 @@ bot.operarComSinal = function(payload) {
                     }
                     _dbsRenderLog();
                     if (typeof dbsMgrRegistrarResultado === 'function') dbsMgrRegistrarResultado(won, profit);
-
-                    // ── Registra no TITAN 3.0 (alimenta histórico, loss streak e cooldown) ──
-                    fetch('/dbs/resultado', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            ativo:      bot._dbsUltimoPayload.ativo,
-                            tipo:       bot._dbsUltimoPayload.tipo,
-                            barreira:   bot._dbsUltimoPayload.barreira,
-                            resultado:  won ? 'WIN' : 'LOSS',
-                            confianca:  bot._dbsUltimoPayload.confianca || 0,
-                            lucro:      profit,
-                        })
-                    }).catch(() => {});
-
                     bot._dbsUltimoPayload = null;
                 }
 
@@ -20116,7 +20075,7 @@ function dbsScan() {
     });
 }
 
-// ── Renderizar ranking — TITAN 3.0 ───────────────────────────────────────────
+// ── Renderizar ranking ────────────────────────────────────────────────────────
 function _dbsRenderizar(data) {
     const ranking  = data.ranking || [];
     const top1     = data.top1;
@@ -20135,7 +20094,7 @@ function _dbsRenderizar(data) {
     if (el('dbs-stat-aguardar')) el('dbs-stat-aguardar').textContent = qtAguardar;
     if (el('dbs-stat-top'))      el('dbs-stat-top').textContent      = topConf + '%';
 
-    // ── TOP 1 — painel TITAN completo ──
+    // ── TOP 1 ──
     if (top1 && top1Box) {
         top1Box.style.display = 'block';
         if (el('dbs-top1-tipo'))     el('dbs-top1-tipo').textContent     = top1.tipo;
@@ -20144,40 +20103,6 @@ function _dbsRenderizar(data) {
         if (el('dbs-top1-conf'))     el('dbs-top1-conf').textContent     = top1.confianca;
         if (el('dbs-top1-motivo'))   el('dbs-top1-motivo').textContent   = top1.motivo || '—';
 
-        // Painel de consenso triplo
-        const cons = top1.consenso || {};
-        if (cons.pct10 !== undefined) {
-            if (el('dbs-top1-consenso')) el('dbs-top1-consenso').style.display = 'block';
-            if (el('dbs-c10'))   el('dbs-c10').textContent   = cons.pct10;
-            if (el('dbs-c30'))   el('dbs-c30').textContent   = cons.pct30;
-            if (el('dbs-c100'))  el('dbs-c100').textContent  = cons.pct100;
-            if (el('dbs-cest'))  el('dbs-cest').textContent  = cons.estabilidade;
-            // Colorir cada janela: ≥85=verde, ≥70=amarelo, else vermelho
-            ['dbs-c10','dbs-c30','dbs-c100'].forEach((id, idx) => {
-                const v = [cons.pct10, cons.pct30, cons.pct100][idx];
-                if (el(id)) el(id).style.color = v >= 85 ? '#00ff88' : v >= 70 ? '#fbbf24' : '#f87171';
-            });
-        }
-
-        // Flags de status (reversão, histórico, cooldown, amostra)
-        if (el('dbs-top1-flags')) el('dbs-top1-flags').style.display = 'flex';
-        const _flag = (id, txt, clr, show) => {
-            const f = el(id);
-            if (!f) return;
-            if (show) {
-                f.textContent = txt;
-                f.style.display = 'inline';
-                f.style.background = clr + '22';
-                f.style.border = `1px solid ${clr}66`;
-                f.style.color = clr;
-            } else { f.style.display = 'none'; }
-        };
-        _flag('dbs-flag-rev',     '⚠️ REVERSÃO',          '#f87171', top1.reversao);
-        _flag('dbs-flag-hist',    `📊 HIST ${top1.wr_hist !== null && top1.wr_hist !== undefined ? top1.wr_hist + '%' : '—'} (${top1.n_hist || 0} ops)`, '#a5b4fc', top1.n_hist > 0);
-        _flag('dbs-flag-cd',      `⏳ STREAK ${top1.loss_streak || 0}`,  '#fbbf24', (top1.loss_streak || 0) > 0);
-        _flag('dbs-flag-amostra', `📥 ${top1.n_ticks || 0} ticks`,       '#6b7280', true);
-
-        // Botão de operação
         if (btnOp) {
             btnOp.disabled = false;
             btnOp.style.cursor  = 'pointer';
@@ -20196,36 +20121,21 @@ function _dbsRenderizar(data) {
         }
     }
 
-    // ── Tabela — TITAN 3.0 ──
+    // ── Tabela ──
     if (!tbody) return;
     tbody.innerHTML = '';
     ranking.forEach((r, i) => {
         const isTop   = i === 0;
         const isOp    = r.veredicto === 'OPERAR';
         const confClr = r.confianca >= 85 ? '#00ff88' : r.confianca >= 72 ? '#fbbf24' : '#f87171';
-        const verdClr = isOp ? '#00ff88' : '#f87171';
         const rowBg   = isTop ? 'rgba(99,102,241,0.1)' : (i % 2 === 0 ? 'rgba(255,255,255,0.02)' : 'transparent');
+        const verdClr = isOp ? '#00ff88' : '#f87171';
 
-        // Pressão de dígitos (novo campo de fluxo)
-        const pressao    = r.notas ? (r.notas.pressao || 0) : 0;
-        const pressaoClr = pressao >= 85 ? '#00ff88' : pressao >= 65 ? '#fbbf24' : '#f87171';
-
-        // Hard blocks compactos
-        const blocks  = r.hard_blocks || [];
-        let blocoTxt  = '';
-        let blocoClr  = '#6b7280';
-        if (isOp) {
-            blocoTxt = '✅ OK';
-            blocoClr = '#00ff88';
-        } else if (blocks.length > 0) {
-            const b = blocks[0];
-            const abrev = { THRESHOLD:'THRESH', CONSENSO:'CONS', REVERSAO:'REV', HISTORICO:'HIST', COOLDOWN:'CD', AMOSTRA:'AMO' };
-            blocoTxt = '🚫 ' + (abrev[b] || b);
-            blocoClr = '#f87171';
-        } else {
-            blocoTxt = '⛔ EDC';
-            blocoClr = '#fbbf24';
-        }
+        // Coluna FLUXO
+        const fluxo = r.fluxo || 'NEUTRO';
+        let fluxoTxt = '→ NEUTRO', fluxoClr = '#6b7280';
+        if (fluxo === 'CALL') { fluxoTxt = '↑ CALL'; fluxoClr = '#00ff88'; }
+        else if (fluxo === 'PUT')  { fluxoTxt = '↓ PUT';  fluxoClr = '#f87171'; }
 
         tbody.innerHTML += `
         <tr style="background:${rowBg};border-bottom:1px solid rgba(255,255,255,0.04);">
@@ -20234,16 +20144,15 @@ function _dbsRenderizar(data) {
           <td style="padding:5px 6px;color:#a5b4fc;">${r.tipo}</td>
           <td style="padding:5px 6px;text-align:center;color:#fbbf24;">${r.barreira}</td>
           <td style="padding:5px 6px;text-align:right;color:${confClr};font-weight:bold;">${r.confianca}%</td>
-          <td style="padding:5px 6px;text-align:center;color:${pressaoClr};font-weight:bold;" title="Pressão de dígitos nos últimos 30 ticks">${pressao}%</td>
-          <td style="padding:5px 6px;text-align:center;color:${blocoClr};font-size:0.6rem;">${blocoTxt}</td>
+          <td style="padding:5px 6px;text-align:center;color:${fluxoClr};font-size:0.62rem;font-weight:bold;">${fluxoTxt}</td>
+          <td style="padding:5px 6px;text-align:center;color:${verdClr};font-size:0.62rem;font-weight:bold;">${r.veredicto}</td>
           <td style="padding:5px 6px;text-align:center;color:#6b7280;">${r.n_ticks || '—'}</td>
         </tr>`;
     });
 
     if (status) {
         const ts = new Date().toLocaleTimeString('pt-BR');
-        const motor = data.motor === 'TITAN3' ? ' [TITAN 3.0]' : '';
-        status.textContent = `✅ Scan concluído às ${ts}${motor} — ${ranking.length} combos, ${qtOperar} aprovados.`;
+        status.textContent = `✅ Scan concluído às ${ts} — ${ranking.length} combos avaliados, ${qtOperar} prontos para operar.`;
     }
 }
 

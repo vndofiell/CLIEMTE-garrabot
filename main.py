@@ -2391,459 +2391,6 @@ def _recuperar_aprendizado() -> str:
         )
     return json.dumps(resumo, ensure_ascii=False)
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# TITAN 3.0 — Motor de Decisão para DIGITOVER/DIGITUNDER
-# Substitui o DecisionSupervisor para a rota /ia/digit-barrier-356.
-# O DecisionSupervisor legado é preservado abaixo para as demais rotas.
-# ═══════════════════════════════════════════════════════════════════════════════
-
-DBS_TITAN_FILE = os.path.join(_BASE_DIR, "dbs_titan_state.json")
-
-def _titan_estado_ler() -> dict:
-    """Lê estado persistente do TITAN (loss_streak e cooldown por combo)."""
-    if os.path.exists(DBS_TITAN_FILE):
-        try:
-            with open(DBS_TITAN_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            pass
-    return {}
-
-def _titan_estado_salvar(estado: dict):
-    try:
-        with open(DBS_TITAN_FILE, "w", encoding="utf-8") as f:
-            json.dump(estado, f, indent=2, ensure_ascii=False)
-    except Exception:
-        pass
-
-def _titan_chave(ativo: str, tipo: str, barreira: int) -> str:
-    return f"{ativo}|{tipo}|{barreira}"
-
-def _titan_registrar_resultado(ativo: str, tipo: str, barreira: int,
-                                resultado: str, tick_atual: int = 0):
-    """
-    Registra WIN ou LOSS para um combo específico.
-    Atualiza loss_streak, ticks_desde_loss e histórico interno.
-    """
-    chave  = _titan_chave(ativo, tipo, barreira)
-    estado = _titan_estado_ler()
-    combo  = estado.get(chave, {
-        "loss_streak":    0,
-        "wins":           0,
-        "losses":         0,
-        "tick_ultimo":    0,
-        "historico":      [],  # últimos 50 resultados com confiança
-    })
-
-    combo["tick_ultimo"] = tick_atual
-    hist = combo.get("historico", [])
-
-    if resultado == "WIN":
-        combo["wins"]        += 1
-        combo["loss_streak"]  = 0
-        hist.append("W")
-    else:
-        combo["losses"]      += 1
-        combo["loss_streak"] += 1
-        hist.append("L")
-
-    combo["historico"] = hist[-50:]  # mantém últimos 50
-    estado[chave]      = combo
-    _titan_estado_salvar(estado)
-
-class Titan3Engine:
-    """
-    TITAN 3.0 — Motor de decisão para DIGITOVER/DIGITUNDER.
-
-    Pipeline de hard-blocks obrigatórios (qualquer falha → BLOQUEAR):
-      1. Threshold mínimo real: confiança bruta >= 85
-      2. Amostra mínima: >= 50 dígitos disponíveis
-      3. Consenso triplo: janelas 10/30/100 devem concordar (divergência bloqueia)
-      4. Reversão detectada: janela curta cai muito vs. média → BLOQUEAR
-      5. Histórico combo: win rate < 40% em >= 20 ops → BLOQUEAR
-      6. Loss streak: 2+ perdas seguidas neste combo → BLOQUEAR (cooldown por ticks)
-      7. Cooldown de ticks após loss
-      8. EDC ponderado (sem o agente de fluxo direcional inválido)
-
-    Fluxo para DIGITOVER/UNDER:
-      - NÃO usa fluxo CALL/PUT de preço
-      - Usa "pressão de dígitos": % dos últimos 30 favoráveis ao contrato
-    """
-
-    THRESHOLD_PADRAO = 72
-    # Consenso: cada janela deve ter pelo menos este % de favoráveis
-    MIN_PCT_JANELA = 55.0   # abaixo de 55% em qualquer janela → bloquear
-    # Consenso: divergência máxima entre janelas curta e longa
-    MAX_DIVERGENCIA_CONSENSO = 20  # pp — acima disso o mercado está instável
-    # Reversão: se janela_5 cair >= este valor vs. janela_30 → BLOQUEAR
-    LIMIAR_REVERSAO = 25
-    # Loss streak máximo antes de cooldown
-    MAX_LOSS_STREAK = 2
-    # Ticks de cooldown após loss_streak atingido (em segundos)
-    COOLDOWN_TICKS = {2: 30, 3: 120, 4: 999}
-    # Histórico mínimo para bloquear por win rate
-    MIN_HISTORICO_BLOQUEIO = 20
-    # Win rate mínimo no histórico do combo (abaixo → BLOQUEAR)
-    MIN_WIN_RATE_COMBO = 0.40
-
-    def __init__(self, threshold: int = THRESHOLD_PADRAO):
-        self.threshold = threshold
-
-    # ── Calcula proporção favorável numa janela de dígitos ──────────────────
-    @staticmethod
-    def _pct_favoravel(digitos: list, tipo: str, barreira: int) -> float:
-        """Retorna fração [0..1] de dígitos favoráveis ao contrato na janela."""
-        if not digitos:
-            return 0.5
-        tipo = tipo.upper()
-        if tipo == "DIGITUNDER":
-            fav = sum(1 for d in digitos if d < barreira)
-        elif tipo == "DIGITOVER":
-            fav = sum(1 for d in digitos if d > barreira)
-        elif tipo == "DIGITEVEN":
-            fav = sum(1 for d in digitos if d % 2 == 0)
-        elif tipo == "DIGITODD":
-            fav = sum(1 for d in digitos if d % 2 != 0)
-        else:
-            return 0.5
-        return fav / len(digitos)
-
-    # ── Consenso triplo ─────────────────────────────────────────────────────
-    def _consenso(self, digitos: list, tipo: str, barreira: int) -> dict:
-        """
-        Calcula % favorável em 3 janelas independentes.
-        Retorna dict com pct10, pct30, pct100, divergencia, estabilidade.
-        """
-        j10  = digitos[-10:]  if len(digitos) >= 10  else digitos
-        j30  = digitos[-30:]  if len(digitos) >= 30  else digitos
-        j100 = digitos[-100:] if len(digitos) >= 100 else digitos
-
-        p10  = self._pct_favoravel(j10,  tipo, barreira)
-        p30  = self._pct_favoravel(j30,  tipo, barreira)
-        p100 = self._pct_favoravel(j100, tipo, barreira)
-
-        # Divergência = diferença entre janela mais alta e mais baixa
-        divergencia = round((max(p10, p30, p100) - min(p10, p30, p100)) * 100, 1)
-        # Estabilidade = quanto as 3 janelas concordam (100 = perfeito)
-        media = (p10 + p30 + p100) / 3
-        variancia = ((p10 - media)**2 + (p30 - media)**2 + (p100 - media)**2) / 3
-        estabilidade = round(max(0, 100 - variancia * 2000), 1)
-
-        return {
-            "pct10":         round(p10  * 100, 1),
-            "pct30":         round(p30  * 100, 1),
-            "pct100":        round(p100 * 100, 1),
-            "divergencia":   divergencia,
-            "estabilidade":  estabilidade,
-        }
-
-    # ── Detecção de reversão ────────────────────────────────────────────────
-    def _detectar_reversao(self, digitos: list, tipo: str, barreira: int) -> bool:
-        """
-        Retorna True se há sinal de reversão: os últimos 5 ticks contradizem
-        a tendência dos últimos 30 em >= LIMIAR_REVERSAO pontos percentuais.
-        """
-        if len(digitos) < 10:
-            return False
-        j5  = digitos[-5:]
-        j30 = digitos[-30:] if len(digitos) >= 30 else digitos
-        p5  = self._pct_favoravel(j5,  tipo, barreira) * 100
-        p30 = self._pct_favoravel(j30, tipo, barreira) * 100
-        # Reversão = janela curta caiu muito em relação à média longa
-        return (p30 - p5) >= self.LIMIAR_REVERSAO
-
-    # ── Fluxo de dígitos (substitui CALL/PUT para contratos DIGIT) ──────────
-    def _pressao_digitos(self, digitos: list, tipo: str, barreira: int) -> int:
-        """
-        Calcula a 'pressão' de dígitos favoráveis nos últimos 30 ticks.
-        Retorna nota 0-100. Não usa direção de preço.
-        """
-        j = digitos[-30:] if len(digitos) >= 30 else digitos
-        if not j:
-            return 50
-        p = self._pct_favoravel(j, tipo, barreira)
-        # Mapeia: 50% → 50pts, 70% → 80pts, 80% → 90pts, 90%+ → 100pts
-        if p <= 0.50:
-            return round(p * 100)
-        return round(50 + (p - 0.50) * 100)
-
-    # ── Agente de volatilidade do ativo ─────────────────────────────────────
-    @staticmethod
-    def _nota_volatilidade(ativo: str, tipo: str, barreira: int) -> int:
-        perfil = {
-            "1HZ10V": 95, "1HZ25V": 90, "1HZ50V": 80,
-            "R_10": 88, "R_25": 85, "R_50": 78,
-            "R_75": 65, "1HZ75V": 70, "1HZ100V": 60, "R_100": 50,
-        }
-        base = perfil.get(ativo.upper(), 65)
-        if tipo == "DIGITUNDER":
-            base = max(0, base - max(0, (8 - barreira) * 8))
-        elif tipo == "DIGITOVER":
-            base = max(0, base - max(0, (barreira - 2) * 8))
-        return min(round(base), 100)
-
-    # ── Agente de saúde de banca ─────────────────────────────────────────────
-    @staticmethod
-    def _nota_risco(nivel_gale: int, banca: float, stake: float) -> int:
-        penalidade_gale = {0: 0, 1: 10, 2: 25, 3: 45, 4: 70}
-        nota = 100 - penalidade_gale.get(nivel_gale, 80)
-        if banca > 0:
-            pct = stake / banca
-            if pct > 0.10:   nota -= 40
-            elif pct > 0.05: nota -= 20
-            elif pct > 0.03: nota -= 10
-        return max(0, round(nota))
-
-    # ── Histórico específico do combo ────────────────────────────────────────
-    @staticmethod
-    def _nota_historico_combo(ativo: str, tipo: str, barreira: int) -> tuple:
-        """
-        Consulta histórico específico ativo+tipo+barreira no memory_vault.
-        Retorna (nota 0-100, n_ops, win_rate, bloqueado).
-        bloqueado = True se win_rate < MIN e n_ops >= MIN_HISTORICO.
-        """
-        chave_titan = _titan_chave(ativo, tipo, barreira)
-        estado = _titan_estado_ler()
-        combo  = estado.get(chave_titan, {})
-        w = combo.get("wins", 0)
-        l = combo.get("losses", 0)
-        n = w + l
-
-        # Também consulta memory_vault para histórico mais rico
-        mem_wins   = 0
-        mem_total  = 0
-        nome_combo = f"{tipo}-{barreira}@{ativo}"
-        if os.path.exists(MEMORY_FILE):
-            try:
-                with open(MEMORY_FILE, "r", encoding="utf-8") as f:
-                    mem = json.load(f)
-                relevantes = [
-                    e for e in mem
-                    if e.get("estrategia") == nome_combo
-                    or (e.get("tipo_contrato") == tipo
-                        and str(e.get("barreira")) == str(barreira)
-                        and e.get("contexto") == ativo)
-                ]
-                mem_wins  = sum(1 for e in relevantes if e.get("resultado") == "WIN")
-                mem_total = len(relevantes)
-            except Exception:
-                pass
-
-        # Combina titan_state + memory_vault
-        total_w = w + mem_wins
-        total_n = max(n, mem_total)
-        total_l = total_n - total_w
-
-        if total_n == 0:
-            return 75, 0, None, False   # sem histórico → neutro
-
-        wr = total_w / total_n
-        bloqueado = (total_n >= Titan3Engine.MIN_HISTORICO_BLOQUEIO
-                     and wr < Titan3Engine.MIN_WIN_RATE_COMBO)
-
-        if wr < 0.40:
-            nota = round(wr * 100)
-        elif wr < 0.60:
-            nota = round(40 + (wr - 0.40) * 250)  # 40→90
-        else:
-            nota = round(min(90 + (wr - 0.60) * 50, 100))
-
-        return nota, total_n, round(wr * 100, 1), bloqueado
-
-    # ── Verifica cooldown de loss_streak ────────────────────────────────────
-    @staticmethod
-    def _verificar_cooldown(ativo: str, tipo: str, barreira: int,
-                             tick_atual: int) -> tuple:
-        """
-        Retorna (em_cooldown: bool, ticks_restantes: int, loss_streak: int).
-        tick_atual é o índice absoluto de ticks (usado para comparar quando o cooldown expira).
-        Como não temos índice de tick real, usamos timestamp aproximado.
-        """
-        chave  = _titan_chave(ativo, tipo, barreira)
-        estado = _titan_estado_ler()
-        combo  = estado.get(chave, {})
-        streak = combo.get("loss_streak", 0)
-
-        if streak < Titan3Engine.MAX_LOSS_STREAK:
-            return False, 0, streak
-
-        # Perdeu MAX_LOSS_STREAK ou mais — verifica quando foi o último loss
-        tick_ult = combo.get("tick_ultimo", 0)
-        espera   = Titan3Engine.COOLDOWN_TICKS.get(
-            min(streak, max(Titan3Engine.COOLDOWN_TICKS.keys())), 999
-        )
-        agora    = int(time.time())
-        # Aproximação: 1 tick ≈ 1 segundo em índices sintéticos
-        passados = agora - tick_ult
-        restantes = max(0, espera - passados)
-
-        return (restantes > 0), restantes, streak
-
-    # ── Motor principal ──────────────────────────────────────────────────────
-    def avaliar(self, ctx: dict) -> dict:
-        """
-        Executa o pipeline TITAN 3.0.
-        Hard-blocks corretos para DIGITOVER/UNDER:
-        - AMOSTRA:   < 50 dígitos
-        - CONSENSO:  alguma janela < 55% favorável  OU  divergência > 20pp
-        - REVERSAO:  últimos 5T caíram ≥ 25pp vs 30T
-        - HISTORICO: win rate < 40% com ≥ 20 ops
-        - COOLDOWN:  2+ losses seguidos em cooldown
-        O threshold de 72% é aplicado ao EDC SCORE (não à freq. bruta de dígitos).
-        """
-        tipo     = ctx.get("tipo_contrato", "DIGITUNDER").upper()
-        barreira = int(ctx.get("barreira", 5))
-        ativo    = ctx.get("ativo", "R_100").upper()
-        digitos  = ctx.get("ultimos_digitos", [])
-        precos   = ctx.get("ultimos_precos", [])
-        banca    = float(ctx.get("banca_usd", ctx.get("banca", 100.0)))
-        stake    = float(ctx.get("stake_usd", ctx.get("stake", 0.35)))
-        nivel_g  = int(ctx.get("nivel_gale", 0))
-
-        hard_blocks   = []
-        motivos_bloco = []
-
-        # ── 1. AMOSTRA MÍNIMA (50 dígitos) ──────────────────────────────────
-        n_digitos = len(digitos)
-        if n_digitos < 50:
-            hard_blocks.append("AMOSTRA")
-            motivos_bloco.append(f"Amostra insuficiente ({n_digitos}/50 dígitos)")
-
-        # ── 2. CONSENSO TRIPLO ───────────────────────────────────────────────
-        # Regras corretas para contratos DIGIT (distribuição base ~60% para barr. 6):
-        #   a) Cada janela deve ter >= MIN_PCT_JANELA favoráveis
-        #   b) Divergência entre janelas <= MAX_DIVERGENCIA_CONSENSO pp
-        cons = self._consenso(digitos, tipo, barreira)
-
-        # a) Pressão mínima em todas as janelas
-        pcts = [cons["pct10"], cons["pct30"], cons["pct100"]]
-        min_pct = min(pcts)
-        if min_pct < self.MIN_PCT_JANELA:
-            hard_blocks.append("CONSENSO")
-            motivos_bloco.append(
-                f"Pressão insuficiente: janela mínima {min_pct}% < {self.MIN_PCT_JANELA}% "
-                f"(10T:{cons['pct10']}% | 30T:{cons['pct30']}% | 100T:{cons['pct100']}%)"
-            )
-        # b) Divergência entre janelas (instabilidade)
-        elif cons["divergencia"] > self.MAX_DIVERGENCIA_CONSENSO:
-            hard_blocks.append("CONSENSO")
-            motivos_bloco.append(
-                f"Divergência entre janelas: {cons['divergencia']}pp "
-                f"(10T:{cons['pct10']}% | 30T:{cons['pct30']}% | 100T:{cons['pct100']}%)"
-            )
-
-        # confianca_bruta = média ponderada das janelas (informativo, não bloqueia diretamente)
-        confianca_bruta = round(
-            cons["pct10"] * 0.20 + cons["pct30"] * 0.35 + cons["pct100"] * 0.45, 1
-        )
-
-        # ── 3. REVERSÃO ──────────────────────────────────────────────────────
-        reversao = self._detectar_reversao(digitos, tipo, barreira)
-        if reversao:
-            hard_blocks.append("REVERSAO")
-            j5  = digitos[-5:]  if len(digitos) >= 5  else digitos
-            j30 = digitos[-30:] if len(digitos) >= 30 else digitos
-            p5  = round(self._pct_favoravel(j5,  tipo, barreira) * 100, 1)
-            p30 = round(self._pct_favoravel(j30, tipo, barreira) * 100, 1)
-            motivos_bloco.append(f"Reversão detectada: últimos 5T={p5}% vs 30T={p30}%")
-
-        # ── 4. HISTÓRICO ESPECÍFICO DO COMBO ─────────────────────────────────
-        nota_hist, n_hist, wr_hist, hist_bloqueado = self._nota_historico_combo(
-            ativo, tipo, barreira
-        )
-        if hist_bloqueado:
-            hard_blocks.append("HISTORICO")
-            motivos_bloco.append(
-                f"Win rate histórico {wr_hist}% em {n_hist} ops — abaixo do mínimo"
-            )
-
-        # ── 5. LOSS STREAK + COOLDOWN ─────────────────────────────────────────
-        tick_ts = int(time.time())
-        em_cd, cd_rest, streak = self._verificar_cooldown(ativo, tipo, barreira, tick_ts)
-        if em_cd:
-            hard_blocks.append("COOLDOWN")
-            motivos_bloco.append(
-                f"Cooldown ativo: {streak} losses seguidos — aguardar ~{cd_rest}s"
-            )
-
-        # ── 6. EDC SCORE PONDERADO ────────────────────────────────────────────
-        pressao = self._pressao_digitos(digitos, tipo, barreira)
-        vol     = self._nota_volatilidade(ativo, tipo, barreira)
-        risco   = self._nota_risco(nivel_g, banca, stake)
-
-        notas = {
-            "consenso_10t":  round(cons["pct10"]),
-            "consenso_30t":  round(cons["pct30"]),
-            "consenso_100t": round(cons["pct100"]),
-            "estabilidade":  round(cons["estabilidade"]),
-            "pressao":       pressao,
-            "volatilidade":  vol,
-            "risco":         risco,
-            "historico":     nota_hist,
-        }
-        # Pressão: mapeia freq. bruta para score. Ex: 70% favoráveis → pressao=70
-        # EDC combina pressão (momento), estabilidade (consistência),
-        # histórico (aprendizado), volatilidade e risco
-        edc_score = round(
-            notas["pressao"]      * 0.35 +
-            notas["estabilidade"] * 0.20 +
-            notas["historico"]    * 0.25 +
-            notas["volatilidade"] * 0.10 +
-            notas["risco"]        * 0.10,
-            1
-        )
-
-        # ── VEREDICTO FINAL — threshold aplicado ao EDC SCORE ────────────────
-        bloqueado = len(hard_blocks) > 0
-        veredicto = "AGUARDAR" if bloqueado else ("OPERAR" if edc_score >= self.threshold else "AGUARDAR")
-
-        if bloqueado:
-            motivo_principal = motivos_bloco[0]
-            motivo = f"🚫 BLOQUEADO — {motivo_principal}"
-            if len(motivos_bloco) > 1:
-                motivo += f" (+{len(motivos_bloco)-1} outros)"
-        elif veredicto == "OPERAR":
-            motivo = "✅ Todos os filtros TITAN aprovaram a entrada."
-        else:
-            motivo = f"⛔ EDC score {edc_score}% < threshold {self.threshold}%"
-
-        return {
-            "confianca":       edc_score,
-            "confianca_bruta": confianca_bruta,
-            "veredicto":       veredicto,
-            "threshold":       self.threshold,
-            "notas":           notas,
-            "consenso":        cons,
-            "hard_blocks":     hard_blocks,
-            "motivos_bloco":   motivos_bloco,
-            "reversao":        reversao,
-            "loss_streak":     streak,
-            "n_hist":          n_hist,
-            "wr_hist":         wr_hist,
-            "n_digitos":       n_digitos,
-            "motivo":          motivo,
-        }
-
-    def narrativa(self, relatorio: dict, nome_estrategia: str = "") -> str:
-        v = relatorio["veredicto"]
-        c = relatorio["confianca"]
-        icone = "🟢" if v == "OPERAR" else "🚫"
-        cons  = relatorio.get("consenso", {})
-        linhas = [
-            f"{icone} TITAN 3.0 — {v} (EDC: {c}%)",
-            f"Combo: {nome_estrategia}" if nome_estrategia else "",
-            f"",
-            f"CONSENSO  10T:{cons.get('pct10','?')}%  "
-            f"30T:{cons.get('pct30','?')}%  100T:{cons.get('pct100','?')}%",
-            f"Estabilidade: {cons.get('estabilidade','?')}%  "
-            f"Reversão: {'SIM 🚫' if relatorio.get('reversao') else 'NÃO'}",
-            f"Histórico: {relatorio.get('wr_hist','—')}% em {relatorio.get('n_hist',0)} ops",
-            f"Loss streak: {relatorio.get('loss_streak',0)}",
-            f"",
-            relatorio["motivo"],
-        ]
-        return "\n".join(l for l in linhas if l is not None)
-
 
 # ─────────────────────────────────────────────────────────
 # EDC FASE 2 — Conselho de Especialistas (legado — demais rotas)
@@ -2851,7 +2398,7 @@ class Titan3Engine:
 class DecisionSupervisor:
     """
     Motor de Confiança Probabilística legado.
-    Usado pelas demais rotas do bot (não pelo DBS TITAN 3.0).
+    Motor de Confiança Probabilística — usado por todas as rotas.
     """
 
     PESOS = {
@@ -3021,11 +2568,8 @@ class DecisionSupervisor:
         return "\n".join(linhas)
 
 
-# Instância global legada — usada pelas demais rotas
+# Instância global — usada por todas as rotas
 _supervisor = DecisionSupervisor()
-
-# Instância global TITAN 3.0 — usada exclusivamente pelo DBS
-_titan = Titan3Engine()
 
 # ─────────────────────────────────────────────────────────
 # EDC — Formatador de Veredito Cognitivo (Narrativa Executiva)
@@ -10904,13 +10448,12 @@ def quick_sort_simulacao():
     return jsonify({"ok": True, "passos": passos})
 
 
-# ── Digit Barrier 356 — TITAN 3.0 ───────────────────────────────────────────
+# ── Digit Barrier 356 ────────────────────────────────────────────────────────
 @app.route('/ia/digit-barrier-356', methods=['POST'])
 def ia_digit_barrier_356():
     """
-    TITAN 3.0 — Avalia 30 combinações (5 ativos × UNDER/OVER × barreiras 3,5,6)
-    com hard-blocks obrigatórios: threshold 85%, consenso triplo 10/30/100 ticks,
-    detecção de reversão, histórico por combo, loss streak e cooldown.
+    DBS356 — Avalia 30 combinações (5 ativos × UNDER/OVER × barreiras 3,5,6)
+    usando o DecisionSupervisor (EDC de 6 agentes).
     """
     dados = request.get_json(force=True, silent=True) or {}
 
@@ -10919,6 +10462,7 @@ def ia_digit_barrier_356():
     banca                 = float(dados.get("banca", 1000))
     gale_nivel            = int(dados.get("gale_nivel", 0))
     ativo_atual           = dados.get("ativo", "R_100").upper()
+    fluxo_mercado         = dados.get("fluxo_mercado", "NEUTRO").upper()
 
     ATIVOS    = ["R_10", "R_25", "R_50", "R_75", "R_100"]
     BARREIRAS = [3, 5, 6]
@@ -10937,16 +10481,38 @@ def ia_digit_barrier_356():
             precos  = ultimos_precos_atual
             digitos = ultimos_digitos_atual
         else:
-            # Busca 120 ticks — necessário para janela_100 do TITAN
-            precos  = _buscar_ticks_ws_sync(ativo, count=120)
+            precos  = _buscar_ticks_ws_sync(ativo, count=60)
             digitos = [int(str(round(abs(p), 5)).replace(".", "")[-1]) for p in precos] if precos else []
         with cache_lock:
             ticks_cache[ativo] = (precos, digitos)
         return precos, digitos
 
+    def _fluxo_para_ativo(ativo, precos):
+        """Calcula direção do fluxo local via regressão linear sobre os últimos 30 preços."""
+        if ativo == ativo_atual:
+            return fluxo_mercado
+        if not precos or len(precos) < 5:
+            return "NEUTRO"
+        sample = precos[-30:] if len(precos) >= 30 else precos
+        n  = len(sample)
+        sx = sum(range(n))
+        sy = sum(sample)
+        sx2 = sum(i * i for i in range(n))
+        sxy = sum(i * v for i, v in enumerate(sample))
+        denom = n * sx2 - sx * sx
+        if denom == 0:
+            return "NEUTRO"
+        slope = (n * sxy - sx * sy) / denom
+        if slope > 0.00001:
+            return "CALL"
+        if slope < -0.00001:
+            return "PUT"
+        return "NEUTRO"
+
     def _avaliar_combo(ativo, tipo, barreira):
         try:
             precos, digitos = _obter_ticks(ativo)
+            fluxo_local = _fluxo_para_ativo(ativo, precos)
             ctx = {
                 "tipo_contrato":   tipo,
                 "barreira":        barreira,
@@ -10956,46 +10522,31 @@ def ia_digit_barrier_356():
                 "banca":           banca,
                 "stake":           0.35,
                 "nivel_gale":      gale_nivel,
+                "fluxo_mercado":   fluxo_local,
             }
-            rel = _titan.avaliar(ctx)
+            rel = _supervisor.avaliar(ctx)
             entrada = {
-                "ativo":           ativo,
-                "tipo":            tipo,
-                "barreira":        barreira,
-                "confianca":       rel["confianca"],
-                "confianca_bruta": rel.get("confianca_bruta", rel["confianca"]),
-                "veredicto":       rel["veredicto"],
-                "notas":           rel["notas"],
-                "consenso":        rel.get("consenso", {}),
-                "hard_blocks":     rel.get("hard_blocks", []),
-                "motivos_bloco":   rel.get("motivos_bloco", []),
-                "reversao":        rel.get("reversao", False),
-                "loss_streak":     rel.get("loss_streak", 0),
-                "n_hist":          rel.get("n_hist", 0),
-                "wr_hist":         rel.get("wr_hist"),
-                "n_ticks":         len(digitos),
-                "motivo":          rel["motivo"],
-                "fluxo":           f"P{rel['notas'].get('pressao', 0)}",
+                "ativo":     ativo,
+                "tipo":      tipo,
+                "barreira":  barreira,
+                "confianca": rel["confianca"],
+                "veredicto": rel["veredicto"],
+                "notas":     rel["notas"],
+                "n_ticks":   len(digitos),
+                "motivo":    rel["motivo"],
+                "fluxo":     fluxo_local,
             }
         except Exception as exc:
             entrada = {
-                "ativo":           ativo,
-                "tipo":            tipo,
-                "barreira":        barreira,
-                "confianca":       0,
-                "confianca_bruta": 0,
-                "veredicto":       "ERRO",
-                "notas":           {},
-                "consenso":        {},
-                "hard_blocks":     ["ERRO"],
-                "motivos_bloco":   [str(exc)],
-                "reversao":        False,
-                "loss_streak":     0,
-                "n_hist":          0,
-                "wr_hist":         None,
-                "n_ticks":         0,
-                "motivo":          str(exc),
-                "fluxo":           "?",
+                "ativo":     ativo,
+                "tipo":      tipo,
+                "barreira":  barreira,
+                "confianca": 0,
+                "veredicto": "ERRO",
+                "notas":     {},
+                "n_ticks":   0,
+                "motivo":    str(exc),
+                "fluxo":     "?",
             }
         with lock:
             resultados.append(entrada)
@@ -11013,7 +10564,6 @@ def ia_digit_barrier_356():
     for t in threads: t.start()
     for t in threads: t.join(timeout=20)
 
-    # OPERAR primeiro, depois por confiança desc
     resultados.sort(key=lambda x: (0 if x["veredicto"] == "OPERAR" else 1, -x["confianca"]))
 
     top1 = next((r for r in resultados if r["veredicto"] == "OPERAR"), None) or \
@@ -11026,57 +10576,27 @@ def ia_digit_barrier_356():
         "n_aguardar": sum(1 for r in resultados if r["veredicto"] != "OPERAR"),
         "ranking":    resultados,
         "top1":       top1,
-        "motor":      "TITAN3",
+        "motor":      "EDC",
     })
-
-
-@app.route('/dbs/resultado', methods=['POST'])
-def dbs_resultado():
-    """
-    Registra WIN/LOSS de uma operação DBS no estado TITAN 3.0.
-    Body: { ativo, tipo, barreira, resultado, confianca?, lucro? }
-    """
-    dados     = request.get_json(force=True, silent=True) or {}
-    ativo     = dados.get("ativo", "").upper()
-    tipo      = dados.get("tipo", "").upper()
-    barreira  = int(dados.get("barreira", 0))
-    resultado = dados.get("resultado", "").upper()
-
-    if not ativo or not tipo or not barreira or resultado not in ("WIN", "LOSS"):
-        return jsonify({"ok": False, "erro": "ativo, tipo, barreira e resultado obrigatórios"}), 400
-
-    _titan_registrar_resultado(ativo, tipo, barreira, resultado, tick_atual=int(time.time()))
-
-    nome_combo = f"{tipo}-{barreira}@{ativo}"
-    _registrar_experiencia(
-        estrategia_nome=nome_combo,
-        resultado=resultado,
-        lucro=float(dados.get("lucro", 0)),
-        regime_mercado=ativo,
-        tipo_contrato=tipo,
-        barreira=barreira,
-        confianca_edc=float(dados.get("confianca", 0)),
-    )
-    return jsonify({"ok": True, "combo": nome_combo, "resultado": resultado})
 
 
 @app.route('/dbs/threshold', methods=['GET', 'POST'])
 def dbs_threshold():
-    """Lê ou ajusta o threshold do Titan3Engine em tempo real."""
+    """Lê ou ajusta o threshold do DecisionSupervisor em tempo real."""
     if request.method == 'GET':
-        return jsonify({"ok": True, "threshold": _titan.threshold})
+        return jsonify({"ok": True, "threshold": _supervisor.threshold})
     dados = request.get_json(force=True, silent=True) or {}
     novo = dados.get("threshold")
     if novo is None or not (50 <= int(novo) <= 99):
         return jsonify({"ok": False, "erro": "threshold deve ser entre 50 e 99"}), 400
-    _titan.threshold = int(novo)
+    _supervisor.threshold = int(novo)
     try:
         st = _ect_state_ler()
-        st["threshold_supervisor"] = _titan.threshold
+        st["threshold_supervisor"] = _supervisor.threshold
         _ect_state_salvar(st)
     except Exception:
         pass
-    return jsonify({"ok": True, "threshold": _titan.threshold})
+    return jsonify({"ok": True, "threshold": _supervisor.threshold})
 
 
 # ── Digit Sniper PRO ────────────────────────────────────────────────────────
