@@ -2391,23 +2391,447 @@ def _recuperar_aprendizado() -> str:
         )
     return json.dumps(resumo, ensure_ascii=False)
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# TITAN 3.0 — Motor de Decisão para DIGITOVER/DIGITUNDER
+# Substitui o DecisionSupervisor para a rota /ia/digit-barrier-356.
+# O DecisionSupervisor legado é preservado abaixo para as demais rotas.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+DBS_TITAN_FILE = os.path.join(_BASE_DIR, "dbs_titan_state.json")
+
+def _titan_estado_ler() -> dict:
+    """Lê estado persistente do TITAN (loss_streak e cooldown por combo)."""
+    if os.path.exists(DBS_TITAN_FILE):
+        try:
+            with open(DBS_TITAN_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {}
+
+def _titan_estado_salvar(estado: dict):
+    try:
+        with open(DBS_TITAN_FILE, "w", encoding="utf-8") as f:
+            json.dump(estado, f, indent=2, ensure_ascii=False)
+    except Exception:
+        pass
+
+def _titan_chave(ativo: str, tipo: str, barreira: int) -> str:
+    return f"{ativo}|{tipo}|{barreira}"
+
+def _titan_registrar_resultado(ativo: str, tipo: str, barreira: int,
+                                resultado: str, tick_atual: int = 0):
+    """
+    Registra WIN ou LOSS para um combo específico.
+    Atualiza loss_streak, ticks_desde_loss e histórico interno.
+    """
+    chave  = _titan_chave(ativo, tipo, barreira)
+    estado = _titan_estado_ler()
+    combo  = estado.get(chave, {
+        "loss_streak":    0,
+        "wins":           0,
+        "losses":         0,
+        "tick_ultimo":    0,
+        "historico":      [],  # últimos 50 resultados com confiança
+    })
+
+    combo["tick_ultimo"] = tick_atual
+    hist = combo.get("historico", [])
+
+    if resultado == "WIN":
+        combo["wins"]        += 1
+        combo["loss_streak"]  = 0
+        hist.append("W")
+    else:
+        combo["losses"]      += 1
+        combo["loss_streak"] += 1
+        hist.append("L")
+
+    combo["historico"] = hist[-50:]  # mantém últimos 50
+    estado[chave]      = combo
+    _titan_estado_salvar(estado)
+
+class Titan3Engine:
+    """
+    TITAN 3.0 — Motor de decisão para DIGITOVER/DIGITUNDER.
+
+    Pipeline de hard-blocks obrigatórios (qualquer falha → BLOQUEAR):
+      1. Threshold mínimo real: confiança bruta >= 85
+      2. Amostra mínima: >= 50 dígitos disponíveis
+      3. Consenso triplo: janelas 10/30/100 devem concordar (divergência bloqueia)
+      4. Reversão detectada: janela curta cai muito vs. média → BLOQUEAR
+      5. Histórico combo: win rate < 40% em >= 20 ops → BLOQUEAR
+      6. Loss streak: 2+ perdas seguidas neste combo → BLOQUEAR (cooldown por ticks)
+      7. Cooldown de ticks após loss
+      8. EDC ponderado (sem o agente de fluxo direcional inválido)
+
+    Fluxo para DIGITOVER/UNDER:
+      - NÃO usa fluxo CALL/PUT de preço
+      - Usa "pressão de dígitos": % dos últimos 30 favoráveis ao contrato
+    """
+
+    THRESHOLD_PADRAO = 85
+    # Consenso: divergência máxima entre janelas para não bloquear
+    MAX_DIVERGENCIA_CONSENSO = 15  # pontos percentuais entre janela curta e longa
+    # Reversão: se janela_5 cair >= este valor vs. janela_30 → BLOQUEAR
+    LIMIAR_REVERSAO = 20
+    # Loss streak máximo antes de cooldown
+    MAX_LOSS_STREAK = 2
+    # Ticks de cooldown após loss_streak atingido
+    COOLDOWN_TICKS = {1: 10, 2: 25, 3: 999}  # perdas → ticks de espera
+    # Histórico mínimo para bloquear por win rate
+    MIN_HISTORICO_BLOQUEIO = 20
+    # Win rate mínimo no histórico do combo (abaixo → BLOQUEAR)
+    MIN_WIN_RATE_COMBO = 0.40
+
+    def __init__(self, threshold: int = THRESHOLD_PADRAO):
+        self.threshold = threshold
+
+    # ── Calcula proporção favorável numa janela de dígitos ──────────────────
+    @staticmethod
+    def _pct_favoravel(digitos: list, tipo: str, barreira: int) -> float:
+        """Retorna fração [0..1] de dígitos favoráveis ao contrato na janela."""
+        if not digitos:
+            return 0.5
+        tipo = tipo.upper()
+        if tipo == "DIGITUNDER":
+            fav = sum(1 for d in digitos if d < barreira)
+        elif tipo == "DIGITOVER":
+            fav = sum(1 for d in digitos if d > barreira)
+        elif tipo == "DIGITEVEN":
+            fav = sum(1 for d in digitos if d % 2 == 0)
+        elif tipo == "DIGITODD":
+            fav = sum(1 for d in digitos if d % 2 != 0)
+        else:
+            return 0.5
+        return fav / len(digitos)
+
+    # ── Consenso triplo ─────────────────────────────────────────────────────
+    def _consenso(self, digitos: list, tipo: str, barreira: int) -> dict:
+        """
+        Calcula % favorável em 3 janelas independentes.
+        Retorna dict com pct10, pct30, pct100, divergencia, estabilidade.
+        """
+        j10  = digitos[-10:]  if len(digitos) >= 10  else digitos
+        j30  = digitos[-30:]  if len(digitos) >= 30  else digitos
+        j100 = digitos[-100:] if len(digitos) >= 100 else digitos
+
+        p10  = self._pct_favoravel(j10,  tipo, barreira)
+        p30  = self._pct_favoravel(j30,  tipo, barreira)
+        p100 = self._pct_favoravel(j100, tipo, barreira)
+
+        # Divergência = diferença entre janela mais alta e mais baixa
+        divergencia = round((max(p10, p30, p100) - min(p10, p30, p100)) * 100, 1)
+        # Estabilidade = quanto as 3 janelas concordam (100 = perfeito)
+        media = (p10 + p30 + p100) / 3
+        variancia = ((p10 - media)**2 + (p30 - media)**2 + (p100 - media)**2) / 3
+        estabilidade = round(max(0, 100 - variancia * 2000), 1)
+
+        return {
+            "pct10":         round(p10  * 100, 1),
+            "pct30":         round(p30  * 100, 1),
+            "pct100":        round(p100 * 100, 1),
+            "divergencia":   divergencia,
+            "estabilidade":  estabilidade,
+        }
+
+    # ── Detecção de reversão ────────────────────────────────────────────────
+    def _detectar_reversao(self, digitos: list, tipo: str, barreira: int) -> bool:
+        """
+        Retorna True se há sinal de reversão: os últimos 5 ticks contradizem
+        a tendência dos últimos 30 em >= LIMIAR_REVERSAO pontos percentuais.
+        """
+        if len(digitos) < 10:
+            return False
+        j5  = digitos[-5:]
+        j30 = digitos[-30:] if len(digitos) >= 30 else digitos
+        p5  = self._pct_favoravel(j5,  tipo, barreira) * 100
+        p30 = self._pct_favoravel(j30, tipo, barreira) * 100
+        # Reversão = janela curta caiu muito em relação à média longa
+        return (p30 - p5) >= self.LIMIAR_REVERSAO
+
+    # ── Fluxo de dígitos (substitui CALL/PUT para contratos DIGIT) ──────────
+    def _pressao_digitos(self, digitos: list, tipo: str, barreira: int) -> int:
+        """
+        Calcula a 'pressão' de dígitos favoráveis nos últimos 30 ticks.
+        Retorna nota 0-100. Não usa direção de preço.
+        """
+        j = digitos[-30:] if len(digitos) >= 30 else digitos
+        if not j:
+            return 50
+        p = self._pct_favoravel(j, tipo, barreira)
+        # Mapeia: 50% → 50pts, 70% → 80pts, 80% → 90pts, 90%+ → 100pts
+        if p <= 0.50:
+            return round(p * 100)
+        return round(50 + (p - 0.50) * 100)
+
+    # ── Agente de volatilidade do ativo ─────────────────────────────────────
+    @staticmethod
+    def _nota_volatilidade(ativo: str, tipo: str, barreira: int) -> int:
+        perfil = {
+            "1HZ10V": 95, "1HZ25V": 90, "1HZ50V": 80,
+            "R_10": 88, "R_25": 85, "R_50": 78,
+            "R_75": 65, "1HZ75V": 70, "1HZ100V": 60, "R_100": 50,
+        }
+        base = perfil.get(ativo.upper(), 65)
+        if tipo == "DIGITUNDER":
+            base = max(0, base - max(0, (8 - barreira) * 8))
+        elif tipo == "DIGITOVER":
+            base = max(0, base - max(0, (barreira - 2) * 8))
+        return min(round(base), 100)
+
+    # ── Agente de saúde de banca ─────────────────────────────────────────────
+    @staticmethod
+    def _nota_risco(nivel_gale: int, banca: float, stake: float) -> int:
+        penalidade_gale = {0: 0, 1: 10, 2: 25, 3: 45, 4: 70}
+        nota = 100 - penalidade_gale.get(nivel_gale, 80)
+        if banca > 0:
+            pct = stake / banca
+            if pct > 0.10:   nota -= 40
+            elif pct > 0.05: nota -= 20
+            elif pct > 0.03: nota -= 10
+        return max(0, round(nota))
+
+    # ── Histórico específico do combo ────────────────────────────────────────
+    @staticmethod
+    def _nota_historico_combo(ativo: str, tipo: str, barreira: int) -> tuple:
+        """
+        Consulta histórico específico ativo+tipo+barreira no memory_vault.
+        Retorna (nota 0-100, n_ops, win_rate, bloqueado).
+        bloqueado = True se win_rate < MIN e n_ops >= MIN_HISTORICO.
+        """
+        chave_titan = _titan_chave(ativo, tipo, barreira)
+        estado = _titan_estado_ler()
+        combo  = estado.get(chave_titan, {})
+        w = combo.get("wins", 0)
+        l = combo.get("losses", 0)
+        n = w + l
+
+        # Também consulta memory_vault para histórico mais rico
+        mem_wins   = 0
+        mem_total  = 0
+        nome_combo = f"{tipo}-{barreira}@{ativo}"
+        if os.path.exists(MEMORY_FILE):
+            try:
+                with open(MEMORY_FILE, "r", encoding="utf-8") as f:
+                    mem = json.load(f)
+                relevantes = [
+                    e for e in mem
+                    if e.get("estrategia") == nome_combo
+                    or (e.get("tipo_contrato") == tipo
+                        and str(e.get("barreira")) == str(barreira)
+                        and e.get("contexto") == ativo)
+                ]
+                mem_wins  = sum(1 for e in relevantes if e.get("resultado") == "WIN")
+                mem_total = len(relevantes)
+            except Exception:
+                pass
+
+        # Combina titan_state + memory_vault
+        total_w = w + mem_wins
+        total_n = max(n, mem_total)
+        total_l = total_n - total_w
+
+        if total_n == 0:
+            return 75, 0, None, False   # sem histórico → neutro
+
+        wr = total_w / total_n
+        bloqueado = (total_n >= Titan3Engine.MIN_HISTORICO_BLOQUEIO
+                     and wr < Titan3Engine.MIN_WIN_RATE_COMBO)
+
+        if wr < 0.40:
+            nota = round(wr * 100)
+        elif wr < 0.60:
+            nota = round(40 + (wr - 0.40) * 250)  # 40→90
+        else:
+            nota = round(min(90 + (wr - 0.60) * 50, 100))
+
+        return nota, total_n, round(wr * 100, 1), bloqueado
+
+    # ── Verifica cooldown de loss_streak ────────────────────────────────────
+    @staticmethod
+    def _verificar_cooldown(ativo: str, tipo: str, barreira: int,
+                             tick_atual: int) -> tuple:
+        """
+        Retorna (em_cooldown: bool, ticks_restantes: int, loss_streak: int).
+        tick_atual é o índice absoluto de ticks (usado para comparar quando o cooldown expira).
+        Como não temos índice de tick real, usamos timestamp aproximado.
+        """
+        chave  = _titan_chave(ativo, tipo, barreira)
+        estado = _titan_estado_ler()
+        combo  = estado.get(chave, {})
+        streak = combo.get("loss_streak", 0)
+
+        if streak < Titan3Engine.MAX_LOSS_STREAK:
+            return False, 0, streak
+
+        # Perdeu MAX_LOSS_STREAK ou mais — verifica quando foi o último loss
+        tick_ult = combo.get("tick_ultimo", 0)
+        espera   = Titan3Engine.COOLDOWN_TICKS.get(
+            min(streak, max(Titan3Engine.COOLDOWN_TICKS.keys())), 999
+        )
+        agora    = int(time.time())
+        # Aproximação: 1 tick ≈ 1 segundo em índices sintéticos
+        passados = agora - tick_ult
+        restantes = max(0, espera - passados)
+
+        return (restantes > 0), restantes, streak
+
+    # ── Motor principal ──────────────────────────────────────────────────────
+    def avaliar(self, ctx: dict) -> dict:
+        """
+        Executa o pipeline TITAN 3.0.
+        Retorna relatório completo com hard_blocks, consenso, veredicto e motivo.
+        """
+        tipo     = ctx.get("tipo_contrato", "DIGITUNDER").upper()
+        barreira = int(ctx.get("barreira", 5))
+        ativo    = ctx.get("ativo", "R_100").upper()
+        digitos  = ctx.get("ultimos_digitos", [])
+        precos   = ctx.get("ultimos_precos", [])
+        banca    = float(ctx.get("banca_usd", ctx.get("banca", 100.0)))
+        stake    = float(ctx.get("stake_usd", ctx.get("stake", 0.35)))
+        nivel_g  = int(ctx.get("nivel_gale", 0))
+
+        hard_blocks   = []   # lista de bloqueios ativos
+        motivos_bloco = []   # descrições legíveis
+
+        # ── 1. AMOSTRA MÍNIMA ────────────────────────────────────────────────
+        n_digitos = len(digitos)
+        if n_digitos < 50:
+            hard_blocks.append("AMOSTRA")
+            motivos_bloco.append(f"Amostra insuficiente ({n_digitos}/50 dígitos)")
+
+        # ── 2. CONSENSO TRIPLO ───────────────────────────────────────────────
+        cons = self._consenso(digitos, tipo, barreira)
+        if cons["divergencia"] > self.MAX_DIVERGENCIA_CONSENSO:
+            hard_blocks.append("CONSENSO")
+            motivos_bloco.append(
+                f"Divergência entre janelas: {cons['divergencia']}pp "
+                f"(10T:{cons['pct10']}% | 30T:{cons['pct30']}% | 100T:{cons['pct100']}%)"
+            )
+
+        # ── 3. CONFIANÇA BRUTA (maior janela disponível) ──────────────────────
+        # Usamos pct100 como proxy de confiança bruta
+        confianca_bruta = cons["pct100"] if n_digitos >= 50 else cons["pct30"]
+        if confianca_bruta < self.threshold:
+            hard_blocks.append("THRESHOLD")
+            motivos_bloco.append(
+                f"Confiança bruta {confianca_bruta}% < threshold {self.threshold}%"
+            )
+
+        # ── 4. REVERSÃO ──────────────────────────────────────────────────────
+        reversao = self._detectar_reversao(digitos, tipo, barreira)
+        if reversao:
+            hard_blocks.append("REVERSAO")
+            j5  = digitos[-5:]  if len(digitos) >= 5  else digitos
+            j30 = digitos[-30:] if len(digitos) >= 30 else digitos
+            p5  = round(self._pct_favoravel(j5,  tipo, barreira) * 100, 1)
+            p30 = round(self._pct_favoravel(j30, tipo, barreira) * 100, 1)
+            motivos_bloco.append(f"Reversão detectada: últimos 5T={p5}% vs 30T={p30}%")
+
+        # ── 5. HISTÓRICO ESPECÍFICO DO COMBO ─────────────────────────────────
+        nota_hist, n_hist, wr_hist, hist_bloqueado = self._nota_historico_combo(
+            ativo, tipo, barreira
+        )
+        if hist_bloqueado:
+            hard_blocks.append("HISTORICO")
+            motivos_bloco.append(
+                f"Win rate histórico {wr_hist}% em {n_hist} ops — abaixo do mínimo"
+            )
+
+        # ── 6. LOSS STREAK + COOLDOWN ─────────────────────────────────────────
+        tick_ts = int(time.time())
+        em_cd, cd_rest, streak = self._verificar_cooldown(ativo, tipo, barreira, tick_ts)
+        if em_cd:
+            hard_blocks.append("COOLDOWN")
+            motivos_bloco.append(
+                f"Cooldown ativo: {streak} losses seguidos — aguardar ~{cd_rest}s"
+            )
+
+        # ── 7. NOTAS EDC PONDERADAS (sem fluxo direcional inválido) ──────────
+        pressao = self._pressao_digitos(digitos, tipo, barreira)
+        vol     = self._nota_volatilidade(ativo, tipo, barreira)
+        risco   = self._nota_risco(nivel_g, banca, stake)
+
+        # EDC score: médio ponderado dos 4 agentes válidos para DIGIT
+        notas = {
+            "consenso_10t":  round(cons["pct10"]),
+            "consenso_30t":  round(cons["pct30"]),
+            "consenso_100t": round(cons["pct100"]),
+            "estabilidade":  round(cons["estabilidade"]),
+            "pressao":       pressao,
+            "volatilidade":  vol,
+            "risco":         risco,
+            "historico":     nota_hist,
+        }
+        edc_score = round(
+            notas["pressao"]    * 0.30 +
+            notas["estabilidade"] * 0.20 +
+            notas["historico"]  * 0.25 +
+            notas["volatilidade"] * 0.10 +
+            notas["risco"]      * 0.15,
+            1
+        )
+
+        # ── VEREDICTO FINAL ───────────────────────────────────────────────────
+        bloqueado = len(hard_blocks) > 0
+        veredicto = "AGUARDAR" if bloqueado else ("OPERAR" if edc_score >= self.threshold else "AGUARDAR")
+
+        if bloqueado:
+            motivo_principal = motivos_bloco[0]
+            motivo = f"🚫 BLOQUEADO — {motivo_principal}"
+            if len(motivos_bloco) > 1:
+                motivo += f" (+{len(motivos_bloco)-1} outros)"
+        elif veredicto == "OPERAR":
+            motivo = "✅ Todos os filtros TITAN aprovaram a entrada."
+        else:
+            motivo = f"⛔ EDC score {edc_score}% < threshold {self.threshold}%"
+
+        return {
+            "confianca":       edc_score,
+            "confianca_bruta": confianca_bruta,
+            "veredicto":       veredicto,
+            "threshold":       self.threshold,
+            "notas":           notas,
+            "consenso":        cons,
+            "hard_blocks":     hard_blocks,
+            "motivos_bloco":   motivos_bloco,
+            "reversao":        reversao,
+            "loss_streak":     streak,
+            "n_hist":          n_hist,
+            "wr_hist":         wr_hist,
+            "n_digitos":       n_digitos,
+            "motivo":          motivo,
+        }
+
+    def narrativa(self, relatorio: dict, nome_estrategia: str = "") -> str:
+        v = relatorio["veredicto"]
+        c = relatorio["confianca"]
+        icone = "🟢" if v == "OPERAR" else "🚫"
+        cons  = relatorio.get("consenso", {})
+        linhas = [
+            f"{icone} TITAN 3.0 — {v} (EDC: {c}%)",
+            f"Combo: {nome_estrategia}" if nome_estrategia else "",
+            f"",
+            f"CONSENSO  10T:{cons.get('pct10','?')}%  "
+            f"30T:{cons.get('pct30','?')}%  100T:{cons.get('pct100','?')}%",
+            f"Estabilidade: {cons.get('estabilidade','?')}%  "
+            f"Reversão: {'SIM 🚫' if relatorio.get('reversao') else 'NÃO'}",
+            f"Histórico: {relatorio.get('wr_hist','—')}% em {relatorio.get('n_hist',0)} ops",
+            f"Loss streak: {relatorio.get('loss_streak',0)}",
+            f"",
+            relatorio["motivo"],
+        ]
+        return "\n".join(l for l in linhas if l is not None)
+
+
 # ─────────────────────────────────────────────────────────
-# EDC FASE 2 — Conselho de Especialistas (Decision Supervisor)
+# EDC FASE 2 — Conselho de Especialistas (legado — demais rotas)
 # ─────────────────────────────────────────────────────────
 class DecisionSupervisor:
     """
-    Motor de Confiança Probabilística.
-    Fragmenta a decisão em 6 agentes independentes, pondera as notas
-    e emite um veredicto: OPERAR (confiança >= threshold) ou AGUARDAR.
-
-    Cada agente retorna uma nota de 0 a 100.
-    Pesos:
-      - estatistica  0.30  (histórico de win rate do ativo/estratégia)
-      - risco        0.25  (saúde da banca, nível de Gale)
-      - scanner      0.15  (momentum: sequência de dígitos recentes)
-      - volatilidade 0.10  (conservadorismo baseado no ativo)
-      - volume       0.10  (amplitude de movimento dos ticks — atividade do mercado)
-      - fluxo        0.10  (direção do mercado vs. direção da estratégia — bloqueio duro)
+    Motor de Confiança Probabilística legado.
+    Usado pelas demais rotas do bot (não pelo DBS TITAN 3.0).
     """
 
     PESOS = {
@@ -2418,29 +2842,19 @@ class DecisionSupervisor:
         "volume":      0.10,
         "fluxo":       0.10,
     }
-    THRESHOLD_PADRAO = 72  # confiança mínima para OPERAR
+    THRESHOLD_PADRAO = 72
 
     def __init__(self, threshold: int = THRESHOLD_PADRAO):
         self.threshold = threshold
 
-    # ── Agente 1 — Scanner de Momentum ───────────────────
     def _agente_scanner(self, ctx: dict) -> int:
-        """
-        Analisa a sequência de dígitos recentes enviada pelo frontend.
-        Penaliza quando os últimos ticks contradizem o tipo de contrato.
-        ctx esperado: { tipo_contrato, barreira, ultimos_digitos: [int,...] }
-        """
         digitos  = ctx.get("ultimos_digitos", [])
         tipo     = ctx.get("tipo_contrato", "").upper()
         barreira = int(ctx.get("barreira", 5))
-
         if not digitos or len(digitos) < 3:
-            return 60  # sem dados suficientes → nota neutra
-
-        janela = digitos[-10:]  # últimos 10 ticks
-
+            return 60
+        janela = digitos[-10:]
         if tipo == "DIGITUNDER":
-            # Proporção de dígitos abaixo da barreira na janela
             favoraveis = sum(1 for d in janela if d < barreira)
         elif tipo == "DIGITOVER":
             favoraveis = sum(1 for d in janela if d > barreira)
@@ -2448,178 +2862,89 @@ class DecisionSupervisor:
             alvo = (lambda d: d % 2 == 0) if tipo == "DIGITEVEN" else (lambda d: d % 2 != 0)
             favoraveis = sum(1 for d in janela if alvo(d))
         else:
-            return 65  # FLUXO / DUPLA / PCT → nota neutra
+            return 65
+        return round(favoraveis / len(janela) * 100)
 
-        pct = favoraveis / len(janela)
-        # Mapeia 0-100%  →  0-100 pontos (linear)
-        return round(pct * 100)
-
-    # ── Agente 2 — Estatística Histórica ─────────────────
     def _agente_estatistica(self, ctx: dict) -> int:
-        """
-        Consulta o memory_vault.json filtrado por estratégia + ativo.
-        Retorna o win rate histórico como nota (0-100).
-        """
         estrategia = ctx.get("nome", "")
         ativo      = ctx.get("ativo", "")
-
         if not os.path.exists(MEMORY_FILE):
-            return 75  # sem histórico → nota neutra alta (não penaliza estratégias novas)
-
+            return 75
         try:
             with open(MEMORY_FILE, "r", encoding="utf-8") as f:
                 memoria = json.load(f)
         except Exception:
             return 75
-
-        # Filtra por estratégia (e opcionalmente por ativo)
         relevantes = [
             e for e in memoria
             if e.get("estrategia") == estrategia
             and (not ativo or e.get("contexto") == ativo)
         ]
         if len(relevantes) < 5:
-            # Menos de 5 amostras → sem dados suficientes, nota neutra alta
             return 75
-
         wins = sum(1 for e in relevantes if e.get("resultado") == "WIN")
         taxa = wins / len(relevantes)
-
-        # Win rate <30% → nota 0 ; =50% → 50 ; =80% → 90 ; =100% → 100
-        # Escala suavizada: penaliza fortemente abaixo de 50%
         if taxa < 0.50:
-            nota = round(taxa * 100)          # 0-49
-        else:
-            nota = round(50 + (taxa - 0.50) * 100)  # 50-100
-        return min(nota, 100)
+            return round(taxa * 100)
+        return min(round(50 + (taxa - 0.50) * 100), 100)
 
-    # ── Agente 3 — Volatilidade do Ativo ─────────────────
     def _agente_volatilidade(self, ctx: dict) -> int:
-        """
-        Score conservador baseado no ativo e tipo de contrato.
-        Ativos mais voláteis (R_100) com barreiras arriscadas → nota baixa.
-        """
         ativo    = ctx.get("ativo", "R_100").upper()
         tipo     = ctx.get("tipo_contrato", "").upper()
         barreira = int(ctx.get("barreira", 5))
-
-        # Mapa de volatilidade base (0-100, maior = mais seguro)
         perfil_ativo = {
             "1HZ10V": 95, "1HZ25V": 90, "1HZ50V": 80,
             "R_10": 88, "R_25": 85, "R_50": 78,
             "R_75": 65, "1HZ75V": 70, "1HZ100V": 60, "R_100": 50,
         }
         base = perfil_ativo.get(ativo, 65)
-
-        # Ajuste de barreira para DIGITOVER/UNDER
         if tipo == "DIGITUNDER":
-            # Under 8/9 → seguro; Under 5/4 → arriscado
-            penalidade = max(0, (8 - barreira) * 8)
-            base = max(0, base - penalidade)
+            base = max(0, base - max(0, (8 - barreira) * 8))
         elif tipo == "DIGITOVER":
-            # Over 1/2 → seguro; Over 5/6 → arriscado
-            penalidade = max(0, (barreira - 2) * 8)
-            base = max(0, base - penalidade)
-
+            base = max(0, base - max(0, (barreira - 2) * 8))
         return min(round(base), 100)
 
-    # ── Agente 4 — Segurança de Banca ────────────────────
     def _agente_risco(self, ctx: dict) -> int:
-        """
-        Verifica nível de Martingale e exposição da banca.
-        ctx esperado: { nivel_gale (int), banca_usd (float), stake_usd (float) }
-        """
         nivel_gale = int(ctx.get("nivel_gale", 0))
         banca      = float(ctx.get("banca_usd", 100.0))
         stake      = float(ctx.get("stake_usd", 1.0))
-
         nota = 100
-
-        # Penaliza Martingale progressivo
         penalidade_gale = {0: 0, 1: 10, 2: 25, 3: 45, 4: 70}
         nota -= penalidade_gale.get(nivel_gale, 80)
-
-        # Penaliza se stake > 5% da banca
         if banca > 0:
             pct_risco = stake / banca
-            if pct_risco > 0.10:
-                nota -= 40
-            elif pct_risco > 0.05:
-                nota -= 20
-            elif pct_risco > 0.03:
-                nota -= 10
-
+            if pct_risco > 0.10:   nota -= 40
+            elif pct_risco > 0.05: nota -= 20
+            elif pct_risco > 0.03: nota -= 10
         return max(0, round(nota))
 
-    # ── Agente 5 — Atividade de Tick (amplitude de mercado) ─────────────────
     def _agente_volume(self, ctx: dict) -> int:
-        """
-        Mede a frequência/amplitude dos ticks como proxy de atividade.
-        Índices sintéticos não têm volume real — usamos a variação tick a tick.
-        - Mercado parado (avg_move muito baixo) → nota baixa (ruim para Touch/Dupla)
-        - Mercado com explosão (avg_move alto)  → nota 100
-        - Mercado normal                        → nota 85 (neutro)
-        ctx esperado: { ultimos_precos: [float, ...], tipo_contrato: str }
-        """
         ticks = ctx.get("ultimos_precos", [])
         tipo  = ctx.get("tipo_contrato", "").upper()
-
         if not ticks or len(ticks) < 10:
-            return 70  # sem dados suficientes → nota neutra
-
+            return 70
         diffs    = [abs(ticks[i] - ticks[i - 1]) for i in range(1, len(ticks))]
         avg_move = sum(diffs) / len(diffs)
-
-        # NOTOUCH se beneficia de mercado calmo — inverte a lógica
         if tipo == "NOTOUCH":
-            if avg_move < 0.0001:
-                return 95   # mercado parado → ótimo para NOTOUCH
-            elif avg_move > 0.005:
-                return 40   # explosão → perigoso para NOTOUCH
+            if avg_move < 0.0001: return 95
+            elif avg_move > 0.005: return 40
             return 80
-
-        # Demais contratos: quanto mais movimento, melhor
-        if avg_move < 0.0001:
-            return 30   # mercado "morto" — entrada arriscada
-        elif avg_move > 0.005:
-            return 100  # alta atividade — ótimo para Touch/Dupla/Digit
+        if avg_move < 0.0001: return 30
+        elif avg_move > 0.005: return 100
         return 85
 
-    # ── Agente 6 — Filtro de Fluxo Obrigatório ───────────────────────────────
     def _agente_fluxo_obrigatorio(self, ctx: dict) -> int:
-        """
-        Verifica coerência entre a direção do mercado e o tipo de contrato.
-        Bloqueia (nota 0) entradas contrárias ao fluxo.
-        Penaliza (nota 50) entradas em mercado neutro/lateral.
-        ctx esperado: { fluxo_mercado: "CALL"|"PUT"|"NEUTRO", tipo_contrato: str }
-        """
         fluxo = ctx.get("fluxo_mercado", "NEUTRO").upper()
         tipo  = ctx.get("tipo_contrato", "").upper()
-
-        # Contratos direcionais — Over sobe, Under cai
-        if "OVER" in tipo and fluxo == "PUT":
-            return 0    # fluxo contrário → bloqueio duro
-        if "UNDER" in tipo and fluxo == "CALL":
-            return 0    # fluxo contrário → bloqueio duro
-
-        # Contratos de dígitos não-direcionais (PAR/ÍMPAR/DUPLA): fluxo não bloqueia
+        if "OVER" in tipo and fluxo == "PUT":   return 0
+        if "UNDER" in tipo and fluxo == "CALL": return 0
         if tipo in ("DIGITEVEN", "DIGITODD", "DIGITDUPLA",
                     "DIGITMATCH", "DIGITPCT", "SATURACAO"):
-            return 85   # neutro positivo — fluxo não é determinante
-
-        # Fluxo neutro para contratos direcionais → reduz confiança
-        if fluxo == "NEUTRO":
-            return 50
-
-        # Fluxo alinhado com o contrato → nota máxima
+            return 85
+        if fluxo == "NEUTRO": return 50
         return 100
 
-    # ── Motor de Consenso ─────────────────────────────────
     def avaliar(self, ctx: dict) -> dict:
-        """
-        Executa todos os agentes, pondera e retorna o relatório completo.
-        Retorno: { confianca, veredicto, notas, motivo, threshold }
-        """
         notas = {
             "scanner":     self._agente_scanner(ctx),
             "estatistica": self._agente_estatistica(ctx),
@@ -2628,11 +2953,8 @@ class DecisionSupervisor:
             "volume":      self._agente_volume(ctx),
             "fluxo":       self._agente_fluxo_obrigatorio(ctx),
         }
-
         confianca = round(sum(notas[k] * self.PESOS[k] for k in notas), 1)
         veredicto = "OPERAR" if confianca >= self.threshold else "AGUARDAR"
-
-        # Identifica o agente mais restritivo para o motivo narrativo
         agente_fraco = min(notas, key=lambda k: notas[k])
         labels = {
             "scanner":      "Momentum dos dígitos recentes desfavorável",
@@ -2643,49 +2965,47 @@ class DecisionSupervisor:
             "fluxo":        "Direção do mercado contrária ao tipo de contrato",
         }
         motivo = (
-            f"✅ Todos os módulos aprovaram a entrada."
+            "✅ Todos os módulos aprovaram a entrada."
             if veredicto == "OPERAR"
             else f"⛔ Módulo mais restritivo: {agente_fraco.upper()} ({notas[agente_fraco]}/100) — {labels[agente_fraco]}."
         )
-
         return {
-            "confianca":  confianca,
-            "veredicto":  veredicto,
-            "threshold":  self.threshold,
-            "notas":      notas,
-            "motivo":     motivo,
+            "confianca": confianca,
+            "veredicto": veredicto,
+            "threshold": self.threshold,
+            "notas":     notas,
+            "motivo":    motivo,
         }
 
-    # ── Narrativa para Telegram/WhatsApp ─────────────────
     def narrativa(self, relatorio: dict, nome_estrategia: str = "") -> str:
-        """Formata o relatório do Conselho como mensagem de notificação."""
         v = relatorio["veredicto"]
         c = relatorio["confianca"]
         n = relatorio["notas"]
         icone = "🛡️" if v == "OPERAR" else "🚫"
-        linhas = [
-            f"{icone} CONSELHO DE ESPECIALISTAS — {v} (Confiança: {c}%)",
-        ]
+        linhas = [f"{icone} CONSELHO DE ESPECIALISTAS — {v} (Confiança: {c}%)"]
         if nome_estrategia:
             linhas.append(f"Estratégia: {nome_estrategia}")
         fluxo_nota  = n.get('fluxo', '—')
         fluxo_icone = "🟢" if isinstance(fluxo_nota, int) and fluxo_nota >= 85 else ("🔴" if isinstance(fluxo_nota, int) and fluxo_nota == 0 else "🟡")
         linhas += [
-            f"",
+            "",
             f"📊 Estatística histórica : {n['estatistica']}/100",
             f"📈 Scanner de momentum  : {n['scanner']}/100",
             f"🌡️ Volatilidade do ativo : {n['volatilidade']}/100",
             f"🏦 Segurança de banca   : {n['risco']}/100",
-            f"📈 Atividade de Tick    : {n.get('volume', '—')}/100  (amplitude tick-a-tick)",
+            f"📈 Atividade de Tick    : {n.get('volume','—')}/100",
             f"{fluxo_icone} Fluxo direcional    : {fluxo_nota}/100",
-            f"",
+            "",
             relatorio["motivo"],
         ]
         return "\n".join(linhas)
 
 
-# Instância global — reutilizada em todas as rotas
+# Instância global legada — usada pelas demais rotas
 _supervisor = DecisionSupervisor()
+
+# Instância global TITAN 3.0 — usada exclusivamente pelo DBS
+_titan = Titan3Engine()
 
 # ─────────────────────────────────────────────────────────
 # EDC — Formatador de Veredito Cognitivo (Narrativa Executiva)
@@ -10564,65 +10884,41 @@ def quick_sort_simulacao():
     return jsonify({"ok": True, "passos": passos})
 
 
-# ── Digit Barrier 356 — Scanner Multi-Ativo × Multi-Barreira ────────────────
+# ── Digit Barrier 356 — TITAN 3.0 ───────────────────────────────────────────
 @app.route('/ia/digit-barrier-356', methods=['POST'])
 def ia_digit_barrier_356():
     """
-    Avalia 30 combinações (5 ativos × 6 contratos: UNDER/OVER × barreiras 3,5,6)
-    em paralelo usando o DecisionSupervisor (EDC) e retorna o ranking completo
-    + TOP 1 com maior confiança.
+    TITAN 3.0 — Avalia 30 combinações (5 ativos × UNDER/OVER × barreiras 3,5,6)
+    com hard-blocks obrigatórios: threshold 85%, consenso triplo 10/30/100 ticks,
+    detecção de reversão, histórico por combo, loss streak e cooldown.
     """
     dados = request.get_json(force=True, silent=True) or {}
 
-    # Ticks enviados pelo frontend (ativo atual já carregado no bot)
     ultimos_digitos_atual = dados.get("ultimos_digitos", [])
     ultimos_precos_atual  = dados.get("ultimos_precos", [])
     banca                 = float(dados.get("banca", 1000))
     gale_nivel            = int(dados.get("gale_nivel", 0))
     ativo_atual           = dados.get("ativo", "R_100").upper()
-    # Fluxo enviado pelo frontend (calculado pelo slope dos ticks do bot)
-    fluxo_frontend        = dados.get("fluxo_mercado", "").upper()  # CALL | PUT | NEUTRO | ""
 
-    ATIVOS     = ["R_10", "R_25", "R_50", "R_75", "R_100"]
-    BARREIRAS  = [3, 5, 6]
-    TIPOS      = ["DIGITUNDER", "DIGITOVER"]
-    SLOPE_MIN  = 0.00015  # mesmo limiar do RegimoDetector
+    ATIVOS    = ["R_10", "R_25", "R_50", "R_75", "R_100"]
+    BARREIRAS = [3, 5, 6]
+    TIPOS     = ["DIGITUNDER", "DIGITOVER"]
 
-    resultados = []
-    lock       = threading.Lock()
-
-    # Cache de ticks por ativo (evita buscar o mesmo ativo 6x)
+    resultados  = []
+    lock        = threading.Lock()
     ticks_cache = {}
     cache_lock  = threading.Lock()
-
-    def _calcular_fluxo(precos: list) -> str:
-        """Calcula o fluxo direcional (CALL/PUT/NEUTRO) via regressão linear simples."""
-        n = len(precos)
-        if n < 10:
-            return "NEUTRO"
-        xm = (n - 1) / 2.0
-        med = sum(precos) / n
-        num = sum((i - xm) * (precos[i] - med) for i in range(n))
-        den = sum((i - xm) ** 2 for i in range(n))
-        if den == 0:
-            return "NEUTRO"
-        slope = num / den
-        if slope > SLOPE_MIN:
-            return "CALL"
-        elif slope < -SLOPE_MIN:
-            return "PUT"
-        return "NEUTRO"
 
     def _obter_ticks(ativo):
         with cache_lock:
             if ativo in ticks_cache:
                 return ticks_cache[ativo]
-        # Se for o ativo atual do bot, usa os ticks já enviados pelo frontend
         if ativo == ativo_atual and ultimos_precos_atual:
             precos  = ultimos_precos_atual
             digitos = ultimos_digitos_atual
         else:
-            precos  = _buscar_ticks_ws_sync(ativo, count=60)
+            # Busca 120 ticks — necessário para janela_100 do TITAN
+            precos  = _buscar_ticks_ws_sync(ativo, count=120)
             digitos = [int(str(round(abs(p), 5)).replace(".", "")[-1]) for p in precos] if precos else []
         with cache_lock:
             ticks_cache[ativo] = (precos, digitos)
@@ -10631,13 +10927,6 @@ def ia_digit_barrier_356():
     def _avaliar_combo(ativo, tipo, barreira):
         try:
             precos, digitos = _obter_ticks(ativo)
-
-            # Fluxo: usa o do frontend se for o ativo atual, senão calcula pelos ticks do ativo
-            if ativo == ativo_atual and fluxo_frontend in ("CALL", "PUT", "NEUTRO"):
-                fluxo = fluxo_frontend
-            else:
-                fluxo = _calcular_fluxo(precos)
-
             ctx = {
                 "tipo_contrato":   tipo,
                 "barreira":        barreira,
@@ -10645,89 +10934,129 @@ def ia_digit_barrier_356():
                 "ultimos_digitos": digitos,
                 "ultimos_precos":  precos,
                 "banca":           banca,
-                "gale_nivel":      gale_nivel,
-                "fluxo_mercado":   fluxo,
-                "nome":            f"{tipo}-{barreira}@{ativo}",
+                "stake":           0.35,
+                "nivel_gale":      gale_nivel,
             }
-            rel = _supervisor.avaliar(ctx)
+            rel = _titan.avaliar(ctx)
             entrada = {
-                "ativo":      ativo,
-                "tipo":       tipo,
-                "barreira":   barreira,
-                "confianca":  rel["confianca"],
-                "veredicto":  rel["veredicto"],
-                "notas":      rel["notas"],
-                "motivo":     rel["motivo"],
-                "n_ticks":    len(digitos),
-                "fluxo":      fluxo,
+                "ativo":           ativo,
+                "tipo":            tipo,
+                "barreira":        barreira,
+                "confianca":       rel["confianca"],
+                "confianca_bruta": rel.get("confianca_bruta", rel["confianca"]),
+                "veredicto":       rel["veredicto"],
+                "notas":           rel["notas"],
+                "consenso":        rel.get("consenso", {}),
+                "hard_blocks":     rel.get("hard_blocks", []),
+                "motivos_bloco":   rel.get("motivos_bloco", []),
+                "reversao":        rel.get("reversao", False),
+                "loss_streak":     rel.get("loss_streak", 0),
+                "n_hist":          rel.get("n_hist", 0),
+                "wr_hist":         rel.get("wr_hist"),
+                "n_ticks":         len(digitos),
+                "motivo":          rel["motivo"],
+                "fluxo":           f"P{rel['notas'].get('pressao', 0)}",
             }
         except Exception as exc:
             entrada = {
-                "ativo":     ativo,
-                "tipo":      tipo,
-                "barreira":  barreira,
-                "confianca": 0,
-                "veredicto": "ERRO",
-                "notas":     {},
-                "motivo":    str(exc),
-                "n_ticks":   0,
-                "fluxo":     "?",
+                "ativo":           ativo,
+                "tipo":            tipo,
+                "barreira":        barreira,
+                "confianca":       0,
+                "confianca_bruta": 0,
+                "veredicto":       "ERRO",
+                "notas":           {},
+                "consenso":        {},
+                "hard_blocks":     ["ERRO"],
+                "motivos_bloco":   [str(exc)],
+                "reversao":        False,
+                "loss_streak":     0,
+                "n_hist":          0,
+                "wr_hist":         None,
+                "n_ticks":         0,
+                "motivo":          str(exc),
+                "fluxo":           "?",
             }
         with lock:
             resultados.append(entrada)
 
-    # Primeiro busca ticks de todos os ativos em paralelo (5 threads)
-    def _prefetch(ativo):
-        _obter_ticks(ativo)
-
-    prefetch_threads = [threading.Thread(target=_prefetch, args=(a,), daemon=True)
+    # Prefetch paralelo — 5 threads, 1 por ativo
+    prefetch_threads = [threading.Thread(target=_obter_ticks, args=(a,), daemon=True)
                         for a in ATIVOS]
-    for t in prefetch_threads:
-        t.start()
-    for t in prefetch_threads:
-        t.join(timeout=12)
+    for t in prefetch_threads: t.start()
+    for t in prefetch_threads: t.join(timeout=15)
 
-    # Depois avalia as 30 combinações em paralelo
-    combos   = [(a, tp, b) for a in ATIVOS for tp in TIPOS for b in BARREIRAS]
-    threads  = [threading.Thread(target=_avaliar_combo, args=c, daemon=True)
-                for c in combos]
-    for t in threads:
-        t.start()
-    for t in threads:
-        t.join(timeout=15)
+    # Avalia 30 combos em paralelo
+    combos  = [(a, tp, b) for a in ATIVOS for tp in TIPOS for b in BARREIRAS]
+    threads = [threading.Thread(target=_avaliar_combo, args=c, daemon=True)
+               for c in combos]
+    for t in threads: t.start()
+    for t in threads: t.join(timeout=20)
 
-    # Ordena por confiança descendente
-    resultados.sort(key=lambda x: -x["confianca"])
+    # OPERAR primeiro, depois por confiança desc
+    resultados.sort(key=lambda x: (0 if x["veredicto"] == "OPERAR" else 1, -x["confianca"]))
 
     top1 = next((r for r in resultados if r["veredicto"] == "OPERAR"), None) or \
            (resultados[0] if resultados else None)
 
     return jsonify({
-        "ok":      True,
-        "total":   len(resultados),
-        "ranking": resultados,
-        "top1":    top1,
+        "ok":         True,
+        "total":      len(resultados),
+        "n_operar":   sum(1 for r in resultados if r["veredicto"] == "OPERAR"),
+        "n_aguardar": sum(1 for r in resultados if r["veredicto"] != "OPERAR"),
+        "ranking":    resultados,
+        "top1":       top1,
+        "motor":      "TITAN3",
     })
+
+
+@app.route('/dbs/resultado', methods=['POST'])
+def dbs_resultado():
+    """
+    Registra WIN/LOSS de uma operação DBS no estado TITAN 3.0.
+    Body: { ativo, tipo, barreira, resultado, confianca?, lucro? }
+    """
+    dados     = request.get_json(force=True, silent=True) or {}
+    ativo     = dados.get("ativo", "").upper()
+    tipo      = dados.get("tipo", "").upper()
+    barreira  = int(dados.get("barreira", 0))
+    resultado = dados.get("resultado", "").upper()
+
+    if not ativo or not tipo or not barreira or resultado not in ("WIN", "LOSS"):
+        return jsonify({"ok": False, "erro": "ativo, tipo, barreira e resultado obrigatórios"}), 400
+
+    _titan_registrar_resultado(ativo, tipo, barreira, resultado, tick_atual=int(time.time()))
+
+    nome_combo = f"{tipo}-{barreira}@{ativo}"
+    _registrar_experiencia(
+        estrategia_nome=nome_combo,
+        resultado=resultado,
+        lucro=float(dados.get("lucro", 0)),
+        regime_mercado=ativo,
+        tipo_contrato=tipo,
+        barreira=barreira,
+        confianca_edc=float(dados.get("confianca", 0)),
+    )
+    return jsonify({"ok": True, "combo": nome_combo, "resultado": resultado})
 
 
 @app.route('/dbs/threshold', methods=['GET', 'POST'])
 def dbs_threshold():
-    """Lê ou ajusta o threshold do DecisionSupervisor em tempo real."""
+    """Lê ou ajusta o threshold do Titan3Engine em tempo real."""
     if request.method == 'GET':
-        return jsonify({"ok": True, "threshold": _supervisor.threshold})
+        return jsonify({"ok": True, "threshold": _titan.threshold})
     dados = request.get_json(force=True, silent=True) or {}
     novo = dados.get("threshold")
     if novo is None or not (50 <= int(novo) <= 99):
         return jsonify({"ok": False, "erro": "threshold deve ser entre 50 e 99"}), 400
-    _supervisor.threshold = int(novo)
-    # Persiste no ect_state.json
+    _titan.threshold = int(novo)
     try:
         st = _ect_state_ler()
-        st["threshold_supervisor"] = _supervisor.threshold
+        st["threshold_supervisor"] = _titan.threshold
         _ect_state_salvar(st)
     except Exception:
         pass
-    return jsonify({"ok": True, "threshold": _supervisor.threshold})
+    return jsonify({"ok": True, "threshold": _titan.threshold})
 
 
 # ── Digit Sniper PRO ────────────────────────────────────────────────────────

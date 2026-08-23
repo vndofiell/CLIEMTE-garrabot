@@ -3426,11 +3426,15 @@
           <!-- ╔══ COLUNA ESQUERDA — configurações + log ══╗ -->
           <div style="display:flex;flex-direction:column;gap:10px;">
 
-            <!-- TOP 1 destaque -->
+            <!-- TOP 1 destaque — TITAN 3.0 -->
             <div id="dbs-top1-box" style="display:none;
                 background:rgba(99,102,241,0.12);border:2px solid #6366f1;
                 border-radius:7px;padding:10px 13px;">
-              <div style="font-size:0.58rem;color:#6366f1;letter-spacing:2px;margin-bottom:5px;">🏆 MELHOR OPORTUNIDADE</div>
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;">
+                <span style="font-size:0.58rem;color:#6366f1;letter-spacing:2px;">🏆 MELHOR OPORTUNIDADE</span>
+                <span style="font-size:0.5rem;color:#4b5563;letter-spacing:1px;">TITAN 3.0</span>
+              </div>
+              <!-- Linha 1: tipo | barreira | ativo | EDC score -->
               <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;flex-wrap:wrap;">
                 <div>
                   <span id="dbs-top1-tipo" style="font-size:0.95rem;font-weight:bold;color:#a5b4fc;">—</span>
@@ -3439,8 +3443,30 @@
                   <span style="color:#555;margin:0 5px;">|</span>
                   <span id="dbs-top1-ativo" style="font-size:0.72rem;color:#00ff88;font-weight:bold;">—</span>
                 </div>
-                <div style="font-size:1.15rem;font-weight:bold;color:#00ff88;"><span id="dbs-top1-conf">—</span>%</div>
+                <div style="text-align:right;">
+                  <div style="font-size:1.15rem;font-weight:bold;color:#00ff88;"><span id="dbs-top1-conf">—</span>%</div>
+                  <div style="font-size:0.52rem;color:#6b7280;">EDC score</div>
+                </div>
               </div>
+              <!-- Linha 2: CONSENSO triplo -->
+              <div id="dbs-top1-consenso" style="display:none;margin-top:7px;
+                  background:rgba(0,0,0,0.25);border-radius:5px;padding:6px 8px;">
+                <div style="font-size:0.52rem;color:#6366f1;letter-spacing:1px;margin-bottom:4px;">CONSENSO</div>
+                <div style="display:flex;gap:5px;flex-wrap:wrap;">
+                  <span style="background:rgba(0,255,136,0.08);border:1px solid rgba(0,255,136,0.2);border-radius:3px;padding:2px 6px;font-size:0.62rem;color:#00ff88;">10T: <b id="dbs-c10">—</b>%</span>
+                  <span style="background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.3);border-radius:3px;padding:2px 6px;font-size:0.62rem;color:#a5b4fc;">30T: <b id="dbs-c30">—</b>%</span>
+                  <span style="background:rgba(168,85,247,0.08);border:1px solid rgba(168,85,247,0.3);border-radius:3px;padding:2px 6px;font-size:0.62rem;color:#c084fc;">100T: <b id="dbs-c100">—</b>%</span>
+                  <span style="background:rgba(251,191,36,0.06);border:1px solid rgba(251,191,36,0.2);border-radius:3px;padding:2px 6px;font-size:0.62rem;color:#fbbf24;">EST: <b id="dbs-cest">—</b>%</span>
+                </div>
+              </div>
+              <!-- Linha 3: flags de status -->
+              <div id="dbs-top1-flags" style="display:none;margin-top:5px;display:flex;gap:4px;flex-wrap:wrap;">
+                <span id="dbs-flag-rev"  style="font-size:0.57rem;border-radius:3px;padding:2px 5px;display:none;">—</span>
+                <span id="dbs-flag-hist" style="font-size:0.57rem;border-radius:3px;padding:2px 5px;display:none;">—</span>
+                <span id="dbs-flag-cd"   style="font-size:0.57rem;border-radius:3px;padding:2px 5px;display:none;">—</span>
+                <span id="dbs-flag-amostra" style="font-size:0.57rem;border-radius:3px;padding:2px 5px;display:none;">—</span>
+              </div>
+              <!-- Linha 4: motivo principal -->
               <div id="dbs-top1-motivo" style="font-size:0.6rem;color:#6b7280;margin-top:5px;line-height:1.4;">—</div>
             </div>
 
@@ -3578,8 +3604,8 @@
                     <th style="text-align:left;padding:6px 7px;">CONTRATO</th>
                     <th style="text-align:center;padding:6px 7px;">BARR.</th>
                     <th style="text-align:right;padding:6px 7px;">CONF.</th>
-                    <th style="text-align:center;padding:6px 7px;">FLUXO</th>
-                    <th style="text-align:center;padding:6px 7px;">STATUS</th>
+                    <th style="text-align:center;padding:6px 7px;" title="Pressão de dígitos nos últimos 30 ticks">PRESSÃO</th>
+                    <th style="text-align:center;padding:6px 7px;">BLOQUEIO</th>
                     <th style="text-align:center;padding:6px 7px;">TICKS</th>
                   </tr>
                 </thead>
@@ -19761,6 +19787,21 @@ bot.operarComSinal = function(payload) {
                     }
                     _dbsRenderLog();
                     if (typeof dbsMgrRegistrarResultado === 'function') dbsMgrRegistrarResultado(won, profit);
+
+                    // ── Registra no TITAN 3.0 (alimenta histórico, loss streak e cooldown) ──
+                    fetch('/dbs/resultado', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            ativo:      bot._dbsUltimoPayload.ativo,
+                            tipo:       bot._dbsUltimoPayload.tipo,
+                            barreira:   bot._dbsUltimoPayload.barreira,
+                            resultado:  won ? 'WIN' : 'LOSS',
+                            confianca:  bot._dbsUltimoPayload.confianca || 0,
+                            lucro:      profit,
+                        })
+                    }).catch(() => {});
+
                     bot._dbsUltimoPayload = null;
                 }
 
@@ -20075,7 +20116,7 @@ function dbsScan() {
     });
 }
 
-// ── Renderizar ranking ────────────────────────────────────────────────────────
+// ── Renderizar ranking — TITAN 3.0 ───────────────────────────────────────────
 function _dbsRenderizar(data) {
     const ranking  = data.ranking || [];
     const top1     = data.top1;
@@ -20083,18 +20124,18 @@ function _dbsRenderizar(data) {
     const tbody    = document.getElementById('dbs-ranking-body');
     const top1Box  = document.getElementById('dbs-top1-box');
     const btnOp    = document.getElementById('dbs-btn-operar-top1');
+    const el       = id => document.getElementById(id);
 
-    // Estatísticas
-    const qtOperar   = ranking.filter(r => r.veredicto === 'OPERAR').length;
-    const qtAguardar = ranking.filter(r => r.veredicto === 'AGUARDAR').length;
+    // ── Estatísticas de scan ──
+    const qtOperar   = (data.n_operar   !== undefined) ? data.n_operar   : ranking.filter(r => r.veredicto === 'OPERAR').length;
+    const qtAguardar = (data.n_aguardar !== undefined) ? data.n_aguardar : ranking.filter(r => r.veredicto !== 'OPERAR').length;
     const topConf    = ranking.length > 0 ? ranking[0].confianca : 0;
-    const el = id => document.getElementById(id);
     if (el('dbs-stat-total'))    el('dbs-stat-total').textContent    = ranking.length;
     if (el('dbs-stat-operar'))   el('dbs-stat-operar').textContent   = qtOperar;
     if (el('dbs-stat-aguardar')) el('dbs-stat-aguardar').textContent = qtAguardar;
     if (el('dbs-stat-top'))      el('dbs-stat-top').textContent      = topConf + '%';
 
-    // TOP 1
+    // ── TOP 1 — painel TITAN completo ──
     if (top1 && top1Box) {
         top1Box.style.display = 'block';
         if (el('dbs-top1-tipo'))     el('dbs-top1-tipo').textContent     = top1.tipo;
@@ -20102,39 +20143,90 @@ function _dbsRenderizar(data) {
         if (el('dbs-top1-ativo'))    el('dbs-top1-ativo').textContent    = top1.ativo;
         if (el('dbs-top1-conf'))     el('dbs-top1-conf').textContent     = top1.confianca;
         if (el('dbs-top1-motivo'))   el('dbs-top1-motivo').textContent   = top1.motivo || '—';
-        // Habilita o botão sempre que há um TOP1 (mesmo AGUARDAR — operação manual fica à escolha do usuário)
+
+        // Painel de consenso triplo
+        const cons = top1.consenso || {};
+        if (cons.pct10 !== undefined) {
+            if (el('dbs-top1-consenso')) el('dbs-top1-consenso').style.display = 'block';
+            if (el('dbs-c10'))   el('dbs-c10').textContent   = cons.pct10;
+            if (el('dbs-c30'))   el('dbs-c30').textContent   = cons.pct30;
+            if (el('dbs-c100'))  el('dbs-c100').textContent  = cons.pct100;
+            if (el('dbs-cest'))  el('dbs-cest').textContent  = cons.estabilidade;
+            // Colorir cada janela: ≥85=verde, ≥70=amarelo, else vermelho
+            ['dbs-c10','dbs-c30','dbs-c100'].forEach((id, idx) => {
+                const v = [cons.pct10, cons.pct30, cons.pct100][idx];
+                if (el(id)) el(id).style.color = v >= 85 ? '#00ff88' : v >= 70 ? '#fbbf24' : '#f87171';
+            });
+        }
+
+        // Flags de status (reversão, histórico, cooldown, amostra)
+        if (el('dbs-top1-flags')) el('dbs-top1-flags').style.display = 'flex';
+        const _flag = (id, txt, clr, show) => {
+            const f = el(id);
+            if (!f) return;
+            if (show) {
+                f.textContent = txt;
+                f.style.display = 'inline';
+                f.style.background = clr + '22';
+                f.style.border = `1px solid ${clr}66`;
+                f.style.color = clr;
+            } else { f.style.display = 'none'; }
+        };
+        _flag('dbs-flag-rev',     '⚠️ REVERSÃO',          '#f87171', top1.reversao);
+        _flag('dbs-flag-hist',    `📊 HIST ${top1.wr_hist !== null && top1.wr_hist !== undefined ? top1.wr_hist + '%' : '—'} (${top1.n_hist || 0} ops)`, '#a5b4fc', top1.n_hist > 0);
+        _flag('dbs-flag-cd',      `⏳ STREAK ${top1.loss_streak || 0}`,  '#fbbf24', (top1.loss_streak || 0) > 0);
+        _flag('dbs-flag-amostra', `📥 ${top1.n_ticks || 0} ticks`,       '#6b7280', true);
+
+        // Botão de operação
         if (btnOp) {
             btnOp.disabled = false;
             btnOp.style.cursor  = 'pointer';
             btnOp.style.opacity = '1';
             if (top1.veredicto === 'OPERAR') {
-                btnOp.style.background = 'rgba(0,255,136,0.25)';
+                btnOp.style.background  = 'rgba(0,255,136,0.25)';
                 btnOp.style.borderColor = '#00ff88';
-                btnOp.style.color = '#00ff88';
-                btnOp.textContent = '⚡ OPERAR COM TOP 1';
+                btnOp.style.color       = '#00ff88';
+                btnOp.textContent       = '⚡ OPERAR COM TOP 1';
             } else {
-                btnOp.style.background = 'rgba(251,191,36,0.15)';
+                btnOp.style.background  = 'rgba(251,191,36,0.15)';
                 btnOp.style.borderColor = '#fbbf24';
-                btnOp.style.color = '#fbbf24';
-                btnOp.textContent = '⚠️ FORÇAR ENTRADA (AGUARDAR)';
+                btnOp.style.color       = '#fbbf24';
+                btnOp.textContent       = '⚠️ FORÇAR ENTRADA (AGUARDAR)';
             }
         }
     }
 
-    // Tabela
+    // ── Tabela — TITAN 3.0 ──
     if (!tbody) return;
     tbody.innerHTML = '';
     ranking.forEach((r, i) => {
         const isTop   = i === 0;
         const isOp    = r.veredicto === 'OPERAR';
-        const confClr = r.confianca >= 82 ? '#00ff88' : r.confianca >= 70 ? '#fbbf24' : '#f87171';
+        const confClr = r.confianca >= 85 ? '#00ff88' : r.confianca >= 72 ? '#fbbf24' : '#f87171';
         const verdClr = isOp ? '#00ff88' : '#f87171';
         const rowBg   = isTop ? 'rgba(99,102,241,0.1)' : (i % 2 === 0 ? 'rgba(255,255,255,0.02)' : 'transparent');
-        const fluxo   = r.fluxo || '—';
-        const fluxoIco = fluxo === 'CALL' ? '↑' : fluxo === 'PUT' ? '↓' : '→';
-        const fluxoClr = fluxo === 'CALL' ? '#00ff88' : fluxo === 'PUT' ? '#f87171' : '#6b7280';
-        // Destaca se o fluxo é CONTRÁRIO ao contrato (bloqueio duro)
-        const fluxoBloq = (fluxo === 'PUT' && r.tipo === 'DIGITOVER') || (fluxo === 'CALL' && r.tipo === 'DIGITUNDER');
+
+        // Pressão de dígitos (novo campo de fluxo)
+        const pressao    = r.notas ? (r.notas.pressao || 0) : 0;
+        const pressaoClr = pressao >= 85 ? '#00ff88' : pressao >= 65 ? '#fbbf24' : '#f87171';
+
+        // Hard blocks compactos
+        const blocks  = r.hard_blocks || [];
+        let blocoTxt  = '';
+        let blocoClr  = '#6b7280';
+        if (isOp) {
+            blocoTxt = '✅ OK';
+            blocoClr = '#00ff88';
+        } else if (blocks.length > 0) {
+            const b = blocks[0];
+            const abrev = { THRESHOLD:'THRESH', CONSENSO:'CONS', REVERSAO:'REV', HISTORICO:'HIST', COOLDOWN:'CD', AMOSTRA:'AMO' };
+            blocoTxt = '🚫 ' + (abrev[b] || b);
+            blocoClr = '#f87171';
+        } else {
+            blocoTxt = '⛔ EDC';
+            blocoClr = '#fbbf24';
+        }
+
         tbody.innerHTML += `
         <tr style="background:${rowBg};border-bottom:1px solid rgba(255,255,255,0.04);">
           <td style="padding:5px 6px;color:#6b7280;">${i + 1}${isTop ? ' 🏆' : ''}</td>
@@ -20142,15 +20234,16 @@ function _dbsRenderizar(data) {
           <td style="padding:5px 6px;color:#a5b4fc;">${r.tipo}</td>
           <td style="padding:5px 6px;text-align:center;color:#fbbf24;">${r.barreira}</td>
           <td style="padding:5px 6px;text-align:right;color:${confClr};font-weight:bold;">${r.confianca}%</td>
-          <td style="padding:5px 6px;text-align:center;color:${fluxoBloq ? '#f87171' : fluxoClr};font-weight:bold;">${fluxoIco} ${fluxo}</td>
-          <td style="padding:5px 6px;text-align:center;color:${verdClr};font-size:0.62rem;">${r.veredicto}</td>
+          <td style="padding:5px 6px;text-align:center;color:${pressaoClr};font-weight:bold;" title="Pressão de dígitos nos últimos 30 ticks">${pressao}%</td>
+          <td style="padding:5px 6px;text-align:center;color:${blocoClr};font-size:0.6rem;">${blocoTxt}</td>
           <td style="padding:5px 6px;text-align:center;color:#6b7280;">${r.n_ticks || '—'}</td>
         </tr>`;
     });
 
     if (status) {
         const ts = new Date().toLocaleTimeString('pt-BR');
-        status.textContent = `✅ Scan concluído às ${ts} — ${ranking.length} combos avaliados, ${qtOperar} prontos para operar.`;
+        const motor = data.motor === 'TITAN3' ? ' [TITAN 3.0]' : '';
+        status.textContent = `✅ Scan concluído às ${ts}${motor} — ${ranking.length} combos, ${qtOperar} aprovados.`;
     }
 }
 
