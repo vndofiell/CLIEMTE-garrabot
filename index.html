@@ -635,19 +635,6 @@
     color: var(--mg);
 }
 
-/* ── Botão MODO DUPLO (conta secundária + estratégias) ── */
-.dual-btn {
-    background: transparent;
-    color: rgba(96,165,250,0.85);
-    border-color: rgba(96,165,250,0.45);
-    margin-top: 12px;
-}
-.dual-btn:hover {
-    background: rgba(96,165,250,0.12);
-    box-shadow: 0 0 16px rgba(96,165,250,0.4);
-    color: #93c5fd;
-}
-
 /* ── Links de rodapé ── */
 .hk-links {
     margin-top: 18px;
@@ -1227,9 +1214,8 @@
         <p class="hk-sub">SELECIONE O PROTOCOLO DE TRADING</p>
         <hr class="hk-divider">
         <button class="cyber-btn"            onclick="escolherModo('NORMAL')">► MODO NORMAL [CONTA_UNICA]</button>
-        <button class="cyber-btn dual-btn"   onclick="escolherModo('DUAL')">💳 MODO DUPLO [CONTA_SECUNDÁRIA]</button>
         <button class="cyber-btn mirror-btn" onclick="escolherModo('ESPELHO')">◈ MODO ESPELHAMENTO [CONTA_DUPLA]</button>
-        <p class="warning-text" style="margin-top:8px;">⚠ ESPELHO: opera exclusivamente na conta secundária.<br><span style="color:rgba(96,165,250,0.8);">💳 DUPLO: conta secundária disponível em qualquer estratégia.</span></p>
+        <p class="warning-text">⚠ AVISO: O MODO ESPELHO EXIGE LOGIN SECUNDÁRIO.</p>
     </div>
 </div>
 
@@ -3434,13 +3420,13 @@
           <div style="background:rgba(251,191,36,0.06);border:1px solid rgba(251,191,36,0.2);border-radius:5px;padding:5px 10px;font-size:0.68rem;color:#fbbf24;">🏆 TOP CONF.: <b id="dbs-stat-top">--%</b></div>
         </div>
 
-        <!-- ══ LAYOUT 2 COLUNAS PRINCIPAIS ═════════════════════════════════════ -->
-        <div style="display:grid;grid-template-columns:680px 1fr;gap:14px;align-items:start;">
+        <!-- ══ LAYOUT 2 COLUNAS ════════════════════════════════════════════════ -->
+        <div style="display:grid;grid-template-columns:340px 1fr;gap:14px;align-items:start;">
 
-          <!-- ╔══ COLUNA ESQUERDA — painel duplo (PRINCIPAL + SEC) ══╗ -->
+          <!-- ╔══ COLUNA ESQUERDA — configurações + log ══╗ -->
           <div style="display:flex;flex-direction:column;gap:10px;">
 
-            <!-- TOP 1 destaque — ocupa toda a largura -->
+            <!-- TOP 1 destaque -->
             <div id="dbs-top1-box" style="display:none;
                 background:rgba(99,102,241,0.12);border:2px solid #6366f1;
                 border-radius:7px;padding:10px 13px;">
@@ -3458,211 +3444,123 @@
               <div id="dbs-top1-motivo" style="font-size:0.6rem;color:#6b7280;margin-top:5px;line-height:1.4;">—</div>
             </div>
 
-            <!-- ══ DUAS COLUNAS: PRINCIPAL | CONTA SEC ══════════════════════════ -->
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start;">
-
-              <!-- ╠═ COLUNA CONTA PRINCIPAL ═╣ -->
-              <div style="display:flex;flex-direction:column;gap:10px;">
-
-                <!-- Gerenciamento de banca -->
-                <div style="background:rgba(0,0,0,0.3);border:1px solid rgba(99,102,241,0.2);border-radius:6px;padding:10px 12px;">
-                  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:6px;flex-wrap:wrap;">
-                    <span style="font-size:0.58rem;color:#6366f1;letter-spacing:2px;">⚙️ GERENCIAMENTO DE BANCA</span>
-                    <!-- Badge JC: aparece apenas quando JC está ativo -->
-                    <div id="dbs-jc-badge" style="display:none;background:rgba(0,255,100,0.08);border:1px solid rgba(0,255,100,0.4);
-                        border-radius:4px;padding:2px 7px;font-size:0.58rem;color:#00ff64;white-space:nowrap;cursor:pointer;"
-                        onclick="dbsJcAplicarMeta()" title="Clique para aplicar meta JC como Stop Win">
-                      💹 JC DIA <span id="dbs-jc-dia">1</span> — META: $<span id="dbs-jc-meta">0.00</span>
-                      <span style="color:#6b7280;font-size:0.53rem;"> ▸ APLICAR</span>
-                    </div>
-                  </div>
-                  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px;">
-                    <div>
-                      <div style="font-size:0.53rem;color:#6b7280;margin-bottom:3px;">ENTRADA ($)</div>
-                      <input id="dbs-entrada" type="number" value="0.35" min="0.35" step="0.01" oninput="dbsOnMgrChange()"
-                          style="width:100%;background:#0d0f1a;border:1px solid rgba(99,102,241,0.4);color:#a5b4fc;
-                                 font-family:'Share Tech Mono';font-size:0.7rem;padding:4px 5px;border-radius:4px;box-sizing:border-box;">
-                    </div>
-                    <div>
-                      <div style="display:flex;align-items:center;gap:3px;margin-bottom:3px;">
-                        <span style="font-size:0.53rem;color:#6b7280;">STOP WIN ($)</span>
-                        <span id="dbs-stopwin-jc-lbl" style="display:none;font-size:0.48rem;color:#00ff64;background:rgba(0,255,100,0.12);
-                            border-radius:2px;padding:1px 3px;">💹 JC</span>
-                      </div>
-                      <input id="dbs-stopwin" type="number" value="10" min="0" step="0.1"
-                          style="width:100%;background:#0d0f1a;border:1px solid rgba(0,255,136,0.35);color:#00ff88;
-                                 font-family:'Share Tech Mono';font-size:0.7rem;padding:4px 5px;border-radius:4px;box-sizing:border-box;">
-                    </div>
-                    <div>
-                      <div style="font-size:0.53rem;color:#6b7280;margin-bottom:3px;">STOP LOSS ($)</div>
-                      <input id="dbs-stoploss" type="number" value="20" min="0" step="0.1"
-                          style="width:100%;background:#0d0f1a;border:1px solid rgba(248,113,113,0.35);color:#f87171;
-                                 font-family:'Share Tech Mono';font-size:0.7rem;padding:4px 5px;border-radius:4px;box-sizing:border-box;">
-                    </div>
-                  </div>
-                  <div style="margin-bottom:8px;">
-                    <div style="font-size:0.53rem;color:#6b7280;margin-bottom:3px;">GERENCIAMENTO</div>
-                    <select id="dbs-mgr" onchange="dbsOnMgrChange()" style="width:100%;background:#0d0f1a;
-                        border:1px solid rgba(168,85,247,0.5);color:#c084fc;
-                        font-family:'Share Tech Mono';font-size:0.67rem;padding:5px 6px;border-radius:4px;">
-                      <option value="flat">💰 Stake Fixa</option>
-                      <option value="📐 MA-Adaptativo">📐 MA-Adaptativo</option>
-                      <option value="🔄 Martingale">🔄 Martingale</option>
-                      <option value="⚡ SorosGale">⚡ SorosGale</option>
-                      <option value="📉 Loss Recovery">📉 Loss Recovery</option>
-                      <option value="🛡️ Recovery Conservador">🛡️ Recovery Conservador</option>
-                      <option value="📐 QSR">📐 QSR</option>
-                      <option value="📊 Masaniello">📊 Masaniello</option>
-                    </select>
-                  </div>
-                  <!-- Stats sessão conta principal -->
-                  <div style="display:flex;gap:5px;flex-wrap:wrap;">
-                    <div style="border:1px solid rgba(0,255,136,0.3);border-radius:4px;padding:2px 7px;font-size:0.63rem;color:#00ff88;">✅ <span id="dbs-mgr-wins">0</span></div>
-                    <div style="border:1px solid rgba(248,113,113,0.3);border-radius:4px;padding:2px 7px;font-size:0.63rem;color:#f87171;">🔁 <span id="dbs-mgr-losses">0</span></div>
-                    <div style="border:1px solid rgba(251,191,36,0.3);border-radius:4px;padding:2px 7px;font-size:0.63rem;color:#fbbf24;">💰 <span id="dbs-mgr-lucro">+$0.00</span></div>
-                    <div style="border:1px solid rgba(168,85,247,0.3);border-radius:4px;padding:2px 7px;font-size:0.63rem;color:#c084fc;">⚡ <span id="dbs-mgr-prox">$--</span></div>
-                  </div>
+            <!-- Gerenciamento de banca -->
+            <div style="background:rgba(0,0,0,0.3);border:1px solid rgba(99,102,241,0.2);border-radius:6px;padding:10px 12px;">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:6px;flex-wrap:wrap;">
+                <span style="font-size:0.58rem;color:#6366f1;letter-spacing:2px;">⚙️ GERENCIAMENTO DE BANCA</span>
+                <!-- Badge JC: aparece apenas quando JC está ativo -->
+                <div id="dbs-jc-badge" style="display:none;background:rgba(0,255,100,0.08);border:1px solid rgba(0,255,100,0.4);
+                    border-radius:4px;padding:2px 7px;font-size:0.58rem;color:#00ff64;white-space:nowrap;cursor:pointer;"
+                    onclick="dbsJcAplicarMeta()" title="Clique para aplicar meta JC como Stop Win">
+                  💹 JC DIA <span id="dbs-jc-dia">1</span> — META: $<span id="dbs-jc-meta">0.00</span>
+                  <span style="color:#6b7280;font-size:0.53rem;"> ▸ APLICAR</span>
                 </div>
-
-                <!-- Botão OPERAR -->
-                <button id="dbs-btn-operar-top1" onclick="dbsOperarTop1()" disabled style="
-                    width:100%;padding:10px;
-                    background:rgba(99,102,241,0.2);border:1px solid #6366f1;
-                    border-radius:5px;color:#a5b4fc;font-size:0.82rem;
-                    font-family:'Share Tech Mono',monospace;cursor:not-allowed;
-                    letter-spacing:1px;opacity:0.5;">⚡ OPERAR COM TOP 1</button>
-
-                <!-- Histórico de operações -->
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px;">
                 <div>
-                  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;">
-                    <span style="font-size:0.6rem;color:#6b7280;letter-spacing:1px;">📋 HISTÓRICO DE OPERAÇÕES</span>
-                    <button onclick="dbsLimparLog()" style="background:none;border:1px solid rgba(255,68,68,0.25);border-radius:3px;color:#f87171;font-size:0.56rem;padding:2px 6px;cursor:pointer;">🗑 LIMPAR</button>
-                  </div>
-                  <div id="dbs-log" style="height:120px;overflow-y:auto;
-                      background:rgba(0,0,0,0.35);border:1px solid rgba(99,102,241,0.2);
-                      border-radius:5px;padding:5px 7px;font-size:0.6rem;
-                      font-family:'Share Tech Mono',monospace;color:#6b7280;">
-                    <span style="color:#374151;">— Nenhuma operação registrada —</span>
-                  </div>
+                  <div style="font-size:0.53rem;color:#6b7280;margin-bottom:3px;">ENTRADA ($)</div>
+                  <input id="dbs-entrada" type="number" value="0.35" min="0.35" step="0.01" oninput="dbsOnMgrChange()"
+                      style="width:100%;background:#0d0f1a;border:1px solid rgba(99,102,241,0.4);color:#a5b4fc;
+                             font-family:'Share Tech Mono';font-size:0.7rem;padding:4px 5px;border-radius:4px;box-sizing:border-box;">
                 </div>
-
-                <!-- Controles scan + threshold -->
-                <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-                  <button id="dbs-btn-scan" onclick="dbsScan()" style="
-                      flex:1;min-width:100px;padding:8px;
-                      background:rgba(99,102,241,0.15);border:1px solid #6366f1;
-                      border-radius:5px;color:#a5b4fc;font-size:0.78rem;
-                      font-family:'Share Tech Mono',monospace;cursor:pointer;letter-spacing:1px;">🔍 ESCANEAR</button>
-                  <label style="display:flex;align-items:center;gap:5px;font-size:0.65rem;color:#6b7280;cursor:pointer;">
-                    <input type="checkbox" id="dbs-auto-scan" style="accent-color:#6366f1;width:13px;height:13px;">
-                    Auto-scan (30s)
-                  </label>
-                  <label style="display:flex;align-items:center;gap:5px;font-size:0.65rem;color:#00ff88;cursor:pointer;" title="Entra automaticamente quando um combo aprovado aparecer">
-                    <input type="checkbox" id="dbs-auto-operar" style="accent-color:#00ff88;width:13px;height:13px;">
-                    ⚡ Auto-operar
-                  </label>
+                <div>
+                  <div style="display:flex;align-items:center;gap:3px;margin-bottom:3px;">
+                    <span style="font-size:0.53rem;color:#6b7280;">STOP WIN ($)</span>
+                    <span id="dbs-stopwin-jc-lbl" style="display:none;font-size:0.48rem;color:#00ff64;background:rgba(0,255,100,0.12);
+                        border-radius:2px;padding:1px 3px;">💹 JC</span>
+                  </div>
+                  <input id="dbs-stopwin" type="number" value="10" min="0" step="0.1"
+                      style="width:100%;background:#0d0f1a;border:1px solid rgba(0,255,136,0.35);color:#00ff88;
+                             font-family:'Share Tech Mono';font-size:0.7rem;padding:4px 5px;border-radius:4px;box-sizing:border-box;">
                 </div>
-
-                <!-- Threshold EDC -->
-                <div style="display:flex;align-items:center;gap:7px;
-                    background:rgba(0,0,0,0.3);border:1px solid rgba(99,102,241,0.2);
-                    border-radius:5px;padding:5px 9px;flex-wrap:wrap;">
-                  <span style="font-size:0.6rem;color:#6b7280;letter-spacing:1px;white-space:nowrap;">⚙️ THRESHOLD:</span>
-                  <input type="range" id="dbs-threshold-slider" min="50" max="85" value="72" step="1"
-                      oninput="dbsThresholdAtualizar(this.value)"
-                      style="flex:1;min-width:60px;accent-color:#6366f1;cursor:pointer;">
-                  <span id="dbs-threshold-val" style="font-size:0.72rem;color:#a5b4fc;font-weight:bold;min-width:30px;text-align:center;">72%</span>
-                  <button onclick="dbsThresholdSalvar()" style="background:rgba(99,102,241,0.2);border:1px solid #6366f1;
-                      border-radius:4px;color:#a5b4fc;font-size:0.6rem;padding:3px 7px;cursor:pointer;white-space:nowrap;">💾 SALVAR</button>
-                </div>
-
-                <!-- Status -->
-                <div id="dbs-status" style="font-size:0.65rem;color:#6b7280;min-height:20px;
-                    background:rgba(0,0,0,0.3);border-radius:4px;padding:4px 7px;">
-                  Aguardando scan…
-                </div>
-
-              </div>
-              <!-- ╚═ FIM CONTA PRINCIPAL ═╝ -->
-
-              <!-- ╠═ COLUNA CONTA SECUNDÁRIA ═╣ -->
-              <div style="background:rgba(0,0,0,0.35);border:1px solid rgba(96,165,250,0.25);border-radius:6px;padding:12px;display:flex;flex-direction:column;gap:8px;">
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;">
-                  <div style="font-size:0.6rem;color:#60a5fa;letter-spacing:1px;">💳 CONTA SECUNDÁRIA</div>
-                  <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
-                    <input type="checkbox" id="dbs-duas-contas" onchange="dbsAtualizarSecundaria()"
-                        style="accent-color:#60a5fa;width:14px;height:14px;">
-                    <span id="dbs-sec-badge" style="font-size:0.6rem;color:#555;letter-spacing:1px;">OFF</span>
-                  </label>
-                </div>
-
-                <!-- Campos visíveis somente quando ativo -->
-                <div id="dbs-sec-campos" style="display:none;flex-direction:column;gap:8px;">
-
-                  <!-- Stake da conta SEC -->
-                  <div>
-                    <div style="font-size:0.53rem;color:#6b7280;margin-bottom:3px;">ENTRADA SEC ($)</div>
-                    <input id="dbs-sec-entrada" type="number" value="0.35" min="0.35" step="0.01"
-                        style="width:100%;background:#0d0f1a;border:1px solid rgba(96,165,250,0.4);color:#60a5fa;
-                               font-family:'Share Tech Mono';font-size:0.7rem;padding:4px 5px;border-radius:4px;box-sizing:border-box;">
-                  </div>
-
-                  <!-- Stop Win SEC -->
-                  <div>
-                    <div style="font-size:0.53rem;color:#6b7280;margin-bottom:3px;">STOP WIN SEC ($)</div>
-                    <input id="dbs-sec-stopwin" type="number" value="10" min="0" step="0.1"
-                        style="width:100%;background:#0d0f1a;border:1px solid rgba(0,255,136,0.35);color:#00ff88;
-                               font-family:'Share Tech Mono';font-size:0.7rem;padding:4px 5px;border-radius:4px;box-sizing:border-box;">
-                  </div>
-
-                  <!-- Stop Loss SEC -->
-                  <div>
-                    <div style="font-size:0.53rem;color:#6b7280;margin-bottom:3px;">STOP LOSS SEC ($)</div>
-                    <input id="dbs-sec-stoploss" type="number" value="20" min="0" step="0.1"
-                        style="width:100%;background:#0d0f1a;border:1px solid rgba(248,113,113,0.35);color:#f87171;
-                               font-family:'Share Tech Mono';font-size:0.7rem;padding:4px 5px;border-radius:4px;box-sizing:border-box;">
-                  </div>
-
-                  <!-- Status SEC -->
-                  <div id="dbs-sec-status" style="font-size:0.6rem;color:#57606a;background:rgba(0,0,0,0.3);
-                      border:1px solid #30363d;border-radius:4px;padding:5px 8px;line-height:1.6;">
-                    Conta secundária: verificando...
-                  </div>
-
-                  <!-- Botão conectar -->
-                  <button id="dbs-btn-conectar-sec" onclick="abrirModalMultiContas()"
-                      style="width:100%;background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.5);
-                             color:#60a5fa;font-family:'Share Tech Mono';font-size:0.68rem;padding:6px;
-                             border-radius:4px;cursor:pointer;letter-spacing:1px;">
-                    💳 Conectar / Configurar Conta SEC
-                  </button>
-
-                  <!-- Placar sessão SEC -->
-                  <div style="display:flex;gap:5px;flex-wrap:wrap;">
-                    <div style="border:1px solid rgba(0,255,136,0.3);border-radius:4px;padding:2px 7px;font-size:0.63rem;color:#00ff88;">✅ <span id="dbs-sec-wins">0</span></div>
-                    <div style="border:1px solid rgba(248,113,113,0.3);border-radius:4px;padding:2px 7px;font-size:0.63rem;color:#f87171;">🔁 <span id="dbs-sec-losses">0</span></div>
-                    <div style="border:1px solid rgba(96,165,250,0.3);border-radius:4px;padding:2px 7px;font-size:0.63rem;color:#60a5fa;">💰 <span id="dbs-sec-lucro">+$0.00</span></div>
-                  </div>
-
-                  <!-- Log SEC -->
-                  <div id="dbs-sec-log" style="height:120px;overflow-y:auto;
-                      background:rgba(0,0,0,0.35);border:1px solid rgba(96,165,250,0.2);
-                      border-radius:5px;padding:5px 7px;font-size:0.6rem;
-                      font-family:'Share Tech Mono',monospace;color:#6b7280;">
-                    <span style="color:#374151;">— Aguardando operações —</span>
-                  </div>
-
-                </div>
-
-                <!-- Mensagem quando desativado -->
-                <div id="dbs-sec-off-msg" style="font-size:0.6rem;color:#555;margin-top:4px;">
-                  Ative para enviar os mesmos trades simultaneamente na conta secundária.
+                <div>
+                  <div style="font-size:0.53rem;color:#6b7280;margin-bottom:3px;">STOP LOSS ($)</div>
+                  <input id="dbs-stoploss" type="number" value="20" min="0" step="0.1"
+                      style="width:100%;background:#0d0f1a;border:1px solid rgba(248,113,113,0.35);color:#f87171;
+                             font-family:'Share Tech Mono';font-size:0.7rem;padding:4px 5px;border-radius:4px;box-sizing:border-box;">
                 </div>
               </div>
-              <!-- ╚═ FIM CONTA SECUNDÁRIA ═╝ -->
-
+              <div style="margin-bottom:8px;">
+                <div style="font-size:0.53rem;color:#6b7280;margin-bottom:3px;">GERENCIAMENTO</div>
+                <select id="dbs-mgr" onchange="dbsOnMgrChange()" style="width:100%;background:#0d0f1a;
+                    border:1px solid rgba(168,85,247,0.5);color:#c084fc;
+                    font-family:'Share Tech Mono';font-size:0.67rem;padding:5px 6px;border-radius:4px;">
+                  <option value="flat">💰 Stake Fixa</option>
+                  <option value="📐 MA-Adaptativo">📐 MA-Adaptativo</option>
+                  <option value="🔄 Martingale">🔄 Martingale</option>
+                  <option value="⚡ SorosGale">⚡ SorosGale</option>
+                  <option value="📉 Loss Recovery">📉 Loss Recovery</option>
+                  <option value="🛡️ Recovery Conservador">🛡️ Recovery Conservador</option>
+                  <option value="📐 QSR">📐 QSR</option>
+                  <option value="📊 Masaniello">📊 Masaniello</option>
+                </select>
+              </div>
+              <!-- Stats sessão -->
+              <div style="display:flex;gap:5px;flex-wrap:wrap;">
+                <div style="border:1px solid rgba(0,255,136,0.3);border-radius:4px;padding:2px 7px;font-size:0.63rem;color:#00ff88;">✅ <span id="dbs-mgr-wins">0</span></div>
+                <div style="border:1px solid rgba(248,113,113,0.3);border-radius:4px;padding:2px 7px;font-size:0.63rem;color:#f87171;">🔁 <span id="dbs-mgr-losses">0</span></div>
+                <div style="border:1px solid rgba(251,191,36,0.3);border-radius:4px;padding:2px 7px;font-size:0.63rem;color:#fbbf24;">💰 <span id="dbs-mgr-lucro">+$0.00</span></div>
+                <div style="border:1px solid rgba(168,85,247,0.3);border-radius:4px;padding:2px 7px;font-size:0.63rem;color:#c084fc;">⚡ <span id="dbs-mgr-prox">$--</span></div>
+              </div>
             </div>
-            <!-- ══ FIM DUAS COLUNAS ══ -->
+
+            <!-- Botão OPERAR -->
+            <button id="dbs-btn-operar-top1" onclick="dbsOperarTop1()" disabled style="
+                width:100%;padding:10px;
+                background:rgba(99,102,241,0.2);border:1px solid #6366f1;
+                border-radius:5px;color:#a5b4fc;font-size:0.82rem;
+                font-family:'Share Tech Mono',monospace;cursor:not-allowed;
+                letter-spacing:1px;opacity:0.5;">⚡ OPERAR COM TOP 1</button>
+
+            <!-- Histórico de operações -->
+            <div>
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;">
+                <span style="font-size:0.6rem;color:#6b7280;letter-spacing:1px;">📋 HISTÓRICO DE OPERAÇÕES</span>
+                <button onclick="dbsLimparLog()" style="background:none;border:1px solid rgba(255,68,68,0.25);border-radius:3px;color:#f87171;font-size:0.56rem;padding:2px 6px;cursor:pointer;">🗑 LIMPAR</button>
+              </div>
+              <div id="dbs-log" style="height:130px;overflow-y:auto;
+                  background:rgba(0,0,0,0.35);border:1px solid rgba(99,102,241,0.2);
+                  border-radius:5px;padding:5px 7px;font-size:0.6rem;
+                  font-family:'Share Tech Mono',monospace;color:#6b7280;">
+                <span style="color:#374151;">— Nenhuma operação registrada —</span>
+              </div>
+            </div>
+
+            <!-- Controles scan + threshold -->
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+              <button id="dbs-btn-scan" onclick="dbsScan()" style="
+                  flex:1;min-width:100px;padding:8px;
+                  background:rgba(99,102,241,0.15);border:1px solid #6366f1;
+                  border-radius:5px;color:#a5b4fc;font-size:0.78rem;
+                  font-family:'Share Tech Mono',monospace;cursor:pointer;letter-spacing:1px;">🔍 ESCANEAR</button>
+              <label style="display:flex;align-items:center;gap:5px;font-size:0.65rem;color:#6b7280;cursor:pointer;">
+                <input type="checkbox" id="dbs-auto-scan" style="accent-color:#6366f1;width:13px;height:13px;">
+                Auto-scan (30s)
+              </label>
+              <label style="display:flex;align-items:center;gap:5px;font-size:0.65rem;color:#00ff88;cursor:pointer;" title="Entra automaticamente quando um combo aprovado aparecer">
+                <input type="checkbox" id="dbs-auto-operar" style="accent-color:#00ff88;width:13px;height:13px;">
+                ⚡ Auto-operar
+              </label>
+            </div>
+
+            <!-- Threshold EDC -->
+            <div style="display:flex;align-items:center;gap:7px;
+                background:rgba(0,0,0,0.3);border:1px solid rgba(99,102,241,0.2);
+                border-radius:5px;padding:5px 9px;flex-wrap:wrap;">
+              <span style="font-size:0.6rem;color:#6b7280;letter-spacing:1px;white-space:nowrap;">⚙️ THRESHOLD:</span>
+              <input type="range" id="dbs-threshold-slider" min="50" max="85" value="72" step="1"
+                  oninput="dbsThresholdAtualizar(this.value)"
+                  style="flex:1;min-width:80px;accent-color:#6366f1;cursor:pointer;">
+              <span id="dbs-threshold-val" style="font-size:0.72rem;color:#a5b4fc;font-weight:bold;min-width:30px;text-align:center;">72%</span>
+              <button onclick="dbsThresholdSalvar()" style="background:rgba(99,102,241,0.2);border:1px solid #6366f1;
+                  border-radius:4px;color:#a5b4fc;font-size:0.6rem;padding:3px 7px;cursor:pointer;white-space:nowrap;">💾 SALVAR</button>
+            </div>
+
+            <!-- Status -->
+            <div id="dbs-status" style="font-size:0.65rem;color:#6b7280;min-height:20px;
+                background:rgba(0,0,0,0.3);border-radius:4px;padding:4px 7px;">
+              Aguardando scan…
+            </div>
 
           </div>
           <!-- ╚══ FIM COLUNA ESQUERDA ══╝ -->
@@ -5781,9 +5679,9 @@ function _cfgAplicar(cfg) {
             setTimeout(() => toggleModoIaLivre(true), 300); // aguarda DOM pronto
         }
 
-        // Restaura modo de operação (NORMAL / ESPELHO / DUAL) — sem abrir o overlay de seleção
+        // Restaura modo de operação (NORMAL / ESPELHO) — sem abrir o overlay de seleção
         // e sem abrir o modal da conta secundária automaticamente (silencioso=true)
-        if (cfg.modo && (cfg.modo === 'NORMAL' || cfg.modo === 'ESPELHO' || cfg.modo === 'DUAL')) {
+        if (cfg.modo && (cfg.modo === 'NORMAL' || cfg.modo === 'ESPELHO')) {
             window._modoAtual = cfg.modo;
             const lbl = document.getElementById('lbl-trocar-modo');
             if (lbl) lbl.textContent = 'Atual: ' + cfg.modo;
@@ -16884,13 +16782,6 @@ function configurarInterfacePorModo(modo, silencioso) {
     if (modo === 'NORMAL') {
         console.log('[*] Modo Normal ativado.');
         if (btnSecundario) btnSecundario.style.display = 'none';
-    } else if (modo === 'DUAL') {
-        console.log('[*] Modo Duplo ativado — conta secundária disponível em qualquer estratégia.');
-        if (btnSecundario) btnSecundario.style.display = '';
-        // Só abre o modal automaticamente quando o usuário escolhe o modo manualmente
-        if (!silencioso && typeof abrirModalMultiContas === 'function') {
-            setTimeout(abrirModalMultiContas, 600);
-        }
     } else if (modo === 'ESPELHO') {
         console.log('[*] Modo Espelhamento ativado.');
         if (btnSecundario) btnSecundario.style.display = '';
@@ -19714,6 +19605,7 @@ function _dbsRenderLog() {
           <span style="color:#fbbf24;flex-shrink:0;">B:${e.barreira || '—'}</span>
           <span style="color:#00ff88;flex-shrink:0;">${e.ativo || '—'}</span>
           <span style="color:#6b7280;flex-shrink:0;">Conf:${e.confianca || '—'}%</span>
+          ${e.stake != null ? `<span style="color:#0ff;flex-shrink:0;">$${parseFloat(e.stake).toFixed(2)}</span>` : ''}
           ${e.resultado ? `<span style="color:${e.cor};margin-left:auto;">${e.resultado}</span>` : ''}
         </div>`
     ).join('');
@@ -19799,169 +19691,6 @@ function dbsMgrAtualizarStats() {
 // ── Trava própria do DBS (independente do bot.running e bot._buying) ─────────
 let _dbsEmOperacao = false;
 let _dbsReqIdAtivo = null;
-
-// ── Placar da conta secundária DBS ───────────────────────────────────────────
-let _dbsSecWins   = 0;
-let _dbsSecLosses = 0;
-let _dbsSecLucro  = 0;
-
-function _dbsSecAtualizarStats() {
-    const s = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
-    s('dbs-sec-wins',   _dbsSecWins);
-    s('dbs-sec-losses', _dbsSecLosses);
-    s('dbs-sec-lucro',  (_dbsSecLucro >= 0 ? '+' : '') + '$' + _dbsSecLucro.toFixed(2));
-}
-
-function _dbsSecRegistrarLog(entry) {
-    const logEl = document.getElementById('dbs-sec-log');
-    if (!logEl) return;
-    const ts  = new Date().toLocaleTimeString('pt-BR');
-    const cor = entry.resultado === 'WIN' ? '#00ff88' : entry.resultado === 'LOSS' ? '#f87171' : '#60a5fa';
-    const ico = entry.resultado === 'WIN' ? '✅' : entry.resultado === 'LOSS' ? '❌' : '⚡';
-    const linha = `<div style="border-bottom:1px solid rgba(255,255,255,0.04);padding:2px 0;display:flex;gap:6px;align-items:center;">
-        <span style="color:#4b5563;flex-shrink:0;">${ts}</span>
-        <span style="color:${cor};flex-shrink:0;">${ico}</span>
-        <span style="color:#a5b4fc;flex-shrink:0;">${entry.tipo || '—'}</span>
-        <span style="color:#fbbf24;flex-shrink:0;">B:${entry.barreira || '—'}</span>
-        <span style="color:#00ff88;flex-shrink:0;">${entry.ativo || '—'}</span>
-        ${entry.resultado ? `<span style="color:${cor};margin-left:auto;">${entry.resultado} ${entry.profit !== undefined ? (entry.profit >= 0 ? '+' : '') + '$' + parseFloat(entry.profit).toFixed(2) : ''}</span>` : ''}
-    </div>`;
-    if (logEl.querySelector('span[style*="color:#374151"]')) logEl.innerHTML = '';
-    logEl.insertAdjacentHTML('afterbegin', linha);
-}
-
-// ── Atualiza painel da conta secundária (toggle ON/OFF) ───────────────────────
-function dbsAtualizarSecundaria() {
-    const chk    = document.getElementById('dbs-duas-contas');
-    const campos = document.getElementById('dbs-sec-campos');
-    const offMsg = document.getElementById('dbs-sec-off-msg');
-    const badge  = document.getElementById('dbs-sec-badge');
-    if (!chk) return;
-    const ativo = chk.checked;
-    if (campos) campos.style.display = ativo ? 'flex' : 'none';
-    if (offMsg) offMsg.style.display = ativo ? 'none' : 'block';
-    if (badge)  { badge.textContent = ativo ? 'ON' : 'OFF'; badge.style.color = ativo ? '#60a5fa' : '#555'; }
-    if (!ativo) return;
-
-    // Atualiza status da SEC
-    const secPronto = (typeof _sec !== 'undefined') && _sec.pronto
-        && _sec.ws && _sec.ws.readyState === WebSocket.OPEN;
-    const stEl  = document.getElementById('dbs-sec-status');
-    const btnSec = document.getElementById('dbs-btn-conectar-sec');
-    if (stEl) {
-        if (secPronto) {
-            const saldo = typeof _sec.saldo !== 'undefined'
-                ? ` | Banca: <b style="color:#fbbf24">$${parseFloat(_sec.saldo).toFixed(2)}</b>` : '';
-            stEl.innerHTML = `✅ SEC conectada${saldo}`;
-            stEl.style.color = '#4ade80';
-            stEl.style.borderColor = 'rgba(74,222,128,0.4)';
-            if (btnSec) { btnSec.textContent = '✅ Conta SEC conectada — clique para reconfigurar'; btnSec.style.borderColor = 'rgba(0,255,65,0.4)'; btnSec.style.color = '#00ff41'; }
-        } else {
-            stEl.textContent = '⚠️ Conta SEC não conectada.';
-            stEl.style.color = '#f87171';
-            stEl.style.borderColor = 'rgba(248,113,113,0.3)';
-            if (btnSec) { btnSec.textContent = '💳 Conectar / Configurar Conta SEC'; btnSec.style.borderColor = 'rgba(96,165,250,0.5)'; btnSec.style.color = '#60a5fa'; }
-        }
-    }
-}
-
-// ── Envia o mesmo trade DBS para a conta secundária (paralelo à conta principal) ──
-function _dbsOperarNaSecundaria(payload, stakeMain) {
-    const secPronto = (typeof _sec !== 'undefined') && _sec.pronto
-        && _sec.ws && _sec.ws.readyState === WebSocket.OPEN;
-    if (!secPronto) {
-        console.warn('[DBS] Conta SEC não disponível — trade enviado apenas na conta principal.');
-        const stEl = document.getElementById('dbs-sec-status');
-        if (stEl) { stEl.textContent = '⚠️ SEC desconectada — trade enviado só na conta principal.'; stEl.style.color = '#f87171'; }
-        return;
-    }
-
-    // Usa a stake configurada no painel da SEC (ou a da principal como fallback)
-    const secStake = parseFloat(document.getElementById('dbs-sec-entrada')?.value) || stakeMain;
-    const reqIdSec = -(Math.floor(Math.random() * 90000) + 10000);
-    const proposal = {
-        proposal:           1,
-        req_id:             reqIdSec,
-        amount:             secStake,
-        basis:              'stake',
-        currency:           _sec.currency || 'USD',
-        duration:           1,
-        duration_unit:      't',
-        underlying_symbol:  payload.ativo,
-        contract_type:      payload.tipo_contrato,
-        barrier:            String(payload.barreira),
-    };
-
-    const stEl = document.getElementById('dbs-sec-status');
-
-    // Handler de resposta isolado na conta SEC
-    const _origSecOnMsg = _sec.ws.onmessage;
-    _sec.ws.onmessage = function(msg) {
-        try {
-            const d = JSON.parse(msg.data);
-            if (d.msg_type === 'proposal' && d.req_id === reqIdSec) {
-                if (d.error) {
-                    console.warn('[DBS-SEC] Proposta recusada:', d.error.message);
-                    _sec.ws.onmessage = _origSecOnMsg;
-                    if (stEl) { stEl.textContent = `❌ Proposta SEC recusada: ${d.error.message}`; stEl.style.color = '#f87171'; }
-                    return;
-                }
-                if (d.proposal && d.proposal.id) {
-                    _sec.ws.send(JSON.stringify({ buy: d.proposal.id, price: secStake }));
-                }
-                return;
-            }
-            if (d.msg_type === 'proposal_open_contract'
-                    && d.proposal_open_contract?.is_sold
-                    && d.echo_req?.req_id === undefined) {
-                _sec.ws.onmessage = _origSecOnMsg;
-                _origSecOnMsg(msg);
-
-                const profit = parseFloat(d.proposal_open_contract.profit || 0);
-                const won    = profit > 0;
-
-                // Placar
-                if (won) _dbsSecWins++; else _dbsSecLosses++;
-                _dbsSecLucro = parseFloat((_dbsSecLucro + profit).toFixed(2));
-                _dbsSecAtualizarStats();
-
-                // Log
-                _dbsSecRegistrarLog({ tipo: payload.tipo_contrato, barreira: payload.barreira, ativo: payload.ativo, resultado: won ? 'WIN' : 'LOSS', profit });
-
-                // Status
-                if (stEl) {
-                    stEl.innerHTML = `${won ? '✅ WIN' : '❌ LOSS'} <b>${payload.tipo_contrato}</b> B:${payload.barreira} ${payload.ativo} | ${profit >= 0 ? '+' : ''}$${profit.toFixed(2)}`;
-                    stEl.style.color = won ? '#4ade80' : '#f87171';
-                    stEl.style.borderColor = won ? 'rgba(74,222,128,0.4)' : 'rgba(248,113,113,0.3)';
-                }
-
-                // Verifica Stop Win / Stop Loss da SEC
-                const swSec = parseFloat(document.getElementById('dbs-sec-stopwin')?.value)  || 9999;
-                const slSec = parseFloat(document.getElementById('dbs-sec-stoploss')?.value) || 9999;
-                if (_dbsSecLucro >= swSec) {
-                    if (stEl) { stEl.innerHTML = `🏆 STOP WIN SEC atingido: +$${_dbsSecLucro.toFixed(2)} — conta SEC pausada.`; stEl.style.color = '#fbbf24'; }
-                    const chk = document.getElementById('dbs-duas-contas');
-                    if (chk) { chk.checked = false; dbsAtualizarSecundaria(); }
-                } else if (_dbsSecLucro <= -Math.abs(slSec)) {
-                    if (stEl) { stEl.innerHTML = `🛑 STOP LOSS SEC atingido: $${_dbsSecLucro.toFixed(2)} — conta SEC pausada.`; stEl.style.color = '#f87171'; }
-                    const chk = document.getElementById('dbs-duas-contas');
-                    if (chk) { chk.checked = false; dbsAtualizarSecundaria(); }
-                }
-                return;
-            }
-        } catch(_) {}
-        _origSecOnMsg(msg);
-    };
-
-    _sec.ws.send(JSON.stringify(proposal));
-    if (stEl) {
-        stEl.textContent = `⚡ Enviando ${payload.tipo_contrato} B:${payload.barreira} ${payload.ativo} $${secStake}…`;
-        stEl.style.color = '#60a5fa';
-        stEl.style.borderColor = '#30363d';
-    }
-    _dbsSecRegistrarLog({ tipo: payload.tipo_contrato, barreira: payload.barreira, ativo: payload.ativo });
-    print(`💳 DBS-SEC → <b>${payload.tipo_contrato}</b> barreira=<b>${payload.barreira}</b> | ativo=<b>${payload.ativo}</b> | stake=$${secStake}`, 'log-info');
-}
 
 // ── Função de compra direta pelo DBS (executa via WebSocket igual ao buy()) ──
 bot.operarComSinal = function(payload) {
@@ -20104,16 +19833,10 @@ bot.operarComSinal = function(payload) {
     bot.ws.send(json(proposal));
     print(`⚡ DBS → <b>${payload.tipo_contrato}</b> barreira=<b>${payload.barreira}</b> | ativo=<b>${payload.ativo}</b> | stake=$${stake} | origem=${payload.origem || 'DBS356'}`, 'log-info');
 
-    // ── Duas Contas: espelha o mesmo trade na conta secundária ───────────────
-    const _duasContasChk = document.getElementById('dbs-duas-contas');
-    if (_duasContasChk && _duasContasChk.checked) {
-        _dbsOperarNaSecundaria(payload, stake);
-    }
-
     // Registra entrada no log do DBS
     const confianca = payload.confianca || _dbsTop1?.confianca || '—';
-    bot._dbsUltimoPayload = { tipo: payload.tipo_contrato, barreira: payload.barreira, ativo: payload.ativo, confianca };
-    dbsRegistrarLog({ tipo: payload.tipo_contrato, barreira: payload.barreira, ativo: payload.ativo, confianca });
+    bot._dbsUltimoPayload = { tipo: payload.tipo_contrato, barreira: payload.barreira, ativo: payload.ativo, confianca, stake };
+    dbsRegistrarLog({ tipo: payload.tipo_contrato, barreira: payload.barreira, ativo: payload.ativo, confianca, stake });
 
     // Watchdog: se em 30s não receber resultado, libera a trava
     setTimeout(() => {
