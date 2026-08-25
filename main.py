@@ -106,7 +106,7 @@ def _auth_gerar_token() -> str:
     return hashlib.sha256((str(time.time()) + str(random.random())).encode()).hexdigest()
 
 # Estado global do modo de operação
-_MODO_OPERACAO = {"modo": "NORMAL"}   # NORMAL ou ESPELHO
+_MODO_OPERACAO = {"modo": "NORMAL"}   # NORMAL | ESPELHO | DUAL
 
 # ── Cache de cotação USD/BRL ──────────────────────────────────────────────────
 _COT_CACHE: dict = {"valor": 0.0, "ts": 0}
