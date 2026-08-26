@@ -106,7 +106,7 @@ def _auth_gerar_token() -> str:
     return hashlib.sha256((str(time.time()) + str(random.random())).encode()).hexdigest()
 
 # Estado global do modo de operação
-_MODO_OPERACAO = {"modo": "NORMAL"}   # NORMAL | ESPELHO | DUAL
+_MODO_OPERACAO = {"modo": "NORMAL"}   # NORMAL ou ESPELHO
 
 # ── Cache de cotação USD/BRL ──────────────────────────────────────────────────
 _COT_CACHE: dict = {"valor": 0.0, "ts": 0}
@@ -10588,7 +10588,7 @@ def dbs_threshold():
     dados = request.get_json(force=True, silent=True) or {}
     novo = dados.get("threshold")
     if novo is None or not (50 <= int(novo) <= 99):
-        return jsonify({"ok": False, "erro": "threshold deve ser entre 50 e 99"}), 400
+        return jsonify({"ok": False, "erro": "threshold deve ser entre 50 e 99 (inclusive)"}), 400
     _supervisor.threshold = int(novo)
     try:
         st = _ect_state_ler()

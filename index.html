@@ -3548,12 +3548,27 @@
                 background:rgba(0,0,0,0.3);border:1px solid rgba(99,102,241,0.2);
                 border-radius:5px;padding:5px 9px;flex-wrap:wrap;">
               <span style="font-size:0.6rem;color:#6b7280;letter-spacing:1px;white-space:nowrap;">⚙️ THRESHOLD:</span>
-              <input type="range" id="dbs-threshold-slider" min="50" max="85" value="72" step="1"
+              <input type="range" id="dbs-threshold-slider" min="50" max="99" value="72" step="1"
                   oninput="dbsThresholdAtualizar(this.value)"
                   style="flex:1;min-width:80px;accent-color:#6366f1;cursor:pointer;">
               <span id="dbs-threshold-val" style="font-size:0.72rem;color:#a5b4fc;font-weight:bold;min-width:30px;text-align:center;">72%</span>
               <button onclick="dbsThresholdSalvar()" style="background:rgba(99,102,241,0.2);border:1px solid #6366f1;
                   border-radius:4px;color:#a5b4fc;font-size:0.6rem;padding:3px 7px;cursor:pointer;white-space:nowrap;">💾 SALVAR</button>
+            </div>
+
+            <!-- Loss Virtual DBS -->
+            <div style="display:flex;align-items:center;gap:7px;
+                background:rgba(255,189,46,0.05);border:1px solid rgba(255,189,46,0.25);
+                border-radius:5px;padding:5px 9px;flex-wrap:wrap;">
+              <label style="display:flex;align-items:center;gap:5px;font-size:0.65rem;color:#ffbd2e;cursor:pointer;white-space:nowrap;">
+                <input type="checkbox" id="dbs-lv-ativo" style="accent-color:#ffbd2e;width:13px;height:13px;" onchange="dbsLvAtualizar()">
+                🛡️ Loss Virtual
+              </label>
+              <span style="font-size:0.6rem;color:#6b7280;white-space:nowrap;">Qtd:</span>
+              <input type="number" id="dbs-lv-qtd" value="3" min="1" max="20" step="1"
+                  style="width:42px;background:#0d0f1a;border:1px solid rgba(255,189,46,0.4);color:#ffbd2e;
+                         font-family:'Share Tech Mono';font-size:0.7rem;padding:3px 5px;border-radius:4px;text-align:center;">
+              <span id="dbs-lv-status" style="font-size:0.6rem;color:#6b7280;flex:1;text-align:right;white-space:nowrap;">Inativo</span>
             </div>
 
             <!-- Status -->
@@ -19580,6 +19595,64 @@ let _dbsMatrixRAF   = null;
 let _dbsMatrixDrops = null;
 let _dbsScanning    = false;
 
+// ── Loss Virtual DBS ─────────────────────────────────────────────────────────
+let _dbsLvContador  = 0;   // quantas "entradas virtuais" já foram simuladas
+let _dbsLvAtivo     = false; // se o Loss Virtual está habilitado
+
+function dbsLvAtualizar() {
+    const chk = document.getElementById('dbs-lv-ativo');
+    _dbsLvAtivo = chk && chk.checked;
+    if (!_dbsLvAtivo) {
+        _dbsLvContador = 0;
+        const st = document.getElementById('dbs-lv-status');
+        if (st) st.textContent = 'Inativo';
+    } else {
+        _dbsLvAtualizarStatus();
+    }
+}
+
+function _dbsLvAtualizarStatus() {
+    const st  = document.getElementById('dbs-lv-status');
+    const qtd = parseInt(document.getElementById('dbs-lv-qtd')?.value) || 3;
+    if (!st) return;
+    if (!_dbsLvAtivo) { st.textContent = 'Inativo'; return; }
+    if (_dbsLvContador < qtd) {
+        st.textContent = `🛡️ Virtual ${_dbsLvContador}/${qtd}`;
+        st.style.color = '#00ff88';
+    } else {
+        st.textContent = `✅ Liberado (${_dbsLvContador}/${qtd})`;
+        st.style.color = '#ffbd2e';
+    }
+}
+
+/**
+ * Verifica se o Loss Virtual DBS deve bloquear a entrada real.
+ * Retorna true se deve BLOQUEAR (ainda acumulando virtualmente).
+ */
+function _dbsLvVerificar(logSinal) {
+    if (!_dbsLvAtivo) return false; // sem LV — deixa operar
+    const qtd = parseInt(document.getElementById('dbs-lv-qtd')?.value) || 3;
+    if (_dbsLvContador < qtd) {
+        _dbsLvContador++;
+        _dbsLvAtualizarStatus();
+        const st = document.getElementById('dbs-status');
+        if (st) st.textContent = `🛡️ Loss Virtual ${_dbsLvContador}/${qtd} — entrada simulada (sem operação real)`;
+        // Registra no log como virtual
+        if (logSinal) {
+            dbsRegistrarLog({
+                tipo:      logSinal.tipo_contrato || logSinal.tipo,
+                barreira:  logSinal.barreira,
+                ativo:     logSinal.ativo,
+                confianca: logSinal.confianca,
+                stake:     0,
+                virtual:   true,
+            });
+        }
+        return true; // BLOQUEADO
+    }
+    return false; // liberado — pode operar real
+}
+
 // ── Sincroniza mini painel de banca com o header principal ───────────────────
 function dbsSincronizarBanca() {
     const get = id => document.getElementById(id)?.textContent || '--';
@@ -19630,18 +19703,24 @@ function _dbsRenderLog() {
         el.innerHTML = '<span style="color:#374151;">— Nenhuma operação registrada —</span>';
         return;
     }
-    el.innerHTML = _dbsLog.map(e =>
-        `<div style="border-bottom:1px solid rgba(255,255,255,0.04);padding:2px 0;display:flex;gap:8px;align-items:center;">
+    el.innerHTML = _dbsLog.map(e => {
+        const isVirtual = !!e.virtual;
+        const cor = isVirtual ? '#ffbd2e' : e.cor;
+        const ico = isVirtual ? '🛡️' : e.ico;
+        const resultado = isVirtual ? 'VIRTUAL' : (e.resultado || '');
+        const stakeStr  = isVirtual ? '<span style="color:#ffbd2e;flex-shrink:0;">virtual</span>'
+                        : (e.stake != null ? `<span style="color:#0ff;flex-shrink:0;">$${parseFloat(e.stake).toFixed(2)}</span>` : '');
+        return `<div style="border-bottom:1px solid rgba(255,255,255,0.04);padding:2px 0;display:flex;gap:8px;align-items:center;${isVirtual ? 'opacity:0.6;' : ''}">
           <span style="color:#4b5563;flex-shrink:0;">${e.ts}</span>
-          <span style="color:${e.cor};flex-shrink:0;">${e.ico}</span>
+          <span style="color:${cor};flex-shrink:0;">${ico}</span>
           <span style="color:#a5b4fc;flex-shrink:0;">${e.tipo || '—'}</span>
           <span style="color:#fbbf24;flex-shrink:0;">B:${e.barreira || '—'}</span>
           <span style="color:#00ff88;flex-shrink:0;">${e.ativo || '—'}</span>
           <span style="color:#6b7280;flex-shrink:0;">Conf:${e.confianca || '—'}%</span>
-          ${e.stake != null ? `<span style="color:#0ff;flex-shrink:0;">$${parseFloat(e.stake).toFixed(2)}</span>` : ''}
-          ${e.resultado ? `<span style="color:${e.cor};margin-left:auto;">${e.resultado}</span>` : ''}
-        </div>`
-    ).join('');
+          ${stakeStr}
+          ${resultado ? `<span style="color:${cor};margin-left:auto;">${resultado}</span>` : ''}
+        </div>`;
+    }).join('');
 }
 
 function dbsLimparLog() {
@@ -19797,6 +19876,10 @@ bot.operarComSinal = function(payload, _retentativa) {
                 _dbsEmOperacao = false;
                 _dbsReqIdAtivo = null;
                 bot.ws.onmessage = _origOnMsg;
+
+                // ── Loss Virtual: reseta contador após resultado real ──────────
+                _dbsLvContador = 0;
+                _dbsLvAtualizarStatus();
 
                 // Registra resultado no log e gerenciador DBS
                 if (bot._dbsUltimoPayload) {
@@ -20100,8 +20183,14 @@ function dbsScan() {
         if (autoOperarChk && autoOperarChk.checked && data.top1 && data.top1.veredicto === 'OPERAR') {
             const t = data.top1;
             const statusEl = document.getElementById('dbs-status');
-            if (statusEl) statusEl.textContent = `⚡ Auto-operando: ${t.tipo} | Barreira ${t.barreira} | ${t.ativo} | Conf. ${t.confianca}%`;
-            bot.operarComSinal({ tipo_contrato: t.tipo, barreira: t.barreira, ativo: t.ativo, origem: 'DBS356-AUTO' });
+            // ── Loss Virtual: verifica se ainda está acumulando entradas virtuais ──
+            const sinalLv = { tipo_contrato: t.tipo, barreira: t.barreira, ativo: t.ativo, confianca: t.confianca, origem: 'DBS356-AUTO' };
+            if (_dbsLvVerificar(sinalLv)) {
+                // bloqueado pelo Loss Virtual — não opera agora, aguarda próximo scan
+            } else {
+                if (statusEl) statusEl.textContent = `⚡ Auto-operando: ${t.tipo} | Barreira ${t.barreira} | ${t.ativo} | Conf. ${t.confianca}%`;
+                bot.operarComSinal(sinalLv);
+            }
         }
 
         // Auto-scan
@@ -20215,8 +20304,15 @@ function dbsOperarTop1() {
         tipo_contrato: t.tipo,
         barreira:      t.barreira,
         ativo:         t.ativo,
+        confianca:     t.confianca,
         origem:        'DBS356',
     };
+    // Aplica Loss Virtual também no botão manual
+    if (_dbsLvVerificar(payload)) {
+        const status = document.getElementById('dbs-status');
+        if (status) status.textContent = `🛡️ Loss Virtual ativo — entrada simulada, sem operação real`;
+        return;
+    }
     bot.operarComSinal(payload);
     const status = document.getElementById('dbs-status');
     if (status) status.textContent = `⚡ Operação enviada: ${t.tipo} | Barreira ${t.barreira} | ${t.ativo} | Conf. ${t.confianca}%`;
