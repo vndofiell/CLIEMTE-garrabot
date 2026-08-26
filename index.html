@@ -8550,14 +8550,33 @@ function initWebSocket(wssUrl) {
     bot.ws.onerror  = () => print("⚠️ ERRO WEBSOCKET.", "log-loss");
     bot.ws.onclose  = () => {
         print("🔌 CONEXÃO ENCERRADA.", "log-loss");
-        // Reconecta automaticamente se o bot estava rodando (ex: app minimizado)
-        if (bot.running && bot._wssUrl) {
-            setTimeout(() => {
-                if (bot.running) {
-                    print("📡 Reconectando automaticamente...", "log-info");
-                    initWebSocket(bot._wssUrl);
-                }
-            }, 2000);
+        // Verifica se o DBS está ativo (modal aberto e auto-scan/operar ligado)
+        const _dbsModalAberto = () => {
+            const m = document.getElementById('dbs-modal');
+            return m && m.style.display !== 'none';
+        };
+        const _dbsEstaAtivo = () => {
+            const autoScan  = document.getElementById('dbs-auto-scan');
+            const autoOp    = document.getElementById('dbs-auto-operar');
+            return _dbsModalAberto() && ((autoScan && autoScan.checked) || (autoOp && autoOp.checked));
+        };
+        // Reconecta automaticamente se o bot estava rodando OU se o DBS está ativo
+        if (bot._wssUrl && (bot.running || _dbsEstaAtivo())) {
+            const _tentarReconectar = (tentativa) => {
+                if (!bot._wssUrl) return;
+                // Só prossegue se o motivo ainda é válido
+                if (!bot.running && !_dbsEstaAtivo()) return;
+                print(`📡 Reconectando automaticamente... (tentativa ${tentativa})`, "log-info");
+                try { initWebSocket(bot._wssUrl); } catch(_) {}
+                // Verifica após 5s se reconectou; se não, tenta de novo (infinitamente)
+                setTimeout(() => {
+                    if (bot.ws && bot.ws.readyState === WebSocket.OPEN) return; // reconectado
+                    if (!bot._wssUrl) return;
+                    if (!bot.running && !_dbsEstaAtivo()) return;
+                    _tentarReconectar(tentativa + 1);
+                }, 5000);
+            };
+            setTimeout(() => _tentarReconectar(1), 2000);
         }
     };
 
@@ -17183,8 +17202,15 @@ _wakeLockAtivar();
 
     // ── 1. Watchdog — verifica WS a cada 5s e reconecta se cair ──
     setInterval(() => {
-        // Bot principal
-        if (typeof bot !== 'undefined' && bot.running && bot._wssUrl) {
+        // Bot principal — reconecta se bot rodando OU se DBS está ativo com modal aberto
+        const _wdDbsAtivo = () => {
+            const m  = document.getElementById('dbs-modal');
+            if (!m || m.style.display === 'none') return false;
+            const s1 = document.getElementById('dbs-auto-scan');
+            const s2 = document.getElementById('dbs-auto-operar');
+            return (s1 && s1.checked) || (s2 && s2.checked);
+        };
+        if (typeof bot !== 'undefined' && bot._wssUrl && (bot.running || _wdDbsAtivo())) {
             if (!bot.ws || bot.ws.readyState === WebSocket.CLOSED || bot.ws.readyState === WebSocket.CLOSING) {
                 console.warn('🔁 Watchdog: WS principal caiu — reconectando...');
                 try { initWebSocket(bot._wssUrl); } catch(_) {}
@@ -17237,8 +17263,15 @@ _wakeLockAtivar();
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState !== 'visible') return;
         setTimeout(() => {
-            // Reconecta bot principal se caiu
-            if (typeof bot !== 'undefined' && bot.running && bot._wssUrl) {
+            // Reconecta bot principal se caiu — também reconecta se DBS está ativo
+            const _vcDbsAtivo = () => {
+                const m  = document.getElementById('dbs-modal');
+                if (!m || m.style.display === 'none') return false;
+                const s1 = document.getElementById('dbs-auto-scan');
+                const s2 = document.getElementById('dbs-auto-operar');
+                return (s1 && s1.checked) || (s2 && s2.checked);
+            };
+            if (typeof bot !== 'undefined' && bot._wssUrl && (bot.running || _vcDbsAtivo())) {
                 if (!bot.ws || bot.ws.readyState !== WebSocket.OPEN) {
                     console.log('📡 Voltou do background — reconectando bot principal...');
                     try { initWebSocket(bot._wssUrl); } catch(_) {}
@@ -19693,10 +19726,23 @@ let _dbsEmOperacao = false;
 let _dbsReqIdAtivo = null;
 
 // ── Função de compra direta pelo DBS (executa via WebSocket igual ao buy()) ──
-bot.operarComSinal = function(payload) {
+bot.operarComSinal = function(payload, _retentativa) {
     if (!bot.ws || bot.ws.readyState !== WebSocket.OPEN) {
         const st = document.getElementById('dbs-status');
-        if (st) st.textContent = '⚠️ WebSocket não conectado. Reconecte o bot.';
+        const tent = (_retentativa || 0) + 1;
+        if (st) st.textContent = `⏳ WS desconectado — aguardando reconexão... (tentativa ${tent})`;
+        // Se temos a URL, dispara reconexão imediata
+        if (bot._wssUrl && (!bot.ws || bot.ws.readyState === WebSocket.CLOSED || bot.ws.readyState === WebSocket.CLOSING)) {
+            try { initWebSocket(bot._wssUrl); } catch(_) {}
+        }
+        // Aguarda 3s e retenta indefinidamente
+        setTimeout(() => {
+            const autoOp = document.getElementById('dbs-auto-operar');
+            // Só retenta se o auto-operar ainda estiver ativo
+            if (autoOp && autoOp.checked) {
+                bot.operarComSinal(payload, tent);
+            }
+        }, 3000);
         return;
     }
     if (_dbsEmOperacao) {
