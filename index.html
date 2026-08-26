@@ -19596,16 +19596,22 @@ let _dbsMatrixDrops = null;
 let _dbsScanning    = false;
 
 // ── Loss Virtual DBS ─────────────────────────────────────────────────────────
-let _dbsLvContador  = 0;   // quantas "entradas virtuais" já foram simuladas
-let _dbsLvAtivo     = false; // se o Loss Virtual está habilitado
+// Regra: acumula N PERDAS virtuais consecutivas antes de operar real.
+// Se ganhar virtualmente → reseta contador para zero e recomeça.
+// Só quando atingir N perdas virtuais → libera entrada real.
+
+let _dbsLvContador     = 0;      // perdas virtuais acumuladas
+let _dbsLvAtivo        = false;  // Loss Virtual habilitado
+let _dbsLvSimulando    = false;  // true enquanto aguarda resultado de uma entrada virtual
 
 function dbsLvAtualizar() {
     const chk = document.getElementById('dbs-lv-ativo');
     _dbsLvAtivo = chk && chk.checked;
     if (!_dbsLvAtivo) {
-        _dbsLvContador = 0;
+        _dbsLvContador  = 0;
+        _dbsLvSimulando = false;
         const st = document.getElementById('dbs-lv-status');
-        if (st) st.textContent = 'Inativo';
+        if (st) { st.textContent = 'Inativo'; st.style.color = '#6b7280'; }
     } else {
         _dbsLvAtualizarStatus();
     }
@@ -19615,42 +19621,115 @@ function _dbsLvAtualizarStatus() {
     const st  = document.getElementById('dbs-lv-status');
     const qtd = parseInt(document.getElementById('dbs-lv-qtd')?.value) || 3;
     if (!st) return;
-    if (!_dbsLvAtivo) { st.textContent = 'Inativo'; return; }
+    if (!_dbsLvAtivo) { st.textContent = 'Inativo'; st.style.color = '#6b7280'; return; }
     if (_dbsLvContador < qtd) {
-        st.textContent = `🛡️ Virtual ${_dbsLvContador}/${qtd}`;
+        st.textContent = `🛡️ Loss virt. ${_dbsLvContador}/${qtd}`;
         st.style.color = '#00ff88';
     } else {
-        st.textContent = `✅ Liberado (${_dbsLvContador}/${qtd})`;
+        st.textContent = `⚡ Liberto — entrando real!`;
         st.style.color = '#ffbd2e';
     }
 }
 
 /**
- * Verifica se o Loss Virtual DBS deve bloquear a entrada real.
- * Retorna true se deve BLOQUEAR (ainda acumulando virtualmente).
+ * Resolve se um sinal teria GANHO ou PERDIDO com base no próximo tick do mercado.
+ * DIGITOVER  barreira B → ganhou se último dígito >  B
+ * DIGITUNDER barreira B → ganhou se último dígito <  B
  */
-function _dbsLvVerificar(logSinal) {
-    if (!_dbsLvAtivo) return false; // sem LV — deixa operar
+function _dbsLvResolveu(tipo, barreira) {
+    const d = typeof bot !== 'undefined' ? (bot._ultimoDigito ?? -1) : -1;
+    if (d < 0) return null; // dígito indisponível
+    const t = (tipo || '').toUpperCase();
+    if (t === 'DIGITOVER')  return d >  barreira;
+    if (t === 'DIGITUNDER') return d <  barreira;
+    return null;
+}
+
+/**
+ * Simula uma entrada virtual: pede o próximo tick, resolve ganho/perda e
+ * decide se incrementa o contador ou reseta.
+ * Retorna true se deve BLOQUEAR a entrada real (ainda em modo virtual).
+ *
+ * @param {object} logSinal  - payload do sinal { tipo_contrato, barreira, ativo, confianca }
+ * @param {function} cbLiberar - callback chamado quando o LV liberar entrada real
+ */
+function _dbsLvVerificar(logSinal, cbLiberar) {
+    if (!_dbsLvAtivo) return false; // LV desligado — opera normalmente
+
     const qtd = parseInt(document.getElementById('dbs-lv-qtd')?.value) || 3;
-    if (_dbsLvContador < qtd) {
-        _dbsLvContador++;
-        _dbsLvAtualizarStatus();
-        const st = document.getElementById('dbs-status');
-        if (st) st.textContent = `🛡️ Loss Virtual ${_dbsLvContador}/${qtd} — entrada simulada (sem operação real)`;
-        // Registra no log como virtual
-        if (logSinal) {
-            dbsRegistrarLog({
-                tipo:      logSinal.tipo_contrato || logSinal.tipo,
-                barreira:  logSinal.barreira,
-                ativo:     logSinal.ativo,
-                confianca: logSinal.confianca,
-                stake:     0,
-                virtual:   true,
-            });
+
+    // Já acumulou N perdas virtuais → está liberado para operar real
+    if (_dbsLvContador >= qtd) return false;
+
+    // Está bloqueado — simula a entrada e aguarda próximo tick
+    if (_dbsLvSimulando) return true; // já há uma simulação em andamento
+
+    _dbsLvSimulando = true;
+
+    const tipo     = logSinal.tipo_contrato || logSinal.tipo;
+    const barreira = logSinal.barreira;
+    const ativo    = logSinal.ativo;
+    const confianca = logSinal.confianca;
+
+    const stEl = document.getElementById('dbs-status');
+    if (stEl) stEl.textContent = `🛡️ Loss Virtual — aguardando próximo tick para simular... (${_dbsLvContador}/${qtd})`;
+
+    // Aguarda o próximo tick para resolver o resultado virtual
+    // Usa polling curto sobre bot._ultimoDigito (tick chega em ~1-2s)
+    const _digitAntes = typeof bot !== 'undefined' ? bot._ultimoDigito : undefined;
+    let _tentativas   = 0;
+
+    const _intervalo = setInterval(() => {
+        _tentativas++;
+        const _digitAtual = typeof bot !== 'undefined' ? bot._ultimoDigito : undefined;
+
+        // Ainda não veio tick novo (ou dígito indisponível)
+        if (_digitAtual === _digitAntes || _digitAtual === undefined) {
+            if (_tentativas > 40) { // timeout ~8s
+                _dbsLvSimulando = false;
+                clearInterval(_intervalo);
+            }
+            return;
         }
-        return true; // BLOQUEADO
-    }
-    return false; // liberado — pode operar real
+
+        clearInterval(_intervalo);
+        _dbsLvSimulando = false;
+
+        const ganhou = _dbsLvResolveu(tipo, barreira);
+
+        // Registra no log como virtual com resultado
+        dbsRegistrarLog({
+            tipo:      tipo,
+            barreira:  barreira,
+            ativo:     ativo,
+            confianca: confianca,
+            stake:     0,
+            virtual:   true,
+            resultado: ganhou ? 'WIN' : 'LOSS',
+        });
+
+        if (ganhou) {
+            // Ganhou virtual → reseta contador e recomeça do zero
+            _dbsLvContador = 0;
+            _dbsLvAtualizarStatus();
+            const st2 = document.getElementById('dbs-status');
+            if (st2) st2.textContent = `🛡️ Loss Virtual — WIN virtual! Contador RESETADO (0/${qtd}). Aguardando ${qtd} perdas.`;
+        } else {
+            // Perdeu virtual → incrementa contador
+            _dbsLvContador++;
+            _dbsLvAtualizarStatus();
+            const st2 = document.getElementById('dbs-status');
+            if (_dbsLvContador >= qtd) {
+                if (st2) st2.textContent = `🛡️ Loss Virtual completo (${_dbsLvContador}/${qtd} perdas) — LIBERTO para operar real!`;
+                // Libera: chama callback para entrar real no próximo scan
+                if (typeof cbLiberar === 'function') cbLiberar();
+            } else {
+                if (st2) st2.textContent = `🛡️ Loss Virtual — LOSS virtual ${_dbsLvContador}/${qtd} acumulado.`;
+            }
+        }
+    }, 200); // verifica a cada 200ms
+
+    return true; // BLOQUEADO enquanto simula
 }
 
 // ── Sincroniza mini painel de banca com o header principal ───────────────────
@@ -19689,8 +19768,14 @@ let _dbsLog = [];
 
 function dbsRegistrarLog(entry) {
     const ts  = new Date().toLocaleTimeString('pt-BR');
-    const cor = entry.resultado === 'WIN' ? '#00ff88' : entry.resultado === 'LOSS' ? '#f87171' : '#fbbf24';
-    const ico = entry.resultado === 'WIN' ? '✅' : entry.resultado === 'LOSS' ? '❌' : '⚡';
+    // Entradas virtuais: ícone específico; cor pelo resultado simulado
+    const isVirtual = !!entry.virtual;
+    const cor = isVirtual
+        ? (entry.resultado === 'WIN' ? '#00cc66' : entry.resultado === 'LOSS' ? '#c05050' : '#ffbd2e')
+        : (entry.resultado === 'WIN' ? '#00ff88' : entry.resultado === 'LOSS' ? '#f87171' : '#fbbf24');
+    const ico = isVirtual
+        ? (entry.resultado === 'WIN' ? '🛡️✅' : entry.resultado === 'LOSS' ? '🛡️❌' : '🛡️')
+        : (entry.resultado === 'WIN' ? '✅' : entry.resultado === 'LOSS' ? '❌' : '⚡');
     _dbsLog.unshift({ ts, ...entry, cor, ico });
     if (_dbsLog.length > 30) _dbsLog.pop();
     _dbsRenderLog();
@@ -19877,8 +19962,10 @@ bot.operarComSinal = function(payload, _retentativa) {
                 _dbsReqIdAtivo = null;
                 bot.ws.onmessage = _origOnMsg;
 
-                // ── Loss Virtual: reseta contador após resultado real ──────────
-                _dbsLvContador = 0;
+                // ── Loss Virtual: após operação real, reseta sempre para reiniciar ciclo ──
+                // (a lógica de reset por WIN/LOSS virtual é controlada dentro de _dbsLvVerificar)
+                _dbsLvContador  = 0;
+                _dbsLvSimulando = false;
                 _dbsLvAtualizarStatus();
 
                 // Registra resultado no log e gerenciador DBS
@@ -20183,10 +20270,17 @@ function dbsScan() {
         if (autoOperarChk && autoOperarChk.checked && data.top1 && data.top1.veredicto === 'OPERAR') {
             const t = data.top1;
             const statusEl = document.getElementById('dbs-status');
-            // ── Loss Virtual: verifica se ainda está acumulando entradas virtuais ──
             const sinalLv = { tipo_contrato: t.tipo, barreira: t.barreira, ativo: t.ativo, confianca: t.confianca, origem: 'DBS356-AUTO' };
-            if (_dbsLvVerificar(sinalLv)) {
-                // bloqueado pelo Loss Virtual — não opera agora, aguarda próximo scan
+            // ── Loss Virtual: bloqueia e simula; cbLiberar entra real quando completo ──
+            if (_dbsLvVerificar(sinalLv, () => {
+                // Callback: Loss Virtual liberou → opera real imediatamente
+                const autoChk2 = document.getElementById('dbs-auto-operar');
+                if (autoChk2 && autoChk2.checked) {
+                    if (statusEl) statusEl.textContent = `⚡ Loss Virtual liberado — Auto-operando: ${t.tipo} | B:${t.barreira} | ${t.ativo}`;
+                    bot.operarComSinal(sinalLv);
+                }
+            })) {
+                // bloqueado — simulação em andamento, aguarda resultado do tick
             } else {
                 if (statusEl) statusEl.textContent = `⚡ Auto-operando: ${t.tipo} | Barreira ${t.barreira} | ${t.ativo} | Conf. ${t.confianca}%`;
                 bot.operarComSinal(sinalLv);
@@ -20308,9 +20402,13 @@ function dbsOperarTop1() {
         origem:        'DBS356',
     };
     // Aplica Loss Virtual também no botão manual
-    if (_dbsLvVerificar(payload)) {
-        const status = document.getElementById('dbs-status');
-        if (status) status.textContent = `🛡️ Loss Virtual ativo — entrada simulada, sem operação real`;
+    const _stManual = document.getElementById('dbs-status');
+    if (_dbsLvVerificar(payload, () => {
+        // Callback: LV liberou — entra real
+        if (_stManual) _stManual.textContent = `⚡ Loss Virtual liberado — operando: ${t.tipo} | B:${t.barreira} | ${t.ativo}`;
+        bot.operarComSinal(payload);
+    })) {
+        if (_stManual) _stManual.textContent = `🛡️ Loss Virtual — simulando entrada (sem operação real)`;
         return;
     }
     bot.operarComSinal(payload);
