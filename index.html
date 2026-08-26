@@ -19731,6 +19731,9 @@ function _dbsLvVerificar(logSinal, cbLiberar) {
             _dbsLvModoReal = false;
             _dbsLvAtualizarStatus();
             if (st2) st2.textContent = `🛡️ WIN virtual — contador RESETADO. Aguardando ${qtd} perdas para entrar real.`;
+            // Dispara scan imediato para continuar o ciclo
+            const _aoChk = document.getElementById('dbs-auto-operar');
+            if (_aoChk && _aoChk.checked) setTimeout(() => dbsScan(), 500);
         } else {
             // LOSS virtual → acumula
             _dbsLvContador++;
@@ -19743,6 +19746,9 @@ function _dbsLvVerificar(logSinal, cbLiberar) {
                 if (typeof cbLiberar === 'function') cbLiberar();
             } else {
                 if (st2) st2.textContent = `🛡️ LOSS virtual ${_dbsLvContador}/${qtd} — aguardando mais ${qtd - _dbsLvContador}.`;
+                // Dispara scan imediato para simular a próxima entrada virtual
+                const _aoChk = document.getElementById('dbs-auto-operar');
+                if (_aoChk && _aoChk.checked) setTimeout(() => dbsScan(), 500);
             }
         }
     }, 200);
