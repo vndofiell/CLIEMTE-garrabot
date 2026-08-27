@@ -3576,7 +3576,7 @@
                 background:rgba(0,255,136,0.04);border:1px solid rgba(0,255,136,0.2);
                 border-radius:5px;padding:5px 9px;flex-wrap:wrap;">
               <label style="display:flex;align-items:center;gap:5px;font-size:0.65rem;color:#00ff88;cursor:pointer;white-space:nowrap;"
-                  title="Só entra se a SOMA dos dígitos perdedores estiver abaixo do limite nos últimos ticks">
+                  title="OVER: bloqueia se perdedores (0→B) estão quentes. UNDER: bloqueia se ganhadores (0→B-1) estão frios.">
                 <input type="checkbox" id="dbs-ff-ativo" style="accent-color:#00ff88;width:13px;height:13px;" onchange="dbsFfAtualizar()">
                 🎯 Dígitos Frios
               </label>
@@ -3585,11 +3585,11 @@
                   style="width:40px;background:#0d0f1a;border:1px solid rgba(0,255,136,0.3);color:#00ff88;
                          font-family:'Share Tech Mono';font-size:0.7rem;padding:3px 5px;border-radius:4px;text-align:center;"
                   title="Quantidade de ticks recentes analisados">
-              <span style="font-size:0.6rem;color:#6b7280;white-space:nowrap;">tks. Soma≤</span>
+              <span style="font-size:0.6rem;color:#6b7280;white-space:nowrap;">tks. Limiar:</span>
               <input type="number" id="dbs-ff-maxpct" value="40" min="10" max="80" step="5"
                   style="width:38px;background:#0d0f1a;border:1px solid rgba(0,255,136,0.3);color:#00ff88;
                          font-family:'Share Tech Mono';font-size:0.7rem;padding:3px 5px;border-radius:4px;text-align:center;"
-                  title="% máxima SOMADA de todos os dígitos perdedores (ex: B:3 → soma de 0+1+2+3 ≤ 40%)">
+                  title="OVER: perdedores devem somar MENOS que este %. UNDER: ganhadores devem somar MAIS que este %.">
               <span style="font-size:0.6rem;color:#6b7280;">%</span>
               <span id="dbs-ff-status" style="font-size:0.6rem;flex:1;text-align:right;color:#6b7280;white-space:nowrap;">Inativo</span>
             </div>
@@ -19799,27 +19799,25 @@ function dbsFfAtualizar() {
 }
 
 /**
- * Verifica se os dígitos perdedores do sinal estão FRIOS.
- * Usa a SOMA TOTAL de frequência de todos os dígitos perdedores na janela.
+ * Filtro de Dígitos — lógica específica por tipo de contrato:
  *
- * Exemplos:
- *   DIGITOVER  B:3 → perdedores 0,1,2,3 → probabilidade natural ~40%
- *   DIGITUNDER B:6 → perdedores 6,7,8,9 → probabilidade natural ~40%
+ * DIGITOVER  B → verifica dígitos PERDEDORES (0…B):
+ *   Bloqueia se a soma deles for ALTA (estão quentes = risco de perder).
+ *   Só entra quando os perdedores estão FRIOS (abaixo do limite).
  *
- * Se soma > limite → perdedores estão QUENTES → bloqueia.
- * Limite recomendado: 40% (igual à probabilidade natural para B:3 ou B:6).
+ * DIGITUNDER B → verifica dígitos GANHADORES (0…B-1):
+ *   Bloqueia se a soma deles for BAIXA (ganhadores estão frios = sem pressão).
+ *   Só entra quando os ganhadores estão com PRESSÃO (acima do limite).
  *
- * @param {string} tipo     - 'DIGITOVER' ou 'DIGITUNDER'
- * @param {number} barreira - barreira do contrato
- * @param {string} ativo    - ativo do combo (R_10, R_25, etc.)
+ * O campo "Soma≤" controla o limiar em % para ambos os casos.
  */
 function _dbsFiltroFrioVerificar(tipo, barreira, ativo) {
     if (!_dbsFfAtivo) return { ok: true, motivo: 'filtro inativo' };
 
     const janela  = Math.max(5, parseInt(document.getElementById('dbs-ff-janela')?.value) || 20);
-    const maxSoma = Math.max(10, parseInt(document.getElementById('dbs-ff-maxpct')?.value) || 40);
+    const limiar  = Math.max(10, parseInt(document.getElementById('dbs-ff-maxpct')?.value) || 40);
 
-    // Usa dígitos do ativo específico do sinal (do último scan do DBS)
+    // Ticks do ativo específico do sinal
     let fonte = 'bot';
     let recentes = [];
     if (ativo && _dbsDigitosPorAtivo[ativo] && _dbsDigitosPorAtivo[ativo].length >= 5) {
@@ -19832,53 +19830,63 @@ function _dbsFiltroFrioVerificar(tipo, barreira, ativo) {
     if (recentes.length < 5) return { ok: true, motivo: 'poucos ticks' };
 
     const total = recentes.length;
-
-    // Identifica quais dígitos causam PERDA
     const t = (tipo || '').toUpperCase();
-    const perdedores = [];
     const b = parseInt(barreira);
-    if (t === 'DIGITOVER') {
-        for (let d = 0; d <= b; d++) perdedores.push(d);  // perde quando dígito ≤ B
-    } else if (t === 'DIGITUNDER') {
-        for (let d = b; d <= 9; d++) perdedores.push(d);  // perde quando dígito ≥ B
-    } else {
-        return { ok: true, motivo: 'tipo desconhecido' };
-    }
 
-    // Conta frequência de cada dígito perdedor
+    // Conta frequência de todos os dígitos
     const contagem = new Array(10).fill(0);
     for (const d of recentes) contagem[d]++;
 
-    // Calcula SOMA TOTAL dos dígitos perdedores
-    let somaAparicoes = 0;
-    const detalhe = [];
-    for (const d of perdedores) {
-        const cnt = contagem[d];
-        somaAparicoes += cnt;
-        if (cnt > 0) detalhe.push(`${d}:${cnt}`);
-    }
-    const somaPct = Math.round((somaAparicoes / total) * 100);
-
-    // Atualiza badge
     const stEl = document.getElementById('dbs-ff-status');
-    const bloqueado = somaPct > maxSoma;
-    if (stEl) {
-        if (!bloqueado) {
-            stEl.textContent = `✅ ${fonte}: soma ${somaPct}%≤${maxSoma}%`;
-            stEl.style.color = '#00ff88';
-        } else {
-            stEl.textContent = `🔥 ${fonte}: soma ${somaPct}%>${maxSoma}% [${detalhe.join(' ')}]`;
-            stEl.style.color = '#f87171';
-        }
-    }
 
-    if (bloqueado) {
-        return {
-            ok:     false,
-            motivo: `🔥 ${fonte}: perdedores somam ${somaPct}% (limite ${maxSoma}%) — bloqueado [${detalhe.join(' ')}]`,
-        };
+    if (t === 'DIGITOVER') {
+        // ── DIGITOVER: dígitos 0…B causam PERDA ─────────────────────────────
+        // Bloqueia se a soma deles for ALTA (estão quentes)
+        let soma = 0;
+        const det = [];
+        for (let d = 0; d <= b; d++) {
+            soma += contagem[d];
+            if (contagem[d] > 0) det.push(`${d}:${contagem[d]}`);
+        }
+        const pct = Math.round((soma / total) * 100);
+        const bloqueado = pct > limiar;
+
+        if (stEl) {
+            stEl.textContent = bloqueado
+                ? `🔥 ${fonte}: perd. ${pct}%>${limiar}% [${det.join(' ')}]`
+                : `✅ ${fonte}: perd. ${pct}%≤${limiar}%`;
+            stEl.style.color = bloqueado ? '#f87171' : '#00ff88';
+        }
+        if (bloqueado)
+            return { ok: false, motivo: `🔥 ${fonte} OVER: perdedores quentes ${pct}% > ${limiar}% [${det.join(' ')}]` };
+        return { ok: true, motivo: `✅ ${fonte} OVER: perdedores frios ${pct}% ≤ ${limiar}%` };
+
+    } else if (t === 'DIGITUNDER') {
+        // ── DIGITUNDER: dígitos 0…B-1 causam GANHO ──────────────────────────
+        // Bloqueia se a soma dos GANHADORES for BAIXA (sem pressão a favor)
+        let soma = 0;
+        const det = [];
+        for (let d = 0; d < b; d++) {
+            soma += contagem[d];
+            if (contagem[d] > 0) det.push(`${d}:${contagem[d]}`);
+        }
+        const pct = Math.round((soma / total) * 100);
+        // Para DIGITUNDER: queremos que ganhadores somem ACIMA do limiar
+        const bloqueado = pct < limiar;
+
+        if (stEl) {
+            stEl.textContent = bloqueado
+                ? `❄️ ${fonte}: ganh. ${pct}%<${limiar}% [${det.join(' ')}]`
+                : `✅ ${fonte}: ganh. ${pct}%≥${limiar}%`;
+            stEl.style.color = bloqueado ? '#60a5fa' : '#00ff88';
+        }
+        if (bloqueado)
+            return { ok: false, motivo: `❄️ ${fonte} UNDER: ganhadores frios ${pct}% < ${limiar}% [${det.join(' ')}]` };
+        return { ok: true, motivo: `✅ ${fonte} UNDER: ganhadores com pressão ${pct}% ≥ ${limiar}%` };
+
+    } else {
+        return { ok: true, motivo: 'tipo desconhecido' };
     }
-    return { ok: true, motivo: `✅ ${fonte}: perdedores somam ${somaPct}% ≤ ${maxSoma}%` };
 }
 
 
