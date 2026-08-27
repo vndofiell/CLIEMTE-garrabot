@@ -3576,7 +3576,7 @@
                 background:rgba(0,255,136,0.04);border:1px solid rgba(0,255,136,0.2);
                 border-radius:5px;padding:5px 9px;flex-wrap:wrap;">
               <label style="display:flex;align-items:center;gap:5px;font-size:0.65rem;color:#00ff88;cursor:pointer;white-space:nowrap;"
-                  title="Só entra se os dígitos que causam PERDA estiverem frios (pouco frequentes) nos últimos ticks">
+                  title="Só entra se a SOMA dos dígitos perdedores estiver abaixo do limite nos últimos ticks">
                 <input type="checkbox" id="dbs-ff-ativo" style="accent-color:#00ff88;width:13px;height:13px;" onchange="dbsFfAtualizar()">
                 🎯 Dígitos Frios
               </label>
@@ -3585,11 +3585,11 @@
                   style="width:40px;background:#0d0f1a;border:1px solid rgba(0,255,136,0.3);color:#00ff88;
                          font-family:'Share Tech Mono';font-size:0.7rem;padding:3px 5px;border-radius:4px;text-align:center;"
                   title="Quantidade de ticks recentes analisados">
-              <span style="font-size:0.6rem;color:#6b7280;white-space:nowrap;">ticks. Máx frio:</span>
-              <input type="number" id="dbs-ff-maxpct" value="30" min="5" max="60" step="5"
+              <span style="font-size:0.6rem;color:#6b7280;white-space:nowrap;">tks. Soma≤</span>
+              <input type="number" id="dbs-ff-maxpct" value="40" min="10" max="80" step="5"
                   style="width:38px;background:#0d0f1a;border:1px solid rgba(0,255,136,0.3);color:#00ff88;
                          font-family:'Share Tech Mono';font-size:0.7rem;padding:3px 5px;border-radius:4px;text-align:center;"
-                  title="% máxima de aparições dos dígitos perdedores na janela (abaixo = frio)">
+                  title="% máxima SOMADA de todos os dígitos perdedores (ex: B:3 → soma de 0+1+2+3 ≤ 40%)">
               <span style="font-size:0.6rem;color:#6b7280;">%</span>
               <span id="dbs-ff-status" style="font-size:0.6rem;flex:1;text-align:right;color:#6b7280;white-space:nowrap;">Inativo</span>
             </div>
@@ -19799,9 +19799,15 @@ function dbsFfAtualizar() {
 }
 
 /**
- * Verifica se os dígitos perdedores do sinal estão FRIOS nos últimos ticks.
- * Usa os dígitos do ATIVO ESPECÍFICO do sinal (não o ativo do bot principal).
- * Retorna { ok: bool, motivo: string }
+ * Verifica se os dígitos perdedores do sinal estão FRIOS.
+ * Usa a SOMA TOTAL de frequência de todos os dígitos perdedores na janela.
+ *
+ * Exemplos:
+ *   DIGITOVER  B:3 → perdedores 0,1,2,3 → probabilidade natural ~40%
+ *   DIGITUNDER B:6 → perdedores 6,7,8,9 → probabilidade natural ~40%
+ *
+ * Se soma > limite → perdedores estão QUENTES → bloqueia.
+ * Limite recomendado: 40% (igual à probabilidade natural para B:3 ou B:6).
  *
  * @param {string} tipo     - 'DIGITOVER' ou 'DIGITUNDER'
  * @param {number} barreira - barreira do contrato
@@ -19810,17 +19816,16 @@ function dbsFfAtualizar() {
 function _dbsFiltroFrioVerificar(tipo, barreira, ativo) {
     if (!_dbsFfAtivo) return { ok: true, motivo: 'filtro inativo' };
 
-    const janela = Math.max(5, parseInt(document.getElementById('dbs-ff-janela')?.value) || 20);
-    const maxPct = Math.max(1, parseInt(document.getElementById('dbs-ff-maxpct')?.value) || 30);
+    const janela  = Math.max(5, parseInt(document.getElementById('dbs-ff-janela')?.value) || 20);
+    const maxSoma = Math.max(10, parseInt(document.getElementById('dbs-ff-maxpct')?.value) || 40);
 
     // Usa dígitos do ativo específico do sinal (do último scan do DBS)
-    // Fallback: dígitos do bot principal se o ativo não estiver no cache
-    let fonte = 'bot principal';
+    let fonte = 'bot';
     let recentes = [];
     if (ativo && _dbsDigitosPorAtivo[ativo] && _dbsDigitosPorAtivo[ativo].length >= 5) {
         recentes = _dbsDigitosPorAtivo[ativo].slice(-janela);
         fonte = ativo;
-    } else if (typeof bot !== 'undefined' && bot._digitRecentes) {
+    } else if (typeof bot !== 'undefined' && bot._digitRecentes && bot._digitRecentes.length >= 5) {
         recentes = bot._digitRecentes.slice(-janela);
     }
 
@@ -19828,49 +19833,52 @@ function _dbsFiltroFrioVerificar(tipo, barreira, ativo) {
 
     const total = recentes.length;
 
-    // Dígitos que causam PERDA neste sinal
+    // Identifica quais dígitos causam PERDA
     const t = (tipo || '').toUpperCase();
     const perdedores = [];
     const b = parseInt(barreira);
     if (t === 'DIGITOVER') {
-        for (let d = 0; d <= b; d++) perdedores.push(d);   // perde se dígito <= B
+        for (let d = 0; d <= b; d++) perdedores.push(d);  // perde quando dígito ≤ B
     } else if (t === 'DIGITUNDER') {
-        for (let d = b; d <= 9; d++) perdedores.push(d);   // perde se dígito >= B
+        for (let d = b; d <= 9; d++) perdedores.push(d);  // perde quando dígito ≥ B
     } else {
         return { ok: true, motivo: 'tipo desconhecido' };
     }
 
-    // Frequência de cada dígito perdedor na janela
+    // Conta frequência de cada dígito perdedor
     const contagem = new Array(10).fill(0);
     for (const d of recentes) contagem[d]++;
 
-    const quentes = [];
-    let maxFreqPct = 0;
-
+    // Calcula SOMA TOTAL dos dígitos perdedores
+    let somaAparicoes = 0;
+    const detalhe = [];
     for (const d of perdedores) {
-        const pct = Math.round((contagem[d] / total) * 100);
-        if (pct >= maxPct) quentes.push({ digito: d, pct }); // >= bloqueia no limite também
-        if (pct > maxFreqPct) maxFreqPct = pct;
+        const cnt = contagem[d];
+        somaAparicoes += cnt;
+        if (cnt > 0) detalhe.push(`${d}:${cnt}`);
     }
+    const somaPct = Math.round((somaAparicoes / total) * 100);
 
-    // Atualiza badge do filtro
+    // Atualiza badge
     const stEl = document.getElementById('dbs-ff-status');
+    const bloqueado = somaPct > maxSoma;
     if (stEl) {
-        if (quentes.length === 0) {
-            stEl.textContent = `✅ Frios (${fonte}: max ${maxFreqPct}%<${maxPct}%)`;
+        if (!bloqueado) {
+            stEl.textContent = `✅ ${fonte}: soma ${somaPct}%≤${maxSoma}%`;
             stEl.style.color = '#00ff88';
         } else {
-            const ql = quentes.map(q => `${q.digito}(${q.pct}%)`).join(' ');
-            stEl.textContent = `🔥 ${fonte}: ${ql}`;
+            stEl.textContent = `🔥 ${fonte}: soma ${somaPct}%>${maxSoma}% [${detalhe.join(' ')}]`;
             stEl.style.color = '#f87171';
         }
     }
 
-    if (quentes.length > 0) {
-        const ql = quentes.map(q => `${q.digito}(${q.pct}%)`).join(', ');
-        return { ok: false, motivo: `🔥 ${fonte}: perdedores quentes ${ql} — bloqueado`, quentes };
+    if (bloqueado) {
+        return {
+            ok:     false,
+            motivo: `🔥 ${fonte}: perdedores somam ${somaPct}% (limite ${maxSoma}%) — bloqueado [${detalhe.join(' ')}]`,
+        };
     }
-    return { ok: true, motivo: `✅ frios em ${fonte} (max ${maxFreqPct}%<${maxPct}%)` };
+    return { ok: true, motivo: `✅ ${fonte}: perdedores somam ${somaPct}% ≤ ${maxSoma}%` };
 }
 
 
