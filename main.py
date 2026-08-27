@@ -1929,16 +1929,31 @@ def _get_token_com_access(access_token: str, tipo: str):
 
 @app.route('/get-token')
 def get_token():
-    """Gera WSS URL usando o token armazenado localmente (recebido via /pegar-token-robo)."""
+    """Gera WSS URL usando o token armazenado localmente (recebido via /pegar-token-robo).
+    
+    IMPORTANTE: o OTP da Deriv expira em ~30s após gerado.
+    Para evitar usar OTPs velhos, esta rota SÓ gera a wss_url quando o
+    frontend acabou de fazer o login (token_ts muito recente — últimos 20s).
+    Para polls anteriores ao login retorna apenas {wss_url: null}.
+    """
     try:
         # 1. Tenta usar token armazenado localmente (recebido do Netlify)
         with _token_lock:
             access_token = _token_recebido.get("access_token", "")
             token_ts     = _token_recebido.get("ts", 0)
+            bot_confirmou = _token_recebido.get("_bot_confirmou", False)
 
-        # Token expira após 10 minutos sem uso
+        # Token existe e é recente (últimos 10 minutos) — mas só gera OTP se
+        # veio de um login novo (token_ts < 20s) OU ainda não foi confirmado
         if access_token and (time.time() - token_ts) < 600:
-            print(f"[Token] Usando token local: {access_token[:10]}...")
+            # Se o bot já confirmou e o token tem mais de 20s, não regera OTP
+            # (evita gerar OTPs novos durante re-polls que vão expirar antes de serem usados)
+            idade_token = time.time() - token_ts
+            if bot_confirmou and idade_token > 20:
+                # Já conectou antes — aguarda novo login
+                return jsonify({"wss_url": None, "erro": "token_nao_encontrado"})
+            
+            print(f"[Token] Usando token local (idade={idade_token:.0f}s): {access_token[:10]}...")
             # Marca que o bot leu o token (sinaliza para a página de callback)
             with _token_lock:
                 _token_recebido["_bot_confirmou"] = True

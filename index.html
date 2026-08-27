@@ -6616,11 +6616,11 @@ function escolherConta(tipo) {
                     if (_btnTrocar) _btnTrocar.style.display = '';
                     if (_lblTrocar) _lblTrocar.textContent = data.conta_id + ' (' + (data.tipo||'') + ')';
 
-                    // Oculta o loader e conecta após 1 segundo
+                    // Oculta o loader e conecta IMEDIATAMENTE (OTP expira em ~30s)
+                    document.getElementById('terminal-loading').style.display = 'none';
+                    bot.token = data.wss_url;
+                    initWebSocket(data.wss_url);
                     setTimeout(() => {
-                        document.getElementById('terminal-loading').style.display = 'none';
-                        bot.token = data.wss_url;
-                        initWebSocket(data.wss_url);
                         // Tenta conectar conta secundária SOMENTE no modo ESPELHO
                         fetch('/get-modo').then(r=>r.json()).then(d=>{
                             if ((d.modo||'').toUpperCase() === 'ESPELHO') {
