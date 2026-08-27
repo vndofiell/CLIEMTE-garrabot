@@ -3571,6 +3571,29 @@
               <span id="dbs-lv-status" style="font-size:0.6rem;color:#6b7280;flex:1;text-align:right;white-space:nowrap;">Inativo</span>
             </div>
 
+            <!-- Filtro Dígitos Frios -->
+            <div style="display:flex;align-items:center;gap:7px;
+                background:rgba(0,255,136,0.04);border:1px solid rgba(0,255,136,0.2);
+                border-radius:5px;padding:5px 9px;flex-wrap:wrap;">
+              <label style="display:flex;align-items:center;gap:5px;font-size:0.65rem;color:#00ff88;cursor:pointer;white-space:nowrap;"
+                  title="Só entra se os dígitos que causam PERDA estiverem frios (pouco frequentes) nos últimos ticks">
+                <input type="checkbox" id="dbs-ff-ativo" style="accent-color:#00ff88;width:13px;height:13px;" onchange="dbsFfAtualizar()">
+                🎯 Dígitos Frios
+              </label>
+              <span style="font-size:0.6rem;color:#6b7280;white-space:nowrap;">Janela:</span>
+              <input type="number" id="dbs-ff-janela" value="20" min="5" max="60" step="1"
+                  style="width:40px;background:#0d0f1a;border:1px solid rgba(0,255,136,0.3);color:#00ff88;
+                         font-family:'Share Tech Mono';font-size:0.7rem;padding:3px 5px;border-radius:4px;text-align:center;"
+                  title="Quantidade de ticks recentes analisados">
+              <span style="font-size:0.6rem;color:#6b7280;white-space:nowrap;">ticks. Máx frio:</span>
+              <input type="number" id="dbs-ff-maxpct" value="30" min="5" max="60" step="5"
+                  style="width:38px;background:#0d0f1a;border:1px solid rgba(0,255,136,0.3);color:#00ff88;
+                         font-family:'Share Tech Mono';font-size:0.7rem;padding:3px 5px;border-radius:4px;text-align:center;"
+                  title="% máxima de aparições dos dígitos perdedores na janela (abaixo = frio)">
+              <span style="font-size:0.6rem;color:#6b7280;">%</span>
+              <span id="dbs-ff-status" style="font-size:0.6rem;flex:1;text-align:right;color:#6b7280;white-space:nowrap;">Inativo</span>
+            </div>
+
             <!-- Status -->
             <div id="dbs-status" style="font-size:0.65rem;color:#6b7280;min-height:20px;
                 background:rgba(0,0,0,0.3);border-radius:4px;padding:4px 7px;">
@@ -19756,6 +19779,89 @@ function _dbsLvVerificar(logSinal, cbLiberar) {
     return true; // BLOQUEADO enquanto simula
 }
 
+
+// ── Filtro Dígitos Frios DBS ─────────────────────────────────────────────────
+// Dígitos que causam PERDA:
+//   DIGITOVER  barreira B → perdem quando dígito <= B  (0, 1, 2, … B)
+//   DIGITUNDER barreira B → perdem quando dígito >= B  (B, B+1, … 9)
+//
+// O filtro só aprova entrada se a frequência de TODOS os dígitos perdedores
+// na janela recente for <= maxPct% (estão frios).
+
+let _dbsFfAtivo = false;
+
+function dbsFfAtualizar() {
+    const chk = document.getElementById('dbs-ff-ativo');
+    _dbsFfAtivo = chk && chk.checked;
+    const st = document.getElementById('dbs-ff-status');
+    if (st) { st.textContent = _dbsFfAtivo ? 'Ativo' : 'Inativo'; st.style.color = _dbsFfAtivo ? '#00ff88' : '#6b7280'; }
+}
+
+/**
+ * Verifica se os dígitos perdedores do sinal estão FRIOS nos últimos ticks.
+ * Retorna { ok: bool, motivo: string, digitosMaisQuentes: [] }
+ */
+function _dbsFiltroFrioVerificar(tipo, barreira) {
+    if (!_dbsFfAtivo) return { ok: true, motivo: 'filtro inativo' };
+
+    const janela  = Math.max(5, parseInt(document.getElementById('dbs-ff-janela')?.value)  || 20);
+    const maxPct  = Math.max(1, parseInt(document.getElementById('dbs-ff-maxpct')?.value)  || 30);
+    const recentes = (typeof bot !== 'undefined' && bot._digitRecentes)
+                     ? bot._digitRecentes.slice(-janela)
+                     : [];
+
+    if (recentes.length < 5) return { ok: true, motivo: 'poucos ticks' }; // sem dados suficientes
+
+    const total = recentes.length;
+
+    // Identifica quais dígitos causam PERDA neste sinal
+    const t = (tipo || '').toUpperCase();
+    let perdedores = [];
+    const b = parseInt(barreira);
+    if (t === 'DIGITOVER') {
+        // perdem dígitos 0 até B (inclusive)
+        for (let d = 0; d <= b; d++) perdedores.push(d);
+    } else if (t === 'DIGITUNDER') {
+        // perdem dígitos B até 9 (inclusive)
+        for (let d = b; d <= 9; d++) perdedores.push(d);
+    } else {
+        return { ok: true, motivo: 'tipo desconhecido' };
+    }
+
+    // Conta frequência de cada dígito perdedor na janela
+    const contagem = new Array(10).fill(0);
+    for (const d of recentes) contagem[d]++;
+
+    const quentes = []; // dígitos perdedores acima do limite
+    let maxFreqPct = 0;
+
+    for (const d of perdedores) {
+        const pct = Math.round((contagem[d] / total) * 100);
+        if (pct > maxPct) quentes.push({ digito: d, pct });
+        if (pct > maxFreqPct) maxFreqPct = pct;
+    }
+
+    // Atualiza badge do filtro
+    const stEl = document.getElementById('dbs-ff-status');
+    if (stEl) {
+        if (quentes.length === 0) {
+            stEl.textContent = `✅ Frios (${maxFreqPct}%≤${maxPct}%)`;
+            stEl.style.color = '#00ff88';
+        } else {
+            const ql = quentes.map(q => `${q.digito}(${q.pct}%)`).join(' ');
+            stEl.textContent = `🔥 Quente: ${ql}`;
+            stEl.style.color = '#f87171';
+        }
+    }
+
+    if (quentes.length > 0) {
+        const ql = quentes.map(q => `${q.digito}(${q.pct}%)`).join(', ');
+        return { ok: false, motivo: `🔥 Dígitos perdedores QUENTES: ${ql} — aguardando esfriar`, quentes };
+    }
+    return { ok: true, motivo: `✅ Dígitos perdedores frios (max ${maxFreqPct}%≤${maxPct}%)` };
+}
+
+
 // ── Sincroniza mini painel de banca com o header principal ───────────────────
 function dbsSincronizarBanca() {
     const get = id => document.getElementById(id)?.textContent || '--';
@@ -20303,16 +20409,30 @@ function dbsScan() {
             const t = data.top1;
             const statusEl = document.getElementById('dbs-status');
             const sinalLv = { tipo_contrato: t.tipo, barreira: t.barreira, ativo: t.ativo, confianca: t.confianca, origem: 'DBS356-AUTO' };
+
+            // ── Filtro Dígitos Frios: verifica ANTES de qualquer operação ───────
+            const _ffRes = _dbsFiltroFrioVerificar(t.tipo, t.barreira);
+            if (!_ffRes.ok) {
+                if (statusEl) statusEl.textContent = `🎯 ${_ffRes.motivo}`;
+                // Filtro bloqueou — não opera, aguarda próximo scan
+                return;
+            }
+
             // ── Loss Virtual: bloqueia e simula; cbLiberar entra real quando completo ──
             if (_dbsLvVerificar(sinalLv, () => {
-                // Callback: Loss Virtual liberou → opera real imediatamente
+                // Callback: Loss Virtual liberou → verifica filtro frio novamente antes de operar
+                const _ffRes2 = _dbsFiltroFrioVerificar(t.tipo, t.barreira);
+                if (!_ffRes2.ok) {
+                    if (statusEl) statusEl.textContent = `🎯 LV liberado mas ${_ffRes2.motivo}`;
+                    return;
+                }
                 const autoChk2 = document.getElementById('dbs-auto-operar');
                 if (autoChk2 && autoChk2.checked) {
                     if (statusEl) statusEl.textContent = `⚡ Loss Virtual liberado — Auto-operando: ${t.tipo} | B:${t.barreira} | ${t.ativo}`;
                     bot.operarComSinal(sinalLv);
                 }
             })) {
-                // bloqueado — simulação em andamento, aguarda resultado do tick
+                // bloqueado — simulação LV em andamento
             } else {
                 if (statusEl) statusEl.textContent = `⚡ Auto-operando: ${t.tipo} | Barreira ${t.barreira} | ${t.ativo} | Conf. ${t.confianca}%`;
                 bot.operarComSinal(sinalLv);
@@ -20433,10 +20553,22 @@ function dbsOperarTop1() {
         confianca:     t.confianca,
         origem:        'DBS356',
     };
-    // Aplica Loss Virtual também no botão manual
     const _stManual = document.getElementById('dbs-status');
+
+    // ── Filtro Dígitos Frios ─────────────────────────────────────────────────
+    const _ffRes = _dbsFiltroFrioVerificar(t.tipo, t.barreira);
+    if (!_ffRes.ok) {
+        if (_stManual) _stManual.textContent = `🎯 ${_ffRes.motivo}`;
+        return;
+    }
+
+    // ── Loss Virtual ─────────────────────────────────────────────────────────
     if (_dbsLvVerificar(payload, () => {
-        // Callback: LV liberou — entra real
+        const _ffRes2 = _dbsFiltroFrioVerificar(t.tipo, t.barreira);
+        if (!_ffRes2.ok) {
+            if (_stManual) _stManual.textContent = `🎯 LV liberado mas ${_ffRes2.motivo}`;
+            return;
+        }
         if (_stManual) _stManual.textContent = `⚡ Loss Virtual liberado — operando: ${t.tipo} | B:${t.barreira} | ${t.ativo}`;
         bot.operarComSinal(payload);
     })) {
@@ -20444,8 +20576,7 @@ function dbsOperarTop1() {
         return;
     }
     bot.operarComSinal(payload);
-    const status = document.getElementById('dbs-status');
-    if (status) status.textContent = `⚡ Operação enviada: ${t.tipo} | Barreira ${t.barreira} | ${t.ativo} | Conf. ${t.confianca}%`;
+    if (_stManual) _stManual.textContent = `⚡ Operação enviada: ${t.tipo} | Barreira ${t.barreira} | ${t.ativo} | Conf. ${t.confianca}%`;
 }
 // ── FIM DIGIT BARRIER 356 ─────────────────────────────────────────────────────
 
