@@ -19612,11 +19612,12 @@ function ltsOperar() {
 // ══════════════════════════════════════════════════════════════════════════════
 // DIGIT BARRIER 356 — Scanner Multi-Ativo × Multi-Barreira (EDC)
 // ══════════════════════════════════════════════════════════════════════════════
-let _dbsTop1        = null;
-let _dbsAutoTimer   = null;
-let _dbsMatrixRAF   = null;
-let _dbsMatrixDrops = null;
-let _dbsScanning    = false;
+let _dbsTop1              = null;
+let _dbsAutoTimer         = null;
+let _dbsMatrixRAF         = null;
+let _dbsMatrixDrops       = null;
+let _dbsScanning          = false;
+let _dbsDigitosPorAtivo   = {};   // cache dos dígitos por ativo do último scan
 
 // ── Loss Virtual DBS ─────────────────────────────────────────────────────────
 // Regra completa:
@@ -19799,45 +19800,56 @@ function dbsFfAtualizar() {
 
 /**
  * Verifica se os dígitos perdedores do sinal estão FRIOS nos últimos ticks.
- * Retorna { ok: bool, motivo: string, digitosMaisQuentes: [] }
+ * Usa os dígitos do ATIVO ESPECÍFICO do sinal (não o ativo do bot principal).
+ * Retorna { ok: bool, motivo: string }
+ *
+ * @param {string} tipo     - 'DIGITOVER' ou 'DIGITUNDER'
+ * @param {number} barreira - barreira do contrato
+ * @param {string} ativo    - ativo do combo (R_10, R_25, etc.)
  */
-function _dbsFiltroFrioVerificar(tipo, barreira) {
+function _dbsFiltroFrioVerificar(tipo, barreira, ativo) {
     if (!_dbsFfAtivo) return { ok: true, motivo: 'filtro inativo' };
 
-    const janela  = Math.max(5, parseInt(document.getElementById('dbs-ff-janela')?.value)  || 20);
-    const maxPct  = Math.max(1, parseInt(document.getElementById('dbs-ff-maxpct')?.value)  || 30);
-    const recentes = (typeof bot !== 'undefined' && bot._digitRecentes)
-                     ? bot._digitRecentes.slice(-janela)
-                     : [];
+    const janela = Math.max(5, parseInt(document.getElementById('dbs-ff-janela')?.value) || 20);
+    const maxPct = Math.max(1, parseInt(document.getElementById('dbs-ff-maxpct')?.value) || 30);
 
-    if (recentes.length < 5) return { ok: true, motivo: 'poucos ticks' }; // sem dados suficientes
+    // Usa dígitos do ativo específico do sinal (do último scan do DBS)
+    // Fallback: dígitos do bot principal se o ativo não estiver no cache
+    let fonte = 'bot principal';
+    let recentes = [];
+    if (ativo && _dbsDigitosPorAtivo[ativo] && _dbsDigitosPorAtivo[ativo].length >= 5) {
+        recentes = _dbsDigitosPorAtivo[ativo].slice(-janela);
+        fonte = ativo;
+    } else if (typeof bot !== 'undefined' && bot._digitRecentes) {
+        recentes = bot._digitRecentes.slice(-janela);
+    }
+
+    if (recentes.length < 5) return { ok: true, motivo: 'poucos ticks' };
 
     const total = recentes.length;
 
-    // Identifica quais dígitos causam PERDA neste sinal
+    // Dígitos que causam PERDA neste sinal
     const t = (tipo || '').toUpperCase();
-    let perdedores = [];
+    const perdedores = [];
     const b = parseInt(barreira);
     if (t === 'DIGITOVER') {
-        // perdem dígitos 0 até B (inclusive)
-        for (let d = 0; d <= b; d++) perdedores.push(d);
+        for (let d = 0; d <= b; d++) perdedores.push(d);   // perde se dígito <= B
     } else if (t === 'DIGITUNDER') {
-        // perdem dígitos B até 9 (inclusive)
-        for (let d = b; d <= 9; d++) perdedores.push(d);
+        for (let d = b; d <= 9; d++) perdedores.push(d);   // perde se dígito >= B
     } else {
         return { ok: true, motivo: 'tipo desconhecido' };
     }
 
-    // Conta frequência de cada dígito perdedor na janela
+    // Frequência de cada dígito perdedor na janela
     const contagem = new Array(10).fill(0);
     for (const d of recentes) contagem[d]++;
 
-    const quentes = []; // dígitos perdedores acima do limite
+    const quentes = [];
     let maxFreqPct = 0;
 
     for (const d of perdedores) {
         const pct = Math.round((contagem[d] / total) * 100);
-        if (pct > maxPct) quentes.push({ digito: d, pct });
+        if (pct >= maxPct) quentes.push({ digito: d, pct }); // >= bloqueia no limite também
         if (pct > maxFreqPct) maxFreqPct = pct;
     }
 
@@ -19845,20 +19857,20 @@ function _dbsFiltroFrioVerificar(tipo, barreira) {
     const stEl = document.getElementById('dbs-ff-status');
     if (stEl) {
         if (quentes.length === 0) {
-            stEl.textContent = `✅ Frios (${maxFreqPct}%≤${maxPct}%)`;
+            stEl.textContent = `✅ Frios (${fonte}: max ${maxFreqPct}%<${maxPct}%)`;
             stEl.style.color = '#00ff88';
         } else {
             const ql = quentes.map(q => `${q.digito}(${q.pct}%)`).join(' ');
-            stEl.textContent = `🔥 Quente: ${ql}`;
+            stEl.textContent = `🔥 ${fonte}: ${ql}`;
             stEl.style.color = '#f87171';
         }
     }
 
     if (quentes.length > 0) {
         const ql = quentes.map(q => `${q.digito}(${q.pct}%)`).join(', ');
-        return { ok: false, motivo: `🔥 Dígitos perdedores QUENTES: ${ql} — aguardando esfriar`, quentes };
+        return { ok: false, motivo: `🔥 ${fonte}: perdedores quentes ${ql} — bloqueado`, quentes };
     }
-    return { ok: true, motivo: `✅ Dígitos perdedores frios (max ${maxFreqPct}%≤${maxPct}%)` };
+    return { ok: true, motivo: `✅ frios em ${fonte} (max ${maxFreqPct}%<${maxPct}%)` };
 }
 
 
@@ -20401,6 +20413,8 @@ function dbsScan() {
         if (btnScan) { btnScan.textContent = '🔍 ESCANEAR'; btnScan.disabled = false; }
         if (!data.ok) { if (status) status.textContent = '❌ Erro no scan.'; return; }
         _dbsTop1 = data.top1;
+        // Salva dígitos por ativo para o filtro frio usar o ativo correto
+        if (data.digitos_por_ativo) _dbsDigitosPorAtivo = data.digitos_por_ativo;
         _dbsRenderizar(data);
 
         // Auto-operar: se o TOP1 foi aprovado e o checkbox está marcado, entra imediatamente
@@ -20410,8 +20424,8 @@ function dbsScan() {
             const statusEl = document.getElementById('dbs-status');
             const sinalLv = { tipo_contrato: t.tipo, barreira: t.barreira, ativo: t.ativo, confianca: t.confianca, origem: 'DBS356-AUTO' };
 
-            // ── Filtro Dígitos Frios: verifica ANTES de qualquer operação ───────
-            const _ffRes = _dbsFiltroFrioVerificar(t.tipo, t.barreira);
+            // ── Filtro Dígitos Frios: usa dígitos do ativo específico do sinal ──
+            const _ffRes = _dbsFiltroFrioVerificar(t.tipo, t.barreira, t.ativo);
             if (!_ffRes.ok) {
                 if (statusEl) statusEl.textContent = `🎯 ${_ffRes.motivo}`;
                 // Filtro bloqueou — não opera, aguarda próximo scan
@@ -20420,8 +20434,8 @@ function dbsScan() {
 
             // ── Loss Virtual: bloqueia e simula; cbLiberar entra real quando completo ──
             if (_dbsLvVerificar(sinalLv, () => {
-                // Callback: Loss Virtual liberou → verifica filtro frio novamente antes de operar
-                const _ffRes2 = _dbsFiltroFrioVerificar(t.tipo, t.barreira);
+                // Callback: Loss Virtual liberou → reverifica filtro com ativo correto
+                const _ffRes2 = _dbsFiltroFrioVerificar(t.tipo, t.barreira, t.ativo);
                 if (!_ffRes2.ok) {
                     if (statusEl) statusEl.textContent = `🎯 LV liberado mas ${_ffRes2.motivo}`;
                     return;
@@ -20556,7 +20570,7 @@ function dbsOperarTop1() {
     const _stManual = document.getElementById('dbs-status');
 
     // ── Filtro Dígitos Frios ─────────────────────────────────────────────────
-    const _ffRes = _dbsFiltroFrioVerificar(t.tipo, t.barreira);
+    const _ffRes = _dbsFiltroFrioVerificar(t.tipo, t.barreira, t.ativo);
     if (!_ffRes.ok) {
         if (_stManual) _stManual.textContent = `🎯 ${_ffRes.motivo}`;
         return;
@@ -20564,7 +20578,7 @@ function dbsOperarTop1() {
 
     // ── Loss Virtual ─────────────────────────────────────────────────────────
     if (_dbsLvVerificar(payload, () => {
-        const _ffRes2 = _dbsFiltroFrioVerificar(t.tipo, t.barreira);
+        const _ffRes2 = _dbsFiltroFrioVerificar(t.tipo, t.barreira, t.ativo);
         if (!_ffRes2.ok) {
             if (_stManual) _stManual.textContent = `🎯 LV liberado mas ${_ffRes2.motivo}`;
             return;

@@ -10569,14 +10569,21 @@ def ia_digit_barrier_356():
     top1 = next((r for r in resultados if r["veredicto"] == "OPERAR"), None) or \
            (resultados[0] if resultados else None)
 
+    # Inclui dígitos recentes por ativo para o filtro de dígitos frios no frontend
+    digitos_por_ativo = {}
+    with cache_lock:
+        for _a, (_p, _d) in ticks_cache.items():
+            digitos_por_ativo[_a] = _d[-60:] if _d else []
+
     return jsonify({
-        "ok":         True,
-        "total":      len(resultados),
-        "n_operar":   sum(1 for r in resultados if r["veredicto"] == "OPERAR"),
-        "n_aguardar": sum(1 for r in resultados if r["veredicto"] != "OPERAR"),
-        "ranking":    resultados,
-        "top1":       top1,
-        "motor":      "EDC",
+        "ok":               True,
+        "total":            len(resultados),
+        "n_operar":         sum(1 for r in resultados if r["veredicto"] == "OPERAR"),
+        "n_aguardar":       sum(1 for r in resultados if r["veredicto"] != "OPERAR"),
+        "ranking":          resultados,
+        "top1":             top1,
+        "motor":            "EDC",
+        "digitos_por_ativo": digitos_por_ativo,
     })
 
 
