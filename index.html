@@ -3571,6 +3571,25 @@
               <span id="dbs-lv-status" style="font-size:0.6rem;color:#6b7280;flex:1;text-align:right;white-space:nowrap;">Inativo</span>
             </div>
 
+            <!-- Proteção Mão Quente DBS -->
+            <div style="display:flex;align-items:center;gap:7px;
+                background:rgba(248,113,113,0.05);border:1px solid rgba(248,113,113,0.3);
+                border-radius:5px;padding:5px 9px;flex-wrap:wrap;"
+                title="Pausa o auto-operar por N segundos quando atingir X losses consecutivos. 0 = desativado.">
+              <span style="font-size:0.65rem;color:#f87171;white-space:nowrap;font-family:'Share Tech Mono';">🛑 Mão Quente</span>
+              <span style="font-size:0.6rem;color:#6b7280;white-space:nowrap;">Losses:</span>
+              <input type="number" id="dbs-prot-losses" value="3" min="0" max="10" step="1"
+                  style="width:38px;background:#0d0f1a;border:1px solid rgba(248,113,113,0.4);color:#f87171;
+                         font-family:'Share Tech Mono';font-size:0.7rem;padding:3px 5px;border-radius:4px;text-align:center;"
+                  title="Pausa após N losses seguidos (0=off)">
+              <span style="font-size:0.6rem;color:#6b7280;white-space:nowrap;">Pausa(s):</span>
+              <input type="number" id="dbs-prot-cooldown" value="60" min="10" max="600" step="10"
+                  style="width:46px;background:#0d0f1a;border:1px solid rgba(248,113,113,0.4);color:#f87171;
+                         font-family:'Share Tech Mono';font-size:0.7rem;padding:3px 5px;border-radius:4px;text-align:center;"
+                  title="Segundos de pausa antes de reativar o auto-operar">
+              <span id="dbs-prot-status" style="font-size:0.6rem;color:#6b7280;flex:1;text-align:right;white-space:nowrap;">Off</span>
+            </div>
+
             <!-- Filtro Dígitos Frios -->
             <div style="display:flex;align-items:center;gap:7px;
                 background:rgba(0,255,136,0.04);border:1px solid rgba(0,255,136,0.2);
@@ -19849,17 +19868,17 @@ function _dbsFiltroFrioVerificar(tipo, barreira, ativo) {
             if (contagem[d] > 0) det.push(`${d}:${contagem[d]}`);
         }
         const pct = Math.round((soma / total) * 100);
-        const bloqueado = pct > limiar;
+        const bloqueado = pct >= limiar;  // >= bloqueia também quando igual ao limiar
 
         if (stEl) {
             stEl.textContent = bloqueado
-                ? `🔥 ${fonte}: perd. ${pct}%>${limiar}% [${det.join(' ')}]`
-                : `✅ ${fonte}: perd. ${pct}%≤${limiar}%`;
+                ? `🔥 ${fonte}: perd. ${pct}%≥${limiar}% [${det.join(' ')}]`
+                : `✅ ${fonte}: perd. ${pct}%<${limiar}%`;
             stEl.style.color = bloqueado ? '#f87171' : '#00ff88';
         }
         if (bloqueado)
-            return { ok: false, motivo: `🔥 ${fonte} OVER: perdedores quentes ${pct}% > ${limiar}% [${det.join(' ')}]` };
-        return { ok: true, motivo: `✅ ${fonte} OVER: perdedores frios ${pct}% ≤ ${limiar}%` };
+            return { ok: false, motivo: `🔥 ${fonte} OVER: perdedores quentes ${pct}% ≥ ${limiar}% [${det.join(' ')}]` };
+        return { ok: true, motivo: `✅ ${fonte} OVER: perdedores frios ${pct}% < ${limiar}%` };
 
     } else if (t === 'DIGITUNDER') {
         // ── DIGITUNDER: dígitos 0…B-1 causam GANHO ──────────────────────────
@@ -19871,18 +19890,18 @@ function _dbsFiltroFrioVerificar(tipo, barreira, ativo) {
             if (contagem[d] > 0) det.push(`${d}:${contagem[d]}`);
         }
         const pct = Math.round((soma / total) * 100);
-        // Para DIGITUNDER: queremos que ganhadores somem ACIMA do limiar
-        const bloqueado = pct < limiar;
+        // Para DIGITUNDER: queremos que ganhadores somem ACIMA do limiar (estritamente)
+        const bloqueado = pct <= limiar;  // <= bloqueia também quando igual ao limiar
 
         if (stEl) {
             stEl.textContent = bloqueado
-                ? `❄️ ${fonte}: ganh. ${pct}%<${limiar}% [${det.join(' ')}]`
-                : `✅ ${fonte}: ganh. ${pct}%≥${limiar}%`;
+                ? `❄️ ${fonte}: ganh. ${pct}%≤${limiar}% [${det.join(' ')}]`
+                : `✅ ${fonte}: ganh. ${pct}%>${limiar}%`;
             stEl.style.color = bloqueado ? '#60a5fa' : '#00ff88';
         }
         if (bloqueado)
-            return { ok: false, motivo: `❄️ ${fonte} UNDER: ganhadores frios ${pct}% < ${limiar}% [${det.join(' ')}]` };
-        return { ok: true, motivo: `✅ ${fonte} UNDER: ganhadores com pressão ${pct}% ≥ ${limiar}%` };
+            return { ok: false, motivo: `❄️ ${fonte} UNDER: ganhadores frios ${pct}% ≤ ${limiar}% [${det.join(' ')}]` };
+        return { ok: true, motivo: `✅ ${fonte} UNDER: ganhadores com pressão ${pct}% > ${limiar}%` };
 
     } else {
         return { ok: true, motivo: 'tipo desconhecido' };
@@ -19979,6 +19998,10 @@ let _dbsMgrLucro   = 0;
 let _dbsMaDiv      = 0;
 let _dbsMaAtivo    = false;
 
+// ── Proteção de mão quente DBS ───────────────────────────────────────────────
+let _dbsLossConsec   = 0;   // perdas consecutivas na sessão atual
+let _dbsCooldownAte  = 0;   // timestamp (ms) até quando o cooldown está ativo
+
 function dbsOnMgrChange() {
     const nome  = document.getElementById('dbs-mgr')?.value;
     const stake = parseFloat(document.getElementById('dbs-entrada')?.value) || 0.35;
@@ -19989,6 +20012,10 @@ function dbsOnMgrChange() {
         _dbsMgr = (nome && nome !== 'flat' && typeof GerenciadorUnificado !== 'undefined')
             ? new GerenciadorUnificado(nome, { stake }) : null;
     }
+    // Reseta proteção de mão quente ao trocar gerenciador
+    _dbsLossConsec  = 0;
+    _dbsCooldownAte = 0;
+    dbsMgrAtualizarStatsConsec();
     dbsMgrAtualizarStats();
 }
 
@@ -20018,6 +20045,37 @@ function dbsMgrRegistrarResultado(won, profit) {
     }
     if (won) _dbsMgrWins++; else _dbsMgrLosses++;
     _dbsMgrLucro = parseFloat((_dbsMgrLucro + profit).toFixed(2));
+
+    // ── Proteção mão quente: atualiza contador de losses consecutivos ─────────
+    const _protLim = parseInt(document.getElementById('dbs-prot-losses')?.value) || 0;
+    const _protSec = parseInt(document.getElementById('dbs-prot-cooldown')?.value) || 60;
+    if (won) {
+        _dbsLossConsec = 0;  // win reseta a sequência
+    } else {
+        _dbsLossConsec++;
+        if (_protLim > 0 && _dbsLossConsec >= _protLim) {
+            // Ativa cooldown
+            _dbsCooldownAte = Date.now() + _protSec * 1000;
+            const statusEl = document.getElementById('dbs-status');
+            if (statusEl) statusEl.textContent = `🛑 ${_dbsLossConsec} losses seguidos — pausando ${_protSec}s para resfriar mão.`;
+            const autoChk = document.getElementById('dbs-auto-operar');
+            if (autoChk) autoChk.checked = false;
+            // Reagenda reativação automática após cooldown
+            setTimeout(() => {
+                const chk = document.getElementById('dbs-auto-operar');
+                if (chk && !chk.checked) {
+                    chk.checked = true;
+                    _dbsLossConsec = 0;
+                    _dbsCooldownAte = 0;
+                    const st = document.getElementById('dbs-status');
+                    if (st) st.textContent = `✅ Cooldown encerrado — auto-operar reativado.`;
+                    setTimeout(() => dbsScan(), 500);
+                }
+            }, _protSec * 1000);
+        }
+    }
+    dbsMgrAtualizarStatsConsec();
+
     // Stop Win / Stop Loss
     const sw = parseFloat(document.getElementById('dbs-stopwin')?.value)  || 9999;
     const sl = parseFloat(document.getElementById('dbs-stoploss')?.value) || 9999;
@@ -20041,6 +20099,21 @@ function dbsMgrAtualizarStats() {
     s('dbs-mgr-losses', _dbsMgrLosses);
     s('dbs-mgr-lucro',  (_dbsMgrLucro >= 0 ? '+' : '') + '$' + _dbsMgrLucro.toFixed(2));
     s('dbs-mgr-prox',   '$' + prox.toFixed(2));
+}
+
+function dbsMgrAtualizarStatsConsec() {
+    const lim = parseInt(document.getElementById('dbs-prot-losses')?.value) || 0;
+    const el  = document.getElementById('dbs-prot-status');
+    if (!el) return;
+    if (lim <= 0) { el.textContent = 'Off'; el.style.color = '#6b7280'; return; }
+    if (_dbsCooldownAte > Date.now()) {
+        const sec = Math.ceil((_dbsCooldownAte - Date.now()) / 1000);
+        el.textContent = `❄️ cooling ${sec}s`;
+        el.style.color = '#60a5fa';
+        return;
+    }
+    el.textContent = `${_dbsLossConsec}/${lim}`;
+    el.style.color = _dbsLossConsec >= lim - 1 ? '#f87171' : '#6b7280';
 }
 
 // ── Trava própria do DBS (independente do bot.running e bot._buying) ─────────
