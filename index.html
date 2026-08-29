@@ -9615,10 +9615,17 @@ function initWebSocket(wssUrl) {
 
         // Resultado da operaçõeso
         if (data.msg_type === 'proposal_open_contract' && data.proposal_open_contract.is_sold) {
-            // ── Resultado de operação DBS: só atualiza saldo, não conta wins/losses do bot principal ──
+            // ── Resultado de operação DBS: conta wins/losses e atualiza lucro, mas não imprime no log principal ──
             if (bot._skipResultadoPrincipal) {
                 bot._skipResultadoPrincipal = false;
-                // Só atualiza saldo via balance request (já disparado pelo handler DBS)
+                const _dbsProfit = parseFloat(data.proposal_open_contract.profit);
+                const _dbsWon    = _dbsProfit > 0;
+                // Atualiza lucro e placar do header
+                bot.profit += _dbsProfit;
+                if (_dbsWon) { bot.wins++;   bot._seqWinAtual++;  bot._seqLossAtual = 0; }
+                else         { bot.losses++; bot._seqLossAtual++; bot._seqWinAtual  = 0; }
+                bot.ws.send(json({ balance: 1 }));
+                updateHeader();
                 return;
             }
             const profit = parseFloat(data.proposal_open_contract.profit);
