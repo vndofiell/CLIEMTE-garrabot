@@ -19985,12 +19985,18 @@ function _dbsRenderLog() {
     }
     el.innerHTML = _dbsLog.map(e => {
         const isVirtual = !!e.virtual;
-        const cor = isVirtual ? '#ffbd2e' : e.cor;
-        const ico = isVirtual ? '🛡️' : e.ico;
-        const resultado = isVirtual ? 'VIRTUAL' : (e.resultado || '');
-        const stakeStr  = isVirtual ? '<span style="color:#ffbd2e;flex-shrink:0;">virtual</span>'
-                        : (e.stake != null ? `<span style="color:#0ff;flex-shrink:0;">$${parseFloat(e.stake).toFixed(2)}</span>` : '');
-        return `<div style="border-bottom:1px solid rgba(255,255,255,0.04);padding:2px 0;display:flex;gap:8px;align-items:center;${isVirtual ? 'opacity:0.6;' : ''}">
+        // Cor pelo resultado: virtual WIN=verde, virtual LOSS=vermelho, pendente=amarelo
+        const cor = isVirtual
+            ? (e.resultado === 'WIN' ? '#00ff88' : e.resultado === 'LOSS' ? '#f87171' : '#ffbd2e')
+            : e.cor;
+        const ico = isVirtual ? (e.resultado === 'WIN' ? '🛡️✅' : e.resultado === 'LOSS' ? '🛡️❌' : '🛡️') : e.ico;
+        // Palavra VIRTUAL colorida: verde=WIN, vermelho=LOSS, amarelo=pendente
+        const virtualLabel = e.resultado === 'WIN'  ? `<span style="color:#00ff88;font-weight:bold;margin-left:auto;">VIRTUAL</span>`
+                           : e.resultado === 'LOSS' ? `<span style="color:#f87171;font-weight:bold;margin-left:auto;">VIRTUAL</span>`
+                           :                          `<span style="color:#ffbd2e;font-weight:bold;margin-left:auto;">VIRTUAL</span>`;
+        const resultado = isVirtual ? '' : (e.resultado || '');
+        const stakeStr  = isVirtual ? '' : (e.stake != null ? `<span style="color:#0ff;flex-shrink:0;">$${parseFloat(e.stake).toFixed(2)}</span>` : '');
+        return `<div style="border-bottom:1px solid rgba(255,255,255,0.04);padding:2px 0;display:flex;gap:8px;align-items:center;${isVirtual ? 'opacity:0.75;' : ''}">
           <span style="color:#4b5563;flex-shrink:0;">${e.ts}</span>
           <span style="color:${cor};flex-shrink:0;">${ico}</span>
           <span style="color:#a5b4fc;flex-shrink:0;">${e.tipo || '—'}</span>
@@ -19998,7 +20004,7 @@ function _dbsRenderLog() {
           <span style="color:#00ff88;flex-shrink:0;">${e.ativo || '—'}</span>
           <span style="color:#6b7280;flex-shrink:0;">Conf:${e.confianca || '—'}%</span>
           ${stakeStr}
-          ${resultado ? `<span style="color:${cor};margin-left:auto;">${resultado}</span>` : ''}
+          ${isVirtual ? virtualLabel : (resultado ? `<span style="color:${cor};margin-left:auto;">${resultado}</span>` : '')}
         </div>`;
     }).join('');
 }
