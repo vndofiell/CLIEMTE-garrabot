@@ -19793,25 +19793,23 @@ function _dbsLvVerificar(logSinal, cbLiberar) {
             _dbsLvContador = 0;
             _dbsLvModoReal = false;
             _dbsLvAtualizarStatus();
-            if (st2) st2.textContent = `🛡️ WIN virtual — contador RESETADO. Aguardando ${qtd} perdas para entrar real.`;
-            // Dispara scan imediato para continuar o ciclo
-            const _aoChk = document.getElementById('dbs-auto-operar');
-            if (_aoChk && _aoChk.checked) setTimeout(() => dbsScan(), 500);
+            if (st2) st2.textContent = `🛡️ WIN virtual — contador RESETADO. Aguarda próx. scan para nova simulação.`;
+            // NÃO força scan imediato — aguarda o ciclo normal do auto-scan (30s)
+            // para respeitar filtros EDC e intervalo real entre entradas
         } else {
             // LOSS virtual → acumula
             _dbsLvContador++;
             _dbsLvAtualizarStatus();
             if (_dbsLvContador >= qtd) {
-                // Atingiu N perdas → entra em modo real
+                // Atingiu N perdas virtuais → entra em modo real
                 _dbsLvModoReal = true;
                 _dbsLvAtualizarStatus();
                 if (st2) st2.textContent = `🛡️ ${qtd}/${qtd} perdas virtuais — MODO REAL ATIVADO!`;
                 if (typeof cbLiberar === 'function') cbLiberar();
             } else {
-                if (st2) st2.textContent = `🛡️ LOSS virtual ${_dbsLvContador}/${qtd} — aguardando mais ${qtd - _dbsLvContador}.`;
-                // Dispara scan imediato para simular a próxima entrada virtual
-                const _aoChk = document.getElementById('dbs-auto-operar');
-                if (_aoChk && _aoChk.checked) setTimeout(() => dbsScan(), 500);
+                if (st2) st2.textContent = `🛡️ LOSS virtual ${_dbsLvContador}/${qtd} — aguarda próx. scan (${qtd - _dbsLvContador} restante${qtd - _dbsLvContador > 1 ? 's' : ''}).`;
+                // NÃO força scan — aguarda o ciclo natural do auto-scan para simular
+                // a próxima entrada com os mesmos filtros (EDC, Dígitos Frios, etc.)
             }
         }
     }, 200);
