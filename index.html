@@ -9617,6 +9617,12 @@ function initWebSocket(wssUrl) {
 
         // Resultado da operaçõeso
         if (data.msg_type === 'proposal_open_contract' && data.proposal_open_contract.is_sold) {
+            // ── Resultado de operação DBS: só atualiza saldo, não conta wins/losses do bot principal ──
+            if (bot._skipResultadoPrincipal) {
+                bot._skipResultadoPrincipal = false;
+                // Só atualiza saldo via balance request (já disparado pelo handler DBS)
+                return;
+            }
             const profit = parseFloat(data.proposal_open_contract.profit);
             const won    = profit > 0;
             const cid    = data.proposal_open_contract.contract_id;
@@ -20223,7 +20229,9 @@ bot.operarComSinal = function(payload, _retentativa) {
                 const st = document.getElementById('dbs-status');
                 if (st) st.textContent = `${won ? '✅ WIN' : '❌ LOSS'} | ${payload.tipo_contrato} B:${payload.barreira} ${payload.ativo} | ${profit >= 0 ? '+' : ''}$${profit.toFixed(2)}`;
 
-                // Propaga para o handler original (atualiza saldo etc.)
+                // Propaga para o handler original SOMENTE para atualizar saldo —
+                // marca flag para o handler principal não contar wins/losses do DBS
+                bot._skipResultadoPrincipal = true;
                 _origOnMsg(msg);
 
                 // ── Stop Win DBS com Juros Compostos ─────────────────────────
