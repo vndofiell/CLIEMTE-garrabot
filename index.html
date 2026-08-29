@@ -9626,8 +9626,12 @@ function initWebSocket(wssUrl) {
                 else         { bot.losses++; bot._seqLossAtual++; bot._seqWinAtual  = 0; }
                 bot.ws.send(json({ balance: 1 }));
                 updateHeader();
+                // Atualiza ⚡ próxima stake no header com o valor real do gerenciador DBS
+                const _dbsNextStake = (typeof dbsMgrGetStake === 'function') ? dbsMgrGetStake() : bot.stake;
+                const _hdNext = document.getElementById('hd-nextstake');
+                if (_hdNext) _hdNext.textContent = '$' + _dbsNextStake.toFixed(2);
                 // Envia resultado para o Telegram (mesmo canal do bot principal)
-                if (!(_sec && _sec.pronto)) tgEnviarResultado(_dbsWon, _dbsProfit, bot.stake);
+                if (!(_sec && _sec.pronto)) tgEnviarResultado(_dbsWon, _dbsProfit, _dbsNextStake);
                 return;
             }
             const profit = parseFloat(data.proposal_open_contract.profit);
