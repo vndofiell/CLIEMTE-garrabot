@@ -20220,13 +20220,27 @@ bot.operarComSinal = function(payload, _retentativa) {
                 bot.ws.onmessage = _origOnMsg;
 
                 // ── Loss Virtual: regra após resultado REAL ───────────────────
-                // WIN real  → volta pro modo virtual (reseta contador)
-                // LOSS real → permanece em modo real até ganhar
+                // WIN real  → só volta ao virtual se a dívida MA estiver zerada
+                //             (stake já voltou à entrada base)
+                // LOSS real → permanece em modo real até quitar a dívida
                 _dbsLvSimulando = false;
                 if (won) {
-                    // Ganhou real → reinicia ciclo virtual
-                    _dbsLvContador = 0;
-                    _dbsLvModoReal = false;
+                    // Verifica se ainda há dívida no MA-Adaptativo
+                    const _baseStake = parseFloat(document.getElementById('dbs-entrada')?.value) || 0.35;
+                    const _proxStake = (typeof dbsMgrGetStake === 'function') ? dbsMgrGetStake() : _baseStake;
+                    const _dividaZerada = _proxStake <= _baseStake + 0.01; // margem de 1 centavo
+                    if (_dividaZerada) {
+                        // Dívida quitada → reinicia ciclo virtual
+                        _dbsLvContador = 0;
+                        _dbsLvModoReal = false;
+                        const _stLv = document.getElementById('dbs-status');
+                        if (_stLv) _stLv.textContent = `✅ WIN — dívida zerada, voltando ao modo virtual.`;
+                    } else {
+                        // Ainda há dívida → permanece em modo real para recuperar
+                        _dbsLvModoReal = true;
+                        const _stLv = document.getElementById('dbs-status');
+                        if (_stLv) _stLv.textContent = `✅ WIN — recuperando dívida ($${(_proxStake - _baseStake).toFixed(2)} restante), permanece em modo real.`;
+                    }
                 } else {
                     // Perdeu real → mantém modo real (não reseta)
                     _dbsLvModoReal = true;
