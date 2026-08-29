@@ -5876,8 +5876,10 @@ function updateHeader(balance) {
         taxaEl.style.color = '#ffbd2e';
     }
 
-    // Próxima stake
-    const nextStake = bot.mgr ? bot.mgr.getStake() : bot.stake;
+    // Próxima stake — se DBS está ativo usa o gerenciador DBS, não o bot.mgr
+    const nextStake = (typeof _dbsEmOperacaoRecente !== 'undefined' && _dbsEmOperacaoRecente && typeof dbsMgrGetStake === 'function')
+        ? dbsMgrGetStake()
+        : (bot.mgr ? bot.mgr.getStake() : bot.stake);
     document.getElementById('hd-nextstake').textContent = '$' + nextStake.toFixed(2);
 
     // Garante que o Cyber Sort mostre seu próprio contador após qualquer updateHeader
@@ -20135,8 +20137,9 @@ function dbsMgrAtualizarStatsConsec() {
 }
 
 // ── Trava própria do DBS (independente do bot.running e bot._buying) ─────────
-let _dbsEmOperacao = false;
-let _dbsReqIdAtivo = null;
+let _dbsEmOperacao       = false;
+let _dbsReqIdAtivo       = null;
+let _dbsEmOperacaoRecente = false;  // true enquanto DBS estiver ativo (para updateHeader usar dbsMgr)
 
 // ── Função de compra direta pelo DBS (executa via WebSocket igual ao buy()) ──
 bot.operarComSinal = function(payload, _retentativa) {
@@ -20167,8 +20170,9 @@ bot.operarComSinal = function(payload, _retentativa) {
     const stake  = dbsMgrGetStake();
     const reqId  = Math.floor(Math.random() * 90000) + 10000;
 
-    _dbsEmOperacao    = true;
-    _dbsReqIdAtivo    = reqId;
+    _dbsEmOperacao        = true;
+    _dbsReqIdAtivo        = reqId;
+    _dbsEmOperacaoRecente = true;   // indica ao updateHeader para usar dbsMgrGetStake()
 
     const proposal = {
         proposal:           1,
@@ -20446,6 +20450,7 @@ function dbsFecharModal() {
         clearInterval(window._dbsBancaTimer);
         window._dbsBancaTimer = null;
     }
+    _dbsEmOperacaoRecente = false;  // libera updateHeader para usar bot.mgr novamente
 }
 
 // ── Matrix background (índigo) ────────────────────────────────────────────────
