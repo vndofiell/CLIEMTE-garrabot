@@ -3459,7 +3459,7 @@
               <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px;">
                 <div>
                   <div style="font-size:0.53rem;color:#6b7280;margin-bottom:3px;">ENTRADA ($)</div>
-                  <input id="dbs-entrada" type="number" value="0.35" min="0.35" step="0.01" oninput="dbsOnMgrChange()"
+                  <input id="dbs-entrada" type="number" value="0.35" min="0.35" step="0.01" oninput="dbsOnMgrChange();_dbsSalvarConfig()"
                       style="width:100%;background:#0d0f1a;border:1px solid rgba(99,102,241,0.4);color:#a5b4fc;
                              font-family:'Share Tech Mono';font-size:0.7rem;padding:4px 5px;border-radius:4px;box-sizing:border-box;">
                 </div>
@@ -3469,20 +3469,20 @@
                     <span id="dbs-stopwin-jc-lbl" style="display:none;font-size:0.48rem;color:#00ff64;background:rgba(0,255,100,0.12);
                         border-radius:2px;padding:1px 3px;">💹 JC</span>
                   </div>
-                  <input id="dbs-stopwin" type="number" value="10" min="0" step="0.1"
+                  <input id="dbs-stopwin" type="number" value="10" min="0" step="0.1" oninput="_dbsSalvarConfig()"
                       style="width:100%;background:#0d0f1a;border:1px solid rgba(0,255,136,0.35);color:#00ff88;
                              font-family:'Share Tech Mono';font-size:0.7rem;padding:4px 5px;border-radius:4px;box-sizing:border-box;">
                 </div>
                 <div>
                   <div style="font-size:0.53rem;color:#6b7280;margin-bottom:3px;">STOP LOSS ($)</div>
-                  <input id="dbs-stoploss" type="number" value="20" min="0" step="0.1"
+                  <input id="dbs-stoploss" type="number" value="20" min="0" step="0.1" oninput="_dbsSalvarConfig()"
                       style="width:100%;background:#0d0f1a;border:1px solid rgba(248,113,113,0.35);color:#f87171;
                              font-family:'Share Tech Mono';font-size:0.7rem;padding:4px 5px;border-radius:4px;box-sizing:border-box;">
                 </div>
               </div>
               <div style="margin-bottom:8px;">
                 <div style="font-size:0.53rem;color:#6b7280;margin-bottom:3px;">GERENCIAMENTO</div>
-                <select id="dbs-mgr" onchange="dbsOnMgrChange()" style="width:100%;background:#0d0f1a;
+                <select id="dbs-mgr" onchange="dbsOnMgrChange();_dbsSalvarConfig()" style="width:100%;background:#0d0f1a;
                     border:1px solid rgba(168,85,247,0.5);color:#c084fc;
                     font-family:'Share Tech Mono';font-size:0.67rem;padding:5px 6px;border-radius:4px;">
                   <option value="flat">💰 Stake Fixa</option>
@@ -3547,7 +3547,7 @@
                 border-radius:5px;padding:5px 9px;flex-wrap:wrap;">
               <span style="font-size:0.6rem;color:#6b7280;letter-spacing:1px;white-space:nowrap;">⚙️ THRESHOLD:</span>
               <input type="range" id="dbs-threshold-slider" min="50" max="99" value="72" step="1"
-                  oninput="dbsThresholdAtualizar(this.value)"
+                  oninput="dbsThresholdAtualizar(this.value);_dbsSalvarConfig()"
                   style="flex:1;min-width:80px;accent-color:#6366f1;cursor:pointer;">
               <span id="dbs-threshold-val" style="font-size:0.72rem;color:#a5b4fc;font-weight:bold;min-width:30px;text-align:center;">72%</span>
               <button onclick="dbsThresholdSalvar()" style="background:rgba(99,102,241,0.2);border:1px solid #6366f1;
@@ -3559,11 +3559,11 @@
                 background:rgba(255,189,46,0.05);border:1px solid rgba(255,189,46,0.25);
                 border-radius:5px;padding:5px 9px;flex-wrap:wrap;">
               <label style="display:flex;align-items:center;gap:5px;font-size:0.65rem;color:#ffbd2e;cursor:pointer;white-space:nowrap;">
-                <input type="checkbox" id="dbs-lv-ativo" style="accent-color:#ffbd2e;width:13px;height:13px;" onchange="dbsLvAtualizar()">
+                <input type="checkbox" id="dbs-lv-ativo" style="accent-color:#ffbd2e;width:13px;height:13px;" onchange="dbsLvAtualizar();_dbsSalvarConfig()">
                 🛡️ Loss Virtual
               </label>
               <span style="font-size:0.6rem;color:#6b7280;white-space:nowrap;">Qtd:</span>
-              <input type="number" id="dbs-lv-qtd" value="3" min="1" max="20" step="1"
+              <input type="number" id="dbs-lv-qtd" value="3" min="1" max="20" step="1" oninput="_dbsSalvarConfig()"
                   style="width:42px;background:#0d0f1a;border:1px solid rgba(255,189,46,0.4);color:#ffbd2e;
                          font-family:'Share Tech Mono';font-size:0.7rem;padding:3px 5px;border-radius:4px;text-align:center;">
               <span id="dbs-lv-status" style="font-size:0.6rem;color:#6b7280;flex:1;text-align:right;white-space:nowrap;">Inativo</span>
@@ -3576,12 +3576,12 @@
                 title="Pausa o auto-operar por N segundos quando atingir X losses consecutivos. 0 = desativado.">
               <span style="font-size:0.65rem;color:#f87171;white-space:nowrap;font-family:'Share Tech Mono';">🛑 Mão Quente</span>
               <span style="font-size:0.6rem;color:#6b7280;white-space:nowrap;">Losses:</span>
-              <input type="number" id="dbs-prot-losses" value="3" min="0" max="10" step="1"
+              <input type="number" id="dbs-prot-losses" value="3" min="0" max="10" step="1" oninput="_dbsSalvarConfig()"
                   style="width:38px;background:#0d0f1a;border:1px solid rgba(248,113,113,0.4);color:#f87171;
                          font-family:'Share Tech Mono';font-size:0.7rem;padding:3px 5px;border-radius:4px;text-align:center;"
                   title="Pausa após N losses seguidos (0=off)">
               <span style="font-size:0.6rem;color:#6b7280;white-space:nowrap;">Pausa(s):</span>
-              <input type="number" id="dbs-prot-cooldown" value="60" min="10" max="600" step="10"
+              <input type="number" id="dbs-prot-cooldown" value="60" min="10" max="600" step="10" oninput="_dbsSalvarConfig()"
                   style="width:46px;background:#0d0f1a;border:1px solid rgba(248,113,113,0.4);color:#f87171;
                          font-family:'Share Tech Mono';font-size:0.7rem;padding:3px 5px;border-radius:4px;text-align:center;"
                   title="Segundos de pausa antes de reativar o auto-operar">
@@ -3594,16 +3594,16 @@
                 border-radius:5px;padding:5px 9px;flex-wrap:wrap;">
               <label style="display:flex;align-items:center;gap:5px;font-size:0.65rem;color:#00ff88;cursor:pointer;white-space:nowrap;"
                   title="OVER: bloqueia se perdedores (0→B) estão quentes. UNDER: bloqueia se ganhadores (0→B-1) estão frios.">
-                <input type="checkbox" id="dbs-ff-ativo" style="accent-color:#00ff88;width:13px;height:13px;" onchange="dbsFfAtualizar()">
+                <input type="checkbox" id="dbs-ff-ativo" style="accent-color:#00ff88;width:13px;height:13px;" onchange="dbsFfAtualizar();_dbsSalvarConfig()">
                 🎯 Dígitos Frios
               </label>
               <span style="font-size:0.6rem;color:#6b7280;white-space:nowrap;">Janela:</span>
-              <input type="number" id="dbs-ff-janela" value="20" min="5" max="60" step="1"
+              <input type="number" id="dbs-ff-janela" value="20" min="5" max="60" step="1" oninput="_dbsSalvarConfig()"
                   style="width:40px;background:#0d0f1a;border:1px solid rgba(0,255,136,0.3);color:#00ff88;
                          font-family:'Share Tech Mono';font-size:0.7rem;padding:3px 5px;border-radius:4px;text-align:center;"
                   title="Quantidade de ticks recentes analisados">
               <span style="font-size:0.6rem;color:#6b7280;white-space:nowrap;">tks. Limiar:</span>
-              <input type="number" id="dbs-ff-maxpct" value="40" min="10" max="80" step="5"
+              <input type="number" id="dbs-ff-maxpct" value="40" min="10" max="80" step="5" oninput="_dbsSalvarConfig()"
                   style="width:38px;background:#0d0f1a;border:1px solid rgba(0,255,136,0.3);color:#00ff88;
                          font-family:'Share Tech Mono';font-size:0.7rem;padding:3px 5px;border-radius:4px;text-align:center;"
                   title="OVER: perdedores devem somar MENOS que este %. UNDER: ganhadores devem somar MAIS que este %.">
@@ -20414,11 +20414,66 @@ function dbsJcAplicarMeta() {
         }).catch(() => {});
 }
 
+// ── Persistência de configurações DBS (localStorage) ─────────────────────────
+const _DBS_CFG_KEY = 'garrabot_dbs_config';
+
+function _dbsSalvarConfig() {
+    const g = id => document.getElementById(id);
+    const cfg = {
+        entrada:       g('dbs-entrada')?.value,
+        stopwin:       g('dbs-stopwin')?.value,
+        stoploss:      g('dbs-stoploss')?.value,
+        mgr:           g('dbs-mgr')?.value,
+        threshold:     g('dbs-threshold-slider')?.value,
+        lvAtivo:       g('dbs-lv-ativo')?.checked,
+        lvQtd:         g('dbs-lv-qtd')?.value,
+        protLosses:    g('dbs-prot-losses')?.value,
+        protCooldown:  g('dbs-prot-cooldown')?.value,
+        ffAtivo:       g('dbs-ff-ativo')?.checked,
+        ffJanela:      g('dbs-ff-janela')?.value,
+        ffMaxpct:      g('dbs-ff-maxpct')?.value,
+    };
+    try { localStorage.setItem(_DBS_CFG_KEY, JSON.stringify(cfg)); } catch(_) {}
+}
+
+function _dbsCarregarConfig() {
+    let cfg;
+    try { cfg = JSON.parse(localStorage.getItem(_DBS_CFG_KEY) || 'null'); } catch(_) {}
+    if (!cfg) return; // primeira vez — usa valores padrão do HTML
+
+    const s = (id, val) => { const e = document.getElementById(id); if (e && val !== undefined && val !== null) e.value = val; };
+    const c = (id, val) => { const e = document.getElementById(id); if (e && val !== undefined && val !== null) e.checked = !!val; };
+
+    s('dbs-entrada',       cfg.entrada);
+    s('dbs-stopwin',       cfg.stopwin);
+    s('dbs-stoploss',      cfg.stoploss);
+    s('dbs-mgr',           cfg.mgr);
+    s('dbs-threshold-slider', cfg.threshold);
+    s('dbs-lv-qtd',        cfg.lvQtd);
+    s('dbs-prot-losses',   cfg.protLosses);
+    s('dbs-prot-cooldown', cfg.protCooldown);
+    s('dbs-ff-janela',     cfg.ffJanela);
+    s('dbs-ff-maxpct',     cfg.ffMaxpct);
+    c('dbs-lv-ativo',      cfg.lvAtivo);
+    c('dbs-ff-ativo',      cfg.ffAtivo);
+
+    // Atualiza label do threshold
+    const tVal = document.getElementById('dbs-threshold-val');
+    if (tVal && cfg.threshold) tVal.textContent = cfg.threshold + '%';
+
+    // Dispara callbacks de estado
+    if (typeof dbsLvAtualizar  === 'function') dbsLvAtualizar();
+    if (typeof dbsFfAtualizar  === 'function') dbsFfAtualizar();
+    if (typeof dbsOnMgrChange  === 'function') dbsOnMgrChange();
+    if (typeof dbsMgrAtualizarStatsConsec === 'function') dbsMgrAtualizarStatsConsec();
+}
+
 function dbsAbrirModal() {
     const m = document.getElementById('dbs-modal');
     if (!m) return;
     m.style.display = 'flex';
     _dbsIniciarMatrix();
+    _dbsCarregarConfig();    // ← restaura última configuração salva
     _dbsCarregarThreshold();
     _dbsCarregarJC();        // ← carrega meta JC e preenche Stop Win se JC ativo
     dbsSincronizarBanca();
@@ -20441,6 +20496,7 @@ function dbsAbrirModal() {
 function dbsFecharModal() {
     const m = document.getElementById('dbs-modal');
     if (m) m.style.display = 'none';
+    _dbsSalvarConfig();      // ← salva configuração ao fechar
     _dbsPararMatrix();
     clearInterval(_dbsAutoTimer);
     _dbsAutoTimer = null;
