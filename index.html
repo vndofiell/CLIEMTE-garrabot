@@ -9615,7 +9615,7 @@ function initWebSocket(wssUrl) {
 
         // Resultado da operaçõeso
         if (data.msg_type === 'proposal_open_contract' && data.proposal_open_contract.is_sold) {
-            // ── Resultado de operação DBS: conta wins/losses e atualiza lucro, mas não imprime no log principal ──
+            // ── Resultado de operação DBS: conta wins/losses, atualiza lucro e envia Telegram ──
             if (bot._skipResultadoPrincipal) {
                 bot._skipResultadoPrincipal = false;
                 const _dbsProfit = parseFloat(data.proposal_open_contract.profit);
@@ -9626,6 +9626,8 @@ function initWebSocket(wssUrl) {
                 else         { bot.losses++; bot._seqLossAtual++; bot._seqWinAtual  = 0; }
                 bot.ws.send(json({ balance: 1 }));
                 updateHeader();
+                // Envia resultado para o Telegram (mesmo canal do bot principal)
+                if (!(_sec && _sec.pronto)) tgEnviarResultado(_dbsWon, _dbsProfit, bot.stake);
                 return;
             }
             const profit = parseFloat(data.proposal_open_contract.profit);
