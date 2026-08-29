@@ -9622,10 +9622,22 @@ function initWebSocket(wssUrl) {
                 bot._skipResultadoPrincipal = false;
                 const _dbsProfit = parseFloat(data.proposal_open_contract.profit);
                 const _dbsWon    = _dbsProfit > 0;
-                // Atualiza lucro e placar do header
+                // Atualiza lucro, placar e sequências máximas do header
                 bot.profit += _dbsProfit;
-                if (_dbsWon) { bot.wins++;   bot._seqWinAtual++;  bot._seqLossAtual = 0; }
-                else         { bot.losses++; bot._seqLossAtual++; bot._seqWinAtual  = 0; }
+                if (_dbsWon) {
+                    bot.wins++;
+                    bot._seqWinAtual++;
+                    bot._seqLossAtual = 0;
+                    if (bot._seqWinAtual  > bot._maxWinConsec)  bot._maxWinConsec  = bot._seqWinAtual;
+                } else {
+                    bot.losses++;
+                    bot._seqLossAtual++;
+                    bot._seqWinAtual = 0;
+                    if (bot._seqLossAtual > bot._maxLossConsec) bot._maxLossConsec = bot._seqLossAtual;
+                }
+                // Stake usada nesta operação (salva em bot._dbsUltimaStake no momento da compra)
+                const _dbsStakeUsada = bot._dbsUltimaStake || bot.stake;
+                if (_dbsStakeUsada > (bot._maxStakeUsada || 0)) bot._maxStakeUsada = _dbsStakeUsada;
                 bot.ws.send(json({ balance: 1 }));
                 updateHeader();
                 // Sobrescreve ⚡ stake DEPOIS do updateHeader (que usaria bot.mgr e apagaria)
@@ -20177,6 +20189,7 @@ bot.operarComSinal = function(payload, _retentativa) {
     _dbsEmOperacao        = true;
     _dbsReqIdAtivo        = reqId;
     _dbsEmOperacaoRecente = true;   // indica ao updateHeader para usar dbsMgrGetStake()
+    bot._dbsUltimaStake   = stake;  // guarda stake usada para contabilizar _maxStakeUsada
 
     const proposal = {
         proposal:           1,
