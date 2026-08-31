@@ -3985,8 +3985,8 @@
         </select>
       </div>
       <div>
-        <div style="font-size:0.6rem;color:#9ca3af;margin-bottom:4px;">BANCA INICIAL ($)</div>
-        <input id="dbs-masa-banca" type="number" value="100" min="1" step="0.01"
+        <div style="font-size:0.6rem;color:#9ca3af;margin-bottom:4px;">STAKE INICIAL ($)</div>
+        <input id="dbs-masa-banca" type="number" value="0.35" min="0.01" step="0.01"
             oninput="dbsMasaAtualizarTabela()"
             style="width:100%;background:#0d0f1a;border:1px solid rgba(168,85,247,0.5);
                    color:#c084fc;font-family:'Share Tech Mono';font-size:0.82rem;
@@ -20787,15 +20787,17 @@ function _dbsCarregarConfig() {
         _dbsMasaCfg = cfg.masaCfg;
         // Se o gerenciamento salvo era Masaniello, instancia diretamente sem abrir modal
         if (cfg.mgr === '📊 Masaniello') {
-            const stake2 = parseFloat(cfg.entrada) || 0.35;
+            // banca salva = stake inicial (campo "Stake Inicial" do modal)
+            const stakeRestaurada = parseFloat(cfg.masaCfg.banca) || parseFloat(cfg.entrada) || 0.35;
             _dbsMgr = new GerenciadorUnificado('📊 Masaniello', {
-                stake: stake2,
+                stake:       stakeRestaurada,
                 mas_eventos: cfg.masaCfg.n,
                 mas_acertos: cfg.masaCfg.k,
                 mas_pay:     cfg.masaCfg.pay,
                 mas_tipo:    cfg.masaCfg.tipo,
             });
-            if (_dbsMgr._masaBanca !== undefined) _dbsMgr._masaBanca = cfg.masaCfg.banca;
+            // Banca inicial = stake (igual ao Python)
+            if (_dbsMgr._masaBanca !== undefined) _dbsMgr._masaBanca = stakeRestaurada;
             dbsMgrAtualizarStats();
         }
     }
@@ -20858,15 +20860,14 @@ let _dbsMasaCfg = { n: 10, k: 5, pay: 0.85, tipo: 'Normal', banca: 100 };
 function dbsMasaAbrirModal() {
     const m = document.getElementById('dbs-masa-modal');
     if (!m) return;
-    // Preenche campos com config atual
     const g = id => document.getElementById(id);
-    if (g('dbs-masa-n'))     g('dbs-masa-n').value     = _dbsMasaCfg.n;
-    if (g('dbs-masa-k'))     g('dbs-masa-k').value     = _dbsMasaCfg.k;
-    if (g('dbs-masa-pay'))   g('dbs-masa-pay').value   = _dbsMasaCfg.pay;
-    if (g('dbs-masa-tipo'))  g('dbs-masa-tipo').value  = _dbsMasaCfg.tipo;
-    // Banca: usa saldo real da conta como padrão se disponível
-    const saldoReal = parseFloat(document.getElementById('dbs-banca-saldo')?.textContent?.replace('$','').replace(',','')) || _dbsMasaCfg.banca;
-    if (g('dbs-masa-banca')) g('dbs-masa-banca').value = saldoReal;
+    if (g('dbs-masa-n'))    g('dbs-masa-n').value    = _dbsMasaCfg.n;
+    if (g('dbs-masa-k'))    g('dbs-masa-k').value    = _dbsMasaCfg.k;
+    if (g('dbs-masa-pay'))  g('dbs-masa-pay').value  = _dbsMasaCfg.pay;
+    if (g('dbs-masa-tipo')) g('dbs-masa-tipo').value = _dbsMasaCfg.tipo;
+    // Stake inicial: usa o campo de entrada do DBS (não a banca da conta)
+    const stakeAtual = parseFloat(document.getElementById('dbs-entrada')?.value) || _dbsMasaCfg.banca || 0.35;
+    if (g('dbs-masa-banca')) g('dbs-masa-banca').value = stakeAtual;
     m.style.display = 'flex';
     dbsMasaAtualizarTabela();
 }
@@ -20929,98 +20930,121 @@ function _dbsMasaCalcEntrada(t, n, k, pay, banca, qWins, qLoss, isPrimeira) {
     } catch(_) { return banca; }
 }
 
-// Simula N operações alternando LOSS/WIN para mostrar a sequência real de entradas
+// Tabela do Masaniello: percorre todos os estados (loss=0..N-K, wins=0..K-1)
+// exatamente como o Python — usando stake como banca base fixa (não a banca da conta)
 function dbsMasaAtualizarTabela() {
     const n    = parseInt(document.getElementById('dbs-masa-n')?.value)    || 10;
     const k    = parseInt(document.getElementById('dbs-masa-k')?.value)    || 5;
     const pay  = parseFloat(document.getElementById('dbs-masa-pay')?.value)  || 0.85;
     const tipo = document.getElementById('dbs-masa-tipo')?.value || 'Normal';
-    const bancaInicial = parseFloat(document.getElementById('dbs-masa-banca')?.value) || 100;
+    // "banca" aqui é a STAKE INICIAL — é o parâmetro banca do Masaniello Python
+    const stakeBase = parseFloat(document.getElementById('dbs-masa-banca')?.value) || 0.35;
 
     const tbody = document.getElementById('dbs-masa-tabela-body');
     const resumo = document.getElementById('dbs-masa-resumo');
     if (!tbody) return;
 
-    // Validação
     if (k >= n) {
-        tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:12px;color:#f87171;">K deve ser menor que N</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:12px;color:#f87171;">⚠️ K deve ser menor que N</td></tr>`;
         if (resumo) resumo.textContent = '⚠️ K deve ser menor que N';
         return;
     }
 
+    // Constrói tabela com stake como banca (igual ao Python: self.banca = banca)
     const t = _dbsMasaBuildTabela(n, k, pay);
 
-    // Simula a sequência completa de entradas percorrendo todos os estados possíveis
-    // Exibe: entrada inicial + após cada LOSS consecutivo até atingir N eventos
-    const linhas = [];
-    let banca = bancaInicial;
-    let qWins = 0, qLoss = 0;
-    let ganhoMax = bancaInicial;
-
-    // Entrada 1 (primeira)
-    const e1 = _dbsMasaCalcEntrada(t, n, k, pay, banca, 0, 0, true);
-    linhas.push({ op: 1, wins: 0, loss: 0, entrada: e1, banca: banca });
-
-    // Simula sequência de losses para mostrar a escalada
-    let op = 2;
-    let bancaAtual = banca;
-    let wAtual = 0, lAtual = 0;
-    let prim = false;
-
-    for (let i = 0; i < n - 1 && op <= n; i++) {
-        // Calcula próxima entrada após LOSS
-        bancaAtual = Math.max(0.01, bancaAtual - (linhas[linhas.length - 1]?.entrada || e1));
-        lAtual++;
-        if (tipo === 'Progressivo') wAtual = 0;
-        if (lAtual >= n) { lAtual = 0; wAtual = 0; }
-
-        const ent = _dbsMasaCalcEntrada(t, n, k, pay, bancaAtual, wAtual, lAtual, false);
-        linhas.push({ op, wins: wAtual, loss: lAtual, entrada: ent, banca: bancaAtual });
-        op++;
-
-        // Simula WIN de recuperação para mostrar o ciclo
-        if (i % 3 === 2 && wAtual < k - 1) {
-            const lucro = (linhas[linhas.length - 1]?.entrada || ent) * pay;
-            bancaAtual = parseFloat((bancaAtual + lucro).toFixed(2));
-            wAtual++;
-            lAtual = Math.max(0, lAtual - 1);
-            if (tipo === 'Progressivo' && bancaAtual >= ganhoMax) { ganhoMax = bancaAtual; wAtual = 0; lAtual = 0; }
-            if (wAtual >= k) { wAtual = 0; lAtual = 0; }
-            const ent2 = _dbsMasaCalcEntrada(t, n, k, pay, bancaAtual, wAtual, lAtual, false);
-            linhas.push({ op, wins: wAtual, loss: lAtual, entrada: ent2, banca: bancaAtual, isWin: true });
-            op++;
-        }
+    // ── Calcula entrada para um estado (qLoss, qWins) com banca flutuante ────────
+    // Fórmula idêntica ao calcula_entrada() do Python:
+    //   entrada = (1 - pay * t[row][col+1] / (t[row][col] + (pay-1)*t[row][col+1])) * banca
+    // onde row = qLoss+qWins+1, col = qWins  (indexação 0-based)
+    function calcEntradaEstado(qLoss, qWins, banca, isPrimeira) {
+        try {
+            if (isPrimeira) {
+                // Equivalente a calcula_primeira(): usa linha 1, colunas 0 e 1
+                const v11 = parseFloat(t[1][1]), v10 = parseFloat(t[1][0]);
+                if (isNaN(v11) || isNaN(v10)) return stakeBase;
+                return Math.round(Math.abs((1 - pay * v11 / (v10 + (pay - 1) * v11)) * banca) * 100) / 100;
+            }
+            if (qWins >= k) return 0;
+            const row  = qLoss + qWins + 1;
+            const col  = qWins;       // coluna qWins   → t[row][col]
+            const col1 = qWins + 1;   // coluna qWins+1 → t[row][col+1]
+            if (row >= n || col1 >= k) return banca; // fora da tabela → usa banca restante
+            const v10 = parseFloat(t[row][col]);
+            const v11 = parseFloat(t[row][col1]);
+            if (isNaN(v10) || isNaN(v11)) return banca;
+            return Math.round(Math.abs((1 - pay * v11 / (v10 + (pay - 1) * v11)) * banca) * 100) / 100;
+        } catch(_) { return stakeBase; }
     }
 
-    // Renderiza tabela
+    // ── Simula o ciclo completo: cenário pior caso (todos loss) + recuperação ─────
+    // Exibe linha por linha o que acontece a cada operação, atualizando banca_final
+    const linhas = [];
+    let bancaAtual = stakeBase;   // começa com stake como banca (igual ao Python)
+    let qWins = 0, qLoss = 0;
+    let ganhoMax = stakeBase;
+    let isPrimeira = true;
+
+    for (let op = 1; op <= Math.min(n * 2, 40); op++) {
+        const entrada = calcEntradaEstado(qLoss, qWins, bancaAtual, isPrimeira);
+        isPrimeira = false;
+
+        linhas.push({ op, wins: qWins, loss: qLoss, entrada, banca: bancaAtual });
+
+        // Simula LOSS (cenário conservador — mostra a escalada da stake)
+        const lucroLoss = -entrada;
+        bancaAtual = Math.max(0.01, parseFloat((bancaAtual + lucroLoss).toFixed(4)));
+        qLoss++;
+
+        // Após K-1 losses consecutivos, intercala um WIN para mostrar a recuperação
+        if (qLoss > 0 && qLoss % (k - 1 || 1) === 0) {
+            // WIN: abate a dívida
+            const lucroWin = parseFloat((entrada * pay).toFixed(4));
+            bancaAtual = parseFloat((bancaAtual + entrada + lucroWin).toFixed(4));
+            qWins++;
+            qLoss = Math.max(0, qLoss - 1);
+            if (tipo === 'Progressivo') {
+                if (bancaAtual >= ganhoMax) { ganhoMax = bancaAtual; qWins = 0; qLoss = 0; }
+            }
+            if (qWins >= k) { qWins = 0; qLoss = 0; bancaAtual = stakeBase; ganhoMax = stakeBase; }
+            linhas[linhas.length - 1].isWin = true;   // marca a entrada anterior como WIN
+        }
+
+        // Reset quando esgotou o ciclo
+        if (qLoss + qWins >= n) { qLoss = 0; qWins = 0; bancaAtual = stakeBase; }
+    }
+
+    // Renderiza
     tbody.innerHTML = linhas.map((row, idx) => {
-        const cor = row.isWin ? '#4ade80' : (row.loss > 0 ? '#f87171' : '#c084fc');
-        const bg  = idx % 2 === 0 ? 'rgba(168,85,247,0.04)' : 'transparent';
+        const cor   = row.isWin ? '#4ade80' : (row.loss > 0 ? '#f87171' : '#c084fc');
+        const bg    = idx % 2 === 0 ? 'rgba(168,85,247,0.04)' : 'transparent';
         const icone = row.isWin ? '✅' : (row.loss > 0 ? '❌' : '▶');
         return `<tr style="background:${bg};">
             <td style="padding:4px 8px;text-align:center;color:#6b7280;">${icone} ${row.op}</td>
             <td style="padding:4px 8px;text-align:center;color:#4ade80;">${row.wins}</td>
             <td style="padding:4px 8px;text-align:center;color:#f87171;">${row.loss}</td>
             <td style="padding:4px 8px;text-align:right;color:${cor};font-weight:bold;">$${row.entrada.toFixed(2)}</td>
-            <td style="padding:4px 8px;text-align:right;color:#9ca3af;">$${row.banca.toFixed(2)}</td>
+            <td style="padding:4px 8px;text-align:right;color:#9ca3af;">$${row.banca.toFixed(4)}</td>
         </tr>`;
     }).join('');
 
     // Resumo
-    const entradaInicial = linhas[0]?.entrada || 0;
-    const maiorEntrada   = Math.max(...linhas.map(r => r.entrada));
+    const entradas = linhas.map(r => r.entrada).filter(e => e > 0);
+    const e1 = linhas[0]?.entrada || 0;
+    const eMax = entradas.length ? Math.max(...entradas) : 0;
     if (resumo) resumo.innerHTML =
-        `1ª entrada: <span style="color:#c084fc;font-weight:bold;">$${entradaInicial.toFixed(2)}</span><br>` +
-        `Maior entrada: <span style="color:#f87171;font-weight:bold;">$${maiorEntrada.toFixed(2)}</span><br>` +
-        `Payout: <span style="color:#a78bfa;">${(pay * 100).toFixed(0)}%</span> | Modo: <span style="color:#a78bfa;">${tipo}</span>`;
+        `1ª entrada: <span style="color:#c084fc;font-weight:bold;">$${e1.toFixed(2)}</span><br>` +
+        `Maior entrada: <span style="color:#f87171;font-weight:bold;">$${eMax.toFixed(2)}</span><br>` +
+        `Payout: <span style="color:#a78bfa;">${(pay*100).toFixed(0)}%</span> | Modo: <span style="color:#a78bfa;">${tipo}</span>`;
 }
 
 function dbsMasaConfirmar() {
-    const n    = parseInt(document.getElementById('dbs-masa-n')?.value)    || 10;
-    const k    = parseInt(document.getElementById('dbs-masa-k')?.value)    || 5;
-    const pay  = parseFloat(document.getElementById('dbs-masa-pay')?.value)  || 0.85;
-    const tipo = document.getElementById('dbs-masa-tipo')?.value || 'Normal';
-    const banca = parseFloat(document.getElementById('dbs-masa-banca')?.value) || 100;
+    const n     = parseInt(document.getElementById('dbs-masa-n')?.value)   || 10;
+    const k     = parseInt(document.getElementById('dbs-masa-k')?.value)   || 5;
+    const pay   = parseFloat(document.getElementById('dbs-masa-pay')?.value) || 0.85;
+    const tipo  = document.getElementById('dbs-masa-tipo')?.value || 'Normal';
+    // stake = valor do campo "Stake Inicial" do modal Masaniello
+    const stakeModal = parseFloat(document.getElementById('dbs-masa-banca')?.value) || 0.35;
 
     if (k >= n) {
         const resumo = document.getElementById('dbs-masa-resumo');
@@ -21028,24 +21052,34 @@ function dbsMasaConfirmar() {
         return;
     }
 
-    // Salva config
-    _dbsMasaCfg = { n, k, pay, tipo, banca };
+    // Salva config (banca = stake base para compatibilidade)
+    _dbsMasaCfg = { n, k, pay, tipo, banca: stakeModal };
     _dbsMasaConfirmado = true;
 
-    // Atualiza o gerenciador DBS com os parâmetros corretos
-    const stake = parseFloat(document.getElementById('dbs-entrada')?.value) || 0.35;
-    _dbsMgr = new GerenciadorUnificado('📊 Masaniello', {
-        stake, mas_eventos: n, mas_acertos: k, mas_pay: pay, mas_tipo: tipo,
-    });
-    // Injeta a banca inicial no gerenciador
-    if (_dbsMgr._masaBanca !== undefined) _dbsMgr._masaBanca = banca;
+    // Atualiza campo de entrada do DBS com a stake do modal
+    const entradaEl = document.getElementById('dbs-entrada');
+    if (entradaEl) entradaEl.value = stakeModal.toFixed(2);
 
+    // Instancia o gerenciador com a stake como banca inicial (igual ao Python)
+    _dbsMgr = new GerenciadorUnificado('📊 Masaniello', {
+        stake:       stakeModal,
+        mas_eventos: n,
+        mas_acertos: k,
+        mas_pay:     pay,
+        mas_tipo:    tipo,
+    });
+    // A banca inicial do Masaniello = stake (igual ao Python: self.banca = banca)
+    if (_dbsMgr._masaBanca !== undefined) _dbsMgr._masaBanca = stakeModal;
+
+    // Reseta proteção de mão quente
+    _dbsLossConsec  = 0;
+    _dbsCooldownAte = 0;
     dbsMgrAtualizarStats();
     _dbsSalvarConfig();
     _dbsMasaFecharModalSilencioso();
 
     const st = document.getElementById('dbs-status');
-    if (st) st.textContent = `📊 Masaniello configurado: N=${n} K=${k} pay=${(pay*100).toFixed(0)}% modo=${tipo} banca=$${banca.toFixed(2)}`;
+    if (st) st.textContent = `📊 Masaniello: N=${n} K=${k} pay=${(pay*100).toFixed(0)}% modo=${tipo} stake=$${stakeModal.toFixed(2)}`;
 }
 
 function _dbsMasaFecharModalSilencioso() {
