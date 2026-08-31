@@ -20271,35 +20271,10 @@ bot.operarComSinal = function(payload, _retentativa) {
                 _dbsReqIdAtivo = null;
                 bot.ws.onmessage = _origOnMsg;
 
-                // ── Loss Virtual: regra após resultado REAL ───────────────────
-                // WIN real  → só volta ao virtual se a dívida MA estiver zerada
-                //             (stake já voltou à entrada base)
-                // LOSS real → permanece em modo real até quitar a dívida
                 _dbsLvSimulando = false;
-                if (won) {
-                    // Verifica se ainda há dívida no MA-Adaptativo
-                    const _baseStake = parseFloat(document.getElementById('dbs-entrada')?.value) || 0.35;
-                    const _proxStake = (typeof dbsMgrGetStake === 'function') ? dbsMgrGetStake() : _baseStake;
-                    const _dividaZerada = _proxStake <= _baseStake + 0.01; // margem de 1 centavo
-                    if (_dividaZerada) {
-                        // Dívida quitada → reinicia ciclo virtual
-                        _dbsLvContador = 0;
-                        _dbsLvModoReal = false;
-                        const _stLv = document.getElementById('dbs-status');
-                        if (_stLv) _stLv.textContent = `✅ WIN — dívida zerada, voltando ao modo virtual.`;
-                    } else {
-                        // Ainda há dívida → permanece em modo real para recuperar
-                        _dbsLvModoReal = true;
-                        const _stLv = document.getElementById('dbs-status');
-                        if (_stLv) _stLv.textContent = `✅ WIN — recuperando dívida ($${(_proxStake - _baseStake).toFixed(2)} restante), permanece em modo real.`;
-                    }
-                } else {
-                    // Perdeu real → mantém modo real (não reseta)
-                    _dbsLvModoReal = true;
-                }
-                _dbsLvAtualizarStatus();
 
-                // Registra resultado no log e gerenciador DBS
+                // Registra resultado no log e gerenciador DBS PRIMEIRO
+                // (atualiza a dívida MA antes de verificar se está zerada)
                 if (bot._dbsUltimoPayload) {
                     bot._dbsUltimoPayload.resultado = won ? 'WIN' : 'LOSS';
                     if (_dbsLog.length > 0) {
@@ -20311,6 +20286,30 @@ bot.operarComSinal = function(payload, _retentativa) {
                     if (typeof dbsMgrRegistrarResultado === 'function') dbsMgrRegistrarResultado(won, profit);
                     bot._dbsUltimoPayload = null;
                 }
+
+                // ── Loss Virtual: regra após resultado REAL ───────────────────
+                // Verificação APÓS dbsMgrRegistrarResultado para que dbsMgrGetStake()
+                // já reflita a dívida atualizada (zerada ou não)
+                if (won) {
+                    const _baseStake = parseFloat(document.getElementById('dbs-entrada')?.value) || 0.35;
+                    const _proxStake = (typeof dbsMgrGetStake === 'function') ? dbsMgrGetStake() : _baseStake;
+                    const _dividaZerada = _proxStake <= _baseStake + 0.01;
+                    if (_dividaZerada) {
+                        // Dívida quitada → volta ao modo virtual
+                        _dbsLvContador = 0;
+                        _dbsLvModoReal = false;
+                        const _stLv = document.getElementById('dbs-status');
+                        if (_stLv) _stLv.textContent = `✅ WIN — dívida zerada, voltando ao modo virtual.`;
+                    } else {
+                        // Ainda há dívida → permanece real
+                        _dbsLvModoReal = true;
+                        const _stLv = document.getElementById('dbs-status');
+                        if (_stLv) _stLv.textContent = `✅ WIN — recuperando ($${(_proxStake - _baseStake).toFixed(2)} restante).`;
+                    }
+                } else {
+                    _dbsLvModoReal = true;
+                }
+                _dbsLvAtualizarStatus();
 
                 const st = document.getElementById('dbs-status');
                 if (st) st.textContent = `${won ? '✅ WIN' : '❌ LOSS'} | ${payload.tipo_contrato} B:${payload.barreira} ${payload.ativo} | ${profit >= 0 ? '+' : ''}$${profit.toFixed(2)}`;
@@ -20665,6 +20664,16 @@ function dbsScan() {
 
         // Auto-operar: se o TOP1 foi aprovado e o checkbox está marcado, entra imediatamente
         const autoOperarChk = document.getElementById('dbs-auto-operar');
+
+        // ── Proteção mão quente: bloqueia entrada durante cooldown ───────────────
+        if (autoOperarChk && autoOperarChk.checked && _dbsCooldownAte > Date.now()) {
+            const secRestante = Math.ceil((_dbsCooldownAte - Date.now()) / 1000);
+            const statusEl = document.getElementById('dbs-status');
+            if (statusEl) statusEl.textContent = `🛑 Mão quente bloqueada — aguardando ${secRestante}s para resfriar.`;
+            dbsMgrAtualizarStatsConsec();
+            return;
+        }
+
         if (autoOperarChk && autoOperarChk.checked && data.top1 && data.top1.veredicto === 'OPERAR') {
             const t = data.top1;
             const statusEl = document.getElementById('dbs-status');
