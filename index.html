@@ -4399,14 +4399,17 @@ class GerenciadorUnificado {
         this._raDivida  = 0.0;
         this._raWins    = 0;
         this._raLosses  = 0;
-        // ── Masaniello — tabela bidimensional (fiel ao Python) ───────────────
+        // ── Masaniello — tabela bidimensional ───────────────────────────────
         if (modo === '📊 Masaniello') {
-            // _masaEscala calibra a banca para que a 1ª entrada = stake configurada
-            // Calculado lazy na 1ª chamada de _calcMasa; _masaBanca = _masaEscala inicialmente
-            this._masaBanca      = 0;    // será sobrescrito por _masaEscala no 1º _calcMasa
-            this._masaEscala     = null; // calculado lazy
+            // Trabalha internamente com banca=100 (grande o suficiente para
+            // a fórmula produzir valores significativos).
+            // _masaRatio converte: entrada_real = entrada_100 * ratio
+            // ratio = stake / primeira_entrada_com_banca_100
+            // _masaBanca100 flutua em escala 100 conforme WIN/LOSS.
+            this._masaBanca100   = 100;
+            this._masaRatio      = 0;   // calculado lazy na 1ª chamada
             this._masaPrimeira   = true;
-            this._masaGanhoMax   = 0;    // será calibrado junto com _masaEscala
+            this._masaGanhoMax100 = 100;
             this._masaUltimaEnt  = 0;
             this._masaTabela     = this._masaBuildTabela(
                 parseInt(cfg.mas_eventos || 10),
@@ -4464,12 +4467,12 @@ class GerenciadorUnificado {
             case "📊 Masaniello": {
                 const _masK   = parseInt(cfg.mas_acertos || 3);
                 const _masPay = parseFloat(cfg.mas_pay   || 0.85);
-                // WIN: banca sobe pelo lucro real (entrada × payout)
-                const _lucroMasa = this._masaUltimaEnt * _masPay;
-                this._masaBanca  = parseFloat((this._masaBanca + _lucroMasa).toFixed(4));
+                // WIN: atualiza banca interna (escala 100)
+                const _ent100w = this._masaUltimaEnt100 || (this._masaUltimaEnt / (this._masaRatio || 1));
+                this._masaBanca100 = parseFloat((this._masaBanca100 + _ent100w * _masPay).toFixed(6));
                 this._winsMasa++;
-                if (cfg.mas_tipo === 'Progressivo' && this._masaBanca >= this._masaGanhoMax) {
-                    this._masaGanhoMax = this._masaBanca;
+                if (cfg.mas_tipo === 'Progressivo' && this._masaBanca100 >= this._masaGanhoMax100) {
+                    this._masaGanhoMax100 = this._masaBanca100;
                     this._winsMasa = 0; this._opsMasa = 0;
                 }
                 if (this._winsMasa >= _masK) { this._opsMasa = 0; this._winsMasa = 0; }
@@ -4544,9 +4547,9 @@ class GerenciadorUnificado {
                 break; }
 
             case "📊 Masaniello": {
-                // LOSS: banca desce pela entrada perdida
-                const _minBanca = parseFloat(cfg.stake || this.initialStake) * 0.01;
-                this._masaBanca = parseFloat(Math.max(_minBanca, this._masaBanca - this._masaUltimaEnt).toFixed(4));
+                // LOSS: atualiza banca interna (escala 100)
+                const _ent100l = this._masaUltimaEnt100 || (this._masaUltimaEnt / (this._masaRatio || 1));
+                this._masaBanca100 = parseFloat(Math.max(1, this._masaBanca100 - _ent100l).toFixed(6));
                 this._opsMasa++;
                 if (cfg.mas_tipo === 'Progressivo') this._winsMasa = 0;
                 if (this._opsMasa >= parseInt(cfg.mas_eventos || 10)) { this._opsMasa = 0; this._winsMasa = 0; }
@@ -4631,10 +4634,10 @@ class GerenciadorUnificado {
         return t;
     }
 
-    // ── Masaniello: calcula entrada via tabela (equivalente ao Python calcula_entrada)
-    // _masaBanca é mantido na mesma escala da stake (valores reais em $).
-    // A fórmula retorna fração × banca → mesma escala.
-    // WIN/LOSS atualizam _masaBanca diretamente na escala real.
+    // ── Masaniello: banca interna = 100, ratio converte para escala real ─────
+    // ratio = stake / ent1_100  onde ent1_100 = 1ª entrada com banca=100
+    // Entrada real = entrada_100 × ratio
+    // _masaBanca100 flutua: WIN += ent_100 × pay; LOSS -= ent_100
     _calcMasa() {
         const cfg   = this.cfg;
         const n     = parseInt(cfg.mas_eventos || 10);
@@ -4648,48 +4651,59 @@ class GerenciadorUnificado {
 
         if (!t) return Math.max(MIN, stake);
 
-        // Inicializa _masaBanca na 1ª chamada:
-        // A fórmula Python usa banca passada pelo usuário. Aqui usamos stake como banca base.
-        // Para manter proporcionalidade, a banca começa = stake (1 unidade).
-        // Assim a 1ª entrada = fração × stake, que é o valor correto proporcional.
-        if (!this._masaEscala) {
-            this._masaEscala = true;  // flag "já inicializado"
-            this._masaBanca  = stake;
-            this._masaGanhoMax = stake;
+        // Calcula ratio lazy: ratio = stake / (1ª entrada com banca=100)
+        if (!this._masaRatio) {
+            try {
+                const v10 = parseFloat(t[1][0]), v11 = parseFloat(t[1][1]);
+                const ent1_100 = Math.abs((1 - pay * v11 / (v10 + (pay - 1) * v11)) * 100);
+                this._masaRatio = (ent1_100 > 0) ? stake / ent1_100 : 1;
+            } catch(_) { this._masaRatio = 1; }
+            this._masaBanca100    = 100;
+            this._masaGanhoMax100 = 100;
         }
 
-        const banca = this._masaBanca;
+        const ratio  = this._masaRatio;
+        const banca100 = this._masaBanca100;
 
-        // Fórmula idêntica ao Python calcula_entrada
-        const calcEnt = (row, col0, col1) => {
+        // Calcula entrada na escala 100, converte para real
+        const calcEnt100 = (row, col0, col1) => {
             try {
                 const v10 = parseFloat(t[row][col0]);
                 const v11 = parseFloat(t[row][col1]);
                 if (isNaN(v10) || isNaN(v11) || String(t[row][col0]) === 'NaN') return null;
-                return Math.abs((1 - pay * v11 / (v10 + (pay - 1) * v11)) * banca);
+                return Math.abs((1 - pay * v11 / (v10 + (pay - 1) * v11)) * banca100);
             } catch(_) { return null; }
         };
 
-        // 1ª entrada (calcula_primeira do Python): linha 1, colunas 0 e 1
+        // 1ª entrada
         if (this._masaPrimeira) {
             this._masaPrimeira = false;
-            const ent = calcEnt(1, 0, 1);
-            this._masaUltimaEnt = Math.max(MIN, ent !== null ? Math.round(ent * 100) / 100 : stake);
+            const ent100 = calcEnt100(1, 0, 1);
+            const entReal = (ent100 !== null) ? Math.round(ent100 * ratio * 100) / 100 : stake;
+            this._masaUltimaEnt  = Math.max(MIN, entReal);
+            this._masaUltimaEnt100 = (ent100 !== null) ? ent100 : (stake / ratio);
             return this._masaUltimaEnt;
         }
 
-        if (qWins >= k) { this._masaUltimaEnt = stake; return Math.max(MIN, stake); }
+        if (qWins >= k) {
+            this._masaUltimaEnt = Math.max(MIN, stake);
+            this._masaUltimaEnt100 = stake / ratio;
+            return this._masaUltimaEnt;
+        }
 
         const row  = qLoss + qWins + 1;
         const col0 = qWins;
         const col1 = qWins + 1;
         if (row >= n || col1 >= k) {
             this._masaUltimaEnt = Math.max(MIN, stake);
+            this._masaUltimaEnt100 = stake / ratio;
             return this._masaUltimaEnt;
         }
 
-        const ent = calcEnt(row, col0, col1);
-        this._masaUltimaEnt = Math.max(MIN, ent !== null ? Math.round(ent * 100) / 100 : stake);
+        const ent100 = calcEnt100(row, col0, col1);
+        const entReal = (ent100 !== null) ? Math.round(ent100 * ratio * 100) / 100 : stake;
+        this._masaUltimaEnt    = Math.max(MIN, entReal);
+        this._masaUltimaEnt100 = (ent100 !== null) ? ent100 : (stake / ratio);
         return this._masaUltimaEnt;
     }
 
@@ -20971,50 +20985,60 @@ function dbsMasaAtualizarTabela() {
     const t = _dbsMasaBuildTabela(n, k, pay);
     const MIN = 0.35;
 
-    // Calcula entrada para um estado — banca na mesma escala da stake
-    function calcEntradaEstado(qLoss, qWins, banca, isPrimeira) {
+    // Calcula ratio: ratio = stakeBase / (1ª entrada com banca=100)
+    let ratio = 1;
+    try {
+        const v10_0 = parseFloat(t[1][0]), v11_0 = parseFloat(t[1][1]);
+        const ent1_100 = Math.abs((1 - pay * v11_0 / (v10_0 + (pay - 1) * v11_0)) * 100);
+        if (ent1_100 > 0) ratio = stakeBase / ent1_100;
+    } catch(_) {}
+
+    // Calcula entrada (banca interna 100) e converte para real
+    function calcEntradaEstado(qLoss, qWins, banca100, isPrimeira) {
         try {
             const row  = isPrimeira ? 1 : (qLoss + qWins + 1);
             const col0 = isPrimeira ? 0 : qWins;
             const col1 = isPrimeira ? 1 : (qWins + 1);
-            if (!isPrimeira && qWins >= k) return Math.max(MIN, stakeBase);
-            if (row >= n || col1 >= k) return Math.max(MIN, stakeBase);
+            if (!isPrimeira && qWins >= k) return { real: Math.max(MIN, stakeBase), b100: stakeBase / ratio };
+            if (row >= n || col1 >= k) return { real: Math.max(MIN, stakeBase), b100: stakeBase / ratio };
             const v10 = parseFloat(t[row][col0]);
             const v11 = parseFloat(t[row][col1]);
-            if (isNaN(v10) || isNaN(v11) || String(t[row][col0]) === 'NaN') return Math.max(MIN, stakeBase);
-            const ent = Math.abs((1 - pay * v11 / (v10 + (pay - 1) * v11)) * banca);
-            return Math.max(MIN, Math.round(ent * 100) / 100);
-        } catch(_) { return Math.max(MIN, stakeBase); }
+            if (isNaN(v10) || isNaN(v11) || String(t[row][col0]) === 'NaN')
+                return { real: Math.max(MIN, stakeBase), b100: stakeBase / ratio };
+            const ent100 = Math.abs((1 - pay * v11 / (v10 + (pay - 1) * v11)) * banca100);
+            return { real: Math.max(MIN, Math.round(ent100 * ratio * 100) / 100), b100: ent100 };
+        } catch(_) { return { real: Math.max(MIN, stakeBase), b100: stakeBase / ratio }; }
     }
 
-    // Simula o ciclo: banca começa = stakeBase (escala real)
+    // Simula o ciclo com banca interna=100
     const linhas = [];
-    let banca = stakeBase;
+    let banca100 = 100;
     let qWins = 0, qLoss = 0;
-    let ganhoMax = stakeBase;
+    let ganhoMax100 = 100;
     let isPrimeira = true;
 
     for (let op = 1; op <= Math.min(n * 2, 40); op++) {
-        const entrada = calcEntradaEstado(qLoss, qWins, banca, isPrimeira);
+        const { real: entrada, b100: ent100 } = calcEntradaEstado(qLoss, qWins, banca100, isPrimeira);
         isPrimeira = false;
-        linhas.push({ op, wins: qWins, loss: qLoss, entrada, banca: parseFloat(banca.toFixed(4)) });
+        const bancaReal = parseFloat((banca100 * ratio).toFixed(4));
+        linhas.push({ op, wins: qWins, loss: qLoss, entrada, banca: bancaReal });
 
-        // LOSS: banca desce
-        banca = Math.max(stakeBase * 0.01, parseFloat((banca - entrada).toFixed(4)));
+        // LOSS: banca interna desce
+        banca100 = Math.max(1, parseFloat((banca100 - ent100).toFixed(6)));
         qLoss++;
 
-        // A cada K-1 losses intercala WIN para mostrar ciclo de recuperação
+        // A cada K-1 losses intercala WIN para mostrar recuperação
         if (qLoss > 0 && qLoss % (k - 1 || 1) === 0) {
-            banca = parseFloat((banca + entrada + entrada * pay).toFixed(4));
+            banca100 = parseFloat((banca100 + ent100 + ent100 * pay).toFixed(6));
             qWins++;
             qLoss = Math.max(0, qLoss - 1);
-            if (tipo === 'Progressivo' && banca >= ganhoMax) {
-                ganhoMax = banca; qWins = 0; qLoss = 0;
+            if (tipo === 'Progressivo' && banca100 >= ganhoMax100) {
+                ganhoMax100 = banca100; qWins = 0; qLoss = 0;
             }
-            if (qWins >= k) { qWins = 0; qLoss = 0; banca = stakeBase; ganhoMax = stakeBase; }
+            if (qWins >= k) { qWins = 0; qLoss = 0; banca100 = 100; ganhoMax100 = 100; }
             linhas[linhas.length - 1].isWin = true;
         }
-        if (qLoss + qWins >= n) { qLoss = 0; qWins = 0; banca = stakeBase; }
+        if (qLoss + qWins >= n) { qLoss = 0; qWins = 0; banca100 = 100; }
     }
 
     // Renderiza
@@ -21071,10 +21095,11 @@ function dbsMasaConfirmar() {
         mas_pay:     pay,
         mas_tipo:    tipo,
     });
-    // Força recálculo de escala na 1ª operação
-    if ('_masaEscala' in _dbsMgr) _dbsMgr._masaEscala = null;
-    if ('_masaBanca'  in _dbsMgr) _dbsMgr._masaBanca  = 0;
-    if ('_masaGanhoMax' in _dbsMgr) _dbsMgr._masaGanhoMax = 0;
+    // Reinicia estado interno
+    if ('_masaRatio'      in _dbsMgr) { _dbsMgr._masaRatio = 0; }
+    if ('_masaBanca100'   in _dbsMgr) { _dbsMgr._masaBanca100 = 100; }
+    if ('_masaGanhoMax100' in _dbsMgr) { _dbsMgr._masaGanhoMax100 = 100; }
+    if ('_masaPrimeira'   in _dbsMgr) { _dbsMgr._masaPrimeira = true; }
 
     // Reseta proteção de mão quente
     _dbsLossConsec  = 0;
