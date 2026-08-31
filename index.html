@@ -4271,14 +4271,26 @@ class GerenciadorUnificado {
         this.currentStake  = base;
         this._nivelGale    = 0;
         this._dividaLR     = 0.0;
-        this._opsMasa      = 0;
-        this._winsMasa     = 0;
+        this._opsMasa      = 0;   // qnt_loss (linha na tabela)
+        this._winsMasa     = 0;   // qnt_wins (coluna na tabela)
         this._indiceCiclo  = 0;
         this._ciclosLista  = cfg.ciclos || [5, 6, 3.5, 7, 14, 28];
         // Recovery Adaptativo
         this._raDivida  = 0.0;
         this._raWins    = 0;
         this._raLosses  = 0;
+        // ── Masaniello — tabela bidimensional (fiel ao Python) ───────────────
+        if (modo === '📊 Masaniello') {
+            this._masaBanca      = base;          // banca_final (varia com resultados)
+            this._masaPrimeira   = true;           // primeira_entrada
+            this._masaGanhoMax   = base;           // ganho_max (modo Progressivo)
+            this._masaUltimaEnt  = 0;             // ultima_entrada
+            this._masaTabela     = this._masaBuildTabela(
+                parseInt(cfg.mas_eventos || 10),
+                parseInt(cfg.mas_acertos || 3),
+                parseFloat(cfg.mas_pay   || 0.85)
+            );
+        }
         // ── Juros Compostos ──────────────────────────────────────────────────
         this._jcPct      = parseFloat(cfg.jc_pct    || 2.0);   // % da banca por entrada
         this._jcBanca    = parseFloat(cfg.jc_banca  || (base * 50)); // banca atual (sincroniza c/ saldo real)
@@ -4326,10 +4338,20 @@ class GerenciadorUnificado {
                 { const pct = parseFloat(cfg.qsr_pct || 50) / 100;
                   this.currentStake = Math.max(base, parseFloat((base + this._dividaLR * pct).toFixed(2))); } break;
 
-            case "📊 Masaniello":
-                this._winsMasa++; this._opsMasa++;
-                if (this._winsMasa >= parseInt(cfg.mas_acertos || 3)) { this._opsMasa = this._winsMasa = 0; }
-                this.currentStake = this._calcMasa(); break;
+            case "📊 Masaniello": {
+                const _masK   = parseInt(cfg.mas_acertos || 3);
+                const _masPay = parseFloat(cfg.mas_pay   || 0.85);
+                const _masN   = parseInt(cfg.mas_eventos || 10);
+                const _lucro  = this._masaUltimaEnt * (_masPay);
+                this._masaBanca = parseFloat((this._masaBanca + _lucro).toFixed(2));
+                this._winsMasa++;
+                // Modo Progressivo: reset se atingiu novo máximo de banca
+                if (cfg.mas_tipo === 'Progressivo' && this._masaBanca >= this._masaGanhoMax) {
+                    this._masaGanhoMax = this._masaBanca;
+                    this._winsMasa = 0; this._opsMasa = 0;
+                }
+                if (this._winsMasa >= _masK) { this._opsMasa = 0; this._winsMasa = 0; }
+                this.currentStake = this._calcMasa(); break; }
 
             case "🎯 Ciclos":
                 this._indiceCiclo = 0;
@@ -4399,10 +4421,14 @@ class GerenciadorUnificado {
                 this.currentStake = Math.min(prox, parseFloat(cfg.qsr_max || 50));
                 break; }
 
-            case "📊 Masaniello":
+            case "📊 Masaniello": {
+                const _masLoss = this._masaUltimaEnt;
+                this._masaBanca = parseFloat(Math.max(0.01, this._masaBanca - _masLoss).toFixed(2));
                 this._opsMasa++;
-                if (this._opsMasa >= parseInt(cfg.mas_eventos || 10)) { this._opsMasa = this._winsMasa = 0; }
-                this.currentStake = this._calcMasa(); break;
+                // Modo Progressivo: loss reseta wins
+                if (cfg.mas_tipo === 'Progressivo') this._winsMasa = 0;
+                if (this._opsMasa >= parseInt(cfg.mas_eventos || 10)) { this._opsMasa = 0; this._winsMasa = 0; }
+                this.currentStake = this._calcMasa(); break; }
 
             case "🎯 Ciclos":
                 this._indiceCiclo = Math.min(this._indiceCiclo + 1, this._ciclosLista.length - 1);
@@ -4443,16 +4469,92 @@ class GerenciadorUnificado {
         this.currentStake = Math.max(0.35, s);
     }
 
+    // ── Masaniello: constrói a tabela bidimensional (port fiel do Python) ────────
+    _masaBuildTabela(quantidade, vitorias, pay) {
+        // tabela[linha][coluna] — dimensões: quantidade × vitorias
+        const t = [];
+        for (let l = 0; l < quantidade; l++) {
+            t.push(new Array(vitorias).fill('NaN'));
+        }
+        for (let linha = quantidade - 1; linha >= 0; linha--) {
+            for (let coluna = vitorias - 1; coluna >= 0; coluna--) {
+                if (coluna === vitorias - 1) {
+                    // coluna final (equivalente a coluna == vitorias na tabela Python com índice +1)
+                    // valor = 1 (célula de referência da coluna mais à direita dentro do range)
+                    t[linha][coluna] = 1;
+                } else if ((vitorias - 1 - coluna) === (quantidade - 1 - linha)) {
+                    // diagonal: pay ^ (profundidade restante)
+                    t[linha][coluna] = Math.pow(pay, quantidade - linha);
+                } else {
+                    let baixo, lado;
+                    if (linha < quantidade - 1) {
+                        baixo = t[linha + 1][coluna];
+                    } else {
+                        baixo = (coluna === vitorias - 1) ? 1 : 'NaN';
+                    }
+                    if (coluna < vitorias - 1 && linha < quantidade - 1) {
+                        lado = t[linha + 1][coluna + 1];
+                    } else {
+                        lado = (coluna === vitorias - 1) ? 1 : 'NaN';
+                    }
+                    if (baixo === 'NaN' && lado === 'NaN') {
+                        t[linha][coluna] = 'NaN';
+                    } else {
+                        const b = parseFloat(baixo), s = parseFloat(lado);
+                        t[linha][coluna] = (pay * b * s) / (b + (pay - 1) * s);
+                    }
+                }
+            }
+        }
+        return t;
+    }
+
+    // ── Masaniello: calcula entrada via tabela (equivalente a calcula_entrada()) ─
     _calcMasa() {
-        const cfg  = this.cfg;
-        const n    = parseInt(cfg.mas_eventos || 10);
-        const k    = parseInt(cfg.mas_acertos || 3);
-        const min  = parseFloat(cfg.stake || 0.35);
-        const i = this._opsMasa, j = this._winsMasa;
-        if (i >= n || k <= j || (n - i) === 0) return min;
-        const frac  = (k - j) / (n - i);
-        const stake = parseFloat(((min * n) * frac / Math.max(k, 1)).toFixed(2));
-        return Math.max(min, stake);
+        const cfg      = this.cfg;
+        const n        = parseInt(cfg.mas_eventos || 10);
+        const k        = parseInt(cfg.mas_acertos || 3);
+        const pay      = parseFloat(cfg.mas_pay   || 0.85);
+        const base     = parseFloat(cfg.stake      || this.initialStake);
+        const t        = this._masaTabela;
+        const banca    = this._masaBanca;
+        const qWins    = this._winsMasa;
+        const qLoss    = this._opsMasa;
+
+        if (!t) return base;
+
+        // Primeira entrada: usa linha 1, coluna 0 e 1 (índice base)
+        if (this._masaPrimeira) {
+            this._masaPrimeira = false;
+            try {
+                const v11 = t[1][1], v10 = t[1][0];
+                if (v11 === 'NaN' || v10 === 'NaN') return base;
+                const ent = (1 - pay * parseFloat(v11) / (parseFloat(v10) + (pay - 1) * parseFloat(v11))) * banca;
+                this._masaUltimaEnt = Math.round(Math.abs(ent) * 100) / 100;
+            } catch(_) { this._masaUltimaEnt = base; }
+            return Math.max(base, this._masaUltimaEnt);
+        }
+
+        if (qWins >= k) { this._masaUltimaEnt = 0; return base; }
+
+        try {
+            const rowIdx = qLoss + qWins + 1;
+            const colIdx = qWins + 1;
+            const colIdx0 = qWins;
+            if (rowIdx >= n || colIdx >= k || colIdx0 >= k) return base;
+            const v11 = t[rowIdx][colIdx];
+            const v10 = t[rowIdx][colIdx0];
+            if (v11 === 'NaN' || v10 === 'NaN') {
+                this._masaUltimaEnt = banca;
+                return Math.max(base, banca);
+            }
+            const ent = (1 - pay * parseFloat(v11) / (parseFloat(v10) + (pay - 1) * parseFloat(v11))) * banca;
+            this._masaUltimaEnt = Math.round(Math.abs(ent) * 100) / 100;
+            return Math.max(base, this._masaUltimaEnt);
+        } catch(_) {
+            this._masaUltimaEnt = banca;
+            return Math.max(base, banca);
+        }
     }
 
     // ── Juros Compostos — recalcula stake pela banca atual ───────────────────
@@ -7173,8 +7275,10 @@ function abrirCfgGerenciamento(nome) {
             break;
 
         case '📊 Masaniello':
-            _campoMgmt('Total de eventos (N)', 'mgmt-mas-eventos', 'number', cfg.mas_eventos ?? 10, 2, 50, 1);
-            _campoMgmt('Acertos esperados (K)', 'mgmt-mas-acertos', 'number', cfg.mas_acertos ?? 3, 1, 49, 1);
+            _campoMgmt('Total de eventos (N)',  'mgmt-mas-eventos', 'number', cfg.mas_eventos ?? 10,   2,    50,   1);
+            _campoMgmt('Acertos esperados (K)', 'mgmt-mas-acertos', 'number', cfg.mas_acertos ?? 3,    1,    49,   1);
+            _campoMgmt('Payout (ex: 0.85)',     'mgmt-mas-pay',     'number', cfg.mas_pay     ?? 0.85, 0.01, 0.99, 0.01);
+            _campoMgmt('Tipo',                  'mgmt-mas-tipo',    'select', cfg.mas_tipo    ?? 'Normal', undefined, undefined, undefined, ['Normal','Progressivo']);
             break;
 
         case '🎯 Ciclos':
@@ -12901,6 +13005,8 @@ function groqAplicarNoBot(idx, cfg, silencioso) {
         // Masaniello
         if (cfg.mas_eventos !== undefined) mgrCfg.mas_eventos = parseInt(cfg.mas_eventos);
         if (cfg.mas_acertos !== undefined) mgrCfg.mas_acertos = parseInt(cfg.mas_acertos);
+        if (cfg.mas_pay     !== undefined) mgrCfg.mas_pay     = parseFloat(cfg.mas_pay);
+        if (cfg.mas_tipo    !== undefined) mgrCfg.mas_tipo    = String(cfg.mas_tipo);
         // Ciclos
         if (cfg.ciclos !== undefined) {
             mgrCfg.ciclos = Array.isArray(cfg.ciclos)
@@ -16158,8 +16264,10 @@ function mcAbrirCfgGerenciamento(nome) {
             _mcCampoMgmt('Stake máxima ($)',            'mc-mgmt-qsr_max', 'number', cfg.qsr_max ?? 50, 0.35, 1000, 0.01);
             break;
         case '📊 Masaniello':
-            _mcCampoMgmt('Total de eventos (N)', 'mc-mgmt-mas_eventos', 'number', cfg.mas_eventos ?? 10, 2,  50, 1);
-            _mcCampoMgmt('Acertos esperados (K)','mc-mgmt-mas_acertos', 'number', cfg.mas_acertos ?? 3,  1,  49, 1);
+            _mcCampoMgmt('Total de eventos (N)',  'mc-mgmt-mas_eventos', 'number', cfg.mas_eventos ?? 10,   2,    50,   1);
+            _mcCampoMgmt('Acertos esperados (K)', 'mc-mgmt-mas_acertos', 'number', cfg.mas_acertos ?? 3,    1,    49,   1);
+            _mcCampoMgmt('Payout (ex: 0.85)',     'mc-mgmt-mas_pay',     'number', cfg.mas_pay     ?? 0.85, 0.01, 0.99, 0.01);
+            _mcCampoMgmt('Tipo',                  'mc-mgmt-mas_tipo',    'select', cfg.mas_tipo    ?? 'Normal', undefined, undefined, undefined, ['Normal','Progressivo']);
             break;
         case '🎯 Ciclos':
             _mcCampoMgmt('Valores dos ciclos (vírgula)', 'mc-mgmt-ciclos', 'text',
