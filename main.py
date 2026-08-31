@@ -2,6 +2,7 @@
 from digit_sniper_pro import register_digit_sniper
 from digit_matrix_sniper import register_digit_matrix
 from memory_time_engine import get_mte, mte_pode_operar, mte_registrar, mte_status
+from masaniello import Masaniello
 import threading
 import time
 import json
