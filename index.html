@@ -20367,10 +20367,19 @@ bot.operarComSinal = function(payload, _retentativa) {
                     return; // não agenda próximo scan
                 }
 
-                // Dispara próximo auto-scan após resultado
-                const autoChk = document.getElementById('dbs-auto-operar');
-                if (autoChk && autoChk.checked) {
-                    setTimeout(() => dbsScan(), 2000);
+                // Próximo scan: respeita o mesmo intervalo do modo virtual (30s).
+                // Reinicia o setInterval do auto-scan para evitar duplo-fire.
+                // Comportamento IDÊNTICO ao modo virtual — sem pressa.
+                clearInterval(_dbsAutoTimer);
+                const autoChk     = document.getElementById('dbs-auto-operar');
+                const autoScanChk = document.getElementById('dbs-auto-scan');
+                if (autoChk && autoChk.checked && autoScanChk && autoScanChk.checked) {
+                    const _intervaloScan = 30;
+                    _dbsAutoTimer = setInterval(() => {
+                        const m = document.getElementById('dbs-modal');
+                        if (!m || m.style.display === 'none') { clearInterval(_dbsAutoTimer); return; }
+                        dbsScan();
+                    }, _intervaloScan * 1000);
                 }
                 return;
             }
