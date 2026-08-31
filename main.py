@@ -1,6 +1,7 @@
 # import webbrowser
 from digit_sniper_pro import register_digit_sniper
 from digit_matrix_sniper import register_digit_matrix
+from memory_time_engine import get_mte, mte_pode_operar, mte_registrar, mte_status
 import threading
 import time
 import json
@@ -3946,6 +3947,19 @@ def ai_feedback():
         volatilidade_ctx = dados.get("volatilidade_ctx", "desconhecida"),
         conta_id         = conta_id,
     )
+
+    # ── Memory Time Engine: registra resultado temporal ───────────────────────
+    try:
+        mte_registrar(
+            resultado  = resultado,
+            estrategia = estrategia,
+            ativo      = dados.get("ativo", dados.get("contexto", "")),
+            regime     = regime,
+            confianca  = float(dados.get("confianca_edc", 0.0)),
+            virtual    = is_virtual,
+        )
+    except Exception:
+        pass
 
     # Atualiza métricas da conta no AccountManager
     if conta_id and conta_id in _account_manager.contas:
@@ -10600,6 +10614,61 @@ def ia_digit_barrier_356():
         "motor":            "EDC",
         "digitos_por_ativo": digitos_por_ativo,
     })
+
+
+# ── Memory Time Engine — rotas ───────────────────────────────────────────────
+@app.route('/mte/status', methods=['GET'])
+def mte_status_route():
+    """Retorna status completo do Memory Time Engine."""
+    try:
+        return jsonify({"ok": True, **mte_status()})
+    except Exception as e:
+        return jsonify({"ok": False, "erro": str(e)}), 500
+
+
+@app.route('/mte/pode-operar', methods=['POST'])
+def mte_pode_operar_route():
+    """Consulta se pode operar agora para o contexto dado."""
+    dados = request.get_json(force=True, silent=True) or {}
+    try:
+        res = mte_pode_operar(
+            estrategia = dados.get("estrategia", ""),
+            ativo      = dados.get("ativo", ""),
+            regime     = dados.get("regime", "DESCONHECIDO"),
+            confianca  = float(dados.get("confianca", 0.0)),
+            enabled    = bool(dados.get("enabled", True)),
+        )
+        return jsonify({"ok": True, **res})
+    except Exception as e:
+        return jsonify({"ok": False, "erro": str(e)}), 500
+
+
+@app.route('/mte/registrar', methods=['POST'])
+def mte_registrar_route():
+    """Registra resultado direto no MTE (para uso pelo DBS sem passar pelo /ai/feedback)."""
+    dados = request.get_json(force=True, silent=True) or {}
+    try:
+        mte_registrar(
+            resultado  = dados.get("resultado", ""),
+            estrategia = dados.get("estrategia", ""),
+            ativo      = dados.get("ativo", ""),
+            regime     = dados.get("regime", "DESCONHECIDO"),
+            confianca  = float(dados.get("confianca", 0.0)),
+            virtual    = bool(dados.get("virtual", False)),
+        )
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"ok": False, "erro": str(e)}), 500
+
+
+@app.route('/mte/limpar', methods=['POST'])
+def mte_limpar_route():
+    """Remove experiências com mais de 7 dias e reprocessa slots."""
+    try:
+        get_mte().limpar_antigos()
+        return jsonify({"ok": True, "msg": "Limpeza e reprocessamento concluídos."})
+    except Exception as e:
+        return jsonify({"ok": False, "erro": str(e)}), 500
 
 
 @app.route('/dbs/threshold', methods=['GET', 'POST'])

@@ -3554,6 +3554,40 @@
                   border-radius:4px;color:#a5b4fc;font-size:0.6rem;padding:3px 7px;cursor:pointer;white-space:nowrap;">💾 SALVAR</button>
             </div>
 
+            <!-- ── MEMORY TIME ENGINE ──────────────────────────────────────── -->
+            <div id="dbs-mte-panel" style="
+                background:rgba(6,182,212,0.05);border:1px solid rgba(6,182,212,0.3);
+                border-radius:5px;padding:7px 9px;display:flex;flex-direction:column;gap:5px;">
+
+              <!-- Linha 1: toggle + estado -->
+              <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;">
+                <label style="display:flex;align-items:center;gap:5px;font-size:0.65rem;color:#06b6d4;cursor:pointer;white-space:nowrap;font-family:'Share Tech Mono';">
+                  <input type="checkbox" id="dbs-mte-ativo" style="accent-color:#06b6d4;width:13px;height:13px;"
+                      onchange="_dbsSalvarConfig();_mtePollStatus()">
+                  🧠 Memória 7D
+                </label>
+                <span id="dbs-mte-estado" style="font-size:0.6rem;color:#6b7280;background:rgba(0,0,0,0.3);
+                    border-radius:3px;padding:1px 5px;white-space:nowrap;">INATIVO</span>
+                <span id="dbs-mte-dias" style="font-size:0.6rem;color:#6b7280;white-space:nowrap;margin-left:auto;">0/7 dias</span>
+              </div>
+
+              <!-- Linha 2: slot atual + WR -->
+              <div id="dbs-mte-slot-row" style="display:none;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                <span style="font-size:0.58rem;color:#6b7280;white-space:nowrap;">AGORA:</span>
+                <span id="dbs-mte-slot-status" style="font-size:0.68rem;font-weight:bold;color:#06b6d4;white-space:nowrap;">--:--</span>
+                <span id="dbs-mte-slot-wr" style="font-size:0.58rem;color:#6b7280;white-space:nowrap;margin-left:auto;">WR: --%</span>
+              </div>
+
+              <!-- Linha 3: maré + próxima zona -->
+              <div id="dbs-mte-mare-row" style="display:none;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                <span style="font-size:0.58rem;color:#6b7280;white-space:nowrap;">MARÉ:</span>
+                <span id="dbs-mte-mare" style="font-size:0.65rem;font-weight:bold;color:#6b7280;white-space:nowrap;">NEUTRA</span>
+                <span style="font-size:0.58rem;color:#6b7280;white-space:nowrap;margin-left:auto;">PRÓX:</span>
+                <span id="dbs-mte-prox" style="font-size:0.6rem;color:#6b7280;white-space:nowrap;">--</span>
+              </div>
+
+            </div>
+
             <!-- Loss Virtual DBS -->
             <div style="display:flex;align-items:center;gap:7px;
                 background:rgba(255,189,46,0.05);border:1px solid rgba(255,189,46,0.25);
@@ -9638,6 +9672,11 @@ function initWebSocket(wssUrl) {
                 // Stake usada nesta operação (salva em bot._dbsUltimaStake no momento da compra)
                 const _dbsStakeUsada = bot._dbsUltimaStake || bot.stake;
                 if (_dbsStakeUsada > (bot._maxStakeUsada || 0)) bot._maxStakeUsada = _dbsStakeUsada;
+                // Registra no MTE
+                if (typeof _mteRegistrarDbs === 'function' && typeof bot._dbsUltimoPayload !== 'undefined') {
+                    const _p = bot._dbsUltimoPayload || {};
+                    _mteRegistrarDbs(_dbsWon ? 'WIN' : 'LOSS', _p.tipo || '', _p.ativo || '', '', _p.confianca || 0, false);
+                }
                 bot.ws.send(json({ balance: 1 }));
                 updateHeader();
                 // Sobrescreve ⚡ stake DEPOIS do updateHeader (que usaria bot.mgr e apagaria)
@@ -20465,6 +20504,7 @@ function _dbsSalvarConfig() {
         ffAtivo:       g('dbs-ff-ativo')?.checked,
         ffJanela:      g('dbs-ff-janela')?.value,
         ffMaxpct:      g('dbs-ff-maxpct')?.value,
+        mteAtivo:      g('dbs-mte-ativo')?.checked,
     };
     try { localStorage.setItem(_DBS_CFG_KEY, JSON.stringify(cfg)); } catch(_) {}
 }
@@ -20489,6 +20529,7 @@ function _dbsCarregarConfig() {
     s('dbs-ff-maxpct',     cfg.ffMaxpct);
     c('dbs-lv-ativo',      cfg.lvAtivo);
     c('dbs-ff-ativo',      cfg.ffAtivo);
+    c('dbs-mte-ativo',     cfg.mteAtivo);
 
     // Atualiza label do threshold
     const tVal = document.getElementById('dbs-threshold-val');
@@ -20499,6 +20540,7 @@ function _dbsCarregarConfig() {
     if (typeof dbsFfAtualizar  === 'function') dbsFfAtualizar();
     if (typeof dbsOnMgrChange  === 'function') dbsOnMgrChange();
     if (typeof dbsMgrAtualizarStatsConsec === 'function') dbsMgrAtualizarStatsConsec();
+    if (typeof _mtePollStatus === 'function') _mtePollStatus();
 }
 
 function dbsAbrirModal() {
@@ -20509,6 +20551,7 @@ function dbsAbrirModal() {
     _dbsCarregarConfig();    // ← restaura última configuração salva
     _dbsCarregarThreshold();
     _dbsCarregarJC();        // ← carrega meta JC e preenche Stop Win se JC ativo
+    _mtePollStatus();        // ← inicia polling do MTE se checkbox estiver ligado
     dbsSincronizarBanca();
     // Atualiza banca a cada 2s enquanto o modal estiver aberto
     if (!window._dbsBancaTimer) {
@@ -20533,6 +20576,8 @@ function dbsFecharModal() {
     _dbsPararMatrix();
     clearInterval(_dbsAutoTimer);
     _dbsAutoTimer = null;
+    clearInterval(_mteTimer);
+    _mteTimer = null;
     if (window._dbsBancaTimer) {
         clearInterval(window._dbsBancaTimer);
         window._dbsBancaTimer = null;
@@ -20625,33 +20670,39 @@ function dbsScan() {
             const statusEl = document.getElementById('dbs-status');
             const sinalLv = { tipo_contrato: t.tipo, barreira: t.barreira, ativo: t.ativo, confianca: t.confianca, origem: 'DBS356-AUTO' };
 
-            // ── Filtro Dígitos Frios: usa dígitos do ativo específico do sinal ──
-            const _ffRes = _dbsFiltroFrioVerificar(t.tipo, t.barreira, t.ativo);
-            if (!_ffRes.ok) {
-                if (statusEl) statusEl.textContent = `🎯 ${_ffRes.motivo}`;
-                // Filtro bloqueou — não opera, aguarda próximo scan
-                return;
-            }
-
-            // ── Loss Virtual: bloqueia e simula; cbLiberar entra real quando completo ──
-            if (_dbsLvVerificar(sinalLv, () => {
-                // Callback: Loss Virtual liberou → reverifica filtro com ativo correto
-                const _ffRes2 = _dbsFiltroFrioVerificar(t.tipo, t.barreira, t.ativo);
-                if (!_ffRes2.ok) {
-                    if (statusEl) statusEl.textContent = `🎯 LV liberado mas ${_ffRes2.motivo}`;
+            // ── [1] Memory Time Engine: verifica horário + maré antes de qualquer filtro ──
+            _mteVerificarAntesDbs(t.tipo, t.ativo, t.fluxo).then(mteRes => {
+                if (!mteRes.permitir) {
+                    if (statusEl) statusEl.textContent = `🧠 MTE bloqueou: ${mteRes.motivo} | ${mteRes.mare === 'RUIM' ? '🔴 Maré ruim' : `Slot ${mteRes.slot} WR:${mteRes.wr_slot}%`}`;
                     return;
                 }
-                const autoChk2 = document.getElementById('dbs-auto-operar');
-                if (autoChk2 && autoChk2.checked) {
-                    if (statusEl) statusEl.textContent = `⚡ Loss Virtual liberado — Auto-operando: ${t.tipo} | B:${t.barreira} | ${t.ativo}`;
+
+                // ── [2] Filtro Dígitos Frios ──────────────────────────────────────────────
+                const _ffRes = _dbsFiltroFrioVerificar(t.tipo, t.barreira, t.ativo);
+                if (!_ffRes.ok) {
+                    if (statusEl) statusEl.textContent = `🎯 ${_ffRes.motivo}`;
+                    return;
+                }
+
+                // ── [3] Loss Virtual: bloqueia e simula ───────────────────────────────────
+                if (_dbsLvVerificar(sinalLv, () => {
+                    const _ffRes2 = _dbsFiltroFrioVerificar(t.tipo, t.barreira, t.ativo);
+                    if (!_ffRes2.ok) {
+                        if (statusEl) statusEl.textContent = `🎯 LV liberado mas ${_ffRes2.motivo}`;
+                        return;
+                    }
+                    const autoChk2 = document.getElementById('dbs-auto-operar');
+                    if (autoChk2 && autoChk2.checked) {
+                        if (statusEl) statusEl.textContent = `⚡ Loss Virtual liberado — Auto-operando: ${t.tipo} | B:${t.barreira} | ${t.ativo}`;
+                        bot.operarComSinal(sinalLv);
+                    }
+                })) {
+                    // bloqueado — simulação LV em andamento
+                } else {
+                    if (statusEl) statusEl.textContent = `⚡ Auto-operando: ${t.tipo} | Barreira ${t.barreira} | ${t.ativo} | Conf. ${t.confianca}%`;
                     bot.operarComSinal(sinalLv);
                 }
-            })) {
-                // bloqueado — simulação LV em andamento
-            } else {
-                if (statusEl) statusEl.textContent = `⚡ Auto-operando: ${t.tipo} | Barreira ${t.barreira} | ${t.ativo} | Conf. ${t.confianca}%`;
-                bot.operarComSinal(sinalLv);
-            }
+            });
         }
 
         // Auto-scan
@@ -20794,6 +20845,137 @@ function dbsOperarTop1() {
     if (_stManual) _stManual.textContent = `⚡ Operação enviada: ${t.tipo} | Barreira ${t.barreira} | ${t.ativo} | Conf. ${t.confianca}%`;
 }
 // ── FIM DIGIT BARRIER 356 ─────────────────────────────────────────────────────
+
+
+// ══════════════════════════════════════════════════════════════════════════════
+// MEMORY TIME ENGINE — UI e integração com o DBS
+// ══════════════════════════════════════════════════════════════════════════════
+let _mteTimer      = null;   // intervalo de polling do status
+let _mteDados      = null;   // último status recebido do servidor
+let _mteAtivo      = false;  // checkbox ligado?
+
+/** Atualiza o painel visual com os dados mais recentes do MTE. */
+function _mteAtualizarPainel(d) {
+    if (!d) return;
+    _mteDados = d;
+    const g   = id => document.getElementById(id);
+    const set = (id, v) => { const e = g(id); if (e) e.textContent = v; };
+    const col = (id, c) => { const e = g(id); if (e) e.style.color = c; };
+
+    const estado = d.estado || 'APRENDIZADO';
+    const dias   = d.dias_coletados || 0;
+    const max    = d.dias_minimos || 7;
+    const slot   = d.slot_atual  || {};
+    const mare   = d.mare        || 'NEUTRA';
+
+    // Estado badge
+    const estadoMap = {
+        APRENDIZADO: { txt: `🧠 APRENDENDO ${dias}/${max}d`, cor: '#fbbf24' },
+        ANALISANDO:  { txt: '🔄 ANALISANDO',                  cor: '#a78bfa' },
+        ATIVO:       { txt: '✅ ATIVO',                        cor: '#00ff88' },
+    };
+    const em = estadoMap[estado] || { txt: estado, cor: '#6b7280' };
+    set('dbs-mte-estado', em.txt);
+    col('dbs-mte-estado', em.cor);
+    set('dbs-mte-dias',   `${dias}/${max} dias`);
+
+    // Slot atual
+    const slotStatus = slot.status || 'APRENDENDO';
+    const slotClr = slotStatus === 'OPERAR' ? '#00ff88'
+                  : slotStatus === 'BLOQUEAR' ? '#f87171' : '#fbbf24';
+    set('dbs-mte-slot-status', `${slot.slot || '--:--'} — ${slotStatus}`);
+    col('dbs-mte-slot-status', slotClr);
+    set('dbs-mte-slot-wr', `WR: ${slot.wr != null ? slot.wr.toFixed(1) : '--'}%`);
+
+    // Maré
+    const mareClr = mare === 'BOA' ? '#00ff88' : mare === 'RUIM' ? '#f87171' : '#6b7280';
+    const mareTxt = mare === 'BOA' ? '🟢 BOA' : mare === 'RUIM' ? '🔴 RUIM' : '⚪ NEUTRA';
+    set('dbs-mte-mare', mareTxt);
+    col('dbs-mte-mare', mareClr);
+
+    // Próximo slot bloqueado ou liberado
+    const proximos = d.proximos_slots || [];
+    const proxBlq  = proximos.find(p => p.status === 'BLOQUEAR' && p.slot !== slot.slot);
+    const proxOp   = proximos.find(p => p.status === 'OPERAR'   && p.slot !== slot.slot);
+    if (proxBlq) {
+        set('dbs-mte-prox', `🔴 ${proxBlq.slot} (${proxBlq.wr.toFixed(0)}%)`);
+        col('dbs-mte-prox', '#f87171');
+    } else if (proxOp) {
+        set('dbs-mte-prox', `🟢 ${proxOp.slot} (${proxOp.wr.toFixed(0)}%)`);
+        col('dbs-mte-prox', '#00ff88');
+    } else {
+        set('dbs-mte-prox', '--');
+    }
+
+    // Exibe linhas extras só quando estado ativo/analisando
+    const mostrar = estado !== 'APRENDIZADO' || dias > 0;
+    const slotRow = g('dbs-mte-slot-row');
+    const mareRow = g('dbs-mte-mare-row');
+    if (slotRow) slotRow.style.display = mostrar ? 'flex' : 'none';
+    if (mareRow) mareRow.style.display = mostrar ? 'flex' : 'none';
+}
+
+/** Busca status do servidor e atualiza o painel. */
+function _mtePollStatus() {
+    const chk = document.getElementById('dbs-mte-ativo');
+    _mteAtivo = chk && chk.checked;
+
+    if (!_mteAtivo) {
+        clearInterval(_mteTimer);
+        _mteTimer = null;
+        const est = document.getElementById('dbs-mte-estado');
+        if (est) { est.textContent = 'INATIVO'; est.style.color = '#6b7280'; }
+        return;
+    }
+
+    // Busca imediata
+    fetch('/mte/status').then(r => r.json()).then(d => { if (d.ok) _mteAtualizarPainel(d); }).catch(() => {});
+
+    // Atualiza a cada 30s
+    clearInterval(_mteTimer);
+    _mteTimer = setInterval(() => {
+        if (!document.getElementById('dbs-mte-ativo')?.checked) {
+            clearInterval(_mteTimer); _mteTimer = null; return;
+        }
+        fetch('/mte/status').then(r => r.json()).then(d => { if (d.ok) _mteAtualizarPainel(d); }).catch(() => {});
+    }, 30000);
+}
+
+/**
+ * Verifica com o MTE se pode operar agora.
+ * Retorna Promise<{permitir, motivo, estado, mare, slot, wr_slot, status_slot}>.
+ */
+function _mteVerificarAntesDbs(tipo, ativo, fluxo) {
+    const chk = document.getElementById('dbs-mte-ativo');
+    if (!chk || !chk.checked) return Promise.resolve({ permitir: true, motivo: 'MTE_DESATIVADO' });
+    return fetch('/mte/pode-operar', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({
+            estrategia: tipo || '',
+            ativo:      ativo || '',
+            regime:     fluxo || 'DESCONHECIDO',
+            confianca:  0,
+            enabled:    true,
+        }),
+    }).then(r => r.json()).catch(() => ({ permitir: true, motivo: 'MTE_ERRO_REDE' }));
+}
+
+/** Registra resultado de uma operação DBS no MTE. */
+function _mteRegistrarDbs(resultado, tipo, ativo, fluxo, confianca, virtual) {
+    fetch('/mte/registrar', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({
+            resultado:  resultado,
+            estrategia: tipo    || '',
+            ativo:      ativo   || '',
+            regime:     fluxo   || 'DESCONHECIDO',
+            confianca:  confianca || 0,
+            virtual:    !!virtual,
+        }),
+    }).catch(() => {});
+}
 
 
 // ══════════════════════════════════════════════════════════════════════════════
