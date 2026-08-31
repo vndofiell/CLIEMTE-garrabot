@@ -4464,12 +4464,9 @@ class GerenciadorUnificado {
             case "📊 Masaniello": {
                 const _masK   = parseInt(cfg.mas_acertos || 3);
                 const _masPay = parseFloat(cfg.mas_pay   || 0.85);
-                // delta ampliado = entrada_real × (escala / stake)
-                // quando stake=escala (primeira entrada) → delta = entrada_real
-                const _esc = this._masaEscala || 1;
-                const _stk = parseFloat(cfg.stake || this.initialStake) || 1;
-                const _deltaW = this._masaUltimaEnt * _masPay * (_esc / _stk);
-                this._masaBanca = parseFloat((this._masaBanca + _deltaW).toFixed(6));
+                // WIN: banca sobe pelo lucro real (entrada × payout)
+                const _lucroMasa = this._masaUltimaEnt * _masPay;
+                this._masaBanca  = parseFloat((this._masaBanca + _lucroMasa).toFixed(4));
                 this._winsMasa++;
                 if (cfg.mas_tipo === 'Progressivo' && this._masaBanca >= this._masaGanhoMax) {
                     this._masaGanhoMax = this._masaBanca;
@@ -4547,11 +4544,9 @@ class GerenciadorUnificado {
                 break; }
 
             case "📊 Masaniello": {
-                // delta ampliado = entrada_real × (escala / stake)
-                const _escL = this._masaEscala || 1;
-                const _stkL = parseFloat(cfg.stake || this.initialStake) || 1;
-                const _deltaL = this._masaUltimaEnt * (_escL / _stkL);
-                this._masaBanca = parseFloat(Math.max(_escL * 0.01, this._masaBanca - _deltaL).toFixed(6));
+                // LOSS: banca desce pela entrada perdida
+                const _minBanca = parseFloat(cfg.stake || this.initialStake) * 0.01;
+                this._masaBanca = parseFloat(Math.max(_minBanca, this._masaBanca - this._masaUltimaEnt).toFixed(4));
                 this._opsMasa++;
                 if (cfg.mas_tipo === 'Progressivo') this._winsMasa = 0;
                 if (this._opsMasa >= parseInt(cfg.mas_eventos || 10)) { this._opsMasa = 0; this._winsMasa = 0; }
@@ -4637,9 +4632,9 @@ class GerenciadorUnificado {
     }
 
     // ── Masaniello: calcula entrada via tabela (equivalente ao Python calcula_entrada)
-    // Estratégia de escala: usa _masaBanca como banca real e a fórmula diretamente.
-    // _masaBanca começa = stake * ESCALA (ex: stake*1000) para dar range numérico adequado.
-    // A saída é sempre dividida por ESCALA para voltar à escala real.
+    // _masaBanca é mantido na mesma escala da stake (valores reais em $).
+    // A fórmula retorna fração × banca → mesma escala.
+    // WIN/LOSS atualizam _masaBanca diretamente na escala real.
     _calcMasa() {
         const cfg   = this.cfg;
         const n     = parseInt(cfg.mas_eventos || 10);
@@ -4653,22 +4648,19 @@ class GerenciadorUnificado {
 
         if (!t) return Math.max(MIN, stake);
 
-        // _masaBanca está na escala ampliada (stake * _masaEscala)
-        // _masaEscala é calculada uma vez para que a 1ª entrada = stake
+        // Inicializa _masaBanca na 1ª chamada:
+        // A fórmula Python usa banca passada pelo usuário. Aqui usamos stake como banca base.
+        // Para manter proporcionalidade, a banca começa = stake (1 unidade).
+        // Assim a 1ª entrada = fração × stake, que é o valor correto proporcional.
         if (!this._masaEscala) {
-            // Calcula a 1ª entrada com banca=1 para obter a fração real
-            try {
-                const v11 = parseFloat(t[1][1]), v10 = parseFloat(t[1][0]);
-                const ent1com1 = Math.abs((1 - pay * v11 / (v10 + (pay - 1) * v11)) * 1);
-                // Para que ent1 = stake: banca_ampliada = stake / ent1com1
-                this._masaEscala = (ent1com1 > 0) ? stake / ent1com1 : stake;
-            } catch(_) { this._masaEscala = stake; }
-            this._masaBanca = this._masaEscala;  // reinicia banca na escala correta
+            this._masaEscala = true;  // flag "já inicializado"
+            this._masaBanca  = stake;
+            this._masaGanhoMax = stake;
         }
 
         const banca = this._masaBanca;
 
-        // Função auxiliar: fórmula Python calcula_entrada para estado (row, col)
+        // Fórmula idêntica ao Python calcula_entrada
         const calcEnt = (row, col0, col1) => {
             try {
                 const v10 = parseFloat(t[row][col0]);
@@ -4678,7 +4670,7 @@ class GerenciadorUnificado {
             } catch(_) { return null; }
         };
 
-        // Primeira entrada: linha 1, colunas 0 e 1 (calcula_primeira do Python)
+        // 1ª entrada (calcula_primeira do Python): linha 1, colunas 0 e 1
         if (this._masaPrimeira) {
             this._masaPrimeira = false;
             const ent = calcEnt(1, 0, 1);
@@ -4688,9 +4680,9 @@ class GerenciadorUnificado {
 
         if (qWins >= k) { this._masaUltimaEnt = stake; return Math.max(MIN, stake); }
 
-        const row   = qLoss + qWins + 1;
-        const col0  = qWins;
-        const col1  = qWins + 1;
+        const row  = qLoss + qWins + 1;
+        const col0 = qWins;
+        const col1 = qWins + 1;
         if (row >= n || col1 >= k) {
             this._masaUltimaEnt = Math.max(MIN, stake);
             return this._masaUltimaEnt;
@@ -20979,17 +20971,8 @@ function dbsMasaAtualizarTabela() {
     const t = _dbsMasaBuildTabela(n, k, pay);
     const MIN = 0.35;
 
-    // ── Escala: calibra banca para que a 1ª entrada = stakeBase ──────────────
-    // Calcula a 1ª entrada com banca=1 → obtém a fração real
-    let escala = stakeBase; // fallback
-    try {
-        const v11_0 = parseFloat(t[1][1]), v10_0 = parseFloat(t[1][0]);
-        const ent1 = Math.abs((1 - pay * v11_0 / (v10_0 + (pay - 1) * v11_0)) * 1);
-        if (ent1 > 0) escala = stakeBase / ent1;
-    } catch(_) {}
-
-    // Calcula entrada para um estado com banca na escala ampliada
-    function calcEntradaEstado(qLoss, qWins, bancaAmpliada, isPrimeira) {
+    // Calcula entrada para um estado — banca na mesma escala da stake
+    function calcEntradaEstado(qLoss, qWins, banca, isPrimeira) {
         try {
             const row  = isPrimeira ? 1 : (qLoss + qWins + 1);
             const col0 = isPrimeira ? 0 : qWins;
@@ -20999,50 +20982,39 @@ function dbsMasaAtualizarTabela() {
             const v10 = parseFloat(t[row][col0]);
             const v11 = parseFloat(t[row][col1]);
             if (isNaN(v10) || isNaN(v11) || String(t[row][col0]) === 'NaN') return Math.max(MIN, stakeBase);
-            const ent = Math.abs((1 - pay * v11 / (v10 + (pay - 1) * v11)) * bancaAmpliada);
+            const ent = Math.abs((1 - pay * v11 / (v10 + (pay - 1) * v11)) * banca);
             return Math.max(MIN, Math.round(ent * 100) / 100);
         } catch(_) { return Math.max(MIN, stakeBase); }
     }
 
-    // ── Simula o ciclo completo: cenário pior caso (todos loss) + recuperação ─────
-    // Exibe linha por linha o que acontece a cada operação, atualizando banca_final
-    // bancaAmpliada = banca na escala interna (começa = escala, equivalente a stakeBase na 1ª entrada)
+    // Simula o ciclo: banca começa = stakeBase (escala real)
     const linhas = [];
-    let bancaAmpliada = escala;
+    let banca = stakeBase;
     let qWins = 0, qLoss = 0;
-    let ganhoMax = escala;
+    let ganhoMax = stakeBase;
     let isPrimeira = true;
 
     for (let op = 1; op <= Math.min(n * 2, 40); op++) {
-        const entrada = calcEntradaEstado(qLoss, qWins, bancaAmpliada, isPrimeira);
+        const entrada = calcEntradaEstado(qLoss, qWins, banca, isPrimeira);
         isPrimeira = false;
+        linhas.push({ op, wins: qWins, loss: qLoss, entrada, banca: parseFloat(banca.toFixed(4)) });
 
-        // Banca real para exibição = bancaAmpliada * (stakeBase / escala) = bancaAmpliada / (escala / stakeBase)
-        const bancaReal = parseFloat((bancaAmpliada * stakeBase / escala).toFixed(4));
-        linhas.push({ op, wins: qWins, loss: qLoss, entrada, banca: bancaReal });
-
-        // Delta da banca ampliada por entrada = entrada / stakeBase * escala
-        const deltaAmpliado = (stakeBase > 0) ? entrada * escala / stakeBase : entrada;
-
-        // LOSS: reduz banca
-        bancaAmpliada = Math.max(escala * 0.01, parseFloat((bancaAmpliada - deltaAmpliado).toFixed(6)));
+        // LOSS: banca desce
+        banca = Math.max(stakeBase * 0.01, parseFloat((banca - entrada).toFixed(4)));
         qLoss++;
 
-        // Após K-1 losses, intercala WIN para mostrar recuperação
+        // A cada K-1 losses intercala WIN para mostrar ciclo de recuperação
         if (qLoss > 0 && qLoss % (k - 1 || 1) === 0) {
-            // WIN: lucro na escala ampliada
-            const lucroAmpliado = deltaAmpliado * pay;
-            bancaAmpliada = parseFloat((bancaAmpliada + deltaAmpliado + lucroAmpliado).toFixed(6));
+            banca = parseFloat((banca + entrada + entrada * pay).toFixed(4));
             qWins++;
             qLoss = Math.max(0, qLoss - 1);
-            if (tipo === 'Progressivo' && bancaAmpliada >= ganhoMax) {
-                ganhoMax = bancaAmpliada; qWins = 0; qLoss = 0;
+            if (tipo === 'Progressivo' && banca >= ganhoMax) {
+                ganhoMax = banca; qWins = 0; qLoss = 0;
             }
-            if (qWins >= k) { qWins = 0; qLoss = 0; bancaAmpliada = escala; ganhoMax = escala; }
+            if (qWins >= k) { qWins = 0; qLoss = 0; banca = stakeBase; ganhoMax = stakeBase; }
             linhas[linhas.length - 1].isWin = true;
         }
-
-        if (qLoss + qWins >= n) { qLoss = 0; qWins = 0; bancaAmpliada = escala; }
+        if (qLoss + qWins >= n) { qLoss = 0; qWins = 0; banca = stakeBase; }
     }
 
     // Renderiza
