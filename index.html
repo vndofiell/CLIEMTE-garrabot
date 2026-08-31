@@ -3949,7 +3949,7 @@
     </div>
 
     <!-- Campos de configuração -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 14px;margin-bottom:14px;">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 14px;margin-bottom:10px;">
       <div>
         <div style="font-size:0.6rem;color:#9ca3af;margin-bottom:4px;">TOTAL DE EVENTOS (N)</div>
         <input id="dbs-masa-n" type="number" value="10" min="2" max="50" step="1"
@@ -3960,7 +3960,7 @@
       </div>
       <div>
         <div style="font-size:0.6rem;color:#9ca3af;margin-bottom:4px;">ACERTOS ESPERADOS (K)</div>
-        <input id="dbs-masa-k" type="number" value="5" min="1" max="49" step="1"
+        <input id="dbs-masa-k" type="number" value="3" min="1" max="49" step="1"
             oninput="dbsMasaAtualizarTabela()"
             style="width:100%;background:#0d0f1a;border:1px solid rgba(168,85,247,0.5);
                    color:#c084fc;font-family:'Share Tech Mono';font-size:0.82rem;
@@ -3999,6 +3999,13 @@
             border-radius:5px;padding:6px 9px;width:100%;box-sizing:border-box;"></div>
       </div>
     </div>
+
+    <!-- Painel de risco dinâmico -->
+    <div id="dbs-masa-risco" style="
+        display:none; margin-bottom:10px;
+        border-radius:6px; padding:8px 11px;
+        font-size:0.62rem; line-height:1.65;
+        font-family:'Share Tech Mono',monospace;"></div>
 
     <!-- Tabela de entradas -->
     <div style="font-size:0.6rem;color:#6b7280;letter-spacing:1px;margin-bottom:6px;">📋 SEQUÊNCIA DE ENTRADAS CALCULADA</div>
@@ -20965,19 +20972,20 @@ function _dbsMasaCalcEntrada(t, n, k, pay, banca, qWins, qLoss, isPrimeira) {
 // exatamente como o Python — usando stake como banca base fixa (não a banca da conta)
 function dbsMasaAtualizarTabela() {
     const n    = parseInt(document.getElementById('dbs-masa-n')?.value)    || 10;
-    const k    = parseInt(document.getElementById('dbs-masa-k')?.value)    || 5;
+    const k    = parseInt(document.getElementById('dbs-masa-k')?.value)    || 3;
     const pay  = parseFloat(document.getElementById('dbs-masa-pay')?.value)  || 0.85;
     const tipo = document.getElementById('dbs-masa-tipo')?.value || 'Normal';
-    // "banca" aqui é a STAKE INICIAL — é o parâmetro banca do Masaniello Python
     const stakeBase = parseFloat(document.getElementById('dbs-masa-banca')?.value) || 0.35;
 
-    const tbody = document.getElementById('dbs-masa-tabela-body');
+    const tbody  = document.getElementById('dbs-masa-tabela-body');
     const resumo = document.getElementById('dbs-masa-resumo');
+    const riscoEl = document.getElementById('dbs-masa-risco');
     if (!tbody) return;
 
     if (k >= n) {
         tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:12px;color:#f87171;">⚠️ K deve ser menor que N</td></tr>`;
         if (resumo) resumo.textContent = '⚠️ K deve ser menor que N';
+        if (riscoEl) riscoEl.style.display = 'none';
         return;
     }
 
@@ -21023,11 +21031,9 @@ function dbsMasaAtualizarTabela() {
         const bancaReal = parseFloat((banca100 * ratio).toFixed(4));
         linhas.push({ op, wins: qWins, loss: qLoss, entrada, banca: bancaReal });
 
-        // LOSS: banca interna desce
         banca100 = Math.max(1, parseFloat((banca100 - ent100).toFixed(6)));
         qLoss++;
 
-        // A cada K-1 losses intercala WIN para mostrar recuperação
         if (qLoss > 0 && qLoss % (k - 1 || 1) === 0) {
             banca100 = parseFloat((banca100 + ent100 + ent100 * pay).toFixed(6));
             qWins++;
@@ -21041,41 +21047,115 @@ function dbsMasaAtualizarTabela() {
         if (qLoss + qWins >= n) { qLoss = 0; qWins = 0; banca100 = 100; }
     }
 
-    // Renderiza
+    // ── Renderiza linhas (destaca entradas acima de 5× a stake inicial) ──────
     tbody.innerHTML = linhas.map((row, idx) => {
-        const cor   = row.isWin ? '#4ade80' : (row.loss > 0 ? '#f87171' : '#c084fc');
-        const bg    = idx % 2 === 0 ? 'rgba(168,85,247,0.04)' : 'transparent';
-        const icone = row.isWin ? '✅' : (row.loss > 0 ? '❌' : '▶');
-        return `<tr style="background:${bg};">
+        const cor    = row.isWin ? '#4ade80' : (row.loss > 0 ? '#f87171' : '#c084fc');
+        const bg     = idx % 2 === 0 ? 'rgba(168,85,247,0.04)' : 'transparent';
+        const icone  = row.isWin ? '✅' : (row.loss > 0 ? '❌' : '▶');
+        const perigo = (!row.isWin && row.entrada > stakeBase * 5);
+        const bgRow  = perigo ? 'rgba(239,68,68,0.12)' : bg;
+        const entStyle = perigo
+            ? 'color:#fbbf24;font-weight:bold;background:rgba(251,191,36,0.1);border-radius:3px;padding:1px 4px;'
+            : `color:${cor};font-weight:bold;`;
+        return `<tr style="background:${bgRow};">
             <td style="padding:4px 8px;text-align:center;color:#6b7280;">${icone} ${row.op}</td>
             <td style="padding:4px 8px;text-align:center;color:#4ade80;">${row.wins}</td>
             <td style="padding:4px 8px;text-align:center;color:#f87171;">${row.loss}</td>
-            <td style="padding:4px 8px;text-align:right;color:${cor};font-weight:bold;">$${row.entrada.toFixed(2)}</td>
+            <td style="padding:4px 8px;text-align:right;${entStyle}">$${row.entrada.toFixed(2)}${perigo ? ' ⚠' : ''}</td>
             <td style="padding:4px 8px;text-align:right;color:#9ca3af;">$${row.banca.toFixed(4)}</td>
         </tr>`;
     }).join('');
 
-    // Resumo
+    // ── Resumo ────────────────────────────────────────────────────────────────
     const entradas = linhas.map(r => r.entrada).filter(e => e > 0);
-    const e1 = linhas[0]?.entrada || 0;
+    const e1   = linhas[0]?.entrada || 0;
     const eMax = entradas.length ? Math.max(...entradas) : 0;
     if (resumo) resumo.innerHTML =
         `1ª entrada: <span style="color:#c084fc;font-weight:bold;">$${e1.toFixed(2)}</span><br>` +
         `Maior entrada: <span style="color:#f87171;font-weight:bold;">$${eMax.toFixed(2)}</span><br>` +
         `Payout: <span style="color:#a78bfa;">${(pay*100).toFixed(0)}%</span> | Modo: <span style="color:#a78bfa;">${tipo}</span>`;
+
+    // ── Painel de risco dinâmico ──────────────────────────────────────────────
+    if (riscoEl) {
+        const ratio_kn   = k / n;           // proporção acertos/eventos
+        const multiplicador = eMax / e1;    // quanto a maior entrada é da primeira
+
+        let nivel = 0; // 0=ok 1=atenção 2=perigo
+        const avisos = [];
+
+        if (ratio_kn >= 0.45) {
+            nivel = Math.max(nivel, 2);
+            avisos.push(`⛔ K/N = ${(ratio_kn*100).toFixed(0)}% — muito agressivo. Tente K≤${Math.floor(n*0.35)} para N=${n}.`);
+        } else if (ratio_kn >= 0.35) {
+            nivel = Math.max(nivel, 1);
+            avisos.push(`⚠️ K/N = ${(ratio_kn*100).toFixed(0)}% — moderadamente agressivo. Recomendado: K≤${Math.floor(n*0.35)}.`);
+        }
+
+        if (pay < 0.90 && ratio_kn >= 0.40) {
+            nivel = Math.max(nivel, 2);
+            avisos.push(`⛔ Payout ${(pay*100).toFixed(0)}% + K/N alto = curva de recuperação muito íngreme.`);
+        }
+
+        if (multiplicador > 10) {
+            nivel = Math.max(nivel, 2);
+            avisos.push(`⛔ A maior entrada ($${eMax.toFixed(2)}) é ${multiplicador.toFixed(0)}× a 1ª. Risco de ruína elevado.`);
+        } else if (multiplicador > 5) {
+            nivel = Math.max(nivel, 1);
+            avisos.push(`⚠️ A maior entrada ($${eMax.toFixed(2)}) é ${multiplicador.toFixed(0)}× a 1ª. Monitore a banca.`);
+        }
+
+        if (nivel === 0) {
+            riscoEl.style.display = 'block';
+            riscoEl.style.background = 'rgba(74,222,128,0.08)';
+            riscoEl.style.border     = '1px solid rgba(74,222,128,0.35)';
+            riscoEl.style.color      = '#4ade80';
+            riscoEl.innerHTML = `✅ Parâmetros conservadores — curva de recuperação suave.<br><span style="color:#6b7280;font-size:0.58rem;">Multiplicador máx: ${multiplicador.toFixed(1)}× | K/N: ${(ratio_kn*100).toFixed(0)}%</span>`;
+        } else if (nivel === 1) {
+            riscoEl.style.display = 'block';
+            riscoEl.style.background = 'rgba(251,191,36,0.08)';
+            riscoEl.style.border     = '1px solid rgba(251,191,36,0.4)';
+            riscoEl.style.color      = '#fbbf24';
+            riscoEl.innerHTML = avisos.join('<br>') +
+                `<br><span style="color:#6b7280;font-size:0.58rem;">Multiplicador máx: ${multiplicador.toFixed(1)}× | K/N: ${(ratio_kn*100).toFixed(0)}%</span>`;
+        } else {
+            riscoEl.style.display = 'block';
+            riscoEl.style.background = 'rgba(239,68,68,0.10)';
+            riscoEl.style.border     = '1px solid rgba(239,68,68,0.5)';
+            riscoEl.style.color      = '#f87171';
+            riscoEl.innerHTML = avisos.join('<br>') +
+                `<br><span style="color:#9ca3af;font-size:0.58rem;">Multiplicador máx: ${multiplicador.toFixed(1)}× | K/N: ${(ratio_kn*100).toFixed(0)}% — ajuste os parâmetros antes de confirmar.</span>`;
+        }
+
+        // Armazena nível para o botão Confirmar
+        riscoEl.dataset.nivel = nivel;
+    }
 }
 
 function dbsMasaConfirmar() {
     const n     = parseInt(document.getElementById('dbs-masa-n')?.value)   || 10;
-    const k     = parseInt(document.getElementById('dbs-masa-k')?.value)   || 5;
+    const k     = parseInt(document.getElementById('dbs-masa-k')?.value)   || 3;
     const pay   = parseFloat(document.getElementById('dbs-masa-pay')?.value) || 0.85;
     const tipo  = document.getElementById('dbs-masa-tipo')?.value || 'Normal';
-    // stake = valor do campo "Stake Inicial" do modal Masaniello
     const stakeModal = parseFloat(document.getElementById('dbs-masa-banca')?.value) || 0.35;
 
     if (k >= n) {
         const resumo = document.getElementById('dbs-masa-resumo');
         if (resumo) resumo.innerHTML = `<span style="color:#f87171;">⚠️ K deve ser menor que N</span>`;
+        return;
+    }
+
+    // Bloqueia confirmação se o nível de risco for PERIGO (vermelho)
+    const riscoEl = document.getElementById('dbs-masa-risco');
+    if (riscoEl && parseInt(riscoEl.dataset.nivel) >= 2) {
+        riscoEl.style.background = 'rgba(239,68,68,0.18)';
+        riscoEl.style.border     = '2px solid #ef4444';
+        const msgBloqueio = `<b>🚫 CONFIRMAÇÃO BLOQUEADA — parâmetros com risco de ruína.</b><br>Reduza K ou aumente N antes de continuar.<br>` +
+            `<span style="color:#fbbf24;">Sugestão: N=${n}, K=${Math.floor(n*0.3)} (${Math.floor(n*0.3*100/n)}%)</span>`;
+        riscoEl.innerHTML = riscoEl.innerHTML.replace(/<b>🚫.*<\/span>/s, '') + '<br>' + msgBloqueio;
+        // Pisca o painel para chamar atenção
+        riscoEl.style.transition = 'opacity 0.1s';
+        let blink = 0;
+        const iv = setInterval(() => { riscoEl.style.opacity = (blink++ % 2 === 0) ? '0.4' : '1'; if (blink > 5) { clearInterval(iv); riscoEl.style.opacity = '1'; } }, 120);
         return;
     }
 
