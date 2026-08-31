@@ -4,3 +4,4 @@ urllib3
 gunicorn
 pillow
 youtube-transcript-api
+pandas
