@@ -4643,37 +4643,39 @@ class GerenciadorUnificado {
 
         if (!t) return base;
 
+        const MIN_STAKE = 0.35;
+
         // Primeira entrada: usa linha 1, coluna 0 e 1 (índice base)
         if (this._masaPrimeira) {
             this._masaPrimeira = false;
             try {
                 const v11 = t[1][1], v10 = t[1][0];
-                if (v11 === 'NaN' || v10 === 'NaN') return base;
+                if (v11 === 'NaN' || v10 === 'NaN') return Math.max(MIN_STAKE, base);
                 const ent = (1 - pay * parseFloat(v11) / (parseFloat(v10) + (pay - 1) * parseFloat(v11))) * banca;
                 this._masaUltimaEnt = Math.round(Math.abs(ent) * 100) / 100;
             } catch(_) { this._masaUltimaEnt = base; }
-            return Math.max(base, this._masaUltimaEnt);
+            return Math.max(MIN_STAKE, base, this._masaUltimaEnt);
         }
 
-        if (qWins >= k) { this._masaUltimaEnt = 0; return base; }
+        if (qWins >= k) { this._masaUltimaEnt = 0; return Math.max(MIN_STAKE, base); }
 
         try {
             const rowIdx = qLoss + qWins + 1;
             const colIdx = qWins + 1;
             const colIdx0 = qWins;
-            if (rowIdx >= n || colIdx >= k || colIdx0 >= k) return base;
+            if (rowIdx >= n || colIdx >= k || colIdx0 >= k) return Math.max(MIN_STAKE, base);
             const v11 = t[rowIdx][colIdx];
             const v10 = t[rowIdx][colIdx0];
             if (v11 === 'NaN' || v10 === 'NaN') {
-                this._masaUltimaEnt = banca;
-                return Math.max(base, banca);
+                this._masaUltimaEnt = Math.max(MIN_STAKE, banca);
+                return this._masaUltimaEnt;
             }
             const ent = (1 - pay * parseFloat(v11) / (parseFloat(v10) + (pay - 1) * parseFloat(v11))) * banca;
             this._masaUltimaEnt = Math.round(Math.abs(ent) * 100) / 100;
-            return Math.max(base, this._masaUltimaEnt);
+            return Math.max(MIN_STAKE, base, this._masaUltimaEnt);
         } catch(_) {
-            this._masaUltimaEnt = banca;
-            return Math.max(base, banca);
+            this._masaUltimaEnt = Math.max(MIN_STAKE, banca);
+            return this._masaUltimaEnt;
         }
     }
 
@@ -20958,23 +20960,25 @@ function dbsMasaAtualizarTabela() {
     //   entrada = (1 - pay * t[row][col+1] / (t[row][col] + (pay-1)*t[row][col+1])) * banca
     // onde row = qLoss+qWins+1, col = qWins  (indexação 0-based)
     function calcEntradaEstado(qLoss, qWins, banca, isPrimeira) {
+        const MIN = 0.35;
         try {
             if (isPrimeira) {
-                // Equivalente a calcula_primeira(): usa linha 1, colunas 0 e 1
                 const v11 = parseFloat(t[1][1]), v10 = parseFloat(t[1][0]);
-                if (isNaN(v11) || isNaN(v10)) return stakeBase;
-                return Math.round(Math.abs((1 - pay * v11 / (v10 + (pay - 1) * v11)) * banca) * 100) / 100;
+                if (isNaN(v11) || isNaN(v10)) return Math.max(MIN, stakeBase);
+                const r = Math.round(Math.abs((1 - pay * v11 / (v10 + (pay - 1) * v11)) * banca) * 100) / 100;
+                return Math.max(MIN, r);
             }
-            if (qWins >= k) return 0;
+            if (qWins >= k) return Math.max(MIN, stakeBase);
             const row  = qLoss + qWins + 1;
-            const col  = qWins;       // coluna qWins   → t[row][col]
-            const col1 = qWins + 1;   // coluna qWins+1 → t[row][col+1]
-            if (row >= n || col1 >= k) return banca; // fora da tabela → usa banca restante
+            const col  = qWins;
+            const col1 = qWins + 1;
+            if (row >= n || col1 >= k) return Math.max(MIN, banca);
             const v10 = parseFloat(t[row][col]);
             const v11 = parseFloat(t[row][col1]);
-            if (isNaN(v10) || isNaN(v11)) return banca;
-            return Math.round(Math.abs((1 - pay * v11 / (v10 + (pay - 1) * v11)) * banca) * 100) / 100;
-        } catch(_) { return stakeBase; }
+            if (isNaN(v10) || isNaN(v11)) return Math.max(MIN, banca);
+            const r = Math.round(Math.abs((1 - pay * v11 / (v10 + (pay - 1) * v11)) * banca) * 100) / 100;
+            return Math.max(MIN, r);
+        } catch(_) { return Math.max(MIN, stakeBase); }
     }
 
     // ── Simula o ciclo completo: cenário pior caso (todos loss) + recuperação ─────
