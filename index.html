@@ -4401,10 +4401,13 @@ class GerenciadorUnificado {
         this._raLosses  = 0;
         // ── Masaniello — tabela bidimensional (fiel ao Python) ───────────────
         if (modo === '📊 Masaniello') {
-            this._masaBanca      = base;          // banca_final (varia com resultados)
-            this._masaPrimeira   = true;           // primeira_entrada
-            this._masaGanhoMax   = base;           // ganho_max (modo Progressivo)
-            this._masaUltimaEnt  = 0;             // ultima_entrada
+            // _masaBanca começa em 100 (banca interna), o fator de escala
+            // converte para stake real. Calculado lazy na primeira chamada de _calcMasa.
+            this._masaBanca      = 100;
+            this._masaFator      = null;           // calculado na 1ª chamada
+            this._masaPrimeira   = true;
+            this._masaGanhoMax   = 100;            // ganho_max na escala interna
+            this._masaUltimaEnt  = 0;
             this._masaTabela     = this._masaBuildTabela(
                 parseInt(cfg.mas_eventos || 10),
                 parseInt(cfg.mas_acertos || 3),
@@ -4461,11 +4464,12 @@ class GerenciadorUnificado {
             case "📊 Masaniello": {
                 const _masK   = parseInt(cfg.mas_acertos || 3);
                 const _masPay = parseFloat(cfg.mas_pay   || 0.85);
-                const _masN   = parseInt(cfg.mas_eventos || 10);
-                const _lucro  = this._masaUltimaEnt * (_masPay);
-                this._masaBanca = parseFloat((this._masaBanca + _lucro).toFixed(2));
+                // Converte lucro para escala interna antes de atualizar _masaBanca
+                const _fatorW = this._masaFator || 1;
+                const _lucroInterno = (_fatorW > 0) ? (this._masaUltimaEnt * _masPay / _fatorW) : 0;
+                this._masaBanca = parseFloat((this._masaBanca + _lucroInterno).toFixed(4));
                 this._winsMasa++;
-                // Modo Progressivo: reset se atingiu novo máximo de banca
+                // Modo Progressivo: reset se atingiu novo máximo de banca interna
                 if (cfg.mas_tipo === 'Progressivo' && this._masaBanca >= this._masaGanhoMax) {
                     this._masaGanhoMax = this._masaBanca;
                     this._winsMasa = 0; this._opsMasa = 0;
@@ -4542,8 +4546,10 @@ class GerenciadorUnificado {
                 break; }
 
             case "📊 Masaniello": {
-                const _masLoss = this._masaUltimaEnt;
-                this._masaBanca = parseFloat(Math.max(0.01, this._masaBanca - _masLoss).toFixed(2));
+                // Converte loss para escala interna antes de atualizar _masaBanca
+                const _fatorL = this._masaFator || 1;
+                const _lossInterno = (_fatorL > 0) ? (this._masaUltimaEnt / _fatorL) : 0;
+                this._masaBanca = parseFloat(Math.max(1, this._masaBanca - _lossInterno).toFixed(4));
                 this._opsMasa++;
                 // Modo Progressivo: loss reseta wins
                 if (cfg.mas_tipo === 'Progressivo') this._winsMasa = 0;
@@ -4630,53 +4636,83 @@ class GerenciadorUnificado {
     }
 
     // ── Masaniello: calcula entrada via tabela (equivalente a calcula_entrada()) ─
+    // ── Calcula fração da tabela com banca=100 (base) ─────────────────────────
+    _masaCalcFrac(rowIdx, colIdx0, colIdx1, pay) {
+        const t = this._masaTabela;
+        if (!t) return null;
+        try {
+            const v10 = parseFloat(t[rowIdx][colIdx0]);
+            const v11 = parseFloat(t[rowIdx][colIdx1]);
+            if (isNaN(v10) || isNaN(v11)) return null;
+            return Math.abs(1 - pay * v11 / (v10 + (pay - 1) * v11));
+        } catch(_) { return null; }
+    }
+
     _calcMasa() {
-        const cfg      = this.cfg;
-        const n        = parseInt(cfg.mas_eventos || 10);
-        const k        = parseInt(cfg.mas_acertos || 3);
-        const pay      = parseFloat(cfg.mas_pay   || 0.85);
-        const base     = parseFloat(cfg.stake      || this.initialStake);
-        const t        = this._masaTabela;
-        const banca    = this._masaBanca;
-        const qWins    = this._winsMasa;
-        const qLoss    = this._opsMasa;
+        const cfg   = this.cfg;
+        const n     = parseInt(cfg.mas_eventos || 10);
+        const k     = parseInt(cfg.mas_acertos || 3);
+        const pay   = parseFloat(cfg.mas_pay   || 0.85);
+        const stake = parseFloat(cfg.stake      || this.initialStake);  // stake real desejada
+        const t     = this._masaTabela;
+        const qWins = this._winsMasa;
+        const qLoss = this._opsMasa;
+        const MIN   = 0.35;
 
-        if (!t) return base;
+        if (!t) return Math.max(MIN, stake);
 
-        const MIN_STAKE = 0.35;
+        // ── Fator de escala ──────────────────────────────────────────────────
+        // A tabela é calculada com banca_interna=100.
+        // A primeira entrada com banca=100 é uma fração f1.
+        // O usuário quer que a primeira entrada seja = stake.
+        // Portanto: fator = stake / (f1 * 100)
+        // Todas as entradas seguintes = fração_atual * 100 * fator
+        if (!this._masaFator) {
+            // Calcula f1 = fração da primeira entrada (linha 1, colunas 0 e 1)
+            const f1 = (t[1] && t[1][1] !== 'NaN' && t[1][0] !== 'NaN')
+                ? this._masaCalcFrac(1, 0, 1, pay)
+                : null;
+            if (f1 && f1 > 0) {
+                // fator: stake / (f1 * 100)  → escalona toda a tabela para stake
+                this._masaFator = stake / (f1 * 100);
+            } else {
+                this._masaFator = stake / 100;
+            }
+        }
+        const fator = this._masaFator;
 
-        // Primeira entrada: usa linha 1, coluna 0 e 1 (índice base)
+        // ── banca_interna flutuante (começa em 100, sobe/desce com resultados) ─
+        // _masaBanca é mantido em escala real (igual ao stake).
+        // Para a fórmula, precisamos da banca na escala interna (÷ fator).
+        const bancaInterna = (fator > 0) ? (this._masaBanca / fator) : 100;
+
+        // ── Primeira entrada ────────────────────────────────────────────────
         if (this._masaPrimeira) {
             this._masaPrimeira = false;
-            try {
-                const v11 = t[1][1], v10 = t[1][0];
-                if (v11 === 'NaN' || v10 === 'NaN') return Math.max(MIN_STAKE, base);
-                const ent = (1 - pay * parseFloat(v11) / (parseFloat(v10) + (pay - 1) * parseFloat(v11))) * banca;
-                this._masaUltimaEnt = Math.round(Math.abs(ent) * 100) / 100;
-            } catch(_) { this._masaUltimaEnt = base; }
-            return Math.max(MIN_STAKE, base, this._masaUltimaEnt);
-        }
-
-        if (qWins >= k) { this._masaUltimaEnt = 0; return Math.max(MIN_STAKE, base); }
-
-        try {
-            const rowIdx = qLoss + qWins + 1;
-            const colIdx = qWins + 1;
-            const colIdx0 = qWins;
-            if (rowIdx >= n || colIdx >= k || colIdx0 >= k) return Math.max(MIN_STAKE, base);
-            const v11 = t[rowIdx][colIdx];
-            const v10 = t[rowIdx][colIdx0];
-            if (v11 === 'NaN' || v10 === 'NaN') {
-                this._masaUltimaEnt = Math.max(MIN_STAKE, banca);
-                return this._masaUltimaEnt;
-            }
-            const ent = (1 - pay * parseFloat(v11) / (parseFloat(v10) + (pay - 1) * parseFloat(v11))) * banca;
-            this._masaUltimaEnt = Math.round(Math.abs(ent) * 100) / 100;
-            return Math.max(MIN_STAKE, base, this._masaUltimaEnt);
-        } catch(_) {
-            this._masaUltimaEnt = Math.max(MIN_STAKE, banca);
+            const f = this._masaCalcFrac(1, 0, 1, pay);
+            const ent = (f !== null) ? Math.round(f * bancaInterna * fator * 100) / 100 : stake;
+            this._masaUltimaEnt = Math.max(MIN, ent);
             return this._masaUltimaEnt;
         }
+
+        if (qWins >= k) { this._masaUltimaEnt = stake; return Math.max(MIN, stake); }
+
+        const rowIdx  = qLoss + qWins + 1;
+        const colIdx0 = qWins;
+        const colIdx1 = qWins + 1;
+        if (rowIdx >= n || colIdx1 >= k) {
+            this._masaUltimaEnt = Math.max(MIN, stake);
+            return this._masaUltimaEnt;
+        }
+
+        const f = this._masaCalcFrac(rowIdx, colIdx0, colIdx1, pay);
+        if (f === null) {
+            this._masaUltimaEnt = Math.max(MIN, stake);
+            return this._masaUltimaEnt;
+        }
+        const ent = Math.round(f * bancaInterna * fator * 100) / 100;
+        this._masaUltimaEnt = Math.max(MIN, ent);
+        return this._masaUltimaEnt;
     }
 
     // ── Juros Compostos — recalcula stake pela banca atual ───────────────────
@@ -20789,7 +20825,6 @@ function _dbsCarregarConfig() {
         _dbsMasaCfg = cfg.masaCfg;
         // Se o gerenciamento salvo era Masaniello, instancia diretamente sem abrir modal
         if (cfg.mgr === '📊 Masaniello') {
-            // banca salva = stake inicial (campo "Stake Inicial" do modal)
             const stakeRestaurada = parseFloat(cfg.masaCfg.banca) || parseFloat(cfg.entrada) || 0.35;
             _dbsMgr = new GerenciadorUnificado('📊 Masaniello', {
                 stake:       stakeRestaurada,
@@ -20798,8 +20833,10 @@ function _dbsCarregarConfig() {
                 mas_pay:     cfg.masaCfg.pay,
                 mas_tipo:    cfg.masaCfg.tipo,
             });
-            // Banca inicial = stake (igual ao Python)
-            if (_dbsMgr._masaBanca !== undefined) _dbsMgr._masaBanca = stakeRestaurada;
+            // Banca interna = 100 (escala normalizada); fator recalculado lazy
+            if (_dbsMgr._masaBanca !== undefined) _dbsMgr._masaBanca = 100;
+            if (_dbsMgr._masaFator !== undefined) _dbsMgr._masaFator = null;
+            if (_dbsMgr._masaGanhoMax !== undefined) _dbsMgr._masaGanhoMax = 100;
             dbsMgrAtualizarStats();
         }
     }
@@ -20955,36 +20992,42 @@ function dbsMasaAtualizarTabela() {
     // Constrói tabela com stake como banca (igual ao Python: self.banca = banca)
     const t = _dbsMasaBuildTabela(n, k, pay);
 
-    // ── Calcula entrada para um estado (qLoss, qWins) com banca flutuante ────────
-    // Fórmula idêntica ao calcula_entrada() do Python:
-    //   entrada = (1 - pay * t[row][col+1] / (t[row][col] + (pay-1)*t[row][col+1])) * banca
-    // onde row = qLoss+qWins+1, col = qWins  (indexação 0-based)
-    function calcEntradaEstado(qLoss, qWins, banca, isPrimeira) {
-        const MIN = 0.35;
+    // ── Fator de escala: banca interna = 100, fator = stakeBase / (f1 * 100) ─────
+    const MIN = 0.35;
+    let fator = 1;
+    try {
+        const v11_0 = parseFloat(t[1][1]), v10_0 = parseFloat(t[1][0]);
+        if (!isNaN(v11_0) && !isNaN(v10_0)) {
+            const f1 = Math.abs(1 - pay * v11_0 / (v10_0 + (pay - 1) * v11_0));
+            if (f1 > 0) fator = stakeBase / (f1 * 100);
+        }
+    } catch(_) {}
+
+    // Calcula entrada para um estado usando banca INTERNA (0-100 scale)
+    // bancaInterna = banca real ÷ fator; resultado = frac * bancaInterna * fator
+    function calcEntradaEstado(qLoss, qWins, bancaReal, isPrimeira) {
+        const bancaInt = (fator > 0) ? bancaReal / fator : 100;
         try {
-            if (isPrimeira) {
-                const v11 = parseFloat(t[1][1]), v10 = parseFloat(t[1][0]);
-                if (isNaN(v11) || isNaN(v10)) return Math.max(MIN, stakeBase);
-                const r = Math.round(Math.abs((1 - pay * v11 / (v10 + (pay - 1) * v11)) * banca) * 100) / 100;
-                return Math.max(MIN, r);
-            }
+            const row  = isPrimeira ? 1 : (qLoss + qWins + 1);
+            const col0 = isPrimeira ? 0 : qWins;
+            const col1 = isPrimeira ? 1 : (qWins + 1);
             if (qWins >= k) return Math.max(MIN, stakeBase);
-            const row  = qLoss + qWins + 1;
-            const col  = qWins;
-            const col1 = qWins + 1;
-            if (row >= n || col1 >= k) return Math.max(MIN, banca);
-            const v10 = parseFloat(t[row][col]);
+            if (row >= n || col1 >= k) return Math.max(MIN, stakeBase);
+            const v10 = parseFloat(t[row][col0]);
             const v11 = parseFloat(t[row][col1]);
-            if (isNaN(v10) || isNaN(v11)) return Math.max(MIN, banca);
-            const r = Math.round(Math.abs((1 - pay * v11 / (v10 + (pay - 1) * v11)) * banca) * 100) / 100;
+            if (isNaN(v10) || isNaN(v11)) return Math.max(MIN, stakeBase);
+            const frac = Math.abs(1 - pay * v11 / (v10 + (pay - 1) * v11));
+            const r = Math.round(frac * bancaInt * fator * 100) / 100;
             return Math.max(MIN, r);
         } catch(_) { return Math.max(MIN, stakeBase); }
     }
 
     // ── Simula o ciclo completo: cenário pior caso (todos loss) + recuperação ─────
     // Exibe linha por linha o que acontece a cada operação, atualizando banca_final
+    // bancaAtual aqui é sempre na escala REAL ($)
+    // internamente o fator converte; começa equivalente a 100 unidades internas
     const linhas = [];
-    let bancaAtual = stakeBase;   // começa com stake como banca (igual ao Python)
+    let bancaAtual = stakeBase;   // escala real = fator * 100 ≈ stakeBase na 1ª entrada
     let qWins = 0, qLoss = 0;
     let ganhoMax = stakeBase;
     let isPrimeira = true;
@@ -21072,8 +21115,10 @@ function dbsMasaConfirmar() {
         mas_pay:     pay,
         mas_tipo:    tipo,
     });
-    // A banca inicial do Masaniello = stake (igual ao Python: self.banca = banca)
-    if (_dbsMgr._masaBanca !== undefined) _dbsMgr._masaBanca = stakeModal;
+    // Banca interna começa em 100 (escala normalizada); fator é calculado lazy
+    if (_dbsMgr._masaBanca !== undefined) _dbsMgr._masaBanca = 100;
+    if (_dbsMgr._masaFator !== undefined) _dbsMgr._masaFator = null; // força recálculo
+    if (_dbsMgr._masaGanhoMax !== undefined) _dbsMgr._masaGanhoMax = 100;
 
     // Reseta proteção de mão quente
     _dbsLossConsec  = 0;
