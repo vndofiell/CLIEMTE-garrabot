@@ -8900,50 +8900,83 @@ function _secAtualizarBadge() {
 let _wsReconectando = false;
 let _wsReconTimer   = null;
 
+/**
+ * Tenta obter uma URL WSS nova do servidor (novo OTP).
+ * Primeiro tenta /get-token-force (sem precisar de novo login).
+ * Se falhar (access_token expirado > 10min), pede novo login ao usuário.
+ * @returns {Promise<string|null>} nova wssUrl ou null se precisar de login
+ */
+async function _wsObterNovaUrl() {
+    try {
+        const res  = await fetch('/get-token-force');
+        const data = await res.json();
+        if (data.wss_url) return data.wss_url;
+    } catch(_) {}
+    return null;
+}
+
 function initWebSocket(wssUrl) {
     bot._wssUrl = wssUrl;  // guarda URL para reconexão automática
+    bot._wsOpenTs = Date.now(); // marca momento em que a conexão foi aberta
     _wsReconectando = false; // nova conexão iniciada — reseta o guard
     if (_wsReconTimer) { clearTimeout(_wsReconTimer); _wsReconTimer = null; }
     bot.ws = new WebSocket(wssUrl);
     bot.ws.onerror  = () => print("⚠️ ERRO WEBSOCKET.", "log-loss");
     bot.ws.onclose  = () => {
         print("🔌 CONEXÃO ENCERRADA.", "log-loss");
-        // Verifica se o DBS está ativo (modal aberto e auto-scan/operar ligado)
-        const _dbsModalAberto = () => {
-            const m = document.getElementById('dbs-modal');
-            return m && m.style.display !== 'none';
-        };
-        const _dbsEstaAtivo = () => {
-            const autoScan  = document.getElementById('dbs-auto-scan');
-            const autoOp    = document.getElementById('dbs-auto-operar');
-            return _dbsModalAberto() && ((autoScan && autoScan.checked) || (autoOp && autoOp.checked));
-        };
-        // Reconecta automaticamente SEMPRE que há URL salva (conectado, rodando ou DBS ativo)
         // Só NÃO reconecta se _wssUrl foi apagado intencionalmente (troca de conta/desconexão manual)
         if (!bot._wssUrl) return;
         if (_wsReconectando) return; // já há uma tentativa em andamento
         _wsReconectando = true;
+
+        // Detecta OTP expirado: conexão durou menos de 3s → token já estava morto
+        const _durou = Date.now() - (bot._wsOpenTs || 0);
+        const _otpExpirado = _durou < 3000;
+
         let _tentativa = 0;
-        const _tentarReconectar = () => {
+        const _tentarReconectar = async () => {
             if (!bot._wssUrl) { _wsReconectando = false; return; }
-            // Se já reconectou (ex: watchdog), cancela
             if (bot.ws && bot.ws.readyState === WebSocket.OPEN) { _wsReconectando = false; return; }
             _tentativa++;
-            // Back-off: 2s, 4s, 6s... máximo 30s entre tentativas
-            const _delay = Math.min(_tentativa * 2000, 30000);
+
+            // Se o OTP parece expirado (ou já tentou 2× e continua falhando rápido),
+            // tenta buscar uma URL nova no servidor antes de abrir nova conexão
+            const _tentarForce = _otpExpirado || _tentativa > 1;
+            if (_tentarForce) {
+                print(`🔑 OTP expirado — buscando novo token... (tentativa ${_tentativa})`, "log-info");
+                const _novaUrl = await _wsObterNovaUrl();
+                if (_novaUrl) {
+                    // Conseguiu nova URL — reconecta com ela
+                    print(`📡 Novo token obtido — reconectando...`, "log-win");
+                    _wsReconectando = false;
+                    initWebSocket(_novaUrl);
+                    return;
+                } else {
+                    // Sem access_token válido — precisa de login manual
+                    _wsReconectando = false;
+                    bot._wssUrl = null; // cancela reconexão automática
+                    print(`🔐 Sessão expirada — faça login novamente.`, "log-loss");
+                    if (typeof abrirModalConta === 'function') abrirModalConta();
+                    return;
+                }
+            }
+
+            // OTP ainda pode ser válido — tenta reconectar direto com back-off suave
+            const _delay = Math.min(_tentativa * 2000, 10000);
             print(`📡 Reconectando automaticamente... (tentativa ${_tentativa})`, "log-info");
             try { initWebSocket(bot._wssUrl); } catch(_) {}
             // Agenda verificação: se não abriu, tenta de novo
-            _wsReconTimer = setTimeout(() => {
+            _wsReconTimer = setTimeout(async () => {
                 if (bot.ws && bot.ws.readyState === WebSocket.OPEN) { _wsReconectando = false; return; }
                 if (!bot._wssUrl) { _wsReconectando = false; return; }
-                _tentarReconectar();
+                await _tentarReconectar();
             }, _delay + 3000);
         };
         _wsReconTimer = setTimeout(_tentarReconectar, 2000);
     };
 
     bot.ws.onopen = () => {
+        bot._wsOpenTs = Date.now(); // atualiza timestamp — conexão aberta com sucesso
         print("🔒 CONECTADO! BUSCANDO SALDO...", "log-win");
         bot._loginid  = undefined; // reseta para nova conexão
         bot._buying   = false;     // libera flag de compra travado

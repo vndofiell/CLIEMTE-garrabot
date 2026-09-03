@@ -1992,6 +1992,31 @@ def get_token():
             print(f"[Erro] {err}")
         return jsonify({"wss_url": None, "erro": err})
 
+@app.route('/get-token-force', methods=['GET', 'POST'])
+def get_token_force():
+    """Gera uma nova WSS URL (novo OTP) usando o access_token já armazenado,
+    SEM restrição de tempo. Usado pelo frontend quando o OTP expirou e
+    precisa reconectar sem pedir novo login ao usuário.
+    Retorna erro se o access_token não existir ou tiver expirado (> 10 min).
+    """
+    try:
+        with _token_lock:
+            access_token = _token_recebido.get("access_token", "")
+            token_ts     = _token_recebido.get("ts", 0)
+
+        if not access_token or (time.time() - token_ts) >= 600:
+            return jsonify({"wss_url": None, "erro": "token_expirado"})
+
+        print(f"[Token-Force] Gerando novo OTP (access_token age={time.time()-token_ts:.0f}s)")
+        tipo = _access_token.get("tipo", "DEMO")
+        return jsonify(_get_token_com_access(access_token, tipo))
+
+    except Exception as e:
+        err = str(e)
+        print(f"[Token-Force] Erro: {err}")
+        return jsonify({"wss_url": None, "erro": err})
+
+
 @app.route('/clear-token', methods=['POST'])
 def clear_token():
     """Limpa o token armazenado localmente — chamado quando o usuário inicia uma nova conexão."""
