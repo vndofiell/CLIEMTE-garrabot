@@ -8896,8 +8896,14 @@ function _secAtualizarBadge() {
     }
 }
 
+// Guard global para evitar múltiplas tentativas de reconexão simultâneas
+let _wsReconectando = false;
+let _wsReconTimer   = null;
+
 function initWebSocket(wssUrl) {
     bot._wssUrl = wssUrl;  // guarda URL para reconexão automática
+    _wsReconectando = false; // nova conexão iniciada — reseta o guard
+    if (_wsReconTimer) { clearTimeout(_wsReconTimer); _wsReconTimer = null; }
     bot.ws = new WebSocket(wssUrl);
     bot.ws.onerror  = () => print("⚠️ ERRO WEBSOCKET.", "log-loss");
     bot.ws.onclose  = () => {
@@ -8912,24 +8918,29 @@ function initWebSocket(wssUrl) {
             const autoOp    = document.getElementById('dbs-auto-operar');
             return _dbsModalAberto() && ((autoScan && autoScan.checked) || (autoOp && autoOp.checked));
         };
-        // Reconecta automaticamente se o bot estava rodando OU se o DBS está ativo
-        if (bot._wssUrl && (bot.running || _dbsEstaAtivo())) {
-            const _tentarReconectar = (tentativa) => {
-                if (!bot._wssUrl) return;
-                // Só prossegue se o motivo ainda é válido
-                if (!bot.running && !_dbsEstaAtivo()) return;
-                print(`📡 Reconectando automaticamente... (tentativa ${tentativa})`, "log-info");
-                try { initWebSocket(bot._wssUrl); } catch(_) {}
-                // Verifica após 5s se reconectou; se não, tenta de novo (infinitamente)
-                setTimeout(() => {
-                    if (bot.ws && bot.ws.readyState === WebSocket.OPEN) return; // reconectado
-                    if (!bot._wssUrl) return;
-                    if (!bot.running && !_dbsEstaAtivo()) return;
-                    _tentarReconectar(tentativa + 1);
-                }, 5000);
-            };
-            setTimeout(() => _tentarReconectar(1), 2000);
-        }
+        // Reconecta automaticamente SEMPRE que há URL salva (conectado, rodando ou DBS ativo)
+        // Só NÃO reconecta se _wssUrl foi apagado intencionalmente (troca de conta/desconexão manual)
+        if (!bot._wssUrl) return;
+        if (_wsReconectando) return; // já há uma tentativa em andamento
+        _wsReconectando = true;
+        let _tentativa = 0;
+        const _tentarReconectar = () => {
+            if (!bot._wssUrl) { _wsReconectando = false; return; }
+            // Se já reconectou (ex: watchdog), cancela
+            if (bot.ws && bot.ws.readyState === WebSocket.OPEN) { _wsReconectando = false; return; }
+            _tentativa++;
+            // Back-off: 2s, 4s, 6s... máximo 30s entre tentativas
+            const _delay = Math.min(_tentativa * 2000, 30000);
+            print(`📡 Reconectando automaticamente... (tentativa ${_tentativa})`, "log-info");
+            try { initWebSocket(bot._wssUrl); } catch(_) {}
+            // Agenda verificação: se não abriu, tenta de novo
+            _wsReconTimer = setTimeout(() => {
+                if (bot.ws && bot.ws.readyState === WebSocket.OPEN) { _wsReconectando = false; return; }
+                if (!bot._wssUrl) { _wsReconectando = false; return; }
+                _tentarReconectar();
+            }, _delay + 3000);
+        };
+        _wsReconTimer = setTimeout(_tentarReconectar, 2000);
     };
 
     bot.ws.onopen = () => {
@@ -17595,18 +17606,14 @@ _wakeLockAtivar();
 
     // ── 1. Watchdog — verifica WS a cada 5s e reconecta se cair ──
     setInterval(() => {
-        // Bot principal — reconecta se bot rodando OU se DBS está ativo com modal aberto
-        const _wdDbsAtivo = () => {
-            const m  = document.getElementById('dbs-modal');
-            if (!m || m.style.display === 'none') return false;
-            const s1 = document.getElementById('dbs-auto-scan');
-            const s2 = document.getElementById('dbs-auto-operar');
-            return (s1 && s1.checked) || (s2 && s2.checked);
-        };
-        if (typeof bot !== 'undefined' && bot._wssUrl && (bot.running || _wdDbsAtivo())) {
+        // Bot principal — reconecta SEMPRE que há URL (independente de running)
+        if (typeof bot !== 'undefined' && bot._wssUrl) {
             if (!bot.ws || bot.ws.readyState === WebSocket.CLOSED || bot.ws.readyState === WebSocket.CLOSING) {
-                console.warn('🔁 Watchdog: WS principal caiu — reconectando...');
-                try { initWebSocket(bot._wssUrl); } catch(_) {}
+                // Só inicia nova conexão se não há já uma em andamento pelo onclose
+                if (!_wsReconectando) {
+                    console.warn('🔁 Watchdog: WS principal caiu — reconectando...');
+                    try { initWebSocket(bot._wssUrl); } catch(_) {}
+                }
             }
         }
         // Conta secundária
@@ -17656,18 +17663,13 @@ _wakeLockAtivar();
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState !== 'visible') return;
         setTimeout(() => {
-            // Reconecta bot principal se caiu — também reconecta se DBS está ativo
-            const _vcDbsAtivo = () => {
-                const m  = document.getElementById('dbs-modal');
-                if (!m || m.style.display === 'none') return false;
-                const s1 = document.getElementById('dbs-auto-scan');
-                const s2 = document.getElementById('dbs-auto-operar');
-                return (s1 && s1.checked) || (s2 && s2.checked);
-            };
-            if (typeof bot !== 'undefined' && bot._wssUrl && (bot.running || _vcDbsAtivo())) {
+            // Reconecta bot principal se caiu — SEMPRE que há URL
+            if (typeof bot !== 'undefined' && bot._wssUrl) {
                 if (!bot.ws || bot.ws.readyState !== WebSocket.OPEN) {
-                    console.log('📡 Voltou do background — reconectando bot principal...');
-                    try { initWebSocket(bot._wssUrl); } catch(_) {}
+                    if (!_wsReconectando) {
+                        console.log('📡 Voltou do background — reconectando bot principal...');
+                        try { initWebSocket(bot._wssUrl); } catch(_) {}
+                    }
                 }
             }
             // Reconecta SEC se caiu
@@ -17701,8 +17703,8 @@ _wakeLockAtivar();
     window.addEventListener('pageshow', (e) => {
         if (!e.persisted) return;  // só para páginas do cache (bfcache iOS)
         setTimeout(() => {
-            if (typeof bot !== 'undefined' && bot.running && bot._wssUrl &&
-                (!bot.ws || bot.ws.readyState !== WebSocket.OPEN)) {
+            if (typeof bot !== 'undefined' && bot._wssUrl &&
+                (!bot.ws || bot.ws.readyState !== WebSocket.OPEN) && !_wsReconectando) {
                 console.log('📡 pageshow bfcache — reconectando...');
                 try { initWebSocket(bot._wssUrl); } catch(_) {}
             }
