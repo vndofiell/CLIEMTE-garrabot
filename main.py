@@ -2221,8 +2221,9 @@ def tg_send():
         wins            = int(payload.get("wins", 0))
         losses          = int(payload.get("losses", 0))
         prox_stake      = float(payload.get("prox_stake", 0))
-        modo            = str(payload.get("modo", ""))
-        estrategia      = str(payload.get("estrategia", ""))
+        modo            = str(payload.get("modo", "")).strip()
+        estrategia      = str(payload.get("estrategia", "")).strip()
+        ativo           = str(payload.get("ativo", "")).strip()   # ativo operado (R_50, R_10 etc.)
         total           = wins + losses
         lucro_brl       = abs(lucro) * cot
         profit_brl      = profit_tot * cot
@@ -2245,14 +2246,16 @@ def tg_send():
         lucro_op_brl   = abs(lucro) * cot
         lucro_op_str   = f"+R${lucro_op_brl:.2f}" if win else f"-R${lucro_op_brl:.2f}"
 
+        # Linha de mercado: usa campo 'ativo' se disponível, senão extrai da estratégia
+        mercado_str = ativo if ativo else (estrategia.split()[-1] if estrategia else '--')
         msg = (
             f"🟢  OPERAÇÃO FINALIZADA\n\n"
             f"{res_linha}\n\n"
             f"💰  Entrada: ${entrada:.2f}\n"
             f"{lucro_linha}  ({lucro_op_str})\n\n"
             f"➡️  Próxima Entrada: ${prox_stake:.2f}\n"
-            f"⚙️  Gestão: {modo}\n\n"
-            f"📊  Mercado: {estrategia.split()[0] if estrategia else '--'}\n"
+            f"⚙️  Gestão: {modo.upper() if modo else '--'}\n\n"
+            f"📊  Mercado: {mercado_str}\n"
             f"🎯  Estratégia: {estrategia}\n\n"
             f"🏦  Banca: ${banca:.2f}  /  R${banca_brl_str}\n"
             f"📈  Lucro Total: {profit_usd_str}  /  {profit_brl_str}\n\n"

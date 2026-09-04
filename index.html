@@ -7688,6 +7688,17 @@ function tgEnviarResultado(win, lucro, prox_stake, _origemSec) {
     } else {
         // ── Modo Normal: usa dados da conta principal ────────────────────
         const saldo = parseFloat(document.getElementById('hd-balance').textContent.replace('$','')) || 0;
+
+        // Se a operação veio do DBS, usa o gerenciador e o ativo do DBS
+        const _dbsOp    = bot._dbsUltimoPayload || null;
+        const _modoReal = _dbsOp
+            ? (document.getElementById('dbs-mgr')?.value || bot.gerenciamento)
+            : bot.gerenciamento;
+        const _ativoReal = _dbsOp ? (_dbsOp.ativo || '') : '';
+
+        // Limpa emojis do gerenciamento
+        const _limparGer = (s) => (s || '').replace(/[\u{1F300}-\u{1FAFF}🎯🤖⚙️💹🔄📐⚡📉🛡️📊]/gu, '').trim();
+
         payload = {
             win:             win,
             lucro:           lucro,
@@ -7696,8 +7707,9 @@ function tgEnviarResultado(win, lucro, prox_stake, _origemSec) {
             wins:            bot.wins,
             losses:          bot.losses,
             prox_stake:      prox_stake,
-            modo:            bot.gerenciamento,
+            modo:            _limparGer(_modoReal),
             estrategia:      bot.estrategia,
+            ativo:           _ativoReal,
             seq_win:         bot._seqWinAtual,
             seq_loss:        bot._seqLossAtual,
             max_win_consec:  bot._maxWinConsec,
