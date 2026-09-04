@@ -20385,38 +20385,112 @@ function dbsLimparLog() {
 function dbsResetarSessao() {
     if (!confirm('Resetar a sessão do DBS?\n\nIsso vai zerar wins, losses, lucro e reiniciar o gerenciador de banca para começar do zero.\n\nO histórico de operações também será limpo.')) return;
 
-    // Zera contadores
-    _dbsMgrWins   = 0;
-    _dbsMgrLosses = 0;
-    _dbsMgrLucro  = 0.0;
-    _dbsMaDiv     = 0;
-    _dbsMaAtivo   = false;
+    // ── Verifica se a meta JC estava batida ──────────────────────────────────
+    // Se sim: avança para o próximo dia da planilha antes de resetar a sessão
+    const _jcAtivo        = typeof bot !== 'undefined' && bot.mgr && bot.mgr.modo === '💹 Juros Compostos';
+    const _metaFoiBatida  = typeof bot !== 'undefined' && bot._metaEncerrada === true;
 
-    // Zera proteção mão quente
-    _dbsLossConsec  = 0;
-    _dbsCooldownAte = 0;
+    const _executarReset = () => {
+        // Zera contadores do DBS
+        _dbsMgrWins   = 0;
+        _dbsMgrLosses = 0;
+        _dbsMgrLucro  = 0.0;
+        _dbsMaDiv     = 0;
+        _dbsMaAtivo   = false;
 
-    // Reinicia gerenciador com os valores atuais da tela
-    const nome  = document.getElementById('dbs-mgr')?.value;
-    const stake = parseFloat(document.getElementById('dbs-entrada')?.value) || 0.35;
-    if (nome === '📐 MA-Adaptativo') {
-        _dbsMgr = null;
+        // Zera proteção mão quente
+        _dbsLossConsec  = 0;
+        _dbsCooldownAte = 0;
+
+        // Reinicia gerenciador com os valores atuais da tela
+        const nome  = document.getElementById('dbs-mgr')?.value;
+        const stake = parseFloat(document.getElementById('dbs-entrada')?.value) || 0.35;
+        if (nome === '📐 MA-Adaptativo') {
+            _dbsMgr = null;
+        } else {
+            _dbsMgr = (nome && nome !== 'flat' && typeof GerenciadorUnificado !== 'undefined')
+                ? new GerenciadorUnificado(nome, { stake }) : null;
+        }
+
+        // Libera o bot para operar no próximo dia
+        if (typeof bot !== 'undefined') {
+            bot._metaEncerrada = false;
+            bot.wins    = 0;
+            bot.losses  = 0;
+            bot.profit  = 0.0;
+            bot._seqWinAtual   = 0;
+            bot._seqLossAtual  = 0;
+            bot._maxWinConsec  = 0;
+            bot._maxLossConsec = 0;
+            bot._maxStakeUsada = 0;
+            bot.stake = bot.initialStake;
+            if (bot.mgr) bot.mgr = new GerenciadorUnificado(bot.gerenciamento,
+                Object.assign({ stake: bot.initialStake }, (bot._mgrCfgs && bot._mgrCfgs[bot.gerenciamento]) || {}));
+            if (typeof _timer !== 'undefined') _timer.resetar();
+            if (typeof updateHeader === 'function') updateHeader();
+        }
+
+        // Limpa status e histórico visual
+        const statusEl = document.getElementById('dbs-status');
+        if (statusEl) statusEl.textContent = '✅ Sessão resetada — pronto para nova sessão.';
+        dbsLimparLog();
+
+        // Atualiza painéis
+        dbsMgrAtualizarStatsConsec();
+        dbsMgrAtualizarStats();
+
+        if (typeof print === 'function') print('🔄 DBS — Sessão resetada. Pronto para novo dia.', 'log-info');
+    };
+
+    if (_jcAtivo && _metaFoiBatida) {
+        // Meta JC batida → registra o dia e avança a planilha antes de resetar
+        const lucro  = (typeof bot !== 'undefined') ? (bot.profit || 0) : 0;
+        const wins   = (typeof bot !== 'undefined') ? (bot.wins   || 0) : 0;
+        const losses = (typeof bot !== 'undefined') ? (bot.losses || 0) : 0;
+
+        if (typeof print === 'function') print('📊 JC — Avançando para o próximo dia da planilha...', 'log-info');
+
+        fetch('/jc-registrar-dia', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ lucro_total: lucro, wins: wins, losses: losses }),
+        })
+        .then(r => r.json())
+        .then(res => {
+            if (res.ok) {
+                const proxDia = res.proximo_dia || (res.dia + 1);
+                if (typeof print === 'function')
+                    print(`✅ JC — Dia ${res.dia} registrado. Avançando para o Dia ${proxDia}.`, 'log-win');
+                // Aplica nova meta do próximo dia como Stop Win
+                if (typeof jcAplicarMetaComoStopWin === 'function') jcAplicarMetaComoStopWin();
+                if (typeof jcAtualizarLabelPainel    === 'function') jcAtualizarLabelPainel(null);
+                // Atualiza badge JC no DBS
+                fetch('/jc-meta').then(r => r.json()).then(m => {
+                    const meta = m.meta_hoje || 0;
+                    const dia  = m.dia_atual  || proxDia;
+                    const badge = document.getElementById('dbs-jc-badge');
+                    const diaEl = document.getElementById('dbs-jc-dia');
+                    const metaEl = document.getElementById('dbs-jc-meta');
+                    if (badge)  badge.style.display = '';
+                    if (diaEl)  diaEl.textContent   = dia;
+                    if (metaEl) metaEl.textContent  = meta.toFixed(2);
+                    // Aplica a nova meta como Stop Win do DBS também
+                    const swEl = document.getElementById('dbs-stopwin');
+                    if (swEl && meta > 0) swEl.value = meta.toFixed(2);
+                }).catch(() => {});
+            } else {
+                if (typeof print === 'function') print('⚠️ JC — Erro ao registrar dia: ' + (res.erro || ''), 'log-loss');
+            }
+            _executarReset();
+        })
+        .catch(() => {
+            if (typeof print === 'function') print('⚠️ JC — Falha ao avançar dia. Resetando mesmo assim.', 'log-loss');
+            _executarReset();
+        });
     } else {
-        _dbsMgr = (nome && nome !== 'flat' && typeof GerenciadorUnificado !== 'undefined')
-            ? new GerenciadorUnificado(nome, { stake }) : null;
+        // Sem JC ou meta não foi batida — reseta direto
+        _executarReset();
     }
-
-    // Limpa status e histórico visual
-    const statusEl = document.getElementById('dbs-status');
-    if (statusEl) statusEl.textContent = '✅ Sessão resetada — pronto para nova sessão.';
-    dbsLimparLog();
-
-    // Atualiza painéis
-    dbsMgrAtualizarStatsConsec();
-    dbsMgrAtualizarStats();
-
-    // Log visual no terminal principal
-    if (typeof print === 'function') print('🔄 DBS — Sessão resetada. Wins/Losses/Lucro zerados.', 'log-info');
 }
 
 // ── Gerenciamento DBS ─────────────────────────────────────────────────────────
