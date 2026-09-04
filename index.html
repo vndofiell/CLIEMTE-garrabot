@@ -4442,17 +4442,23 @@ class GerenciadorUnificado {
 
     getStake() { return Math.max(0.35, parseFloat(this.currentStake.toFixed(2))); }
 
-    updateResult(won) { won ? this._onWin() : this._onLoss(); }
+    // lucroReal: lucro líquido real da operação (positivo=win, negativo=loss)
+    // Se fornecido, QSR usa ele para abater a dívida com precisão
+    updateResult(won, lucroReal) { won ? this._onWin(lucroReal) : this._onLoss(lucroReal); }
 
     updateResultDupla(totalProfit, stakePorLado) {
         // Delega para updateResult normal (Dupla Recovery removido)
-        this.updateResult(totalProfit > 0);
+        this.updateResult(totalProfit > 0, Math.abs(totalProfit));
     }
 
-    _onWin() {
+    _onWin(lucroReal) {
         const cfg  = this.cfg;
         const base = parseFloat(cfg.stake || this.initialStake);
         if (this._dividaLR < 0.07) this._dividaLR = 0;
+        // Abatimento real: usa lucroReal se disponível, senão estima 95% da stake
+        const _abatimento = (lucroReal != null && lucroReal > 0)
+            ? lucroReal
+            : this.currentStake * 0.95;
 
         switch (this.modo) {
             case "💰 Stake Fixa":
@@ -4465,16 +4471,17 @@ class GerenciadorUnificado {
                 this.currentStake = base; this._nivelGale = 0; break;
 
             case "📉 Loss Recovery":
-                this._dividaLR = Math.max(0, this._dividaLR - this.currentStake * 0.95);
+                this._dividaLR = Math.max(0, this._dividaLR - _abatimento);
                 this._nivelGale = 0;
                 this._calcLR(); break;
 
             case "🛡️ Recovery Conservador":
-                this._dividaLR = Math.max(0, this._dividaLR - this.currentStake * 0.95);
+                this._dividaLR = Math.max(0, this._dividaLR - _abatimento);
                 this.currentStake = base; break;
 
             case "📐 QSR":
-                this._dividaLR = Math.max(0, this._dividaLR - this.currentStake * 0.95);
+                // Abate a dívida com o lucro real desta operação
+                this._dividaLR = Math.max(0, parseFloat((this._dividaLR - _abatimento).toFixed(2)));
                 if (this._dividaLR < 0.07) { this._dividaLR = 0; this.currentStake = base; break; }
                 { const pct = parseFloat(cfg.qsr_pct || 50) / 100;
                   this.currentStake = Math.max(base, parseFloat((base + this._dividaLR * pct).toFixed(2))); } break;
@@ -4519,10 +4526,14 @@ class GerenciadorUnificado {
         }
     }
 
-    _onLoss() {
+    _onLoss(lucroReal) {
         const cfg   = this.cfg;
         const base  = parseFloat(cfg.stake || this.initialStake);
+        // Para loss: usa o valor absoluto do lucroReal como perda real, ou cai back para stake
         const stake = this.currentStake;
+        const _perdaReal = (lucroReal != null && lucroReal < 0)
+            ? Math.abs(lucroReal)
+            : stake;
 
         switch (this.modo) {
             case "💰 Stake Fixa": break; // não muda
@@ -4554,7 +4565,8 @@ class GerenciadorUnificado {
                 break; }
 
             case "📐 QSR": {
-                this._dividaLR += stake;
+                // Acumula a perda real na dívida (não apenas a stake teórica)
+                this._dividaLR = parseFloat((this._dividaLR + _perdaReal).toFixed(2));
                 const pct = parseFloat(cfg.qsr_pct || 50) / 100;
                 let prox = parseFloat((base + this._dividaLR * pct).toFixed(2));
                 if (prox <= stake) prox = parseFloat((stake + base).toFixed(2));
@@ -20570,7 +20582,8 @@ function dbsMgrRegistrarResultado(won, profit) {
             _dbsMaAtivo = true;
         }
     } else if (_dbsMgr) {
-        _dbsMgr.updateResult(won);
+        // Passa o lucro/prejuízo real para o gerenciador usar no abatimento da dívida
+        _dbsMgr.updateResult(won, profit);
     }
     if (won) _dbsMgrWins++; else _dbsMgrLosses++;
     _dbsMgrLucro = parseFloat((_dbsMgrLucro + profit).toFixed(2));
