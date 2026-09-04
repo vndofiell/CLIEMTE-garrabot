@@ -7748,19 +7748,27 @@ function tgEnviarStopWin() {
             maxStake = bot._maxStakeUsada;
         }
 
+        // Tempo total do cronômetro (HH:MM:SS) — usa o _timer global
+        const _timerEl = document.getElementById('hd-timer');
+        const _tempoTotal = _timerEl ? _timerEl.textContent : '00:00:00';
+
+        // Limpa emojis e espaços do gerenciamento para exibição limpa
+        const _limparGer = (s) => (s || '').replace(/[\u{1F300}-\u{1FAFF}🎯🤖⚙️💹🔄]/gu, '').trim();
+
         const payload = {
             stop_win:        true,
             lucro:           lucro,
             banca:           saldo,
             wins:            wins,
             losses:          losses,
-            modo:            modo,
-            estrategia:      bot.estrategia,
+            modo:            _limparGer(modo),
+            estrategia:      _limparGer(bot.estrategia),
             seq_win:         seqWin,
             seq_loss:        seqLoss,
             max_win_consec:  maxWin,
             max_loss_consec: maxLoss,
             max_stake:       maxStake,
+            tempo_total:     _tempoTotal,
             // Marca SECUNDARIA para que o servidor monte a mensagem correta
             conta:           _modoEspelhoAtivo ? 'SECUNDARIA' : '',
         };
