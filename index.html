@@ -7689,12 +7689,16 @@ function tgEnviarResultado(win, lucro, prox_stake, _origemSec) {
         // ── Modo Normal: usa dados da conta principal ────────────────────
         const saldo = parseFloat(document.getElementById('hd-balance').textContent.replace('$','')) || 0;
 
-        // Se a operação veio do DBS, usa o gerenciador e o ativo do DBS
+        // Se a operação veio do DBS, usa o gerenciador, ativo e contrato do DBS
         const _dbsOp    = bot._dbsUltimoPayload || null;
         const _modoReal = _dbsOp
             ? (document.getElementById('dbs-mgr')?.value || bot.gerenciamento)
             : bot.gerenciamento;
         const _ativoReal = _dbsOp ? (_dbsOp.ativo || '') : '';
+        // Estratégia: DBS mostra "DIGITOVER B:3" em vez do nome da estratégia do bot
+        const _estrategiaReal = _dbsOp
+            ? `DBS356 — ${(_dbsOp.tipo || '').toUpperCase()} B:${_dbsOp.barreira || ''}`
+            : bot.estrategia;
 
         // Limpa emojis do gerenciamento
         const _limparGer = (s) => (s || '').replace(/[\u{1F300}-\u{1FAFF}🎯🤖⚙️💹🔄📐⚡📉🛡️📊]/gu, '').trim();
@@ -7708,7 +7712,7 @@ function tgEnviarResultado(win, lucro, prox_stake, _origemSec) {
             losses:          bot.losses,
             prox_stake:      prox_stake,
             modo:            _limparGer(_modoReal),
-            estrategia:      bot.estrategia,
+            estrategia:      _estrategiaReal,
             ativo:           _ativoReal,
             seq_win:         bot._seqWinAtual,
             seq_loss:        bot._seqLossAtual,
