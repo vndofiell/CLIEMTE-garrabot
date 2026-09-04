@@ -3448,12 +3448,20 @@
             <div style="background:rgba(0,0,0,0.3);border:1px solid rgba(99,102,241,0.2);border-radius:6px;padding:10px 12px;">
               <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:6px;flex-wrap:wrap;">
                 <span style="font-size:0.58rem;color:#6366f1;letter-spacing:2px;">⚙️ GERENCIAMENTO DE BANCA</span>
-                <!-- Badge JC: aparece apenas quando JC está ativo -->
-                <div id="dbs-jc-badge" style="display:none;background:rgba(0,255,100,0.08);border:1px solid rgba(0,255,100,0.4);
-                    border-radius:4px;padding:2px 7px;font-size:0.58rem;color:#00ff64;white-space:nowrap;cursor:pointer;"
-                    onclick="dbsJcAplicarMeta()" title="Clique para aplicar meta JC como Stop Win">
-                  💹 JC DIA <span id="dbs-jc-dia">1</span> — META: $<span id="dbs-jc-meta">0.00</span>
-                  <span style="color:#6b7280;font-size:0.53rem;"> ▸ APLICAR</span>
+                <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
+                  <!-- Badge JC: aparece apenas quando JC está ativo -->
+                  <div id="dbs-jc-badge" style="display:none;background:rgba(0,255,100,0.08);border:1px solid rgba(0,255,100,0.4);
+                      border-radius:4px;padding:2px 7px;font-size:0.58rem;color:#00ff64;white-space:nowrap;cursor:pointer;"
+                      onclick="dbsJcAplicarMeta()" title="Clique para aplicar meta JC como Stop Win">
+                    💹 JC DIA <span id="dbs-jc-dia">1</span> — META: $<span id="dbs-jc-meta">0.00</span>
+                    <span style="color:#6b7280;font-size:0.53rem;"> ▸ APLICAR</span>
+                  </div>
+                  <!-- Botão resetar sessão DBS -->
+                  <button onclick="dbsResetarSessao()" title="Zera wins, losses, lucro e reinicia o gerenciador para nova sessão"
+                      style="background:rgba(251,191,36,0.08);border:1px solid rgba(251,191,36,0.35);border-radius:4px;
+                             color:#fbbf24;font-size:0.56rem;padding:2px 8px;cursor:pointer;white-space:nowrap;">
+                    🔄 RESETAR SESSÃO
+                  </button>
                 </div>
               </div>
               <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px;">
@@ -20371,6 +20379,44 @@ function _dbsRenderLog() {
 function dbsLimparLog() {
     _dbsLog = [];
     _dbsRenderLog();
+}
+
+// ── Resetar sessão DBS (zera gerenciador, wins, losses, lucro) ────────────────
+function dbsResetarSessao() {
+    if (!confirm('Resetar a sessão do DBS?\n\nIsso vai zerar wins, losses, lucro e reiniciar o gerenciador de banca para começar do zero.\n\nO histórico de operações também será limpo.')) return;
+
+    // Zera contadores
+    _dbsMgrWins   = 0;
+    _dbsMgrLosses = 0;
+    _dbsMgrLucro  = 0.0;
+    _dbsMaDiv     = 0;
+    _dbsMaAtivo   = false;
+
+    // Zera proteção mão quente
+    _dbsLossConsec  = 0;
+    _dbsCooldownAte = 0;
+
+    // Reinicia gerenciador com os valores atuais da tela
+    const nome  = document.getElementById('dbs-mgr')?.value;
+    const stake = parseFloat(document.getElementById('dbs-entrada')?.value) || 0.35;
+    if (nome === '📐 MA-Adaptativo') {
+        _dbsMgr = null;
+    } else {
+        _dbsMgr = (nome && nome !== 'flat' && typeof GerenciadorUnificado !== 'undefined')
+            ? new GerenciadorUnificado(nome, { stake }) : null;
+    }
+
+    // Limpa status e histórico visual
+    const statusEl = document.getElementById('dbs-status');
+    if (statusEl) statusEl.textContent = '✅ Sessão resetada — pronto para nova sessão.';
+    dbsLimparLog();
+
+    // Atualiza painéis
+    dbsMgrAtualizarStatsConsec();
+    dbsMgrAtualizarStats();
+
+    // Log visual no terminal principal
+    if (typeof print === 'function') print('🔄 DBS — Sessão resetada. Wins/Losses/Lucro zerados.', 'log-info');
 }
 
 // ── Gerenciamento DBS ─────────────────────────────────────────────────────────
