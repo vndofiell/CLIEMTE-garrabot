@@ -4481,8 +4481,9 @@ class GerenciadorUnificado {
 
             case "📐 QSR":
                 // Abate a dívida com o lucro real desta operação
-                this._dividaLR = Math.max(0, parseFloat((this._dividaLR - _abatimento).toFixed(2)));
-                if (this._dividaLR < 0.07) { this._dividaLR = 0; this.currentStake = base; break; }
+                this._dividaLR = parseFloat((this._dividaLR - _abatimento).toFixed(2));
+                // Só volta para base quando a dívida total for zero ou positiva (sessão no lucro)
+                if (this._dividaLR <= 0.01) { this._dividaLR = 0; this.currentStake = base; break; }
                 { const pct = parseFloat(cfg.qsr_pct || 50) / 100;
                   this.currentStake = Math.max(base, parseFloat((base + this._dividaLR * pct).toFixed(2))); } break;
 
@@ -4565,12 +4566,15 @@ class GerenciadorUnificado {
                 break; }
 
             case "📐 QSR": {
-                // Acumula a perda real na dívida (não apenas a stake teórica)
+                // Acumula a perda real na dívida total da sessão
                 this._dividaLR = parseFloat((this._dividaLR + _perdaReal).toFixed(2));
                 const pct = parseFloat(cfg.qsr_pct || 50) / 100;
+                // Próxima stake: base + % da dívida total
                 let prox = parseFloat((base + this._dividaLR * pct).toFixed(2));
-                if (prox <= stake) prox = parseFloat((stake + base).toFixed(2));
-                this.currentStake = Math.min(prox, parseFloat(cfg.qsr_max || 50));
+                // Garante que a próxima stake é sempre maior que a anterior
+                // (se não for suficiente para cobrir a dívida, força aumento)
+                if (prox <= stake) prox = parseFloat((stake * 1.1 + base * 0.1).toFixed(2));
+                this.currentStake = Math.min(Math.max(base, prox), parseFloat(cfg.qsr_max || 50));
                 break; }
 
             case "📊 Masaniello": {
