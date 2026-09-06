@@ -4454,7 +4454,6 @@ class GerenciadorUnificado {
     _onWin(lucroReal) {
         const cfg  = this.cfg;
         const base = parseFloat(cfg.stake || this.initialStake);
-        if (this._dividaLR < 0.07) this._dividaLR = 0;
         // Abatimento real: usa lucroReal se disponível, senão estima 95% da stake
         const _abatimento = (lucroReal != null && lucroReal > 0)
             ? lucroReal
@@ -4480,10 +4479,11 @@ class GerenciadorUnificado {
                 this.currentStake = base; break;
 
             case "📐 QSR":
-                // Abate a dívida com o lucro real desta operação
+                // Abate a dívida com o lucro real — preserva crédito negativo para
+                // compensar losses futuros sem escalar stake desnecessariamente
                 this._dividaLR = parseFloat((this._dividaLR - _abatimento).toFixed(2));
-                // Só volta para base quando a dívida total for zero ou positiva (sessão no lucro)
-                if (this._dividaLR <= 0.01) { this._dividaLR = 0; this.currentStake = base; break; }
+                // Só volta para base quando a dívida for ≤ 0 (sessão está no lucro acumulado)
+                if (this._dividaLR <= 0) { this.currentStake = base; break; }
                 { const pct = parseFloat(cfg.qsr_pct || 50) / 100;
                   this.currentStake = Math.max(base, parseFloat((base + this._dividaLR * pct).toFixed(2))); } break;
 
@@ -4566,14 +4566,13 @@ class GerenciadorUnificado {
                 break; }
 
             case "📐 QSR": {
-                // Acumula a perda real na dívida total da sessão
+                // Soma a perda real ao saldo da sessão (que pode estar negativo = crédito)
                 this._dividaLR = parseFloat((this._dividaLR + _perdaReal).toFixed(2));
                 const pct = parseFloat(cfg.qsr_pct || 50) / 100;
-                // Próxima stake: base + % da dívida total
+                // Se a dívida ainda é ≤ 0 (crédito absorveu o loss), volta para base
+                if (this._dividaLR <= 0) { this.currentStake = base; break; }
+                // Próxima stake: base + % da dívida real acumulada
                 let prox = parseFloat((base + this._dividaLR * pct).toFixed(2));
-                // Garante que a próxima stake é sempre maior que a anterior
-                // (se não for suficiente para cobrir a dívida, força aumento)
-                if (prox <= stake) prox = parseFloat((stake * 1.1 + base * 0.1).toFixed(2));
                 this.currentStake = Math.min(Math.max(base, prox), parseFloat(cfg.qsr_max || 50));
                 break; }
 
