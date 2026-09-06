@@ -1995,16 +1995,17 @@ def get_token():
 @app.route('/get-token-force', methods=['GET', 'POST'])
 def get_token_force():
     """Gera uma nova WSS URL (novo OTP) usando o access_token já armazenado,
-    SEM restrição de tempo. Usado pelo frontend quando o OTP expirou e
-    precisa reconectar sem pedir novo login ao usuário.
-    Retorna erro se o access_token não existir ou tiver expirado (> 10 min).
+    SEM restrição de tempo. Usado pelo frontend para reconexão automática.
+    O access_token OAuth da Deriv dura ~24h, então mantemos por até 23h.
+    Retorna erro apenas se o access_token não existir.
     """
     try:
         with _token_lock:
             access_token = _token_recebido.get("access_token", "")
             token_ts     = _token_recebido.get("ts", 0)
 
-        if not access_token or (time.time() - token_ts) >= 600:
+        # Mantém o token por até 23 horas (access_token OAuth da Deriv dura ~24h)
+        if not access_token or (time.time() - token_ts) >= 82800:
             return jsonify({"wss_url": None, "erro": "token_expirado"})
 
         print(f"[Token-Force] Gerando novo OTP (access_token age={time.time()-token_ts:.0f}s)")

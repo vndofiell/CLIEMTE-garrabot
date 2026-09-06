@@ -6860,7 +6860,66 @@ function resetarPlacar() {
     print("🔄 PLACAR RESETADO — Wins: 0 | Losses: 0 | Lucro: $0.00", "log-info");
 }
 
-function abrirModalConta() { document.getElementById('modal-conta').style.display = 'flex'; }
+// ── Reconexão automática após sessão expirada ───────────────────────────────
+// Se já sabemos o tipo de conta (demo/real), não mostra o modal — reconecta sozinho
+function abrirModalConta() {
+    // Tenta recuperar o tipo de conta da sessão anterior
+    const _tipoSalvo = bot.tipoConta
+        || localStorage.getItem('garrabot_tipoconta')
+        || '';
+
+    if (_tipoSalvo && (_tipoSalvo === 'demo' || _tipoSalvo === 'real')) {
+        // Reconecta automaticamente sem mostrar modal
+        print(`🔑 Sessão expirada — reconectando automaticamente como ${_tipoSalvo.toUpperCase()}...`, 'log-info');
+        _reconectarAutomaticamente(_tipoSalvo);
+        return;
+    }
+    // Tipo desconhecido — mostra modal normalmente
+    document.getElementById('modal-conta').style.display = 'flex';
+}
+
+// Tenta fazer o login + reconexão sem intervenção do usuário
+let _reconAutoEmAndamento = false;
+async function _reconectarAutomaticamente(tipo) {
+    if (_reconAutoEmAndamento) return;
+    _reconAutoEmAndamento = true;
+    try {
+        // Limpa token antigo
+        await fetch('/clear-token', { method: 'POST' }).catch(() => {});
+        // Abre o login no servidor (abre aba do browser com a Deriv)
+        await fetch('/open-login?tipo=' + tipo).catch(() => {});
+        print('⏳ Aguardando novo token da Deriv...', 'log-info');
+
+        // Poll por até 3 minutos esperando o token (o usuário pode já estar logado na Deriv)
+        let _tentativas = 0;
+        const _maxTentativas = 36; // 36 × 5s = 3 min
+        const _poll = setInterval(async () => {
+            _tentativas++;
+            try {
+                const res  = await fetch('/get-token');
+                const data = await res.json();
+                if (data.wss_url) {
+                    clearInterval(_poll);
+                    _reconAutoEmAndamento = false;
+                    print(`✅ Reconectado automaticamente como ${(data.tipo || tipo).toUpperCase()}`, 'log-win');
+                    bot.token = data.wss_url;
+                    initWebSocket(data.wss_url);
+                    return;
+                }
+            } catch(_) {}
+            if (_tentativas >= _maxTentativas) {
+                clearInterval(_poll);
+                _reconAutoEmAndamento = false;
+                print('⚠️ Não foi possível reconectar automaticamente. Clique em "conectar" no painel.', 'log-loss');
+                // Aí sim mostra o modal como fallback
+                document.getElementById('modal-conta').style.display = 'flex';
+            }
+        }, 5000);
+    } catch(_) {
+        _reconAutoEmAndamento = false;
+        document.getElementById('modal-conta').style.display = 'flex';
+    }
+}
 
 // ── Animação hacker de carregamento ──────────────────────
 function iniciarAnimacaoHacker() {
@@ -6893,6 +6952,8 @@ let _pollTokenId = 0;
 function escolherConta(tipo) {
     fecharModal('modal-conta');
     bot.tipoConta = tipo;
+    // Salva o tipo de conta para reconexão automática futura
+    localStorage.setItem('garrabot_tipoconta', tipo);
     const label = tipo === 'demo' ? '🧪 DEMO' : '💰 REAL';
     print("✏️ CONTA SELECIONADA: " + label, "log-info");
 
