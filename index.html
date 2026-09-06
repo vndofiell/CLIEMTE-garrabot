@@ -20426,6 +20426,7 @@ function dbsResetarSessao() {
         _dbsMgrWins   = 0;
         _dbsMgrLosses = 0;
         _dbsMgrLucro  = 0.0;
+        _dbsMgrPico   = 0.0;   // reseta pico para nova sessão
         _dbsMaDiv     = 0;
         _dbsMaAtivo   = false;
 
@@ -20529,6 +20530,7 @@ let _dbsMgr        = null;
 let _dbsMgrWins    = 0;
 let _dbsMgrLosses  = 0;
 let _dbsMgrLucro   = 0;
+let _dbsMgrPico    = 0;   // maior lucro já atingido na sessão (peak)
 let _dbsMaDiv      = 0;
 let _dbsMaAtivo    = false;
 
@@ -20585,8 +20587,39 @@ function dbsMgrRegistrarResultado(won, profit) {
             _dbsMaAtivo = true;
         }
     } else if (_dbsMgr) {
-        // Passa o lucro/prejuízo real para o gerenciador usar no abatimento da dívida
-        _dbsMgr.updateResult(won, profit);
+        if (nome === '📐 QSR') {
+            // ── QSR com Peak Recovery ─────────────────────────────────────────
+            // Atualiza o lucro ANTES de calcular o drawdown
+            if (won) _dbsMgrWins++; else _dbsMgrLosses++;
+            _dbsMgrLucro = parseFloat((_dbsMgrLucro + profit).toFixed(2));
+
+            // Atualiza pico se lucro atual superou o pico anterior
+            if (_dbsMgrLucro > _dbsMgrPico) _dbsMgrPico = _dbsMgrLucro;
+
+            // Drawdown = quanto caiu do pico (sempre ≥ 0)
+            const _drawdown = parseFloat(Math.max(0, _dbsMgrPico - _dbsMgrLucro).toFixed(2));
+
+            // Define a dívida do gerenciador = drawdown do pico
+            _dbsMgr._dividaLR = _drawdown;
+
+            // Recalcula a stake baseado no drawdown
+            const _base = parseFloat(document.getElementById('dbs-entrada')?.value) || 0.35;
+            const _cfg  = _dbsMgr.cfg;
+            const _pct  = parseFloat(_cfg.qsr_pct || 50) / 100;
+            if (_drawdown <= 0) {
+                _dbsMgr.currentStake = _base;
+            } else {
+                const _prox = parseFloat((_base + _drawdown * _pct).toFixed(2));
+                _dbsMgr.currentStake = Math.min(Math.max(_base, _prox), parseFloat(_cfg.qsr_max || 50));
+            }
+            // Pula o updateResult padrão — já gerenciamos acima
+        } else {
+            // Outros gerenciadores: usa updateResult normal com lucro real
+            _dbsMgr.updateResult(won, profit);
+            if (won) _dbsMgrWins++; else _dbsMgrLosses++;
+            _dbsMgrLucro = parseFloat((_dbsMgrLucro + profit).toFixed(2));
+        }
+        return; // já atualizou wins/losses/lucro acima para QSR
     }
     if (won) _dbsMgrWins++; else _dbsMgrLosses++;
     _dbsMgrLucro = parseFloat((_dbsMgrLucro + profit).toFixed(2));
