@@ -20575,11 +20575,34 @@ function dbsMgrGetStake() {
         return Math.max(baseStake, parseFloat(((_divTotal + baseStake) / payout).toFixed(2)));
     }
     if (_dbsMgr && _hwmDiv > 0) {
-        // Outros gerenciadores: injeta a dívida HWM na _dividaLR interna
-        // (só se ela ainda não estiver contabilizada — evita dupla contagem)
+        // Injeta dívida HWM no gerenciador:
+        // usa max(dívida interna, dívida HWM) para não abaixar o que já estava sendo recuperado
         const _dividaAtual = _dbsMgr._dividaLR || 0;
-        if (_hwmDiv > _dividaAtual) {
-            _dbsMgr._dividaLR = parseFloat(_hwmDiv.toFixed(2));
+        const _novaDiv = Math.max(_dividaAtual, _hwmDiv);
+        if (_novaDiv !== _dividaAtual) {
+            _dbsMgr._dividaLR = parseFloat(_novaDiv.toFixed(2));
+        }
+        // Força recálculo do currentStake com a dívida atualizada
+        // (getStake() apenas retorna currentStake sem recalcular)
+        const _modo = _dbsMgr.modo || '';
+        if (_modo === '📉 Loss Recovery' && typeof _dbsMgr._calcLR === 'function') {
+            _dbsMgr._calcLR();
+        } else if (_modo === '📐 QSR') {
+            const _pct = parseFloat(_dbsMgr.cfg.qsr_pct || 50) / 100;
+            const _max = parseFloat(_dbsMgr.cfg.qsr_max || 50);
+            _dbsMgr.currentStake = Math.min(
+                Math.max(baseStake, parseFloat((baseStake + _dbsMgr._dividaLR * _pct).toFixed(2))),
+                _max
+            );
+        } else if (_modo === '🛡️ Recovery Conservador') {
+            const _pct = parseFloat(_dbsMgr.cfg.lr_recovery_pct || 50) / 100;
+            _dbsMgr.currentStake = Math.max(baseStake,
+                parseFloat((baseStake + _dbsMgr._dividaLR * _pct).toFixed(2)));
+        } else if (_modo === '🤖 Recovery Adaptativo' && _dbsMgr._dividaLR > 0) {
+            _dbsMgr._raDivida = Math.max(_dbsMgr._raDivida || 0, _hwmDiv);
+            if (typeof _dbsMgr._calcRA === 'function') _dbsMgr._calcRA();
+            else _dbsMgr.currentStake = Math.max(baseStake,
+                parseFloat((baseStake + _dbsMgr._dividaLR * 0.5).toFixed(2)));
         }
     }
     return _dbsMgr ? _dbsMgr.getStake() : baseStake;
@@ -20597,6 +20620,35 @@ function dbsMgrRegistrarResultado(won, profit) {
         }
     } else if (_dbsMgr) {
         _dbsMgr.updateResult(won);
+        // ── HWM: após WIN o _onWin() pode ter zerado _dividaLR e resetado currentStake
+        // para a base. Se ainda há dívida HWM, reinjeta imediatamente para que a
+        // próxima stake já saia correta (não volta para base enquanto banca < pico).
+        if (won && _dbsHwmAtivo) {
+            const _bancaWin = parseFloat(document.getElementById('hd-balance')?.textContent?.replace('$','').replace(',','')) || 0;
+            const _divHwm = _dbsHwmDividaAtual(_bancaWin);
+            if (_divHwm > 0.01) {
+                _dbsMgr._dividaLR = parseFloat(_divHwm.toFixed(2));
+                const _modoWin = _dbsMgr.modo || '';
+                const _baseWin = parseFloat(_dbsMgr.cfg?.stake || _dbsMgr.initialStake || 0.35);
+                if (_modoWin === '📉 Loss Recovery' && typeof _dbsMgr._calcLR === 'function') {
+                    _dbsMgr._calcLR();
+                } else if (_modoWin === '📐 QSR') {
+                    const _pct = parseFloat(_dbsMgr.cfg.qsr_pct || 50) / 100;
+                    const _max = parseFloat(_dbsMgr.cfg.qsr_max || 50);
+                    _dbsMgr.currentStake = Math.min(
+                        Math.max(_baseWin, parseFloat((_baseWin + _divHwm * _pct).toFixed(2))),
+                        _max
+                    );
+                } else if (_modoWin === '🛡️ Recovery Conservador') {
+                    const _pct = parseFloat(_dbsMgr.cfg.lr_recovery_pct || 50) / 100;
+                    _dbsMgr.currentStake = Math.max(_baseWin,
+                        parseFloat((_baseWin + _divHwm * _pct).toFixed(2)));
+                } else if (_modoWin === '🤖 Recovery Adaptativo') {
+                    _dbsMgr._raDivida = Math.max(_dbsMgr._raDivida || 0, _divHwm);
+                    if (typeof _dbsMgr._calcRA === 'function') _dbsMgr._calcRA();
+                }
+            }
+        }
     }
     if (won) _dbsMgrWins++; else _dbsMgrLosses++;
     _dbsMgrLucro = parseFloat((_dbsMgrLucro + profit).toFixed(2));
