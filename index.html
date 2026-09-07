@@ -7662,7 +7662,7 @@ async function testarTelegram() {
     }
 }
 
-function tgEnviarResultado(win, lucro, prox_stake, _origemSec) {
+function tgEnviarResultado(win, lucro, prox_stake, _origemSec, _overrides) {
     const _modoEspelhoAtivo = (typeof _sec !== 'undefined' && _sec.pronto && _sec.espelhandoAtivo);
     const _lvVirtual        = bot.lv && bot.lv.ativo && !bot.lv.emRecuperacao;
 
@@ -7723,8 +7723,8 @@ function tgEnviarResultado(win, lucro, prox_stake, _origemSec) {
             wins:            bot.wins,
             losses:          bot.losses,
             prox_stake:      prox_stake,
-            modo:            bot.gerenciamento,
-            estrategia:      bot.estrategia,
+            modo:            (_overrides && _overrides.modo)       || bot.gerenciamento,
+            estrategia:      (_overrides && _overrides.estrategia) || bot.estrategia,
             seq_win:         bot._seqWinAtual,
             seq_loss:        bot._seqLossAtual,
             max_win_consec:  bot._maxWinConsec,
@@ -10040,8 +10040,20 @@ function initWebSocket(wssUrl) {
                 document.getElementById('hd-nextstake').textContent = '$' + _dbsNextStake.toFixed(2);
                 const _mobNext = document.getElementById('mob-nextstake');
                 if (_mobNext) _mobNext.textContent = '$' + _dbsNextStake.toFixed(2);
-                // Envia resultado para o Telegram com a stake correta do DBS
-                if (!(_sec && _sec.pronto)) tgEnviarResultado(_dbsWon, _dbsProfit, _dbsNextStake);
+                // Envia resultado para o Telegram com dados corretos do DBS
+                if (!(_sec && _sec.pronto)) {
+                    const _tgP = bot._dbsUltimoPayloadTg || {};
+                    const _tgMgrNome = document.getElementById('dbs-mgr')?.value || 'QSR';
+                    // Monta nome: "DIGIT BARRIER 356 — DIGITOVER B:3 R_50"
+                    const _tgEst = _tgP.tipo
+                        ? `DIGIT BARRIER 356 — ${_tgP.tipo} B:${_tgP.barreira} ${_tgP.ativo}`
+                        : 'DIGIT BARRIER 356';
+                    tgEnviarResultado(_dbsWon, _dbsProfit, _dbsNextStake, false, {
+                        estrategia: _tgEst,
+                        modo:       _tgMgrNome,
+                    });
+                    bot._dbsUltimoPayloadTg = null;
+                }
                 return;
             }
             const profit = parseFloat(data.proposal_open_contract.profit);
@@ -20788,6 +20800,13 @@ bot.operarComSinal = function(payload, _retentativa) {
                     }
                     _dbsRenderLog();
                     if (typeof dbsMgrRegistrarResultado === 'function') dbsMgrRegistrarResultado(won, profit);
+                    // Salva dados para o Telegram ANTES de zerar o payload
+                    bot._dbsUltimoPayloadTg = {
+                        tipo:      bot._dbsUltimoPayload.tipo,
+                        barreira:  bot._dbsUltimoPayload.barreira,
+                        ativo:     bot._dbsUltimoPayload.ativo,
+                        confianca: bot._dbsUltimoPayload.confianca,
+                    };
                     bot._dbsUltimoPayload = null;
                 }
 
