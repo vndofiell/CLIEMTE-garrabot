@@ -3448,20 +3448,12 @@
             <div style="background:rgba(0,0,0,0.3);border:1px solid rgba(99,102,241,0.2);border-radius:6px;padding:10px 12px;">
               <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:6px;flex-wrap:wrap;">
                 <span style="font-size:0.58rem;color:#6366f1;letter-spacing:2px;">⚙️ GERENCIAMENTO DE BANCA</span>
-                <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
-                  <!-- Badge JC: aparece apenas quando JC está ativo -->
-                  <div id="dbs-jc-badge" style="display:none;background:rgba(0,255,100,0.08);border:1px solid rgba(0,255,100,0.4);
-                      border-radius:4px;padding:2px 7px;font-size:0.58rem;color:#00ff64;white-space:nowrap;cursor:pointer;"
-                      onclick="dbsJcAplicarMeta()" title="Clique para aplicar meta JC como Stop Win">
-                    💹 JC DIA <span id="dbs-jc-dia">1</span> — META: $<span id="dbs-jc-meta">0.00</span>
-                    <span style="color:#6b7280;font-size:0.53rem;"> ▸ APLICAR</span>
-                  </div>
-                  <!-- Botão resetar sessão DBS -->
-                  <button onclick="dbsResetarSessao()" title="Zera wins, losses, lucro e reinicia o gerenciador para nova sessão"
-                      style="background:rgba(251,191,36,0.08);border:1px solid rgba(251,191,36,0.35);border-radius:4px;
-                             color:#fbbf24;font-size:0.56rem;padding:2px 8px;cursor:pointer;white-space:nowrap;">
-                    🔄 RESETAR SESSÃO
-                  </button>
+                <!-- Badge JC: aparece apenas quando JC está ativo -->
+                <div id="dbs-jc-badge" style="display:none;background:rgba(0,255,100,0.08);border:1px solid rgba(0,255,100,0.4);
+                    border-radius:4px;padding:2px 7px;font-size:0.58rem;color:#00ff64;white-space:nowrap;cursor:pointer;"
+                    onclick="dbsJcAplicarMeta()" title="Clique para aplicar meta JC como Stop Win">
+                  💹 JC DIA <span id="dbs-jc-dia">1</span> — META: $<span id="dbs-jc-meta">0.00</span>
+                  <span style="color:#6b7280;font-size:0.53rem;"> ▸ APLICAR</span>
                 </div>
               </div>
               <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px;">
@@ -4442,22 +4434,17 @@ class GerenciadorUnificado {
 
     getStake() { return Math.max(0.35, parseFloat(this.currentStake.toFixed(2))); }
 
-    // lucroReal: lucro líquido real da operação (positivo=win, negativo=loss)
-    // Se fornecido, QSR usa ele para abater a dívida com precisão
-    updateResult(won, lucroReal) { won ? this._onWin(lucroReal) : this._onLoss(lucroReal); }
+    updateResult(won) { won ? this._onWin() : this._onLoss(); }
 
     updateResultDupla(totalProfit, stakePorLado) {
         // Delega para updateResult normal (Dupla Recovery removido)
-        this.updateResult(totalProfit > 0, Math.abs(totalProfit));
+        this.updateResult(totalProfit > 0);
     }
 
-    _onWin(lucroReal) {
+    _onWin() {
         const cfg  = this.cfg;
         const base = parseFloat(cfg.stake || this.initialStake);
-        // Abatimento real: usa lucroReal se disponível, senão estima 95% da stake
-        const _abatimento = (lucroReal != null && lucroReal > 0)
-            ? lucroReal
-            : this.currentStake * 0.95;
+        if (this._dividaLR < 0.07) this._dividaLR = 0;
 
         switch (this.modo) {
             case "💰 Stake Fixa":
@@ -4470,20 +4457,17 @@ class GerenciadorUnificado {
                 this.currentStake = base; this._nivelGale = 0; break;
 
             case "📉 Loss Recovery":
-                this._dividaLR = Math.max(0, this._dividaLR - _abatimento);
+                this._dividaLR = Math.max(0, this._dividaLR - this.currentStake * 0.95);
                 this._nivelGale = 0;
                 this._calcLR(); break;
 
             case "🛡️ Recovery Conservador":
-                this._dividaLR = Math.max(0, this._dividaLR - _abatimento);
+                this._dividaLR = Math.max(0, this._dividaLR - this.currentStake * 0.95);
                 this.currentStake = base; break;
 
             case "📐 QSR":
-                // Abate a dívida com o lucro real — preserva crédito negativo para
-                // compensar losses futuros sem escalar stake desnecessariamente
-                this._dividaLR = parseFloat((this._dividaLR - _abatimento).toFixed(2));
-                // Só volta para base quando a dívida for ≤ 0 (sessão está no lucro acumulado)
-                if (this._dividaLR <= 0) { this.currentStake = base; break; }
+                this._dividaLR = Math.max(0, this._dividaLR - this.currentStake * 0.95);
+                if (this._dividaLR < 0.07) { this._dividaLR = 0; this.currentStake = base; break; }
                 { const pct = parseFloat(cfg.qsr_pct || 50) / 100;
                   this.currentStake = Math.max(base, parseFloat((base + this._dividaLR * pct).toFixed(2))); } break;
 
@@ -4527,14 +4511,10 @@ class GerenciadorUnificado {
         }
     }
 
-    _onLoss(lucroReal) {
+    _onLoss() {
         const cfg   = this.cfg;
         const base  = parseFloat(cfg.stake || this.initialStake);
-        // Para loss: usa o valor absoluto do lucroReal como perda real, ou cai back para stake
         const stake = this.currentStake;
-        const _perdaReal = (lucroReal != null && lucroReal < 0)
-            ? Math.abs(lucroReal)
-            : stake;
 
         switch (this.modo) {
             case "💰 Stake Fixa": break; // não muda
@@ -4566,14 +4546,11 @@ class GerenciadorUnificado {
                 break; }
 
             case "📐 QSR": {
-                // Soma a perda real ao saldo da sessão (que pode estar negativo = crédito)
-                this._dividaLR = parseFloat((this._dividaLR + _perdaReal).toFixed(2));
+                this._dividaLR += stake;
                 const pct = parseFloat(cfg.qsr_pct || 50) / 100;
-                // Se a dívida ainda é ≤ 0 (crédito absorveu o loss), volta para base
-                if (this._dividaLR <= 0) { this.currentStake = base; break; }
-                // Próxima stake: base + % da dívida real acumulada
                 let prox = parseFloat((base + this._dividaLR * pct).toFixed(2));
-                this.currentStake = Math.min(Math.max(base, prox), parseFloat(cfg.qsr_max || 50));
+                if (prox <= stake) prox = parseFloat((stake + base).toFixed(2));
+                this.currentStake = Math.min(prox, parseFloat(cfg.qsr_max || 50));
                 break; }
 
             case "📊 Masaniello": {
@@ -6860,66 +6837,7 @@ function resetarPlacar() {
     print("🔄 PLACAR RESETADO — Wins: 0 | Losses: 0 | Lucro: $0.00", "log-info");
 }
 
-// ── Reconexão automática após sessão expirada ───────────────────────────────
-// Se já sabemos o tipo de conta (demo/real), não mostra o modal — reconecta sozinho
-function abrirModalConta() {
-    // Tenta recuperar o tipo de conta da sessão anterior
-    const _tipoSalvo = bot.tipoConta
-        || localStorage.getItem('garrabot_tipoconta')
-        || '';
-
-    if (_tipoSalvo && (_tipoSalvo === 'demo' || _tipoSalvo === 'real')) {
-        // Reconecta automaticamente sem mostrar modal
-        print(`🔑 Sessão expirada — reconectando automaticamente como ${_tipoSalvo.toUpperCase()}...`, 'log-info');
-        _reconectarAutomaticamente(_tipoSalvo);
-        return;
-    }
-    // Tipo desconhecido — mostra modal normalmente
-    document.getElementById('modal-conta').style.display = 'flex';
-}
-
-// Tenta fazer o login + reconexão sem intervenção do usuário
-let _reconAutoEmAndamento = false;
-async function _reconectarAutomaticamente(tipo) {
-    if (_reconAutoEmAndamento) return;
-    _reconAutoEmAndamento = true;
-    try {
-        // Limpa token antigo
-        await fetch('/clear-token', { method: 'POST' }).catch(() => {});
-        // Abre o login no servidor (abre aba do browser com a Deriv)
-        await fetch('/open-login?tipo=' + tipo).catch(() => {});
-        print('⏳ Aguardando novo token da Deriv...', 'log-info');
-
-        // Poll por até 3 minutos esperando o token (o usuário pode já estar logado na Deriv)
-        let _tentativas = 0;
-        const _maxTentativas = 36; // 36 × 5s = 3 min
-        const _poll = setInterval(async () => {
-            _tentativas++;
-            try {
-                const res  = await fetch('/get-token');
-                const data = await res.json();
-                if (data.wss_url) {
-                    clearInterval(_poll);
-                    _reconAutoEmAndamento = false;
-                    print(`✅ Reconectado automaticamente como ${(data.tipo || tipo).toUpperCase()}`, 'log-win');
-                    bot.token = data.wss_url;
-                    initWebSocket(data.wss_url);
-                    return;
-                }
-            } catch(_) {}
-            if (_tentativas >= _maxTentativas) {
-                clearInterval(_poll);
-                _reconAutoEmAndamento = false;
-                print('⚠️ Não foi possível reconectar automaticamente. Clique em "conectar" no painel.', 'log-loss');
-                // Aí sim mostra o modal como fallback
-                document.getElementById('modal-conta').style.display = 'flex';
-            }
-        }, 5000);
-    } catch(_) {
-        _reconAutoEmAndamento = false;
-        document.getElementById('modal-conta').style.display = 'flex';
-    }
-}
+function abrirModalConta() { document.getElementById('modal-conta').style.display = 'flex'; }
 
 // ── Animação hacker de carregamento ──────────────────────
 function iniciarAnimacaoHacker() {
@@ -6952,8 +6870,6 @@ let _pollTokenId = 0;
 function escolherConta(tipo) {
     fecharModal('modal-conta');
     bot.tipoConta = tipo;
-    // Salva o tipo de conta para reconexão automática futura
-    localStorage.setItem('garrabot_tipoconta', tipo);
     const label = tipo === 'demo' ? '🧪 DEMO' : '💰 REAL';
     print("✏️ CONTA SELECIONADA: " + label, "log-info");
 
@@ -7764,21 +7680,6 @@ function tgEnviarResultado(win, lucro, prox_stake, _origemSec) {
     } else {
         // ── Modo Normal: usa dados da conta principal ────────────────────
         const saldo = parseFloat(document.getElementById('hd-balance').textContent.replace('$','')) || 0;
-
-        // Se a operação veio do DBS, usa o gerenciador, ativo e contrato do DBS
-        const _dbsOp    = bot._dbsUltimoPayload || null;
-        const _modoReal = _dbsOp
-            ? (document.getElementById('dbs-mgr')?.value || bot.gerenciamento)
-            : bot.gerenciamento;
-        const _ativoReal = _dbsOp ? (_dbsOp.ativo || '') : '';
-        // Estratégia: DBS mostra "DIGITOVER B:3" em vez do nome da estratégia do bot
-        const _estrategiaReal = _dbsOp
-            ? `DBS356 — ${(_dbsOp.tipo || '').toUpperCase()} B:${_dbsOp.barreira || ''}`
-            : bot.estrategia;
-
-        // Limpa emojis do gerenciamento
-        const _limparGer = (s) => (s || '').replace(/[\u{1F300}-\u{1FAFF}🎯🤖⚙️💹🔄📐⚡📉🛡️📊]/gu, '').trim();
-
         payload = {
             win:             win,
             lucro:           lucro,
@@ -7787,9 +7688,8 @@ function tgEnviarResultado(win, lucro, prox_stake, _origemSec) {
             wins:            bot.wins,
             losses:          bot.losses,
             prox_stake:      prox_stake,
-            modo:            _limparGer(_modoReal),
-            estrategia:      _estrategiaReal,
-            ativo:           _ativoReal,
+            modo:            bot.gerenciamento,
+            estrategia:      bot.estrategia,
             seq_win:         bot._seqWinAtual,
             seq_loss:        bot._seqLossAtual,
             max_win_consec:  bot._maxWinConsec,
@@ -7848,27 +7748,19 @@ function tgEnviarStopWin() {
             maxStake = bot._maxStakeUsada;
         }
 
-        // Tempo total do cronômetro (HH:MM:SS) — usa o _timer global
-        const _timerEl = document.getElementById('hd-timer');
-        const _tempoTotal = _timerEl ? _timerEl.textContent : '00:00:00';
-
-        // Limpa emojis e espaços do gerenciamento para exibição limpa
-        const _limparGer = (s) => (s || '').replace(/[\u{1F300}-\u{1FAFF}🎯🤖⚙️💹🔄]/gu, '').trim();
-
         const payload = {
             stop_win:        true,
             lucro:           lucro,
             banca:           saldo,
             wins:            wins,
             losses:          losses,
-            modo:            _limparGer(modo),
-            estrategia:      _limparGer(bot.estrategia),
+            modo:            modo,
+            estrategia:      bot.estrategia,
             seq_win:         seqWin,
             seq_loss:        seqLoss,
             max_win_consec:  maxWin,
             max_loss_consec: maxLoss,
             max_stake:       maxStake,
-            tempo_total:     _tempoTotal,
             // Marca SECUNDARIA para que o servidor monte a mensagem correta
             conta:           _modoEspelhoAtivo ? 'SECUNDARIA' : '',
         };
@@ -9009,10 +8901,9 @@ let _wsReconectando = false;
 let _wsReconTimer   = null;
 
 /**
- * Tenta obter uma URL WSS nova do servidor (novo OTP).
- * Primeiro tenta /get-token-force (sem precisar de novo login).
- * Se falhar (access_token expirado > 10min), pede novo login ao usuário.
- * @returns {Promise<string|null>} nova wssUrl ou null se precisar de login
+ * Tenta obter uma URL WSS nova do servidor via /get-token-force (novo OTP).
+ * Não requer novo login OAuth — usa o access_token já armazenado (válido ~24h).
+ * Retorna null se o access_token expirou (precisa de novo login OAuth).
  */
 async function _wsObterNovaUrl() {
     try {
@@ -9024,9 +8915,9 @@ async function _wsObterNovaUrl() {
 }
 
 function initWebSocket(wssUrl) {
-    bot._wssUrl = wssUrl;  // guarda URL para reconexão automática
-    bot._wsOpenTs = Date.now(); // marca momento em que a conexão foi aberta
-    _wsReconectando = false; // nova conexão iniciada — reseta o guard
+    bot._wssUrl   = wssUrl;  // guarda URL para reconexão automática
+    bot._wsOpenTs = Date.now();
+    _wsReconectando = false;
     if (_wsReconTimer) { clearTimeout(_wsReconTimer); _wsReconTimer = null; }
     bot.ws = new WebSocket(wssUrl);
     bot.ws.onerror  = () => print("⚠️ ERRO WEBSOCKET.", "log-loss");
@@ -9041,50 +8932,67 @@ function initWebSocket(wssUrl) {
         const _durou = Date.now() - (bot._wsOpenTs || 0);
         const _otpExpirado = _durou < 3000;
 
+        // Verifica se o DBS está ativo (modal aberto e auto-scan/operar ligado)
+        const _dbsModalAberto = () => {
+            const m = document.getElementById('dbs-modal');
+            return m && m.style.display !== 'none';
+        };
+        const _dbsEstaAtivo = () => {
+            const autoScan  = document.getElementById('dbs-auto-scan');
+            const autoOp    = document.getElementById('dbs-auto-operar');
+            return _dbsModalAberto() && ((autoScan && autoScan.checked) || (autoOp && autoOp.checked));
+        };
+
         let _tentativa = 0;
         const _tentarReconectar = async () => {
             if (!bot._wssUrl) { _wsReconectando = false; return; }
             if (bot.ws && bot.ws.readyState === WebSocket.OPEN) { _wsReconectando = false; return; }
             _tentativa++;
 
-            // Se o OTP parece expirado (ou já tentou 2× e continua falhando rápido),
-            // tenta buscar uma URL nova no servidor antes de abrir nova conexão
-            const _tentarForce = _otpExpirado || _tentativa > 1;
-            if (_tentarForce) {
-                print(`🔑 OTP expirado — buscando novo token... (tentativa ${_tentativa})`, "log-info");
+            // Se o OTP parece expirado (conexão caiu imediatamente) ou já falhou antes,
+            // busca nova URL via OAuth access_token (sem precisar de novo login)
+            const _deveForcar = _otpExpirado || _tentativa > 2;
+            if (_deveForcar) {
+                print(`🔑 OTP expirado — obtendo novo token OAuth... (tentativa ${_tentativa})`, "log-info");
                 const _novaUrl = await _wsObterNovaUrl();
                 if (_novaUrl) {
-                    // Conseguiu nova URL — reconecta com ela
-                    print(`📡 Novo token obtido — reconectando...`, "log-win");
+                    print(`📡 Novo OTP obtido — reconectando...`, "log-win");
                     _wsReconectando = false;
                     initWebSocket(_novaUrl);
                     return;
                 } else {
-                    // Sem access_token válido — precisa de login manual
+                    // access_token OAuth também expirou (>23h) — precisa de novo login
                     _wsReconectando = false;
-                    bot._wssUrl = null; // cancela reconexão automática
-                    print(`🔐 Sessão expirada — faça login novamente.`, "log-loss");
+                    bot._wssUrl = null;
+                    print(`🔐 Sessão expirada — faça login novamente via OAuth.`, "log-loss");
                     if (typeof abrirModalConta === 'function') abrirModalConta();
                     return;
                 }
             }
 
-            // OTP ainda pode ser válido — tenta reconectar direto com back-off suave
-            const _delay = Math.min(_tentativa * 2000, 10000);
+            // OTP ainda pode ser válido — só reconecta automaticamente se bot rodando ou DBS ativo
+            if (!bot.running && !_dbsEstaAtivo()) {
+                // Bot parado: tenta obter nova URL silenciosamente para próxima vez
+                const _urlSilenciosa = await _wsObterNovaUrl();
+                if (_urlSilenciosa) {
+                    bot._wssUrl = _urlSilenciosa; // atualiza para reconexão futura
+                }
+                _wsReconectando = false;
+                return;
+            }
+
             print(`📡 Reconectando automaticamente... (tentativa ${_tentativa})`, "log-info");
             try { initWebSocket(bot._wssUrl); } catch(_) {}
-            // Agenda verificação: se não abriu, tenta de novo
             _wsReconTimer = setTimeout(async () => {
                 if (bot.ws && bot.ws.readyState === WebSocket.OPEN) { _wsReconectando = false; return; }
                 if (!bot._wssUrl) { _wsReconectando = false; return; }
                 await _tentarReconectar();
-            }, _delay + 3000);
+            }, Math.min(_tentativa * 2000, 10000) + 3000);
         };
         _wsReconTimer = setTimeout(_tentarReconectar, 2000);
     };
 
     bot.ws.onopen = () => {
-        bot._wsOpenTs = Date.now(); // atualiza timestamp — conexão aberta com sucesso
         print("🔒 CONECTADO! BUSCANDO SALDO...", "log-win");
         bot._loginid  = undefined; // reseta para nova conexão
         bot._buying   = false;     // libera flag de compra travado
@@ -17747,10 +17655,16 @@ _wakeLockAtivar();
 
     // ── 1. Watchdog — verifica WS a cada 5s e reconecta se cair ──
     setInterval(() => {
-        // Bot principal — reconecta SEMPRE que há URL (independente de running)
-        if (typeof bot !== 'undefined' && bot._wssUrl) {
+        // Bot principal — reconecta se bot rodando OU se DBS está ativo com modal aberto
+        const _wdDbsAtivo = () => {
+            const m  = document.getElementById('dbs-modal');
+            if (!m || m.style.display === 'none') return false;
+            const s1 = document.getElementById('dbs-auto-scan');
+            const s2 = document.getElementById('dbs-auto-operar');
+            return (s1 && s1.checked) || (s2 && s2.checked);
+        };
+        if (typeof bot !== 'undefined' && bot._wssUrl && (bot.running || _wdDbsAtivo())) {
             if (!bot.ws || bot.ws.readyState === WebSocket.CLOSED || bot.ws.readyState === WebSocket.CLOSING) {
-                // Só inicia nova conexão se não há já uma em andamento pelo onclose
                 if (!_wsReconectando) {
                     console.warn('🔁 Watchdog: WS principal caiu — reconectando...');
                     try { initWebSocket(bot._wssUrl); } catch(_) {}
@@ -17804,8 +17718,15 @@ _wakeLockAtivar();
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState !== 'visible') return;
         setTimeout(() => {
-            // Reconecta bot principal se caiu — SEMPRE que há URL
-            if (typeof bot !== 'undefined' && bot._wssUrl) {
+            // Reconecta bot principal se caiu — também reconecta se DBS está ativo
+            const _vcDbsAtivo = () => {
+                const m  = document.getElementById('dbs-modal');
+                if (!m || m.style.display === 'none') return false;
+                const s1 = document.getElementById('dbs-auto-scan');
+                const s2 = document.getElementById('dbs-auto-operar');
+                return (s1 && s1.checked) || (s2 && s2.checked);
+            };
+            if (typeof bot !== 'undefined' && bot._wssUrl && (bot.running || _vcDbsAtivo())) {
                 if (!bot.ws || bot.ws.readyState !== WebSocket.OPEN) {
                     if (!_wsReconectando) {
                         console.log('📡 Voltou do background — reconectando bot principal...');
@@ -17844,7 +17765,7 @@ _wakeLockAtivar();
     window.addEventListener('pageshow', (e) => {
         if (!e.persisted) return;  // só para páginas do cache (bfcache iOS)
         setTimeout(() => {
-            if (typeof bot !== 'undefined' && bot._wssUrl &&
+            if (typeof bot !== 'undefined' && bot.running && bot._wssUrl &&
                 (!bot.ws || bot.ws.readyState !== WebSocket.OPEN) && !_wsReconectando) {
                 console.log('📡 pageshow bfcache — reconectando...');
                 try { initWebSocket(bot._wssUrl); } catch(_) {}
@@ -20473,125 +20394,11 @@ function dbsLimparLog() {
     _dbsRenderLog();
 }
 
-// ── Resetar sessão DBS (zera gerenciador, wins, losses, lucro) ────────────────
-function dbsResetarSessao() {
-    if (!confirm('Resetar a sessão do DBS?\n\nIsso vai zerar wins, losses, lucro e reiniciar o gerenciador de banca para começar do zero.\n\nO histórico de operações também será limpo.')) return;
-
-    // ── Verifica se a meta JC estava batida ──────────────────────────────────
-    // Se sim: avança para o próximo dia da planilha antes de resetar a sessão
-    const _jcAtivo        = typeof bot !== 'undefined' && bot.mgr && bot.mgr.modo === '💹 Juros Compostos';
-    const _metaFoiBatida  = typeof bot !== 'undefined' && bot._metaEncerrada === true;
-
-    const _executarReset = () => {
-        // Zera contadores do DBS
-        _dbsMgrWins   = 0;
-        _dbsMgrLosses = 0;
-        _dbsMgrLucro  = 0.0;
-        _dbsMgrPico   = 0.0;   // reseta pico para nova sessão
-        _dbsMaDiv     = 0;
-        _dbsMaAtivo   = false;
-
-        // Zera proteção mão quente
-        _dbsLossConsec  = 0;
-        _dbsCooldownAte = 0;
-
-        // Reinicia gerenciador com os valores atuais da tela
-        const nome  = document.getElementById('dbs-mgr')?.value;
-        const stake = parseFloat(document.getElementById('dbs-entrada')?.value) || 0.35;
-        if (nome === '📐 MA-Adaptativo') {
-            _dbsMgr = null;
-        } else {
-            _dbsMgr = (nome && nome !== 'flat' && typeof GerenciadorUnificado !== 'undefined')
-                ? new GerenciadorUnificado(nome, { stake }) : null;
-        }
-
-        // Libera o bot para operar no próximo dia
-        if (typeof bot !== 'undefined') {
-            bot._metaEncerrada = false;
-            bot.wins    = 0;
-            bot.losses  = 0;
-            bot.profit  = 0.0;
-            bot._seqWinAtual   = 0;
-            bot._seqLossAtual  = 0;
-            bot._maxWinConsec  = 0;
-            bot._maxLossConsec = 0;
-            bot._maxStakeUsada = 0;
-            bot.stake = bot.initialStake;
-            if (bot.mgr) bot.mgr = new GerenciadorUnificado(bot.gerenciamento,
-                Object.assign({ stake: bot.initialStake }, (bot._mgrCfgs && bot._mgrCfgs[bot.gerenciamento]) || {}));
-            if (typeof _timer !== 'undefined') _timer.resetar();
-            if (typeof updateHeader === 'function') updateHeader();
-        }
-
-        // Limpa status e histórico visual
-        const statusEl = document.getElementById('dbs-status');
-        if (statusEl) statusEl.textContent = '✅ Sessão resetada — pronto para nova sessão.';
-        dbsLimparLog();
-
-        // Atualiza painéis
-        dbsMgrAtualizarStatsConsec();
-        dbsMgrAtualizarStats();
-
-        if (typeof print === 'function') print('🔄 DBS — Sessão resetada. Pronto para novo dia.', 'log-info');
-    };
-
-    if (_jcAtivo && _metaFoiBatida) {
-        // Meta JC batida → registra o dia e avança a planilha antes de resetar
-        const lucro  = (typeof bot !== 'undefined') ? (bot.profit || 0) : 0;
-        const wins   = (typeof bot !== 'undefined') ? (bot.wins   || 0) : 0;
-        const losses = (typeof bot !== 'undefined') ? (bot.losses || 0) : 0;
-
-        if (typeof print === 'function') print('📊 JC — Avançando para o próximo dia da planilha...', 'log-info');
-
-        fetch('/jc-registrar-dia', {
-            method:  'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({ lucro_total: lucro, wins: wins, losses: losses }),
-        })
-        .then(r => r.json())
-        .then(res => {
-            if (res.ok) {
-                const proxDia = res.proximo_dia || (res.dia + 1);
-                if (typeof print === 'function')
-                    print(`✅ JC — Dia ${res.dia} registrado. Avançando para o Dia ${proxDia}.`, 'log-win');
-                // Aplica nova meta do próximo dia como Stop Win
-                if (typeof jcAplicarMetaComoStopWin === 'function') jcAplicarMetaComoStopWin();
-                if (typeof jcAtualizarLabelPainel    === 'function') jcAtualizarLabelPainel(null);
-                // Atualiza badge JC no DBS
-                fetch('/jc-meta').then(r => r.json()).then(m => {
-                    const meta = m.meta_hoje || 0;
-                    const dia  = m.dia_atual  || proxDia;
-                    const badge = document.getElementById('dbs-jc-badge');
-                    const diaEl = document.getElementById('dbs-jc-dia');
-                    const metaEl = document.getElementById('dbs-jc-meta');
-                    if (badge)  badge.style.display = '';
-                    if (diaEl)  diaEl.textContent   = dia;
-                    if (metaEl) metaEl.textContent  = meta.toFixed(2);
-                    // Aplica a nova meta como Stop Win do DBS também
-                    const swEl = document.getElementById('dbs-stopwin');
-                    if (swEl && meta > 0) swEl.value = meta.toFixed(2);
-                }).catch(() => {});
-            } else {
-                if (typeof print === 'function') print('⚠️ JC — Erro ao registrar dia: ' + (res.erro || ''), 'log-loss');
-            }
-            _executarReset();
-        })
-        .catch(() => {
-            if (typeof print === 'function') print('⚠️ JC — Falha ao avançar dia. Resetando mesmo assim.', 'log-loss');
-            _executarReset();
-        });
-    } else {
-        // Sem JC ou meta não foi batida — reseta direto
-        _executarReset();
-    }
-}
-
 // ── Gerenciamento DBS ─────────────────────────────────────────────────────────
 let _dbsMgr        = null;
 let _dbsMgrWins    = 0;
 let _dbsMgrLosses  = 0;
 let _dbsMgrLucro   = 0;
-let _dbsMgrPico    = 0;   // maior lucro já atingido na sessão (peak)
 let _dbsMaDiv      = 0;
 let _dbsMaAtivo    = false;
 
@@ -20648,39 +20455,7 @@ function dbsMgrRegistrarResultado(won, profit) {
             _dbsMaAtivo = true;
         }
     } else if (_dbsMgr) {
-        if (nome === '📐 QSR') {
-            // ── QSR com Peak Recovery ─────────────────────────────────────────
-            // Atualiza o lucro ANTES de calcular o drawdown
-            if (won) _dbsMgrWins++; else _dbsMgrLosses++;
-            _dbsMgrLucro = parseFloat((_dbsMgrLucro + profit).toFixed(2));
-
-            // Atualiza pico se lucro atual superou o pico anterior
-            if (_dbsMgrLucro > _dbsMgrPico) _dbsMgrPico = _dbsMgrLucro;
-
-            // Drawdown = quanto caiu do pico (sempre ≥ 0)
-            const _drawdown = parseFloat(Math.max(0, _dbsMgrPico - _dbsMgrLucro).toFixed(2));
-
-            // Define a dívida do gerenciador = drawdown do pico
-            _dbsMgr._dividaLR = _drawdown;
-
-            // Recalcula a stake baseado no drawdown
-            const _base = parseFloat(document.getElementById('dbs-entrada')?.value) || 0.35;
-            const _cfg  = _dbsMgr.cfg;
-            const _pct  = parseFloat(_cfg.qsr_pct || 50) / 100;
-            if (_drawdown <= 0) {
-                _dbsMgr.currentStake = _base;
-            } else {
-                const _prox = parseFloat((_base + _drawdown * _pct).toFixed(2));
-                _dbsMgr.currentStake = Math.min(Math.max(_base, _prox), parseFloat(_cfg.qsr_max || 50));
-            }
-            // Pula o updateResult padrão — já gerenciamos acima
-        } else {
-            // Outros gerenciadores: usa updateResult normal com lucro real
-            _dbsMgr.updateResult(won, profit);
-            if (won) _dbsMgrWins++; else _dbsMgrLosses++;
-            _dbsMgrLucro = parseFloat((_dbsMgrLucro + profit).toFixed(2));
-        }
-        return; // já atualizou wins/losses/lucro acima para QSR
+        _dbsMgr.updateResult(won);
     }
     if (won) _dbsMgrWins++; else _dbsMgrLosses++;
     _dbsMgrLucro = parseFloat((_dbsMgrLucro + profit).toFixed(2));

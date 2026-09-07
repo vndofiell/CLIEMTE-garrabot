@@ -1995,9 +1995,9 @@ def get_token():
 @app.route('/get-token-force', methods=['GET', 'POST'])
 def get_token_force():
     """Gera uma nova WSS URL (novo OTP) usando o access_token já armazenado,
-    SEM restrição de tempo. Usado pelo frontend para reconexão automática.
-    O access_token OAuth da Deriv dura ~24h, então mantemos por até 23h.
-    Retorna erro apenas se o access_token não existir.
+    SEM restrição de tempo. Usado pelo frontend para reconexão automática após OTP expirar.
+    O access_token OAuth da Deriv dura ~24h — mantemos por até 23h.
+    Retorna erro apenas se o access_token não existir ou estiver expirado.
     """
     try:
         with _token_lock:
@@ -2185,17 +2185,15 @@ def tg_send():
             banca           = float(payload.get("banca", 0))
             wins            = int(payload.get("wins", 0))
             losses          = int(payload.get("losses", 0))
-            modo            = str(payload.get("modo", "")).strip()
-            estrategia      = str(payload.get("estrategia", "")).strip()
+            modo            = str(payload.get("modo", ""))
+            estrategia      = str(payload.get("estrategia", ""))
             max_win_consec  = int(payload.get("max_win_consec", 0))
             max_loss_consec = int(payload.get("max_loss_consec", 0))
             max_stake       = float(payload.get("max_stake", 0))
-            tempo_total     = str(payload.get("tempo_total", "")).strip()
             total           = wins + losses
             wr              = (wins / total * 100) if total > 0 else 0.0
             lucro_brl       = lucro * cot
             banca_brl       = banca * cot
-            linha_tempo     = f"\n⏱️ Tempo: {tempo_total}" if tempo_total and tempo_total != "00:00:00" else ""
             msg = (
                 f"🏆 STOP WIN BATIDO\n\n"
                 f"💰 Banca: ${banca:.2f} (R$ {banca_brl:.2f})\n"
@@ -2205,8 +2203,7 @@ def tg_send():
                 f"💀 Máx LOSS: {max_loss_consec}x\n"
                 f"💵 Stake Máx: ${max_stake:.2f}\n\n"
                 f"🤖 {estrategia.upper()}\n"
-                f"⚙️ {modo.upper()}"
-                f"{linha_tempo}\n\n"
+                f"⚙️ {modo.upper()}\n\n"
                 f"🕐 {_hora_brt()}"
             )
             img = _assets_path("Meta Batida.png")
@@ -2222,9 +2219,8 @@ def tg_send():
         wins            = int(payload.get("wins", 0))
         losses          = int(payload.get("losses", 0))
         prox_stake      = float(payload.get("prox_stake", 0))
-        modo            = str(payload.get("modo", "")).strip()
-        estrategia      = str(payload.get("estrategia", "")).strip()
-        ativo           = str(payload.get("ativo", "")).strip()   # ativo operado (R_50, R_10 etc.)
+        modo            = str(payload.get("modo", ""))
+        estrategia      = str(payload.get("estrategia", ""))
         total           = wins + losses
         lucro_brl       = abs(lucro) * cot
         profit_brl      = profit_tot * cot
@@ -2247,16 +2243,14 @@ def tg_send():
         lucro_op_brl   = abs(lucro) * cot
         lucro_op_str   = f"+R${lucro_op_brl:.2f}" if win else f"-R${lucro_op_brl:.2f}"
 
-        # Linha de mercado: usa campo 'ativo' se disponível, senão extrai da estratégia
-        mercado_str = ativo if ativo else (estrategia.split()[-1] if estrategia else '--')
         msg = (
             f"🟢  OPERAÇÃO FINALIZADA\n\n"
             f"{res_linha}\n\n"
             f"💰  Entrada: ${entrada:.2f}\n"
             f"{lucro_linha}  ({lucro_op_str})\n\n"
             f"➡️  Próxima Entrada: ${prox_stake:.2f}\n"
-            f"⚙️  Gestão: {modo.upper() if modo else '--'}\n\n"
-            f"📊  Mercado: {mercado_str}\n"
+            f"⚙️  Gestão: {modo}\n\n"
+            f"📊  Mercado: {estrategia.split()[0] if estrategia else '--'}\n"
             f"🎯  Estratégia: {estrategia}\n\n"
             f"🏦  Banca: ${banca:.2f}  /  R${banca_brl_str}\n"
             f"📈  Lucro Total: {profit_usd_str}  /  {profit_brl_str}\n\n"
@@ -4994,18 +4988,18 @@ def wa_send():
                 banca           = float(d.get("banca", 0))
                 wins            = int(d.get("wins", 0))
                 losses          = int(d.get("losses", 0))
-                modo            = str(d.get("modo", "")).strip().upper()
-                estrategia      = str(d.get("estrategia", "")).strip().upper()
+                modo            = str(d.get("modo", "")).upper()
+                estrategia      = str(d.get("estrategia", "")).upper()
                 max_win_consec  = int(d.get("max_win_consec", 0))
                 max_loss_consec = int(d.get("max_loss_consec", 0))
                 max_stake       = float(d.get("max_stake", 0))
-                tempo_total     = str(d.get("tempo_total", "")).strip()
                 conta_sec_sw    = d.get("conta", "") == "SECUNDARIA"
                 total           = wins + losses
                 wr              = (wins / total * 100) if total > 0 else 0
                 lucro_brl       = lucro * cotacao_wa
                 banca_brl       = banca * cotacao_wa
-                linha_tempo_wa  = f"\n⏱️ Tempo: {tempo_total}" if tempo_total and tempo_total != "00:00:00" else ""
+                cabecalho_sec   = "💳 *SECUNDÁRIA*\n" if conta_sec_sw else ""
+                linha_banca     = f"💰 *Banca:* ${banca:.2f}  _(R$ {banca_brl:.2f})_\n" if conta_sec_sw or banca > 0 else ""
                 msg = (
                     f"🏆 STOP WIN BATIDO\n\n"
                     f"💰 Banca: ${banca:.2f} (R$ {banca_brl:.2f})\n"
@@ -5015,8 +5009,7 @@ def wa_send():
                     f"💀 Máx LOSS: {max_loss_consec}x\n"
                     f"💵 Stake Máx: ${max_stake:.2f}\n\n"
                     f"🤖 {estrategia}\n"
-                    f"⚙️ {modo}"
-                    f"{linha_tempo_wa}\n\n"
+                    f"⚙️ {modo}\n\n"
                     f"🕐 {_hora_brt()}"
                 )
             else:

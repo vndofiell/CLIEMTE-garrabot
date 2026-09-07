@@ -1,3 +1,6 @@
+import pandas as pd  # Certifique-se de ter instalado: pip install pandas
+
+
 class Masaniello:
     def __init__(self, quantidade, vitorias, pay, banca, modo='Normal'):
         self.quantidade = quantidade
@@ -10,8 +13,7 @@ class Masaniello:
         self.ultima_entrada = 0
         self.qnt_wins = 0
         self.qnt_loss = 0
-        # Plain dict replaces pd.DataFrame: key = (linha, coluna)
-        self.tabela = {}
+        self.tabela = pd.DataFrame(index=range(0, self.quantidade + 2), columns=range(0, self.vitorias + 2))
         self._calcula_tabela()
 
     def _calcula_tabela(self):
@@ -19,26 +21,26 @@ class Masaniello:
         for linha in range(0, self.quantidade + 2):
             for coluna in range(0, self.vitorias + 2):
                 if linha == 0:
-                    tabela[(linha, coluna)] = 0
+                    tabela.loc[linha, coluna] = 0
                 elif coluna == 0:
-                    tabela[(linha, coluna)] = 1
+                    tabela.loc[linha, coluna] = 1
                 elif coluna > self.vitorias - 1 or linha > self.quantidade - 1:
-                    tabela[(linha, coluna)] = 'NaN'
+                    tabela.loc[linha, coluna] = 'NaN'
                 else:
                     try:
-                        valor_celula_baixo = tabela.get((linha + 1, coluna), 'NaN')
-                        valor_celula_lado  = tabela.get((linha, coluna + 1), 'NaN')
-                    except Exception:
+                        valor_celula_baixo = tabela.loc[linha + 1, coluna]
+                        valor_celula_lado = tabela.loc[linha, coluna + 1]
+                    except:
                         valor_celula_baixo = 'NaN'
-                        valor_celula_lado  = 'NaN'
+                        valor_celula_lado = 'NaN'
                     if linha == self.quantidade - 1:
                         valor_celula_baixo = '1' if coluna == 0 else 'NaN'
                     if coluna == self.vitorias - 1:
                         valor_celula_lado = '1' if linha == 0 else 'NaN'
                     if valor_celula_baixo == 'NaN' and valor_celula_lado == 'NaN':
-                        tabela[(linha, coluna)] = 'NaN'
+                        tabela.loc[linha, coluna] = 'NaN'
                     else:
-                        tabela[(linha, coluna)] = (
+                        tabela.loc[linha, coluna] = (
                             float(self.pay) * float(valor_celula_baixo) * float(valor_celula_lado) /
                             (float(valor_celula_baixo) + (float(self.pay - 1)) * float(valor_celula_lado))
                         )
@@ -46,8 +48,8 @@ class Masaniello:
     def calcula_entrada(self, result=None):
         try:
             if self.primeira_entrada:
-                linha2x2 = float(self.tabela[(1, 1)])
-                linha1x2 = float(self.tabela[(1, 0)])
+                linha2x2 = float(self.tabela.loc[1, 1])
+                linha1x2 = float(self.tabela.loc[1, 0])
                 self.ultima_entrada = round(
                     (1 - self.pay * linha2x2 / (linha1x2 + (self.pay - 1) * (linha2x2))) * self.banca, 2
                 )
@@ -64,11 +66,11 @@ class Masaniello:
             if self.qnt_wins >= self.vitorias or self.qnt_loss + self.qnt_wins >= self.quantidade:
                 return 0  # Ciclo finalizado
 
-            linha2x2 = float(self.tabela[(self.qnt_loss + self.qnt_wins + 1, self.qnt_wins + 1)])
-            linha1x2 = float(self.tabela[(self.qnt_loss + self.qnt_wins + 1, self.qnt_wins)])
+            linha2x2 = float(self.tabela.loc[self.qnt_loss + self.qnt_wins + 1, self.qnt_wins + 1])
+            linha1x2 = float(self.tabela.loc[self.qnt_loss + self.qnt_wins + 1, self.qnt_wins])
             self.ultima_entrada = round(
                 (1 - self.pay * linha2x2 / (linha1x2 + (self.pay - 1) * (linha2x2))) * self.banca_final, 2
             )
             return abs(self.ultima_entrada)
-        except Exception:
+        except:
             return 0.35
