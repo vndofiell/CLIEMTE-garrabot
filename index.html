@@ -3622,6 +3622,41 @@
               <span id="dbs-prot-status" style="font-size:0.6rem;color:#6b7280;flex:1;text-align:right;white-space:nowrap;">Off</span>
             </div>
 
+            <!-- ── High Water Mark (HWM) ─────────────────────────────────── -->
+            <div style="border:1px solid rgba(250,204,21,0.35);border-radius:5px;
+                background:rgba(250,204,21,0.04);padding:6px 9px;">
+              <!-- Linha 1: toggle + badge de status -->
+              <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;">
+                <label style="display:flex;align-items:center;gap:5px;font-size:0.65rem;
+                    color:#facc15;cursor:pointer;white-space:nowrap;font-family:'Share Tech Mono';"
+                    title="Salva a última banca positiva e força o gerenciamento a recuperar perdas até voltar ao pico.">
+                  <input type="checkbox" id="dbs-hwm-ativo" style="accent-color:#facc15;width:13px;height:13px;"
+                      onchange="_dbsHwmToggle()">
+                  💰 Guardar Pico
+                </label>
+                <!-- Badge: aparece quando HWM está ativo -->
+                <div id="dbs-hwm-badge" style="display:none;flex:1;display:flex;align-items:center;
+                    gap:5px;background:rgba(248,113,113,0.07);border:1px solid rgba(248,113,113,0.5);
+                    border-radius:4px;padding:2px 7px;flex-wrap:wrap;">
+                  <span style="font-size:0.57rem;color:#94a3b8;white-space:nowrap;">PICO:</span>
+                  <span id="dbs-hwm-ref" style="font-size:0.63rem;color:#facc15;font-weight:bold;white-space:nowrap;">$0.00</span>
+                  <span style="font-size:0.57rem;color:#94a3b8;white-space:nowrap;margin-left:auto;">FALTA:</span>
+                  <span id="dbs-hwm-div" style="font-size:0.63rem;color:#f87171;font-weight:bold;white-space:nowrap;">—</span>
+                </div>
+              </div>
+              <!-- Linha 2: botão para registrar banca atual como novo pico -->
+              <div style="display:flex;align-items:center;gap:6px;margin-top:5px;flex-wrap:wrap;">
+                <button onclick="_dbsHwmSalvarAgora()"
+                    style="background:rgba(250,204,21,0.1);border:1px solid rgba(250,204,21,0.4);
+                           border-radius:4px;color:#facc15;font-size:0.58rem;padding:3px 8px;
+                           cursor:pointer;font-family:'Share Tech Mono';white-space:nowrap;"
+                    title="Salva a banca atual como novo pico de referência">
+                  📌 Salvar Banca Atual
+                </button>
+                <span id="dbs-hwm-status" style="font-size:0.6rem;color:#6b7280;flex:1;text-align:right;white-space:nowrap;">—</span>
+              </div>
+            </div>
+
             <!-- Filtro Dígitos Frios -->
             <div style="display:flex;align-items:center;gap:7px;
                 background:rgba(0,255,136,0.04);border:1px solid rgba(0,255,136,0.2);
@@ -20402,6 +20437,95 @@ let _dbsMgrLucro   = 0;
 let _dbsMaDiv      = 0;
 let _dbsMaAtivo    = false;
 
+// ── High Water Mark (HWM) — salva a última banca positiva e força recuperação ─
+// _dbsHwmAtivo: toggle ativado pelo usuário
+// _dbsHwmRef  : banca de referência salva (último pico positivo registrado)
+// _dbsHwmDivida: quanto falta recuperar = _dbsHwmRef - banca_atual (quando > 0)
+let _dbsHwmAtivo  = false;
+let _dbsHwmRef    = 0;      // última banca positiva registrada (ex: $12020.00)
+
+/**
+ * Atualiza o HWM com a banca atual.
+ * Chamado após cada operação concluída.
+ * Se a banca subiu acima do HWM anterior → salva novo pico.
+ * Atualiza o badge na UI.
+ */
+function _dbsHwmAtualizar(bancaAtual) {
+    if (!_dbsHwmAtivo) return;
+    const banca = parseFloat(bancaAtual) || 0;
+    if (banca > _dbsHwmRef) {
+        _dbsHwmRef = parseFloat(banca.toFixed(2));
+        _dbsSalvarConfig(); // persiste novo pico
+    }
+    _dbsHwmAtualizarBadge(banca);
+}
+
+/**
+ * Retorna a dívida HWM: quanto falta para voltar ao pico.
+ * Positivo = está abaixo do pico → modo recuperação ativo.
+ * Zero/negativo = banca está no pico ou acima → normal.
+ */
+function _dbsHwmDividaAtual(bancaAtual) {
+    if (!_dbsHwmAtivo || _dbsHwmRef <= 0) return 0;
+    const divida = parseFloat((_dbsHwmRef - (parseFloat(bancaAtual) || 0)).toFixed(2));
+    return divida > 0 ? divida : 0;
+}
+
+function _dbsHwmAtualizarBadge(bancaAtual) {
+    const badge  = document.getElementById('dbs-hwm-badge');
+    const refEl  = document.getElementById('dbs-hwm-ref');
+    const divEl  = document.getElementById('dbs-hwm-div');
+    if (!badge) return;
+    if (!_dbsHwmAtivo) { badge.style.display = 'none'; return; }
+    badge.style.display = '';
+    const divida = _dbsHwmDividaAtual(bancaAtual);
+    if (refEl) refEl.textContent = '$' + _dbsHwmRef.toFixed(2);
+    if (divEl) {
+        if (divida > 0) {
+            divEl.textContent = '-$' + divida.toFixed(2);
+            divEl.style.color = '#f87171';
+            badge.style.borderColor = 'rgba(248,113,113,0.5)';
+            badge.style.background  = 'rgba(248,113,113,0.07)';
+        } else {
+            divEl.textContent = '✓ PICO';
+            divEl.style.color = '#4ade80';
+            badge.style.borderColor = 'rgba(74,222,128,0.4)';
+            badge.style.background  = 'rgba(74,222,128,0.06)';
+        }
+    }
+}
+
+// ── Funções de controle do HWM (chamadas pelo HTML) ──────────────────────────
+function _dbsHwmToggle() {
+    const chk = document.getElementById('dbs-hwm-ativo');
+    _dbsHwmAtivo = chk ? chk.checked : false;
+    if (_dbsHwmAtivo && _dbsHwmRef <= 0) {
+        // Ao ativar pela primeira vez, registra a banca atual como pico inicial
+        _dbsHwmSalvarAgora();
+    } else {
+        const badge = document.getElementById('dbs-hwm-badge');
+        if (badge) badge.style.display = _dbsHwmAtivo ? '' : 'none';
+        const st = document.getElementById('dbs-hwm-status');
+        if (st) st.textContent = _dbsHwmAtivo ? '✅ Ativo' : '—';
+        if (st) st.style.color = _dbsHwmAtivo ? '#4ade80' : '#6b7280';
+    }
+    _dbsSalvarConfig();
+}
+
+function _dbsHwmSalvarAgora() {
+    const banca = parseFloat(document.getElementById('hd-balance')?.textContent?.replace('$','').replace(',','')) || 0;
+    if (banca <= 0) {
+        const st = document.getElementById('dbs-hwm-status');
+        if (st) { st.textContent = '⚠️ Conecte a conta primeiro'; st.style.color = '#f87171'; }
+        return;
+    }
+    _dbsHwmRef = parseFloat(banca.toFixed(2));
+    const st = document.getElementById('dbs-hwm-status');
+    if (st) { st.textContent = `📌 Pico salvo: $${_dbsHwmRef.toFixed(2)}`; st.style.color = '#facc15'; }
+    _dbsHwmAtualizarBadge(banca);
+    _dbsSalvarConfig();
+}
+
 // ── Proteção de mão quente DBS ───────────────────────────────────────────────
 let _dbsLossConsec   = 0;   // perdas consecutivas na sessão atual
 let _dbsCooldownAte  = 0;   // timestamp (ms) até quando o cooldown está ativo
@@ -20436,10 +20560,27 @@ function dbsOnMgrChange() {
 function dbsMgrGetStake() {
     const nome      = document.getElementById('dbs-mgr')?.value;
     const baseStake = parseFloat(document.getElementById('dbs-entrada')?.value) || 0.35;
+
+    // ── HWM: injeta dívida de banca na divisória do gerenciador ──────────────
+    // Quando há dívida HWM, soma ela à dívida interna do gerenciador para
+    // que a stake de recuperação cubra tanto a perda de sessão quanto a de banca.
+    const _bancaAtual = parseFloat(document.getElementById('hd-balance')?.textContent?.replace('$','').replace(',','')) || 0;
+    const _hwmDiv = _dbsHwmDividaAtual(_bancaAtual);
+
     if (nome === '📐 MA-Adaptativo') {
-        if (_dbsMaDiv <= 0.01) return baseStake;
+        // MA-Adaptativo: soma dívida HWM à dívida interna
+        const _divTotal = parseFloat((_dbsMaDiv + _hwmDiv).toFixed(2));
+        if (_divTotal <= 0.01) return baseStake;
         const payout = 0.85;
-        return Math.max(baseStake, parseFloat(((_dbsMaDiv + baseStake) / payout).toFixed(2)));
+        return Math.max(baseStake, parseFloat(((_divTotal + baseStake) / payout).toFixed(2)));
+    }
+    if (_dbsMgr && _hwmDiv > 0) {
+        // Outros gerenciadores: injeta a dívida HWM na _dividaLR interna
+        // (só se ela ainda não estiver contabilizada — evita dupla contagem)
+        const _dividaAtual = _dbsMgr._dividaLR || 0;
+        if (_hwmDiv > _dividaAtual) {
+            _dbsMgr._dividaLR = parseFloat(_hwmDiv.toFixed(2));
+        }
     }
     return _dbsMgr ? _dbsMgr.getStake() : baseStake;
 }
@@ -20459,6 +20600,20 @@ function dbsMgrRegistrarResultado(won, profit) {
     }
     if (won) _dbsMgrWins++; else _dbsMgrLosses++;
     _dbsMgrLucro = parseFloat((_dbsMgrLucro + profit).toFixed(2));
+
+    // ── HWM: atualiza pico de banca após cada resultado ───────────────────────
+    // Lê o saldo real da conta (header) — sempre atualizado pelo WebSocket
+    const _bancaHwm = parseFloat(document.getElementById('hd-balance')?.textContent?.replace('$','').replace(',','')) || 0;
+    if (_bancaHwm > 0) _dbsHwmAtualizar(_bancaHwm);
+    // Atualiza status do HWM na UI
+    const _hwmSt = document.getElementById('dbs-hwm-status');
+    if (_hwmSt && _dbsHwmAtivo) {
+        const _div = _dbsHwmDividaAtual(_bancaHwm);
+        _hwmSt.textContent = _div > 0
+            ? `⚡ RECUPERANDO — falta $${_div.toFixed(2)} para o pico`
+            : `✅ BANCA NO PICO`;
+        _hwmSt.style.color = _div > 0 ? '#f87171' : '#4ade80';
+    }
 
     // ── Proteção mão quente: atualiza contador de losses consecutivos ─────────
     const _protLim = parseInt(document.getElementById('dbs-prot-losses')?.value) || 0;
@@ -20853,6 +21008,9 @@ function _dbsSalvarConfig() {
         ffMaxpct:      g('dbs-ff-maxpct')?.value,
         mteAtivo:      g('dbs-mte-ativo')?.checked,
         masaCfg:       _dbsMasaCfg,
+        // High Water Mark
+        hwmAtivo:      _dbsHwmAtivo,
+        hwmRef:        _dbsHwmRef,
     };
     try { localStorage.setItem(_DBS_CFG_KEY, JSON.stringify(cfg)); } catch(_) {}
 }
@@ -20882,6 +21040,21 @@ function _dbsCarregarConfig() {
     // Atualiza label do threshold
     const tVal = document.getElementById('dbs-threshold-val');
     if (tVal && cfg.threshold) tVal.textContent = cfg.threshold + '%';
+
+    // Restaura High Water Mark
+    if (cfg.hwmAtivo !== undefined) {
+        _dbsHwmAtivo = !!cfg.hwmAtivo;
+        _dbsHwmRef   = parseFloat(cfg.hwmRef) || 0;
+        c('dbs-hwm-ativo', _dbsHwmAtivo);
+        const badge = document.getElementById('dbs-hwm-badge');
+        if (badge) badge.style.display = _dbsHwmAtivo ? '' : 'none';
+        const st = document.getElementById('dbs-hwm-status');
+        if (st && _dbsHwmAtivo) {
+            st.textContent = _dbsHwmRef > 0 ? `📌 Pico: $${_dbsHwmRef.toFixed(2)}` : '✅ Ativo';
+            st.style.color = '#facc15';
+        }
+        _dbsHwmAtualizarBadge(0); // badge visual sem banca (será atualizado na próxima operação)
+    }
 
     // Restaura config Masaniello sem abrir o modal
     if (cfg.masaCfg) {
