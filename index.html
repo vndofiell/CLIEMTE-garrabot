@@ -20596,26 +20596,25 @@ function dbsMgrGetStake() {
         const payout = 0.85;
         return Math.max(baseStake, parseFloat(((_divTotal + baseStake) / payout).toFixed(2)));
     }
-    if (_dbsMgr && (_hwmDiv > 0 || _dbsHwmDividaSessao > 0.01)) {
-        // HWM ativo com dívida: calcula stake mínima de recuperação baseada
-        // na dívida acumulada de sessão (_dbsHwmDividaSessao), sem tocar no
-        // _dividaLR do gerenciador (evita stakes absurdas).
-        const _stakeGer  = _dbsMgr.getStake();
-        // Stake mínima HWM: usa mesmo percentual do QSR/LR configurado
+    // ── HWM ativo: usa a dívida de banca real como piso mínimo de recuperação ──
+    // Fonte de verdade = diferença entre banca atual e pico salvo.
+    // O gerenciador cuida da dívida de sessão; o HWM garante que a stake
+    // não caia abaixo do mínimo necessário para cobrir a dívida de banca.
+    if (_dbsMgr && _hwmDiv > 0) {
+        const _stakeGer = _dbsMgr.getStake();
         const _pct = parseFloat(_dbsMgr.cfg?.qsr_pct || _dbsMgr.cfg?.lr_recovery_pct || 50) / 100;
         const _max = parseFloat(_dbsMgr.cfg?.qsr_max || 50);
-        const _stakeHwm = _dbsHwmDividaSessao > 0.01
-            ? Math.min(_max, Math.max(baseStake,
-                parseFloat((baseStake + _dbsHwmDividaSessao * _pct).toFixed(2))))
-            : baseStake;
-        // Usa o maior entre: gerenciador, stake HWM, stake mínima salva antes do WIN
+        // Stake mínima para cobrir a dívida de banca com o pct configurado
+        const _stakeHwm = Math.min(_max, Math.max(baseStake,
+            parseFloat((baseStake + _hwmDiv * _pct).toFixed(2))));
+        // Piso = maior entre gerenciador, stake HWM e última stake antes do WIN
         const _stakeEfetiva = Math.max(baseStake, _stakeGer, _stakeHwm,
             (_dbsHwmStakeMin > baseStake ? _dbsHwmStakeMin : 0));
         return _stakeEfetiva;
     }
-    // Sem dívida HWM nem de sessão: reseta memória
-    _dbsHwmDividaSessao = 0;
+    // Sem dívida de banca: reseta memória HWM
     _dbsHwmStakeMin     = 0;
+    _dbsHwmDividaSessao = 0;
     return _dbsMgr ? _dbsMgr.getStake() : baseStake;
 }
 
@@ -20630,22 +20629,15 @@ function dbsMgrRegistrarResultado(won, profit) {
             _dbsMaAtivo = true;
         }
     } else if (_dbsMgr) {
-        if (_dbsHwmAtivo) {
-            if (won) {
-                // Salva stake mínima ANTES do WIN (o gerenciador vai resetar para base)
+        // HWM: antes do WIN, se banca ainda abaixo do pico, salva stake atual
+        // como piso mínimo — impede retorno à base enquanto há dívida de banca.
+        if (won && _dbsHwmAtivo) {
+            const _bancaAgora = parseFloat(document.getElementById('hd-balance')
+                ?.textContent?.replace('$','').replace(',','')) || 0;
+            if (_dbsHwmDividaAtual(_bancaAgora) > 0) {
                 _dbsHwmStakeMin = _dbsMgr.getStake();
-                // Abate o lucro real da dívida de sessão
-                const _lucroReal = Math.abs(profit);
-                _dbsHwmDividaSessao = Math.max(0,
-                    parseFloat((_dbsHwmDividaSessao - _lucroReal).toFixed(2)));
-                if (_dbsHwmDividaSessao < 0.02) {
-                    _dbsHwmDividaSessao = 0;
-                    _dbsHwmStakeMin = 0;
-                }
             } else {
-                // LOSS: acumula perda na dívida de sessão
-                _dbsHwmDividaSessao = parseFloat(
-                    (_dbsHwmDividaSessao + Math.abs(profit)).toFixed(2));
+                _dbsHwmStakeMin = 0; // banca no pico — libera retorno à base
             }
         }
         _dbsMgr.updateResult(won);
