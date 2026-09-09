@@ -20453,9 +20453,10 @@ let _dbsMaAtivo    = false;
 // _dbsHwmAtivo: toggle ativado pelo usuário
 // _dbsHwmRef  : banca de referência salva (último pico positivo registrado)
 // _dbsHwmDivida: quanto falta recuperar = _dbsHwmRef - banca_atual (quando > 0)
-let _dbsHwmAtivo       = false;
-let _dbsHwmRef         = 0;      // última banca positiva registrada (ex: $12020.00)
-let _dbsHwmUltimaStake = 0;      // última stake usada enquanto HWM estava ativo com dívida
+let _dbsHwmAtivo          = false;
+let _dbsHwmRef            = 0;    // última banca positiva registrada (ex: $12020.00)
+let _dbsHwmDividaSessao   = 0;    // dívida acumulada de sessão: Σ|loss| - Σprofit_win
+let _dbsHwmStakeMin       = 0;    // stake mínima calculada antes do último WIN
 
 /**
  * Atualiza o HWM com a banca atual.
@@ -20512,6 +20513,11 @@ function _dbsHwmAtualizarBadge(bancaAtual) {
 function _dbsHwmToggle() {
     const chk = document.getElementById('dbs-hwm-ativo');
     _dbsHwmAtivo = chk ? chk.checked : false;
+    if (!_dbsHwmAtivo) {
+        // Ao desativar: zera dívida de sessão e stake mínima
+        _dbsHwmDividaSessao = 0;
+        _dbsHwmStakeMin     = 0;
+    }
     if (_dbsHwmAtivo && _dbsHwmRef <= 0) {
         // Ao ativar pela primeira vez, registra a banca atual como pico inicial
         _dbsHwmSalvarAgora();
@@ -20533,6 +20539,9 @@ function _dbsHwmSalvarAgora() {
         return;
     }
     _dbsHwmRef = parseFloat(banca.toFixed(2));
+    // Ao salvar novo pico, zera a dívida de sessão (começa nova contagem)
+    _dbsHwmDividaSessao = 0;
+    _dbsHwmStakeMin     = 0;
     const st = document.getElementById('dbs-hwm-status');
     if (st) { st.textContent = `📌 Pico salvo: $${_dbsHwmRef.toFixed(2)}`; st.style.color = '#facc15'; }
     _dbsHwmAtualizarBadge(banca);
@@ -20587,17 +20596,26 @@ function dbsMgrGetStake() {
         const payout = 0.85;
         return Math.max(baseStake, parseFloat(((_divTotal + baseStake) / payout).toFixed(2)));
     }
-    if (_dbsMgr && _hwmDiv > 0) {
-        // HWM não altera a dívida do gerenciador.
-        // Regra: enquanto banca < pico, usa a stake do gerenciador OU a última
-        // stake salva antes do WIN (o que for maior), mas nunca abaixo da base.
-        const _stakeGer = _dbsMgr.getStake();
-        const _stakeEfetiva = Math.max(baseStake, _stakeGer,
-            (_dbsHwmUltimaStake > baseStake ? _dbsHwmUltimaStake : 0));
+    if (_dbsMgr && (_hwmDiv > 0 || _dbsHwmDividaSessao > 0.01)) {
+        // HWM ativo com dívida: calcula stake mínima de recuperação baseada
+        // na dívida acumulada de sessão (_dbsHwmDividaSessao), sem tocar no
+        // _dividaLR do gerenciador (evita stakes absurdas).
+        const _stakeGer  = _dbsMgr.getStake();
+        // Stake mínima HWM: usa mesmo percentual do QSR/LR configurado
+        const _pct = parseFloat(_dbsMgr.cfg?.qsr_pct || _dbsMgr.cfg?.lr_recovery_pct || 50) / 100;
+        const _max = parseFloat(_dbsMgr.cfg?.qsr_max || 50);
+        const _stakeHwm = _dbsHwmDividaSessao > 0.01
+            ? Math.min(_max, Math.max(baseStake,
+                parseFloat((baseStake + _dbsHwmDividaSessao * _pct).toFixed(2))))
+            : baseStake;
+        // Usa o maior entre: gerenciador, stake HWM, stake mínima salva antes do WIN
+        const _stakeEfetiva = Math.max(baseStake, _stakeGer, _stakeHwm,
+            (_dbsHwmStakeMin > baseStake ? _dbsHwmStakeMin : 0));
         return _stakeEfetiva;
     }
-    // Sem dívida HWM: reseta a memória de stake
-    _dbsHwmUltimaStake = 0;
+    // Sem dívida HWM nem de sessão: reseta memória
+    _dbsHwmDividaSessao = 0;
+    _dbsHwmStakeMin     = 0;
     return _dbsMgr ? _dbsMgr.getStake() : baseStake;
 }
 
@@ -20612,13 +20630,25 @@ function dbsMgrRegistrarResultado(won, profit) {
             _dbsMaAtivo = true;
         }
     } else if (_dbsMgr) {
-        // Salva a stake ANTES do updateResult para uso pelo HWM após WIN
-        if (won && _dbsHwmAtivo) {
-            _dbsHwmUltimaStake = _dbsMgr.getStake();
+        if (_dbsHwmAtivo) {
+            if (won) {
+                // Salva stake mínima ANTES do WIN (o gerenciador vai resetar para base)
+                _dbsHwmStakeMin = _dbsMgr.getStake();
+                // Abate o lucro real da dívida de sessão
+                const _lucroReal = Math.abs(profit);
+                _dbsHwmDividaSessao = Math.max(0,
+                    parseFloat((_dbsHwmDividaSessao - _lucroReal).toFixed(2)));
+                if (_dbsHwmDividaSessao < 0.02) {
+                    _dbsHwmDividaSessao = 0;
+                    _dbsHwmStakeMin = 0;
+                }
+            } else {
+                // LOSS: acumula perda na dívida de sessão
+                _dbsHwmDividaSessao = parseFloat(
+                    (_dbsHwmDividaSessao + Math.abs(profit)).toFixed(2));
+            }
         }
         _dbsMgr.updateResult(won);
-        // HWM: o bloqueio de retorno à base é feito em dbsMgrGetStake()
-        // usando _dbsHwmUltimaStake salva acima
     }
     if (won) _dbsMgrWins++; else _dbsMgrLosses++;
     _dbsMgrLucro = parseFloat((_dbsMgrLucro + profit).toFixed(2));
@@ -20630,11 +20660,18 @@ function dbsMgrRegistrarResultado(won, profit) {
     // Atualiza status do HWM na UI
     const _hwmSt = document.getElementById('dbs-hwm-status');
     if (_hwmSt && _dbsHwmAtivo) {
-        const _div = _dbsHwmDividaAtual(_bancaHwm);
-        _hwmSt.textContent = _div > 0
-            ? `⚡ RECUPERANDO — falta $${_div.toFixed(2)} para o pico`
-            : `✅ BANCA NO PICO`;
-        _hwmSt.style.color = _div > 0 ? '#f87171' : '#4ade80';
+        const _divBanca = _dbsHwmDividaAtual(_bancaHwm);
+        const _divSessao = _dbsHwmDividaSessao;
+        if (_divBanca > 0 || _divSessao > 0.01) {
+            const _partes = [];
+            if (_divBanca > 0)   _partes.push(`banca -$${_divBanca.toFixed(2)}`);
+            if (_divSessao > 0.01) _partes.push(`sessão -$${_divSessao.toFixed(2)}`);
+            _hwmSt.textContent = `⚡ RECUPERANDO — ${_partes.join(' | ')}`;
+            _hwmSt.style.color = '#f87171';
+        } else {
+            _hwmSt.textContent = `✅ BANCA NO PICO`;
+            _hwmSt.style.color = '#4ade80';
+        }
     }
 
     // ── Proteção mão quente: atualiza contador de losses consecutivos ─────────
