@@ -20455,8 +20455,6 @@ let _dbsMaAtivo    = false;
 // _dbsHwmDivida: quanto falta recuperar = _dbsHwmRef - banca_atual (quando > 0)
 let _dbsHwmAtivo          = false;
 let _dbsHwmRef            = 0;    // última banca positiva registrada (ex: $12020.00)
-let _dbsHwmDividaSessao   = 0;    // dívida acumulada de sessão: Σ|loss| - Σprofit_win
-let _dbsHwmStakeMin       = 0;    // stake mínima calculada antes do último WIN
 
 /**
  * Atualiza o HWM com a banca atual.
@@ -20513,11 +20511,7 @@ function _dbsHwmAtualizarBadge(bancaAtual) {
 function _dbsHwmToggle() {
     const chk = document.getElementById('dbs-hwm-ativo');
     _dbsHwmAtivo = chk ? chk.checked : false;
-    if (!_dbsHwmAtivo) {
-        // Ao desativar: zera dívida de sessão e stake mínima
-        _dbsHwmDividaSessao = 0;
-        _dbsHwmStakeMin     = 0;
-    }
+    // nada a resetar — HWM usa dívida de banca em tempo real
     if (_dbsHwmAtivo && _dbsHwmRef <= 0) {
         // Ao ativar pela primeira vez, registra a banca atual como pico inicial
         _dbsHwmSalvarAgora();
@@ -20539,9 +20533,6 @@ function _dbsHwmSalvarAgora() {
         return;
     }
     _dbsHwmRef = parseFloat(banca.toFixed(2));
-    // Ao salvar novo pico, zera a dívida de sessão (começa nova contagem)
-    _dbsHwmDividaSessao = 0;
-    _dbsHwmStakeMin     = 0;
     const st = document.getElementById('dbs-hwm-status');
     if (st) { st.textContent = `📌 Pico salvo: $${_dbsHwmRef.toFixed(2)}`; st.style.color = '#facc15'; }
     _dbsHwmAtualizarBadge(banca);
@@ -20596,25 +20587,18 @@ function dbsMgrGetStake() {
         const payout = 0.85;
         return Math.max(baseStake, parseFloat(((_divTotal + baseStake) / payout).toFixed(2)));
     }
-    // ── HWM ativo: usa a dívida de banca real como piso mínimo de recuperação ──
-    // Fonte de verdade = diferença entre banca atual e pico salvo.
-    // O gerenciador cuida da dívida de sessão; o HWM garante que a stake
-    // não caia abaixo do mínimo necessário para cobrir a dívida de banca.
+    // ── HWM ativo: piso calculado 100% da dívida de banca em tempo real ─────────
+    // Não usa nenhum valor travado — recalcula a cada chamada com a dívida atual.
     if (_dbsMgr && _hwmDiv > 0) {
         const _stakeGer = _dbsMgr.getStake();
         const _pct = parseFloat(_dbsMgr.cfg?.qsr_pct || _dbsMgr.cfg?.lr_recovery_pct || 50) / 100;
         const _max = parseFloat(_dbsMgr.cfg?.qsr_max || 50);
-        // Stake mínima para cobrir a dívida de banca com o pct configurado
+        // Stake proporcional à dívida de banca atual (recalculada a cada chamada)
         const _stakeHwm = Math.min(_max, Math.max(baseStake,
             parseFloat((baseStake + _hwmDiv * _pct).toFixed(2))));
-        // Piso = maior entre gerenciador, stake HWM e última stake antes do WIN
-        const _stakeEfetiva = Math.max(baseStake, _stakeGer, _stakeHwm,
-            (_dbsHwmStakeMin > baseStake ? _dbsHwmStakeMin : 0));
-        return _stakeEfetiva;
+        // Usa o maior entre gerenciador e stake HWM — sem valor travado
+        return Math.max(baseStake, _stakeGer, _stakeHwm);
     }
-    // Sem dívida de banca: reseta memória HWM
-    _dbsHwmStakeMin     = 0;
-    _dbsHwmDividaSessao = 0;
     return _dbsMgr ? _dbsMgr.getStake() : baseStake;
 }
 
@@ -20629,17 +20613,6 @@ function dbsMgrRegistrarResultado(won, profit) {
             _dbsMaAtivo = true;
         }
     } else if (_dbsMgr) {
-        // HWM: antes do WIN, se banca ainda abaixo do pico, salva stake atual
-        // como piso mínimo — impede retorno à base enquanto há dívida de banca.
-        if (won && _dbsHwmAtivo) {
-            const _bancaAgora = parseFloat(document.getElementById('hd-balance')
-                ?.textContent?.replace('$','').replace(',','')) || 0;
-            if (_dbsHwmDividaAtual(_bancaAgora) > 0) {
-                _dbsHwmStakeMin = _dbsMgr.getStake();
-            } else {
-                _dbsHwmStakeMin = 0; // banca no pico — libera retorno à base
-            }
-        }
         _dbsMgr.updateResult(won);
     }
     if (won) _dbsMgrWins++; else _dbsMgrLosses++;
@@ -20653,12 +20626,8 @@ function dbsMgrRegistrarResultado(won, profit) {
     const _hwmSt = document.getElementById('dbs-hwm-status');
     if (_hwmSt && _dbsHwmAtivo) {
         const _divBanca = _dbsHwmDividaAtual(_bancaHwm);
-        const _divSessao = _dbsHwmDividaSessao;
-        if (_divBanca > 0 || _divSessao > 0.01) {
-            const _partes = [];
-            if (_divBanca > 0)   _partes.push(`banca -$${_divBanca.toFixed(2)}`);
-            if (_divSessao > 0.01) _partes.push(`sessão -$${_divSessao.toFixed(2)}`);
-            _hwmSt.textContent = `⚡ RECUPERANDO — ${_partes.join(' | ')}`;
+        if (_divBanca > 0) {
+            _hwmSt.textContent = `⚡ RECUPERANDO — falta $${_divBanca.toFixed(2)} para o pico`;
             _hwmSt.style.color = '#f87171';
         } else {
             _hwmSt.textContent = `✅ BANCA NO PICO`;
