@@ -2288,6 +2288,7 @@
                 <option value="🛡️ Recovery Conservador">🛡️ Recovery Conservador</option>
                 <option value="📐 QSR">📐 QSR</option>
                 <option value="📊 Masaniello">📊 Masaniello</option>
+                <option value="🏦 RAL">🏦 RAL</option>
               </select>
             </div>
             <div style="display:flex;gap:8px;margin-top:6px;">
@@ -2639,6 +2640,7 @@
                 <option value="🛡️ Recovery Conservador">🛡️ Recovery Conservador</option>
                 <option value="📐 QSR">📐 QSR</option>
                 <option value="📊 Masaniello">📊 Masaniello</option>
+                <option value="🏦 RAL">🏦 RAL</option>
               </select>
             </div>
             <div style="display:flex;gap:8px;margin-top:6px;">
@@ -2937,6 +2939,8 @@
               <option value="📊 Masaniello">📊 Masaniello</option>
               <option value="🎯 Ciclos">🎯 Ciclos</option>
               <option value="🤖 Recovery Adaptativo">🤖 Recovery Adaptativo</option>
+              <option value="🏦 RAL">🏦 RAL</option>
+
             </select>
           </div>
           <div onclick="csToggleAuto()" id="cs-auto-row" style="
@@ -3247,6 +3251,8 @@
               <option value="📊 Masaniello">📊 Masaniello</option>
               <option value="🎯 Ciclos">🎯 Ciclos</option>
               <option value="🤖 Recovery Adaptativo">🤖 Recovery Adaptativo</option>
+              <option value="🏦 RAL">🏦 RAL</option>
+
             </select>
           </div>
           <div onclick="ltsToggleAuto()" id="lts-auto-row" style="
@@ -3493,6 +3499,7 @@
                   <option value="🛡️ Recovery Conservador">🛡️ Recovery Conservador</option>
                   <option value="📐 QSR">📐 QSR</option>
                   <option value="📊 Masaniello">📊 Masaniello</option>
+                  <option value="🏦 RAL">🏦 RAL</option>
                 </select>
               </div>
               <!-- IDs ocultos para manter compatibilidade com dbsMgrAtualizarStats() -->
@@ -4419,6 +4426,7 @@ const GERENCIAMENTOS = {
     "🎯 Ciclos":                 { desc: "Sequência fixa de stakes: 5→6→3.5→7→14→28" },
     "🤖 Recovery Adaptativo":    { desc: "Ajusta recuperação automaticamente pela assertividade" },
     "💹 Juros Compostos":        { desc: "Stake = % da banca. Meta e Stop próprios da planilha." },
+    "🏦 RAL":                    { desc: "Recupera só com lucro realizado — capital inicial intocável" },
 };
 
 // ═══════════════════════════════════════════════════════
@@ -4465,11 +4473,47 @@ class GerenciadorUnificado {
         this._jcMetaPct  = parseFloat(cfg.jc_meta_pct  || 10.0); // % de lucro para parar (meta)
         this._jcStopPct  = parseFloat(cfg.jc_stop_pct  || 20.0); // % de perda para parar (stop loss)
         this._jcBancaInicial = this._jcBanca;  // guarda banca inicial para calcular % de lucro/perda
+        // ── RAL — Recuperação Assintótica com Banco de Lucro ─────────────────
+        // Regra: só aumenta lote depois de ganhar, usando fração do lucro realizado.
+        // Capital inicial intocável — sem banco de lucro, opera sempre na base_lot.
+        this._ralBanco          = parseFloat(cfg.ral_banco_inicial || 0);  // banco de lucro acumulado
+        this._ralRecFrac        = parseFloat(cfg.ral_rec_frac      || 0.25); // 25% do banco por tentativa
+        this._ralLotCap         = parseFloat(cfg.ral_lot_cap       || 3.0);  // teto absoluto de lote (× base)
+        this._ralBloqueado      = false;   // congela após max_rec_streak perdas de recuperação
+        this._ralRecStreak      = 0;       // sequência de falhas de recuperação
+        this._ralMaxRecStreak   = parseInt(cfg.ral_max_rec_streak || 2);
+        this._ralBancoResetDraw = parseFloat(cfg.ral_banco_reset_draw || 0.50); // 50% drawdown → zera banco
+        this._ralEmRecuperacao  = false;   // true quando operando com stake aumentada
+        this._ralBancoBloqueado = 0;       // valor reservado para tentativa atual
+        this._ralPayout         = parseFloat(cfg.ral_payout || 0.85);
     }
 
     getStake() { return Math.max(0.35, parseFloat(this.currentStake.toFixed(2))); }
 
-    updateResult(won) { won ? this._onWin() : this._onLoss(); }
+    updateResult(won, profit) {
+        // RAL precisa do lucro/prejuízo real para atualizar o banco de forma precisa
+        if (this.modo === "🏦 RAL" && profit !== undefined) {
+            if (won) {
+                // Usa lucro real em vez do cálculo interno (mais preciso)
+                this._ralBanco = parseFloat((this._ralBanco + Math.abs(profit)).toFixed(2));
+                this._ralBancoBloqueado = 0;
+                if (this._ralEmRecuperacao) { this._ralRecStreak = 0; this._ralEmRecuperacao = false; }
+                this._ralBloqueado = false;
+                this.currentStake = this._calcRAL();
+            } else {
+                this._ralBancoBloqueado = 0;
+                if (this._ralEmRecuperacao) {
+                    this._ralRecStreak++;
+                    if (this._ralRecStreak >= this._ralMaxRecStreak) {
+                        this._ralBloqueado = true; this._ralEmRecuperacao = false;
+                    }
+                }
+                this.currentStake = this._calcRAL();
+            }
+            return;
+        }
+        won ? this._onWin() : this._onLoss();
+    }
 
     updateResultDupla(totalProfit, stakePorLado) {
         // Delega para updateResult normal (Dupla Recovery removido)
@@ -4505,6 +4549,23 @@ class GerenciadorUnificado {
                 if (this._dividaLR < 0.07) { this._dividaLR = 0; this.currentStake = base; break; }
                 { const pct = parseFloat(cfg.qsr_pct || 50) / 100;
                   this.currentStake = Math.max(base, parseFloat((base + this._dividaLR * pct).toFixed(2))); } break;
+
+            case "🏦 RAL": {
+                // WIN: adiciona lucro ao banco (payout * stake)
+                const lucroWin = parseFloat((this.currentStake * this._ralPayout).toFixed(2));
+                this._ralBanco = parseFloat((this._ralBanco + lucroWin).toFixed(2));
+                // Libera reserva bloqueada
+                this._ralBancoBloqueado = 0;
+                // Se estava em recuperação e ganhou → reseta streak
+                if (this._ralEmRecuperacao) {
+                    this._ralRecStreak = 0;
+                    this._ralEmRecuperacao = false;
+                }
+                // Desbloqueio automático após WIN
+                this._ralBloqueado = false;
+                // Próxima stake: usa fracao do banco para extra lote
+                this.currentStake = this._calcRAL();
+                break; }
 
             case "📊 Masaniello": {
                 const _masK   = parseInt(cfg.mas_acertos || 3);
@@ -4620,6 +4681,34 @@ class GerenciadorUnificado {
                 this._jcBanca = parseFloat(Math.max(1, this._jcBanca - stake).toFixed(2));
                 this._recalcJC();
                 break;
+
+            case "🏦 RAL": {
+                // LOSS: nunca toca capital inicial — apenas registra
+                // Libera reserva bloqueada de volta ao banco (não perdeu o banco, perdeu da conta)
+                this._ralBancoBloqueado = 0;
+                // Se estava em recuperação, conta falha
+                if (this._ralEmRecuperacao) {
+                    this._ralRecStreak++;
+                    // max_rec_streak falhas → congela banco por segurança
+                    if (this._ralRecStreak >= this._ralMaxRecStreak) {
+                        this._ralBloqueado = true;
+                        this._ralEmRecuperacao = false;
+                    }
+                }
+                // Verifica drawdown do banco: se banco caiu >50% → zera e volta base
+                const _ralBancoInicial = parseFloat(this.cfg.ral_banco_inicial || 0);
+                if (this._ralBanco > 0 && _ralBancoInicial > 0) {
+                    const _drawdown = (_ralBancoInicial - this._ralBanco) / _ralBancoInicial;
+                    if (_drawdown >= this._ralBancoResetDraw) {
+                        this._ralBanco = 0;
+                        this._ralBloqueado = false;
+                        this._ralRecStreak = 0;
+                        this._ralEmRecuperacao = false;
+                    }
+                }
+                // Próxima stake: sem banco → volta à base
+                this.currentStake = this._calcRAL();
+                break; }
 
             default:
                 this.currentStake = this.initialStake;
@@ -4749,6 +4838,25 @@ class GerenciadorUnificado {
         return this._masaUltimaEnt;
     }
 
+    // ── RAL — calcula próxima stake com base no banco de lucro ───────────────
+    _calcRAL() {
+        const base    = this.initialStake;
+        const lotCap  = parseFloat(this.cfg.ral_lot_cap || this._ralLotCap || 3.0);
+        const frac    = parseFloat(this.cfg.ral_rec_frac || this._ralRecFrac || 0.25);
+        // Sem banco ou bloqueado → opera na base
+        if (this._ralBloqueado || this._ralBanco <= 0) return base;
+        // Calcula extra lote: fração do banco disponível dividida pela base
+        const disponivel = parseFloat((this._ralBanco * frac).toFixed(2));
+        const extra      = Math.min(disponivel, (lotCap - 1) * base);
+        const proxima    = parseFloat((base + extra).toFixed(2));
+        if (proxima > base) {
+            // Reserva o valor que será usado (bloqueia para não alavancar 2x)
+            this._ralBancoBloqueado = extra;
+            this._ralEmRecuperacao  = true;
+        }
+        return Math.max(base, proxima);
+    }
+
     // ── Juros Compostos — recalcula stake pela banca atual ───────────────────
     _recalcJC() {
         const nova = parseFloat((this._jcBanca * (this._jcPct / 100)).toFixed(2));
@@ -4786,6 +4894,10 @@ class GerenciadorUnificado {
             const lucro = this._jcBanca - this._jcBancaInicial;
             const pct   = ((lucro / this._jcBancaInicial) * 100).toFixed(1);
             return `💹 JC | Banca: $${this._jcBanca.toFixed(2)} | Stake: $${this.getStake().toFixed(2)} | ${lucro >= 0 ? '+' : ''}${pct}%`;
+        }
+        if (this.modo === "🏦 RAL") {
+            const bl = this._ralBloqueado ? ' 🔒CONGELADO' : '';
+            return `🏦 RAL | Banco: $${this._ralBanco.toFixed(2)} | Stake: $${this.getStake().toFixed(2)}${bl}`;
         }
         return `${this.modo} | Stake: $${this.getStake().toFixed(2)} | Dívida: $${this._dividaLR.toFixed(2)} | Nível: ${this._nivelGale}`;
     }
@@ -7489,6 +7601,14 @@ function abrirCfgGerenciamento(nome) {
             _campoMgmt('Stop loss em % da banca (ex: 20 = -20%)', 'mgmt-jc-stop-pct', 'number', cfg.jc_stop_pct ?? 20.0, 0.1, 100, 0.1);
             _campoMgmt('Payout da estratégia (ex: 0.85 = 85%)', 'mgmt-jc-payout', 'number', cfg.jc_payout ?? 0.85, 0.01, 0.99, 0.01);
             break;
+
+        case '🏦 RAL':
+            _campoMgmt('% do banco por tentativa (ex: 25 = 25%)', 'mgmt-ral-rec-frac', 'number', (cfg.ral_rec_frac ?? 0.25) * 100, 1, 100, 1);
+            _campoMgmt('Teto do lote (× entrada base, ex: 3)', 'mgmt-ral-lot-cap', 'number', cfg.ral_lot_cap ?? 3.0, 1.1, 20, 0.1);
+            _campoMgmt('Max falhas de recuperação seguidas', 'mgmt-ral-max-rec-streak', 'number', cfg.ral_max_rec_streak ?? 2, 1, 10, 1);
+            _campoMgmt('Drawdown do banco para reset (ex: 50 = 50%)', 'mgmt-ral-banco-reset-draw', 'number', (cfg.ral_banco_reset_draw ?? 0.50) * 100, 10, 100, 5);
+            _campoMgmt('Payout da estratégia (ex: 0.85 = 85%)', 'mgmt-ral-payout', 'number', cfg.ral_payout ?? 0.85, 0.01, 0.99, 0.01);
+            break;
     }
 
     fecharModal('modal-gerenciamento');
@@ -7526,6 +7646,15 @@ function confirmarGerenciamento() {
         // stake inicial = % da banca
         const _jcPctInit = parseFloat(normalized.jc_pct || 2.0);
         normalized.stake = Math.max(0.35, parseFloat((_saldoReal * _jcPctInit / 100).toFixed(2)));
+    }
+
+    // RAL: converte percentuais do modal (0-100) para frações (0-1)
+    if (nome === "🏦 RAL") {
+        if (normalized.ral_rec_frac !== undefined)
+            normalized.ral_rec_frac = parseFloat((normalized.ral_rec_frac / 100).toFixed(4));
+        if (normalized.ral_banco_reset_draw !== undefined)
+            normalized.ral_banco_reset_draw = parseFloat((normalized.ral_banco_reset_draw / 100).toFixed(4));
+        normalized.ral_banco_inicial = 0;  // banco começa zerado — só cresce com lucro realizado
     }
 
     bot.initialStake  = normalized.stake;
@@ -8460,7 +8589,7 @@ async function _secConectar() {
             _sec.profit = parseFloat((_sec.profit + p).toFixed(2));
 
             // Atualiza o gerenciador da secundária (Martingale, Soros, etc.)
-            if (_sec.mgr) _sec.mgr.updateResult(won);
+            if (_sec.mgr) _sec.mgr.updateResult(won, p);
 
             // ── Notificação Telegram/WhatsApp com dados da conta SECUNDÁRIA ──
             tgEnviarResultado(won, p, (_sec.mgr ? _sec.mgr.getStake() : _mcConfig.stake || 0), true);
@@ -10168,7 +10297,7 @@ function initWebSocket(wssUrl) {
                 // ── Resultado normal (contrato único) ─────────────────────
                 bot._buying = false;
                 bot.profit  += profit;
-                bot.mgr.updateResult(won);
+                bot.mgr.updateResult(won, profit);
                 const _stakeDepois = bot.mgr.getStake();
                 bot.stake = won ? _stakeDepois : _stakeDepois;
                 // Rastreia maior stake de recuperação
@@ -13033,6 +13162,7 @@ function groqEditarAbrir(idx) {
         'masaniello':'masaniello','📊 masaniello':'masaniello',
         'ciclos':'ciclos','🎯 ciclos':'ciclos',
         'adaptativo':'adaptativo','🤖 recovery adaptativo':'adaptativo',
+        'ral':'ral','🏦 ral':'ral',
     };
     const _mgrRaw = (s.gerenciamento || '').toLowerCase().trim();
     const _mgrKey = _mgrNorm[_mgrRaw] || _mgrRaw || 'martingale';
@@ -13243,6 +13373,7 @@ function groqAplicarNoBot(idx, cfg, silencioso) {
         'masaniello':     '📊 Masaniello',
         'ciclos':         '🎯 Ciclos',
         'adaptativo':     '🤖 Recovery Adaptativo',
+        'ral':            '🏦 RAL',
         'fixa':           '💰 Stake Fixa',
     };
     const mgrKey = (cfg.gerenciamento||'').toLowerCase().replace(/[^a-z_]/g,'');
@@ -15681,6 +15812,7 @@ select.ia-input { cursor: pointer; }
                     <option value="masaniello">📊 Masaniello</option>
                     <option value="ciclos">🎯 Ciclos</option>
                     <option value="adaptativo">🤖 Recovery Adaptativo</option>
+                    <option value="ral">🏦 RAL</option>
                 </select>
             </div>
 
@@ -16547,6 +16679,13 @@ function mcAbrirCfgGerenciamento(nome) {
             _mcCampoMgmt('Stop loss em % da banca',       'mc-mgmt-jc_stop_pct', 'number', cfg.jc_stop_pct ?? 20.0, 0.1, 100, 0.1);
             _mcCampoMgmt('Payout da estratégia',          'mc-mgmt-jc_payout',   'number', cfg.jc_payout   ?? 0.85, 0.01, 0.99, 0.01);
             break;
+        case '🏦 RAL':
+            _mcCampoMgmt('% do banco por tentativa (ex: 25)', 'mc-mgmt-ral_rec_frac',        'number', (cfg.ral_rec_frac ?? 0.25) * 100, 1, 100, 1);
+            _mcCampoMgmt('Teto do lote (× entrada base)',     'mc-mgmt-ral_lot_cap',         'number', cfg.ral_lot_cap ?? 3.0, 1.1, 20, 0.1);
+            _mcCampoMgmt('Max falhas de recuperação',         'mc-mgmt-ral_max_rec_streak',  'number', cfg.ral_max_rec_streak ?? 2, 1, 10, 1);
+            _mcCampoMgmt('Drawdown banco para reset (%)',     'mc-mgmt-ral_banco_reset_draw','number', (cfg.ral_banco_reset_draw ?? 0.50) * 100, 10, 100, 5);
+            _mcCampoMgmt('Payout da estratégia',              'mc-mgmt-ral_payout',          'number', cfg.ral_payout ?? 0.85, 0.01, 0.99, 0.01);
+            break;
     }
 
     // Exibe o painel lateral
@@ -16574,6 +16713,15 @@ function mcConfirmarCfgGerenciamento() {
     // Ciclos: converte CSV em array
     if (novaCfg.ciclos && typeof novaCfg.ciclos === 'string') {
         novaCfg.ciclos = novaCfg.ciclos.split(',').map(x => parseFloat(x.trim())).filter(x => !isNaN(x) && x > 0);
+    }
+
+    // RAL: converte percentuais (0-100) para frações (0-1)
+    if (nome === '🏦 RAL') {
+        if (novaCfg.ral_rec_frac !== undefined)
+            novaCfg.ral_rec_frac = parseFloat((novaCfg.ral_rec_frac / 100).toFixed(4));
+        if (novaCfg.ral_banco_reset_draw !== undefined)
+            novaCfg.ral_banco_reset_draw = parseFloat((novaCfg.ral_banco_reset_draw / 100).toFixed(4));
+        novaCfg.ral_banco_inicial = 0;
     }
 
     // Stake base vem do campo mc-mgmt-stake (se existir)
@@ -18882,9 +19030,9 @@ function csOperar() {
 
             // Atualiza gerenciamento — conta certa conforme onde está operando
             if (_csUsandoSec && _csSecMgr) {
-                _csSecMgr.updateResult(won);
+                _csSecMgr.updateResult(won, profit);
             } else if (_csMgr) {
-                _csMgr.updateResult(won);
+                _csMgr.updateResult(won, profit);
             }
             const proxStake = (_csUsandoSec && _csSecMgr) ? _csSecMgr.getStake()
                             : (_csMgr ? _csMgr.getStake() : baseStake);
@@ -19937,8 +20085,8 @@ function ltsOperar() {
             const profit = parseFloat(poc.profit);
             const won    = profit > 0;
 
-            if (_ltsUsandoSec && _ltsSecMgr) { _ltsSecMgr.updateResult(won); }
-            else if (_ltsMgr)                { _ltsMgr.updateResult(won); }
+            if (_ltsUsandoSec && _ltsSecMgr) { _ltsSecMgr.updateResult(won, profit); }
+            else if (_ltsMgr)                { _ltsMgr.updateResult(won, profit); }
             const proxStake = (_ltsUsandoSec && _ltsSecMgr) ? _ltsSecMgr.getStake()
                             : (_ltsMgr ? _ltsMgr.getStake() : baseStake);
 
@@ -20613,7 +20761,7 @@ function dbsMgrRegistrarResultado(won, profit) {
             _dbsMaAtivo = true;
         }
     } else if (_dbsMgr) {
-        _dbsMgr.updateResult(won);
+        _dbsMgr.updateResult(won, profit);  // RAL usa profit real para atualizar banco de lucro
     }
     if (won) _dbsMgrWins++; else _dbsMgrLosses++;
     _dbsMgrLucro = parseFloat((_dbsMgrLucro + profit).toFixed(2));
@@ -22637,8 +22785,8 @@ async function dsOperar() {
             if (maNome === '📐 MA-Adaptativo' || _dsUsandoSec) {
                 _dsMaUpdate(won, profit, baseStake);
             }
-            if (_dsUsandoSec && _dsSecMgr) _dsSecMgr.updateResult(won);
-            else if (_dsMgr) _dsMgr.updateResult(won);
+            if (_dsUsandoSec && _dsSecMgr) _dsSecMgr.updateResult(won, profit);
+            else if (_dsMgr) _dsMgr.updateResult(won, profit);
             if (espAtivo && secPronto && _dsUsandoSec) {
                 if (won) { _dsEspWins++; _dsEspLucro += profit; } else { _dsEspLosses++; _dsEspLucro += profit; }
             } else {
@@ -23657,10 +23805,10 @@ async function dmOperar() {
             // Atualiza dívida MA do lado correto: SEC independente da principal
             if (_dmUsandoSec) {
                 _dmMaUpdateSec(won, profit, baseStake);
-                if (_dmSecMgr) _dmSecMgr.updateResult(won);
+                if (_dmSecMgr) _dmSecMgr.updateResult(won, profit);
             } else {
                 if (maNome === '📐 MA-Adaptativo') _dmMaUpdate(won, profit, baseStake);
-                if (_dmMgr) _dmMgr.updateResult(won);
+                if (_dmMgr) _dmMgr.updateResult(won, profit);
             }
 
             if (espAtivo && secPronto && _dmUsandoSec) {
