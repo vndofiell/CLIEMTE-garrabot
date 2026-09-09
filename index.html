@@ -20559,7 +20559,7 @@ function dbsOnMgrChange() {
         _dbsMaDiv = 0; _dbsMaAtivo = false;
     } else {
         _dbsMgr = (nome && nome !== 'flat' && typeof GerenciadorUnificado !== 'undefined')
-            ? new GerenciadorUnificado(nome, { stake, qsr_max: stake }) : null;
+            ? new GerenciadorUnificado(nome, { stake }) : null;
     }
     // Guarda valor anterior para cancelamento do modal Masaniello
     _dbsMasaValorAnterior = nome;
@@ -20592,7 +20592,7 @@ function dbsMgrGetStake() {
     if (_dbsMgr && _hwmDiv > 0) {
         const _stakeGer = _dbsMgr.getStake();
         const _pct = parseFloat(_dbsMgr.cfg?.qsr_pct || _dbsMgr.cfg?.lr_recovery_pct || 50) / 100;
-        const _max = parseFloat(_dbsMgr.cfg?.qsr_max || baseStake);
+        const _max = parseFloat(_dbsMgr.cfg?.qsr_max || 50);
         // Stake proporcional à dívida de banca atual (recalculada a cada chamada)
         const _stakeHwm = Math.min(_max, Math.max(baseStake,
             parseFloat((baseStake + _hwmDiv * _pct).toFixed(2))));
