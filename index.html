@@ -7483,6 +7483,7 @@ function selecionarEstrategia(nome) {
               undefined, undefined, undefined, [1,2,3,4,5,7,10,15]);
         campo('Ativo (mercado)', 'cfg-ativo', 'select', est.ativo || 'R_100',
               undefined, undefined, undefined,
+              ['R_10','R_25','R_50','R_75','R_100','1HZ10V','1HZ25V','1HZ50V','1HZ75V','1HZ100V']);
 
     } else if (est.tipo === 'garra_m1') {
         // Timeframe M1 — fixo, apenas info
