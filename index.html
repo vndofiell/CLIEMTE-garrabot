@@ -9462,10 +9462,25 @@ function initWebSocket(wssUrl) {
                     timestamp:  parseInt(c.epoch),
                     minuto:     Math.floor(parseInt(c.epoch) / 60),
                 }));
-                // Remove a última vela (pode estar incompleta — ainda em formação)
+                // A última vela da lista é a que ainda está em formação (minuto atual).
+                // Guarda ela como bot._m1VelaAtual e remove do buffer de velas fechadas.
+                // Usa o epoch da Deriv para garantir consistência de fuso horário.
+                const _m1UltimaRaw = _candles[_candles.length - 1];
+                const _m1EpochUltima = parseInt(_m1UltimaRaw.epoch);
+                const _m1MinuteUltima = Math.floor(_m1EpochUltima / 60);
+                // Inicializa a vela atual com os dados da última candle recebida
+                bot._m1VelaAtual = {
+                    abertura:   parseFloat(_m1UltimaRaw.open),
+                    fechamento: parseFloat(_m1UltimaRaw.close),
+                    maxima:     parseFloat(_m1UltimaRaw.high),
+                    minima:     parseFloat(_m1UltimaRaw.low),
+                    timestamp:  _m1EpochUltima,
+                    minuto:     _m1MinuteUltima,
+                };
+                // Remove a última do buffer (ela é a vela atual, não fechada)
                 if (bot._m1Velas.length > 0) bot._m1Velas.pop();
                 print(`🦅 GARRA M1 | <b>${bot._m1Velas.length} velas M1</b> carregadas — motor pronto para análise! ✅`, 'log-win');
-                _seqStatusUpdate(`🦅 M1 PRONTO | ${bot._m1Velas.length} velas carregadas — aguardando virada`);
+                _seqStatusUpdate(`🦅 M1 PRONTO | ${bot._m1Velas.length} velas | aguardando virada...`);
             }
             return;
         }
@@ -9874,7 +9889,7 @@ function initWebSocket(wssUrl) {
 
                 // ── Alimenta a vela M1 em formação ───────────────────────────────────
                 if (!bot._m1VelaAtual) {
-                    // Primeira chegada — inicia nova vela
+                    // Primeira chegada sem histórico pré-carregado — inicia nova vela pelo tick
                     bot._m1VelaAtual = {
                         abertura:    _m1Preco,
                         fechamento:  _m1Preco,
@@ -9883,7 +9898,9 @@ function initWebSocket(wssUrl) {
                         timestamp:   _m1MinAtual * 60,
                         minuto:      _m1MinAtual,
                     };
-                } else if (_m1MinAtual !== bot._m1VelaAtual.minuto) {
+                } else if (_m1MinAtual !== bot._m1VelaAtual.minuto &&
+                           _m1MinAtual > bot._m1VelaAtual.minuto) {
+                    // Garante que só avança (nunca retroage por diferença de fuso)
                     // ── VIRADA DE VELA: novo minuto detectado ─────────────────────────
                     // 1. Fecha a vela anterior
                     const _m1VelaFechada = { ...bot._m1VelaAtual };
