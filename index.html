@@ -2289,6 +2289,8 @@
                 <option value="📐 QSR">📐 QSR</option>
                 <option value="📊 Masaniello">📊 Masaniello</option>
                 <option value="🏦 RAL">🏦 RAL</option>
+                <option value="🔒 CCR">🔒 CCR</option>
+
               </select>
             </div>
             <div style="display:flex;gap:8px;margin-top:6px;">
@@ -2641,6 +2643,8 @@
                 <option value="📐 QSR">📐 QSR</option>
                 <option value="📊 Masaniello">📊 Masaniello</option>
                 <option value="🏦 RAL">🏦 RAL</option>
+                <option value="🔒 CCR">🔒 CCR</option>
+
               </select>
             </div>
             <div style="display:flex;gap:8px;margin-top:6px;">
@@ -2940,6 +2944,8 @@
               <option value="🎯 Ciclos">🎯 Ciclos</option>
               <option value="🤖 Recovery Adaptativo">🤖 Recovery Adaptativo</option>
               <option value="🏦 RAL">🏦 RAL</option>
+              <option value="🔒 CCR">🔒 CCR</option>
+
 
             </select>
           </div>
@@ -3252,6 +3258,8 @@
               <option value="🎯 Ciclos">🎯 Ciclos</option>
               <option value="🤖 Recovery Adaptativo">🤖 Recovery Adaptativo</option>
               <option value="🏦 RAL">🏦 RAL</option>
+              <option value="🔒 CCR">🔒 CCR</option>
+
 
             </select>
           </div>
@@ -3500,6 +3508,8 @@
                   <option value="📐 QSR">📐 QSR</option>
                   <option value="📊 Masaniello">📊 Masaniello</option>
                   <option value="🏦 RAL">🏦 RAL</option>
+                  <option value="🔒 CCR">🔒 CCR</option>
+
                 </select>
               </div>
               <!-- IDs ocultos para manter compatibilidade com dbsMgrAtualizarStats() -->
@@ -4427,6 +4437,7 @@ const GERENCIAMENTOS = {
     "🤖 Recovery Adaptativo":    { desc: "Ajusta recuperação automaticamente pela assertividade" },
     "💹 Juros Compostos":        { desc: "Stake = % da banca. Meta e Stop próprios da planilha." },
     "🏦 RAL":                    { desc: "Recupera só com lucro realizado — capital inicial intocável" },
+    "🔒 CCR":                    { desc: "Caixas isoladas: banca nunca opera, cofre nunca volta ao risco" },
 };
 
 // ═══════════════════════════════════════════════════════
@@ -4473,6 +4484,23 @@ class GerenciadorUnificado {
         this._jcMetaPct  = parseFloat(cfg.jc_meta_pct  || 10.0); // % de lucro para parar (meta)
         this._jcStopPct  = parseFloat(cfg.jc_stop_pct  || 20.0); // % de perda para parar (stop loss)
         this._jcBancaInicial = this._jcBanca;  // guarda banca inicial para calcular % de lucro/perda
+        // ── CCR — Cofre em Camadas com Rodadas Isoladas ───────────────────────
+        // Bot opera caixas, nunca a banca. Lucro que sai da caixa vai ao cofre e nunca volta ao risco.
+        this._ccrBoxSize        = parseFloat(cfg.ccr_box_size_pct || 5.0) / 100 * base;
+        this._ccrTarget         = parseFloat(cfg.ccr_target        || 1.0);
+        this._ccrMaxTrades      = parseInt(cfg.ccr_max_trades       || 40);
+        this._ccrLotMid         = parseFloat(cfg.ccr_lot_mid        || 1.3);
+        this._ccrLotMax         = parseFloat(cfg.ccr_lot_max        || 1.6);
+        this._ccrBoxBalance     = this._ccrBoxSize;
+        this._ccrBoxTrades      = 0;
+        this._ccrVault          = 0;
+        this._ccrBoxFails       = 0;
+        this._ccrBoxTotal       = 0;
+        this._ccrBoxSucc        = 0;
+        this._ccrMaxFailStreak  = parseInt(cfg.ccr_max_fail_streak  || 3);
+        this._ccrPausado        = false;
+        this._ccrBoxSucRate     = parseFloat(cfg.ccr_box_suc_rate   || 0.35);
+        this._ccrVaultWithdraw  = parseFloat(cfg.ccr_vault_withdraw || 2.0);
         // ── RAL — Recuperação Assintótica com Banco de Lucro ─────────────────
         // Regra: só aumenta lote depois de ganhar, usando fração do lucro realizado.
         // Capital inicial intocável — sem banco de lucro, opera sempre na base_lot.
@@ -4491,26 +4519,61 @@ class GerenciadorUnificado {
     getStake() { return Math.max(0.35, parseFloat(this.currentStake.toFixed(2))); }
 
     updateResult(won, profit) {
-        // RAL precisa do lucro/prejuízo real para atualizar o banco de forma precisa
-        if (this.modo === "🏦 RAL" && profit !== undefined) {
-            if (won) {
-                // Usa lucro real em vez do cálculo interno (mais preciso)
-                this._ralBanco = parseFloat((this._ralBanco + Math.abs(profit)).toFixed(2));
-                this._ralBancoBloqueado = 0;
-                if (this._ralEmRecuperacao) { this._ralRecStreak = 0; this._ralEmRecuperacao = false; }
-                this._ralBloqueado = false;
-                this.currentStake = this._calcRAL();
-            } else {
-                this._ralBancoBloqueado = 0;
-                if (this._ralEmRecuperacao) {
-                    this._ralRecStreak++;
-                    if (this._ralRecStreak >= this._ralMaxRecStreak) {
-                        this._ralBloqueado = true; this._ralEmRecuperacao = false;
+        // RAL e CCR usam profit real — cálculos mais precisos que stake × payout interno
+        if (profit !== undefined) {
+            // ── RAL ────────────────────────────────────────────────────────
+            if (this.modo === "🏦 RAL") {
+                if (won) {
+                    this._ralBanco = parseFloat((this._ralBanco + Math.abs(profit)).toFixed(2));
+                    this._ralBancoBloqueado = 0;
+                    if (this._ralEmRecuperacao) { this._ralRecStreak = 0; this._ralEmRecuperacao = false; }
+                    this._ralBloqueado = false;
+                    this.currentStake = this._calcRAL();
+                } else {
+                    this._ralBancoBloqueado = 0;
+                    if (this._ralEmRecuperacao) {
+                        this._ralRecStreak++;
+                        if (this._ralRecStreak >= this._ralMaxRecStreak) {
+                            this._ralBloqueado = true; this._ralEmRecuperacao = false;
+                        }
+                    }
+                    this.currentStake = this._calcRAL();
+                }
+                return;
+            }
+            // ── CCR ────────────────────────────────────────────────────────
+            if (this.modo === "🔒 CCR") {
+                this._ccrBoxTrades++;
+                if (won) {
+                    this._ccrBoxBalance = parseFloat((this._ccrBoxBalance + Math.abs(profit)).toFixed(2));
+                    const lucro = this._ccrBoxBalance - this._ccrBoxSize;
+                    if (lucro >= this._ccrBoxSize * this._ccrTarget) {
+                        // Meta atingida — lucro vai ao cofre, caixa nova
+                        this._ccrVault = parseFloat((this._ccrVault + lucro).toFixed(2));
+                        this._ccrBoxSucc++;
+                        this._ccrBoxTotal++;
+                        this._ccrBoxFails = 0;
+                        this._ccrAbrirCaixaNova();
+                    } else {
+                        this.currentStake = this._calcCCR();
+                    }
+                } else {
+                    const perdida = Math.min(Math.abs(profit), this._ccrBoxBalance);
+                    this._ccrBoxBalance = parseFloat(Math.max(0, this._ccrBoxBalance - perdida).toFixed(2));
+                    if (this._ccrBoxBalance <= 0 || this._ccrBoxTrades >= this._ccrMaxTrades) {
+                        // Caixa morta — apenas perde o que estava na caixa, cofre intacto
+                        this._ccrBoxFails++;
+                        this._ccrBoxTotal++;
+                        if (this._ccrBoxFails >= this._ccrMaxFailStreak) this._ccrPausado = true;
+                        if (this._ccrBoxTotal >= 10 && (this._ccrBoxSucc / this._ccrBoxTotal) < this._ccrBoxSucRate)
+                            this._ccrPausado = true;
+                        this._ccrAbrirCaixaNova();
+                    } else {
+                        this.currentStake = this._calcCCR();
                     }
                 }
-                this.currentStake = this._calcRAL();
+                return;
             }
-            return;
         }
         won ? this._onWin() : this._onLoss();
     }
@@ -4838,6 +4901,34 @@ class GerenciadorUnificado {
         return this._masaUltimaEnt;
     }
 
+    // ── CCR — helpers ─────────────────────────────────────────────────────────
+    _ccrAbrirCaixaNova() {
+        // Reseta totalmente — caixa nova não herda nada do passado
+        this._ccrBoxBalance = this._ccrBoxSize;
+        this._ccrBoxTrades  = 0;
+        this.currentStake   = this._calcCCR();
+    }
+
+    _calcCCR() {
+        // Lote depende apenas do estado da caixa atual, nunca do histórico
+        const base     = this.initialStake;
+        const drawdown = this._ccrBoxSize > 0
+            ? (this._ccrBoxSize - this._ccrBoxBalance) / this._ccrBoxSize
+            : 0;
+        if (this._ccrPausado) return base;               // pausado → lote base apenas
+        if (drawdown < 0.30)  return base;               // caixa saudável
+        if (drawdown < 0.60)  return parseFloat((base * this._ccrLotMid).toFixed(2));  // 30-60% DD
+        return parseFloat((base * this._ccrLotMax).toFixed(2));                        // >60% DD
+    }
+
+    // Retorna 'saque' se cofre ≥ threshold, 'pausado' se estratégia morta, null se OK
+    ccrVerificarCofre() {
+        if (this.modo !== "🔒 CCR") return null;
+        if (this._ccrPausado) return 'pausado';
+        if (this._ccrVault >= this.initialStake * this._ccrVaultWithdraw) return 'saque';
+        return null;
+    }
+
     // ── RAL — calcula próxima stake com base no banco de lucro ───────────────
     _calcRAL() {
         const base    = this.initialStake;
@@ -4898,6 +4989,13 @@ class GerenciadorUnificado {
         if (this.modo === "🏦 RAL") {
             const bl = this._ralBloqueado ? ' 🔒CONGELADO' : '';
             return `🏦 RAL | Banco: $${this._ralBanco.toFixed(2)} | Stake: $${this.getStake().toFixed(2)}${bl}`;
+        }
+        if (this.modo === "🔒 CCR") {
+            const pct     = this._ccrBoxSize > 0 ? ((this._ccrBoxBalance / this._ccrBoxSize) * 100).toFixed(0) : 0;
+            const ddPct   = Math.max(0, 100 - parseInt(pct));
+            const st      = this._ccrPausado ? ' ⛔PAUSADO' : '';
+            const cofre   = this._ccrVault > 0 ? ` | Cofre: $${this._ccrVault.toFixed(2)}` : '';
+            return `🔒 CCR | Caixa: ${pct}%(↓${ddPct}%) T${this._ccrBoxTrades}/${this._ccrMaxTrades}${cofre} | ${this._ccrBoxSucc}✓/${this._ccrBoxTotal}${st}`;
         }
         return `${this.modo} | Stake: $${this.getStake().toFixed(2)} | Dívida: $${this._dividaLR.toFixed(2)} | Nível: ${this._nivelGale}`;
     }
@@ -7609,6 +7707,17 @@ function abrirCfgGerenciamento(nome) {
             _campoMgmt('Drawdown do banco para reset (ex: 50 = 50%)', 'mgmt-ral-banco-reset-draw', 'number', (cfg.ral_banco_reset_draw ?? 0.50) * 100, 10, 100, 5);
             _campoMgmt('Payout da estratégia (ex: 0.85 = 85%)', 'mgmt-ral-payout', 'number', cfg.ral_payout ?? 0.85, 0.01, 0.99, 0.01);
             break;
+        case '🔒 CCR':
+            _campoMgmt('Tamanho da caixa (% da entrada base, ex: 5)', 'mgmt-ccr-box-size-pct',   'number', cfg.ccr_box_size_pct   ?? 5.0,  1,   100, 0.5);
+            _campoMgmt('Meta de lucro da caixa (ex: 1.0 = +100%)',    'mgmt-ccr-target',          'number', cfg.ccr_target         ?? 1.0,  0.1, 10,  0.1);
+            _campoMgmt('Máx trades por caixa (expiração)',             'mgmt-ccr-max-trades',      'number', cfg.ccr_max_trades     ?? 40,   5,   200, 1);
+            _campoMgmt('Mult. lote com 30-60% drawdown (ex: 1.3)',     'mgmt-ccr-lot-mid',         'number', cfg.ccr_lot_mid        ?? 1.3,  1.0, 3.0, 0.1);
+            _campoMgmt('Mult. lote com >60% drawdown (ex: 1.6)',       'mgmt-ccr-lot-max',         'number', cfg.ccr_lot_max        ?? 1.6,  1.0, 5.0, 0.1);
+            _campoMgmt('Caixas falhas seguidas para pausar',           'mgmt-ccr-max-fail-streak', 'number', cfg.ccr_max_fail_streak ?? 3,   1,   10,  1);
+            _campoMgmt('Taxa mín. de sucesso em 10 caixas (ex: 35%)',  'mgmt-ccr-box-suc-rate',    'number', (cfg.ccr_box_suc_rate ?? 0.35) * 100, 5, 100, 5);
+            _campoMgmt('Cofre ≥ N× entrada → sinalizar saque (ex: 2)', 'mgmt-ccr-vault-withdraw',  'number', cfg.ccr_vault_withdraw ?? 2.0,  0.5, 50,  0.5);
+            _campoMgmt('Payout da estratégia (ex: 0.85 = 85%)',        'mgmt-ccr-payout',          'number', cfg.ccr_payout         ?? 0.85, 0.01, 0.99, 0.01);
+            break;
     }
 
     fecharModal('modal-gerenciamento');
@@ -7654,7 +7763,12 @@ function confirmarGerenciamento() {
             normalized.ral_rec_frac = parseFloat((normalized.ral_rec_frac / 100).toFixed(4));
         if (normalized.ral_banco_reset_draw !== undefined)
             normalized.ral_banco_reset_draw = parseFloat((normalized.ral_banco_reset_draw / 100).toFixed(4));
-        normalized.ral_banco_inicial = 0;  // banco começa zerado — só cresce com lucro realizado
+        normalized.ral_banco_inicial = 0;
+    }
+    if (nome === "🔒 CCR") {
+        // ccr_box_suc_rate vem como 0-100 do modal, precisa de fração
+        if (normalized.ccr_box_suc_rate !== undefined)
+            normalized.ccr_box_suc_rate = parseFloat((normalized.ccr_box_suc_rate / 100).toFixed(4));
     }
 
     bot.initialStake  = normalized.stake;
@@ -13163,6 +13277,7 @@ function groqEditarAbrir(idx) {
         'ciclos':'ciclos','🎯 ciclos':'ciclos',
         'adaptativo':'adaptativo','🤖 recovery adaptativo':'adaptativo',
         'ral':'ral','🏦 ral':'ral',
+        'ccr':'ccr','🔒 ccr':'ccr',
     };
     const _mgrRaw = (s.gerenciamento || '').toLowerCase().trim();
     const _mgrKey = _mgrNorm[_mgrRaw] || _mgrRaw || 'martingale';
@@ -13374,6 +13489,7 @@ function groqAplicarNoBot(idx, cfg, silencioso) {
         'ciclos':         '🎯 Ciclos',
         'adaptativo':     '🤖 Recovery Adaptativo',
         'ral':            '🏦 RAL',
+        'ccr':            '🔒 CCR',
         'fixa':           '💰 Stake Fixa',
     };
     const mgrKey = (cfg.gerenciamento||'').toLowerCase().replace(/[^a-z_]/g,'');
@@ -15813,6 +15929,8 @@ select.ia-input { cursor: pointer; }
                     <option value="ciclos">🎯 Ciclos</option>
                     <option value="adaptativo">🤖 Recovery Adaptativo</option>
                     <option value="ral">🏦 RAL</option>
+                    <option value="ccr">🔒 CCR</option>
+
                 </select>
             </div>
 
@@ -16686,6 +16804,17 @@ function mcAbrirCfgGerenciamento(nome) {
             _mcCampoMgmt('Drawdown banco para reset (%)',     'mc-mgmt-ral_banco_reset_draw','number', (cfg.ral_banco_reset_draw ?? 0.50) * 100, 10, 100, 5);
             _mcCampoMgmt('Payout da estratégia',              'mc-mgmt-ral_payout',          'number', cfg.ral_payout ?? 0.85, 0.01, 0.99, 0.01);
             break;
+        case '🔒 CCR':
+            _mcCampoMgmt('Tamanho da caixa (% da entrada base)', 'mc-mgmt-ccr_box_size_pct',   'number', cfg.ccr_box_size_pct   ?? 5.0,  1,   100, 0.5);
+            _mcCampoMgmt('Meta de lucro da caixa (+% para fechar)','mc-mgmt-ccr_target',        'number', cfg.ccr_target         ?? 1.0,  0.1, 10,  0.1);
+            _mcCampoMgmt('Máx trades por caixa',                  'mc-mgmt-ccr_max_trades',    'number', cfg.ccr_max_trades     ?? 40,   5,   200, 1);
+            _mcCampoMgmt('Mult. lote 30-60% drawdown',            'mc-mgmt-ccr_lot_mid',       'number', cfg.ccr_lot_mid        ?? 1.3,  1.0, 3.0, 0.1);
+            _mcCampoMgmt('Mult. lote >60% drawdown',              'mc-mgmt-ccr_lot_max',       'number', cfg.ccr_lot_max        ?? 1.6,  1.0, 5.0, 0.1);
+            _mcCampoMgmt('Caixas falhas para pausar',             'mc-mgmt-ccr_max_fail_streak','number', cfg.ccr_max_fail_streak ?? 3,  1,   10,  1);
+            _mcCampoMgmt('Taxa mín. sucesso em 10 caixas (%)',    'mc-mgmt-ccr_box_suc_rate',  'number', (cfg.ccr_box_suc_rate ?? 0.35) * 100, 5, 100, 5);
+            _mcCampoMgmt('Cofre ≥ N× entrada → sinalizar saque', 'mc-mgmt-ccr_vault_withdraw', 'number', cfg.ccr_vault_withdraw ?? 2.0,  0.5, 50,  0.5);
+            _mcCampoMgmt('Payout da estratégia',                  'mc-mgmt-ccr_payout',        'number', cfg.ccr_payout         ?? 0.85, 0.01, 0.99, 0.01);
+            break;
     }
 
     // Exibe o painel lateral
@@ -16722,6 +16851,10 @@ function mcConfirmarCfgGerenciamento() {
         if (novaCfg.ral_banco_reset_draw !== undefined)
             novaCfg.ral_banco_reset_draw = parseFloat((novaCfg.ral_banco_reset_draw / 100).toFixed(4));
         novaCfg.ral_banco_inicial = 0;
+    }
+    if (nome === '🔒 CCR') {
+        if (novaCfg.ccr_box_suc_rate !== undefined)
+            novaCfg.ccr_box_suc_rate = parseFloat((novaCfg.ccr_box_suc_rate / 100).toFixed(4));
     }
 
     // Stake base vem do campo mc-mgmt-stake (se existir)
