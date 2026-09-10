@@ -8224,6 +8224,26 @@ function processCommand(cmd) {
                     bot._tickAtivo = _ativoInic;
                     bot.ws.send(json({ ticks: _ativoInic, subscribe: 1 }));
                 }
+                // ── GARRA M1: busca histórico de candles M1 imediatamente ──────────
+                // Usa ticks_history com granularity=60 para obter 250 velas M1 prontas
+                // em vez de esperar tick a tick (evita a espera de 3h30)
+                if (est && est.tipo === 'garra_m1') {
+                    bot._m1Velas         = [];
+                    bot._m1VelaAtual     = null;
+                    bot._m1SinalPendente = null;
+                    bot._m1Analisando    = false;
+                    const _m1Ativo = _resolverAtivo(est.ativo || 'R_10');
+                    print(`🦅 GARRA M1 | Buscando histórico M1 de <b>${_m1Ativo}</b>...`, 'log-info');
+                    bot.ws.send(json({
+                        ticks_history: _m1Ativo,
+                        adjust_start_time: 1,
+                        count: 250,
+                        end: 'latest',
+                        granularity: 60,
+                        style: 'candles',
+                        req_id: 9001,
+                    }));
+                }
             }
             print(`▶ ROBÔ ATIVO | Estratégia: <b>${bot.estrategia}</b> | Gerenciamento: <b>${bot.gerenciamento}</b> | Entrada: <b>$${bot.stake.toFixed(2)}</b> | SW: <b>$${bot.stopWin < 999 ? bot.stopWin : '—'}</b>`, "log-win");
             _timer.iniciar();
@@ -9427,6 +9447,29 @@ function initWebSocket(wssUrl) {
             }
         }
 
+        // ── GARRA M1: resposta do ticks_history (candles M1 prontas) ──────────────
+        if (data.msg_type === 'candles' && data.req_id === 9001) {
+            const _candles = data.candles || [];
+            if (_candles.length === 0) {
+                print(`🦅 GARRA M1 | Nenhum candle recebido — aguardando ticks...`, 'log-info');
+            } else {
+                // Converte formato Deriv → formato do motor (abertura, fechamento, maxima, minima, timestamp)
+                bot._m1Velas = _candles.map(c => ({
+                    abertura:   parseFloat(c.open),
+                    fechamento: parseFloat(c.close),
+                    maxima:     parseFloat(c.high),
+                    minima:     parseFloat(c.low),
+                    timestamp:  parseInt(c.epoch),
+                    minuto:     Math.floor(parseInt(c.epoch) / 60),
+                }));
+                // Remove a última vela (pode estar incompleta — ainda em formação)
+                if (bot._m1Velas.length > 0) bot._m1Velas.pop();
+                print(`🦅 GARRA M1 | <b>${bot._m1Velas.length} velas M1</b> carregadas — motor pronto para análise! ✅`, 'log-win');
+                _seqStatusUpdate(`🦅 M1 PRONTO | ${bot._m1Velas.length} velas carregadas — aguardando virada`);
+            }
+            return;
+        }
+
         // Saldo — sempre usa o valor real da Deriv, nunca aritmética manual
         if (data.msg_type === 'balance') {
             const saldo = data.balance && data.balance.balance;
@@ -10019,10 +10062,14 @@ function initWebSocket(wssUrl) {
                     bot._m1VelaAtual.fechamento = _m1Preco;
                     if (_m1Preco > bot._m1VelaAtual.maxima) bot._m1VelaAtual.maxima = _m1Preco;
                     if (_m1Preco < bot._m1VelaAtual.minima) bot._m1VelaAtual.minima = _m1Preco;
-                    // Exibe progresso da coleta
+                    // Exibe estado atual — aguardando virada da vela
                     const _m1Total = est.tp_hist || 210;
-                    if (bot._m1Velas.length < _m1Total) {
-                        _seqStatusUpdate(`🦅 M1 COLETANDO [${bot._m1Velas.length}/${_m1Total} velas] aguarde...`);
+                    if (bot._m1Velas.length < 5) {
+                        // Histórico insuficiente (< 5 velas) — ainda aguardando API
+                        _seqStatusUpdate(`🦅 M1 | aguardando histórico M1...`);
+                    } else if (bot._m1Velas.length < _m1Total) {
+                        // Histórico parcial (carregado mas abaixo do ideal) — já analisa assim que virar
+                        _seqStatusUpdate(`🦅 M1 PRONTO | ${bot._m1Velas.length} velas | aguardando virada...`);
                     }
                 }
 

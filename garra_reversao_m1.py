@@ -319,10 +319,12 @@ class GarraReversaoM1Engine:
         janela = int(cfg.get("janela_entrada_segundos", 2))
         score_min = int(cfg.get("score_minimo", 85))
 
-        # Mínimo de velas para calcular EMA200
-        if len(velas) < 210:
+        # Mínimo de velas para calcular os indicadores (EMA200 precisa de 200+)
+        # Com menos de 200 velas a EMA200 fica imprecisa mas os outros indicadores funcionam.
+        # Aceitamos a partir de 50 velas para não bloquear logo após o carregamento via API.
+        if len(velas) < 50:
             return self._aguardar(
-                f"Coletando histórico ({len(velas)}/210 velas)",
+                f"Histórico insuficiente ({len(velas)}/50 velas)",
                 score_call=0, score_put=0, cfg=cfg
             )
 
