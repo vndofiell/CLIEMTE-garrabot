@@ -10723,6 +10723,82 @@ register_digit_sniper(app, _buscar_ticks_ws_sync)
 # ── Digit Matrix Sniper PRO ──────────────────────────────────────────────────
 register_digit_matrix(app, _buscar_ticks_ws_sync)
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# GARRA REVERSÃO M1 PRO — Rotas Flask
+# ═══════════════════════════════════════════════════════════════════════════════
+from garra_reversao_m1 import get_engine as _get_m1_engine
+
+@app.route('/garra-m1/avaliar', methods=['POST'])
+def garra_m1_avaliar():
+    """
+    Avalia o mercado com os dados de velas M1 enviados pelo front-end.
+    Retorna: { operar, direcao, score, motivos, detalhes, cfg }
+    """
+    dados     = request.get_json(force=True, silent=True) or {}
+    engine    = _get_m1_engine()
+    resultado = engine.avaliar(dados)
+
+    # Notificação Telegram quando aprovado
+    if resultado.get("operar"):
+        try:
+            cfg_tg = _tg_carregar()
+            if cfg_tg.get("enabled"):
+                dir_txt = resultado["direcao"]
+                score   = resultado.get("score", 0)
+                ativo   = resultado.get("cfg", {}).get("ativo", "")
+                msg = (
+                    f"🦅 *GARRA REVERSÃO M1 PRO*\n\n"
+                    f"{'🟢' if dir_txt == 'CALL' else '🔴'} *{dir_txt}* | Score: {score}/100\n"
+                    f"📊 Ativo: {ativo}\n"
+                    f"⏱ Entrada: VIRADA DA VELA\n"
+                    f"🕐 {_hora_brt('%H:%M:%S')}"
+                )
+                _tg_dispatch(lambda: _tg_enviar_texto(cfg_tg["token"], cfg_tg["chat_id"], msg))
+        except Exception:
+            pass
+
+    return jsonify(resultado)
+
+
+@app.route('/garra-m1/config', methods=['GET', 'POST'])
+def garra_m1_config():
+    """Lê ou salva a configuração da estratégia."""
+    engine = _get_m1_engine()
+    if request.method == 'GET':
+        return jsonify(engine.config)
+    dados = request.get_json(force=True, silent=True) or {}
+    engine.salvar_config(dados)
+    return jsonify({"ok": True, "config": engine.config})
+
+
+@app.route('/garra-m1/resultado', methods=['POST'])
+def garra_m1_resultado():
+    """Registra resultado (WIN/LOSS) para estatísticas e MTE."""
+    dados  = request.get_json(force=True, silent=True) or {}
+    engine = _get_m1_engine()
+    if "resultado" not in dados:
+        return jsonify({"ok": False, "erro": "Campo 'resultado' obrigatório."}), 400
+    engine.registrar_resultado(dados)
+    # Alimenta MTE
+    try:
+        mte_registrar(
+            resultado  = str(dados["resultado"]).upper(),
+            estrategia = "GARRA_REVERSAO_M1_PRO",
+            ativo      = dados.get("ativo", ""),
+            regime     = dados.get("regime", "DESCONHECIDO"),
+            confianca  = float(dados.get("score", 0)),
+        )
+    except Exception:
+        pass
+    return jsonify({"ok": True, "stats": engine.estatisticas()})
+
+
+@app.route('/garra-m1/stats', methods=['GET'])
+def garra_m1_stats():
+    """Retorna estatísticas acumuladas."""
+    return jsonify(_get_m1_engine().estatisticas())
+
+
 def start_server():
     # Oracle Cloud — porta configurável via variável de ambiente, padrão 5000
     port = int(os.environ.get("PORT", 5000))

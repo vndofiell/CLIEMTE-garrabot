@@ -4420,6 +4420,32 @@ const ESTRATEGIAS = {
     // ── Slot dinâmico ECT — sobrescrito a cada ciclo do monitor ──────────────
     "🤖 ECT Dinâmica":      { tipo: "digit", contract: "DIGITUNDER", barrier: 7, duracao: 1,
                                seq_gatilho: 0, ativo: "R_100", desc: "Estratégia criada ao vivo pela IA ECT" },
+    // ── GARRA REVERSÃO M1 PRO ─────────────────────────────────────────────────
+    "🦅 GARRA REVERSÃO M1 PRO": {
+        tipo:              "garra_m1",
+        ativo:             "R_10",
+        duracao:           1,
+        duracao_unit:      "m",
+        score_minimo:      85,
+        janela_segundos:   2,
+        tf:                1,           // timeframe M1 (fixo)
+        tp_hist:           210,         // velas mínimas para EMA200
+        usar_price_action: true,
+        usar_estrutura:    true,
+        usar_ema:          true,
+        usar_rsi:          true,
+        usar_macd:         true,
+        usar_adx:          true,
+        usar_atr:          true,
+        usar_sr:           true,
+        usar_bollinger:    true,
+        usar_anti_doji:    true,
+        bloquear_lateral:  true,
+        bloquear_fp:       true,
+        mte_ativo:         true,
+        modo_demo:         true,
+        desc: "Entrada CALL/PUT somente na virada da vela M1 | Price Action + EMA + RSI + MACD + ADX + S/R",
+    },
 };
 
 // ═══════════════════════════════════════════════════════
@@ -7075,6 +7101,15 @@ function resetarPlacar() {
     bot._smartAusencia    = new Array(10).fill(0);
     bot._histBloqAtivo    = false;
     bot._histBloqContador = 0;
+    // Reseta buffers GARRA M1
+    bot._m1Velas         = [];
+    bot._m1VelaAtual     = null;
+    bot._m1SinalPendente = null;
+    bot._m1Analisando    = false;
+    bot._m1Direcao       = null;
+    bot._m1Score         = 0;
+    bot._m1StopWinAcum   = 0;
+    bot._m1StopLossAcum  = 0;
     document.getElementById('digit-hist').innerHTML = 'Aguardando ticks...';
     document.getElementById('hd-profit-brl').textContent = '(R$0,00)';
     updateHeader();
@@ -7448,7 +7483,57 @@ function selecionarEstrategia(nome) {
               undefined, undefined, undefined, [1,2,3,4,5,7,10,15]);
         campo('Ativo (mercado)', 'cfg-ativo', 'select', est.ativo || 'R_100',
               undefined, undefined, undefined,
+
+    } else if (est.tipo === 'garra_m1') {
+        // Timeframe M1 — fixo, apenas info
+        const tfDiv = document.createElement('div');
+        tfDiv.style.cssText = 'background:rgba(0,255,255,0.06);border:1px solid rgba(0,255,255,0.25);border-radius:4px;padding:8px 10px;font-size:0.72rem;color:#0ff;font-family:"Share Tech Mono";';
+        tfDiv.innerHTML = '⏱ TIMEFRAME: <b>M1</b> (fixo) — análise da vela fechada, entrada na virada';
+        campos.appendChild(tfDiv);
+        campo('Score mínimo de confluência (0-100)', 'cfg-score-min',  'number', est.score_minimo || 85, 50, 100, 5);
+        campo('Janela de entrada após virada (seg)', 'cfg-m1-janela',  'number', est.janela_segundos || 2, 1, 10, 1);
+        campo('Duração do contrato', 'cfg-duracao', 'select', est.duracao || 1,
+              undefined, undefined, undefined, [1,2,3,5,10,15,30]);
+        campo('Unidade (m=min / s=seg)', 'cfg-duracao-unit', 'select', est.duracao_unit || 'm',
+              undefined, undefined, undefined, ['m','s']);
+        campo('Ativo (mercado)', 'cfg-ativo', 'select', est.ativo || 'R_10',
+              undefined, undefined, undefined,
               ['R_10','R_25','R_50','R_75','R_100','1HZ10V','1HZ25V','1HZ50V','1HZ75V','1HZ100V']);
+        // Filtros (checkboxes)
+        const filtros = [
+            ['usar_price_action','✅ Price Action',true],
+            ['usar_estrutura',   '✅ Estrutura HH/HL',true],
+            ['usar_ema',         '✅ EMA 20/50/200',true],
+            ['usar_rsi',         '✅ RSI',true],
+            ['usar_macd',        '✅ MACD',true],
+            ['usar_adx',         '✅ ADX',true],
+            ['usar_atr',         '✅ ATR',true],
+            ['usar_sr',          '✅ Suporte/Resistência',true],
+            ['usar_bollinger',   '✅ Bollinger',true],
+            ['usar_anti_doji',   '⛔ Anti-Doji',true],
+            ['bloquear_lateral', '⛔ Bloquear lateral',true],
+            ['bloquear_fp',      '⛔ Bloquear falso rompimento',true],
+            ['mte_ativo',        '🧠 Memory Time Engine',true],
+            ['modo_demo',        '🧪 Modo Sinal (sem operar)',true],
+        ];
+        filtros.forEach(([id, label, def]) => {
+            const row = document.createElement('div');
+            row.style.cssText = 'display:flex;align-items:center;gap:8px;';
+            const chk = document.createElement('input');
+            chk.type = 'checkbox'; chk.id = 'cfg-m1-' + id;
+            chk.checked = est[id] !== undefined ? est[id] : def;
+            chk.style.accentColor = '#00ff41'; chk.style.width = '14px'; chk.style.height = '14px';
+            const lbl2 = document.createElement('label');
+            lbl2.htmlFor = chk.id;
+            lbl2.style.cssText = 'font-size:0.72rem;color:#c9d1d9;font-family:"Share Tech Mono";cursor:pointer;';
+            lbl2.textContent = label;
+            row.appendChild(chk); row.appendChild(lbl2);
+            campos.appendChild(row);
+        });
+        // Campos de gerenciamento financeiro
+        campo('Entrada ($)', 'cfg-m1-stake',    'number', est.stake    || 0.35, 0.35, 1000, 0.01);
+        campo('Stop Win ($)', 'cfg-m1-stopwin', 'number', est.stop_win || 10.0, 0.1, 10000, 0.1);
+        campo('Stop Loss ($)','cfg-m1-stoploss','number', est.stop_loss|| 5.0,  0.1, 10000, 0.1);
     }
 
     fecharModal('modal-estrategia');
@@ -7513,6 +7598,26 @@ function confirmarEstrategia() {
     if (satJanela)   est.sat_janela    = Math.max(10, parseInt(satJanela.value)   || 25);
     if (satLimiar)   est.sat_limiar    = Math.max(51, parseInt(satLimiar.value)   || 70);
     if (satSmartMin) est.sat_smart_min = Math.max(1,  parseInt(satSmartMin.value) || 10);
+    // Campos garra_m1
+    if (est.tipo === 'garra_m1') {
+        const m1ScoreEl   = document.getElementById('cfg-score-min');
+        const m1JanelaEl  = document.getElementById('cfg-m1-janela');
+        const m1StakeEl   = document.getElementById('cfg-m1-stake');
+        const m1StopWinEl = document.getElementById('cfg-m1-stopwin');
+        const m1StopLossEl= document.getElementById('cfg-m1-stoploss');
+        if (m1ScoreEl)    est.score_minimo      = Math.max(50, Math.min(100, parseInt(m1ScoreEl.value)    || 85));
+        if (m1JanelaEl)   est.janela_segundos   = Math.max(1,  Math.min(10,  parseInt(m1JanelaEl.value)   || 2));
+        if (m1StakeEl)    est.stake             = Math.max(0.35, parseFloat(m1StakeEl.value)              || 0.35);
+        if (m1StopWinEl)  est.stop_win          = Math.max(0.1,  parseFloat(m1StopWinEl.value)           || 10.0);
+        if (m1StopLossEl) est.stop_loss         = Math.max(0.1,  parseFloat(m1StopLossEl.value)          || 5.0);
+        const _m1Checks = ['usar_price_action','usar_estrutura','usar_ema','usar_rsi','usar_macd',
+                           'usar_adx','usar_atr','usar_sr','usar_bollinger','usar_anti_doji',
+                           'bloquear_lateral','bloquear_fp','mte_ativo','modo_demo'];
+        _m1Checks.forEach(k => {
+            const el = document.getElementById('cfg-m1-' + k);
+            if (el) est[k] = el.checked;
+        });
+    }
     // Reseta contador de sequência ao confirmar
     bot._seqContador = 0;
     _seqStatusClear();
@@ -7523,6 +7628,11 @@ function confirmarEstrategia() {
     bot._candleSinalPendente = null;  // cancela sinal pendente de virada (candle)
     bot._tpSinalPendente     = null;  // cancela sinal pendente de virada (trend_pro)
     bot._tpAnalisando        = false; // cancela flag de análise em andamento
+    // garra_m1 — reseta buffer de velas M1 e estado do motor
+    bot._m1Velas             = [];    // buffer de candles M1 fechados
+    bot._m1VelaAtual         = null;  // vela M1 em formação (ainda aberta)
+    bot._m1SinalPendente     = null;  // sinal aguardando virada de vela
+    bot._m1Analisando        = false; // evita dupla chamada à API
 
     // Re-subscreve ticks se o ativo mudou e jhconexo WS ativa
     const novoAtivo = _resolverAtivo(est.ativo);
@@ -7535,7 +7645,9 @@ function confirmarEstrategia() {
 
     // Atualiza boto do painel
     let resumo = nome;
-    if (est.tipo === 'garra_dupla') {
+    if (est.tipo === 'garra_m1') {
+        resumo = `M1 | score≥${est.score_minimo || 85} | ${est.duracao || 1}${est.duracao_unit || 'm'}${est.modo_demo ? ' | SINAL' : ''}`;
+    } else if (est.tipo === 'garra_dupla') {
         resumo = `${est.contract || 'DIGITUNDER'} barr.5 | gatilho=${est.qtd_gatilho}x | gale×${est.fator_gale}`;
     } else if (est.tipo === 'gatilho_duplo') {
         resumo = `Barr.${est.gatilho}${est.rep_gatilho} → UNDER+OVER`;
@@ -7554,7 +7666,9 @@ function confirmarEstrategia() {
         `${nome}<span class="cmd-label">${resumo.replace(nome,'').substring(0,36) || est.desc.substring(0,28)}</span>`;
 
     fecharModal('modal-cfg-estrategia');
-    if (est.tipo === 'gatilho_duplo') {
+    if (est.tipo === 'garra_m1') {
+        print(`🦅 GARRA REVERSÃO M1 PRO ativada | score≥<b>${est.score_minimo || 85}</b> | janela: <b>${est.janela_segundos || 2}s</b> | ativo: <b>${est.ativo || 'R_10'}</b> | ${est.modo_demo ? '🧪 MODO SINAL (sem operar)' : '💰 MODO REAL'}`, "log-win");
+    } else if (est.tipo === 'gatilho_duplo') {
         print(`🎯 GATILHO DUPLO: barreira=<b>${est.gatilho}</b> | repetições=<b>${est.rep_gatilho}</b>`
             + (ativo ? ` | Ativo: <b>${est.ativo}</b>` : ''), "log-win");
     } else if (est.tipo === 'garra_dupla') {
@@ -8122,6 +8236,9 @@ function processCommand(cmd) {
         bot._candleSinalPendente  = null;  // cancela sinal pendente (candle)
         bot._tpSinalPendente      = null;  // cancela sinal pendente (trend_pro)
         bot._tpAnalisando         = false; // cancela flag de análise em andamento
+        // Cancela estado GARRA M1
+        bot._m1SinalPendente      = null;
+        bot._m1Analisando         = false;
         _seqStatusClear();
         // Para conta secundária se estiver operando
         if (typeof _sec !== 'undefined' && _sec.espelhandoAtivo) {
@@ -9686,6 +9803,228 @@ function initWebSocket(wssUrl) {
                     setTimeout(_seqStatusClear, 1200);
                 }
 
+            } else if (est.tipo === 'garra_m1') {
+                // ══════════════════════════════════════════════════════════════════════
+                // GARRA REVERSÃO M1 PRO — Motor de velas M1 reais via WebSocket Deriv
+                //
+                // Cada tick alimenta a vela M1 em formação.
+                // Ao detectar a virada (epoch mudou de minuto), a vela anterior é
+                // fechada, enviada ao servidor para análise e, se o score >= mínimo,
+                // a entrada é executada nos primeiros `janela_segundos` da nova vela.
+                //
+                // Regra absoluta: NUNCA entra no meio de uma vela. Se a janela
+                // de entrada (padrão 2s) passar, descarta o sinal e aguarda a próxima.
+                // ══════════════════════════════════════════════════════════════════════
+
+                // ── Inicializa buffers se necessário ─────────────────────────────────
+                if (!bot._m1Velas)         bot._m1Velas         = [];
+                if (!bot._m1VelaAtual)     bot._m1VelaAtual     = null;
+                if (bot._m1SinalPendente === undefined) bot._m1SinalPendente = null;
+                if (bot._m1Analisando    === undefined) bot._m1Analisando    = false;
+                if (!bot._m1StopWinAcum)  bot._m1StopWinAcum  = 0;
+                if (!bot._m1StopLossAcum) bot._m1StopLossAcum = 0;
+
+                const _m1Preco    = parseFloat(data.tick.quote);
+                const _m1Epoch    = data.tick.epoch;              // unix timestamp em segundos
+                const _m1MinAtual = Math.floor(_m1Epoch / 60);   // número do minuto atual
+
+                // ── Alimenta a vela M1 em formação ───────────────────────────────────
+                if (!bot._m1VelaAtual) {
+                    // Primeira chegada — inicia nova vela
+                    bot._m1VelaAtual = {
+                        abertura:    _m1Preco,
+                        fechamento:  _m1Preco,
+                        maxima:      _m1Preco,
+                        minima:      _m1Preco,
+                        timestamp:   _m1MinAtual * 60,
+                        minuto:      _m1MinAtual,
+                    };
+                } else if (_m1MinAtual !== bot._m1VelaAtual.minuto) {
+                    // ── VIRADA DE VELA: novo minuto detectado ─────────────────────────
+                    // 1. Fecha a vela anterior
+                    const _m1VelaFechada = { ...bot._m1VelaAtual };
+
+                    // 2. Inicia a nova vela
+                    bot._m1VelaAtual = {
+                        abertura:   _m1Preco,
+                        fechamento: _m1Preco,
+                        maxima:     _m1Preco,
+                        minima:     _m1Preco,
+                        timestamp:  _m1MinAtual * 60,
+                        minuto:     _m1MinAtual,
+                    };
+
+                    // 3. Empilha a vela fechada no buffer (máx 250 para EMA200 + margem)
+                    bot._m1Velas.push(_m1VelaFechada);
+                    if (bot._m1Velas.length > 250) bot._m1Velas.shift();
+
+                    // 4. Se havia sinal pendente da vela anterior, PROCESSA AGORA
+                    //    (primeiro tick da nova vela = virada = entrada autorizada)
+                    if (bot._m1SinalPendente && !bot._buying) {
+                        const _sinal = bot._m1SinalPendente;
+                        bot._m1SinalPendente = null;
+                        // Verifica janela de entrada: o tick de virada é sempre dentro dos primeiros segundos
+                        const _agora       = Date.now() / 1000;
+                        const _tsVirada    = bot._m1VelaAtual.timestamp;
+                        const _segPassados = _agora - _tsVirada;
+                        const _janela      = est.janela_segundos || 2;
+
+                        if (_segPassados <= _janela) {
+                            // Dentro da janela — autoriza entrada
+                            if (est.modo_demo) {
+                                // MODO SINAL: apenas exibe, não opera
+                                const _barras = (cat, val) => {
+                                    const p = Math.round(val / 10);
+                                    return `${'█'.repeat(p)}${'░'.repeat(10-p)} ${val}`;
+                                };
+                                const _det  = _sinal.detalhes || {};
+                                const _mots = (_sinal.motivos || []).slice(0,4).join(' | ');
+                                print(
+                                    `╔══════════════════════════════════════╗<br>` +
+                                    `║ 🦅 GARRA REVERSÃO M1 PRO             ║<br>` +
+                                    `╠══════════════════════════════════════╣<br>` +
+                                    `║ ATIVO: ${(est.ativo||'R_10').padEnd(6)} | M1 | ⏱ VIRADA ║<br>` +
+                                    `║ ${_sinal.direcao === 'CALL' ? '🟢' : '🔴'} SINAL: <b>${_sinal.direcao}</b> | SCORE: <b>${_sinal.score}/100</b>   ║<br>` +
+                                    `║ ${_mots || 'confluência detectada'}   ║<br>` +
+                                    `╚══════════════════════════════════════╝`,
+                                    _sinal.direcao === 'CALL' ? 'log-win' : 'log-loss'
+                                );
+                                _seqStatusUpdate(`🦅 M1 ${_sinal.direcao} | score ${_sinal.score}/100 | 🧪 SINAL (sem operar)`);
+                                // Registra no servidor para estatísticas/MTE mesmo em modo demo
+                                fetch('/garra-m1/resultado', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                        resultado: 'SINAL',
+                                        ativo:   est.ativo || 'R_10',
+                                        direcao: _sinal.direcao,
+                                        score:   _sinal.score,
+                                        regime:  'DEMO',
+                                    })
+                                }).catch(() => {});
+                            } else {
+                                // MODO REAL: executa a operação
+                                bot._buying   = true;
+                                bot._m1Direcao = _sinal.direcao;  // sinaliza para buy() qual contrato
+                                bot._m1Score   = _sinal.score;
+                                const _dir = _sinal.direcao === 'CALL' ? '🟢 CALL' : '🔴 PUT';
+                                print(`🦅 GARRA M1 ${_dir} | score <b>${_sinal.score}/100</b> | ativo: <b>${est.ativo}</b> | ⏱ VIRADA`, 'log-win');
+                                _seqStatusUpdate(`🦅 M1 ${_sinal.direcao} | score ${_sinal.score}/100 | entrando...`);
+                                _edcEntrar(() => buy());
+                            }
+                        } else {
+                            print(`🦅 GARRA M1 | janela perdida (${_segPassados.toFixed(1)}s > ${_janela}s) — aguardando próxima vela`, 'log-info');
+                            _seqStatusUpdate(`🦅 M1 AGUARDAR | janela perdida — próxima vela`);
+                        }
+                        return;
+                    }
+
+                    // 5. Analisa a vela que acabou de fechar — chama o motor no servidor
+                    if (!bot._m1Analisando && bot._m1Velas.length >= 5) {
+                        bot._m1Analisando = true;
+                        const _m1Payload = {
+                            velas:          bot._m1Velas,
+                            ts_vela_atual:  bot._m1VelaAtual.timestamp,
+                            ts_agora:       Date.now() / 1000,
+                            cfg_override: {
+                                ativo:                     est.ativo             || 'R_10',
+                                duracao:                   est.duracao           || 1,
+                                duracao_unidade:           est.duracao_unit      || 'm',
+                                score_minimo:              est.score_minimo      || 85,
+                                janela_entrada_segundos:   est.janela_segundos   || 2,
+                                usar_price_action:         est.usar_price_action !== false,
+                                usar_estrutura:            est.usar_estrutura    !== false,
+                                usar_ema:                  est.usar_ema          !== false,
+                                usar_rsi:                  est.usar_rsi          !== false,
+                                usar_macd:                 est.usar_macd         !== false,
+                                usar_adx:                  est.usar_adx          !== false,
+                                usar_atr:                  est.usar_atr          !== false,
+                                usar_sr:                   est.usar_sr           !== false,
+                                usar_bollinger:            est.usar_bollinger    !== false,
+                                usar_anti_doji:            est.usar_anti_doji    !== false,
+                                bloquear_lateral:          est.bloquear_lateral  !== false,
+                                bloquear_falso_rompimento: est.bloquear_fp       !== false,
+                                stake:                     est.stake             || 0.35,
+                                gerenciamento:             'flat',
+                            },
+                        };
+                        fetch('/garra-m1/avaliar', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(_m1Payload),
+                        })
+                        .then(r => r.json())
+                        .then(_res => {
+                            bot._m1Analisando = false;
+                            if (_res.operar && _res.direcao !== 'AGUARDAR') {
+                                // Guarda sinal — será executado no próximo tick (virada já ocorreu,
+                                // então verifica se ainda estamos na janela de entrada)
+                                const _agora2      = Date.now() / 1000;
+                                const _tsV2        = bot._m1VelaAtual ? bot._m1VelaAtual.timestamp : _agora2;
+                                const _segDec      = _agora2 - _tsV2;
+                                const _janelaDec   = est.janela_segundos || 2;
+                                if (_segDec <= _janelaDec && !bot._buying) {
+                                    // Análise concluída ainda dentro da janela — entra agora
+                                    if (est.modo_demo) {
+                                        const _mots2 = (_res.motivos || []).slice(0,4).join(' | ');
+                                        print(
+                                            `╔══════════════════════════════════════╗<br>` +
+                                            `║ 🦅 GARRA REVERSÃO M1 PRO             ║<br>` +
+                                            `╠══════════════════════════════════════╣<br>` +
+                                            `║ ATIVO: ${(est.ativo||'R_10').padEnd(6)} | M1 | ⏱ VIRADA ║<br>` +
+                                            `║ ${_res.direcao === 'CALL' ? '🟢' : '🔴'} SINAL: <b>${_res.direcao}</b> | SCORE: <b>${_res.score}/100</b>   ║<br>` +
+                                            `║ ${_mots2 || 'confluência detectada'}   ║<br>` +
+                                            `╚══════════════════════════════════════╝`,
+                                            _res.direcao === 'CALL' ? 'log-win' : 'log-loss'
+                                        );
+                                        _seqStatusUpdate(`🦅 M1 ${_res.direcao} | score ${_res.score}/100 | 🧪 SINAL`);
+                                        fetch('/garra-m1/resultado', {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({ resultado: 'SINAL', ativo: est.ativo || 'R_10', direcao: _res.direcao, score: _res.score, regime: 'DEMO' })
+                                        }).catch(() => {});
+                                    } else {
+                                        bot._buying    = true;
+                                        bot._m1Direcao = _res.direcao;
+                                        bot._m1Score   = _res.score;
+                                        const _dir2 = _res.direcao === 'CALL' ? '🟢 CALL' : '🔴 PUT';
+                                        print(`🦅 GARRA M1 ${_dir2} | score <b>${_res.score}/100</b> | ativo: <b>${est.ativo}</b>`, 'log-win');
+                                        _edcEntrar(() => buy());
+                                    }
+                                } else if (_segDec <= _janelaDec + 1) {
+                                    // Análise quase na hora — guarda como pendente para o próximo tick
+                                    bot._m1SinalPendente = _res;
+                                } else {
+                                    // Janela já passou
+                                    print(`🦅 GARRA M1 | sinal ${_res.direcao} score ${_res.score} — janela passou (${_segDec.toFixed(1)}s)`, 'log-info');
+                                    _seqStatusUpdate(`🦅 M1 AGUARDAR | confluência detectada mas janela passou`);
+                                }
+                            } else {
+                                // AGUARDAR
+                                const _motivo = _res.motivo || 'Confluência insuficiente';
+                                const _sc = _res.score_call !== undefined
+                                    ? ` | CALL:${_res.score_call} PUT:${_res.score_put} mín:${_res.score_minimo}`
+                                    : '';
+                                _seqStatusUpdate(`🦅 M1 AGUARDAR | ${_motivo}${_sc}`);
+                            }
+                        })
+                        .catch(_err => {
+                            bot._m1Analisando = false;
+                            console.warn('[GARRA M1]', _err);
+                        });
+                    }
+                } else {
+                    // ── Mesmo minuto: atualiza vela em formação ───────────────────────
+                    bot._m1VelaAtual.fechamento = _m1Preco;
+                    if (_m1Preco > bot._m1VelaAtual.maxima) bot._m1VelaAtual.maxima = _m1Preco;
+                    if (_m1Preco < bot._m1VelaAtual.minima) bot._m1VelaAtual.minima = _m1Preco;
+                    // Exibe progresso da coleta
+                    const _m1Total = est.tp_hist || 210;
+                    if (bot._m1Velas.length < _m1Total) {
+                        _seqStatusUpdate(`🦅 M1 COLETANDO [${bot._m1Velas.length}/${_m1Total} velas] aguarde...`);
+                    }
+                }
+
             } else if (est.tipo === 'pct_hist') {
                 // ── % Histograma — entra baseado nos percentuais da janela recente ──
                 // Precisa de pelo menos pct_janela ticks
@@ -10470,6 +10809,28 @@ function initWebSocket(wssUrl) {
                 _adaptativoRegistrarResultado(won ? 'WIN' : 'LOSS', profit);
                 // ── EDC: feedback rico normal ─────────────────────────────
                 _edcFeedback(won, profit, false);
+                // ── GARRA M1: registra WIN/LOSS no servidor e alimenta MTE ──
+                if (ESTRATEGIAS[bot.estrategia] && ESTRATEGIAS[bot.estrategia].tipo === 'garra_m1') {
+                    const _m1Est = ESTRATEGIAS[bot.estrategia];
+                    const _m1Res = won ? 'WIN' : 'LOSS';
+                    fetch('/garra-m1/resultado', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            resultado: _m1Res,
+                            ativo:     _m1Est.ativo   || 'R_10',
+                            direcao:   bot._m1Direcao || '',
+                            score:     bot._m1Score   || 0,
+                            regime:    'REAL',
+                            profit:    profit,
+                        })
+                    }).catch(() => {});
+                    const _m1Icone = won ? '✅' : '❌';
+                    const _m1Msg   = won
+                        ? `🦅 GARRA M1 WIN | +$${profit.toFixed(2)} | score ${bot._m1Score || 0}`
+                        : `🦅 GARRA M1 LOSS | -$${Math.abs(profit).toFixed(2)} | score ${bot._m1Score || 0}`;
+                    _seqStatusUpdate(_m1Msg);
+                }
                 // ── Secundária: verifica se deve ativar/desativar espelhamento ──
                 _secVerificarEspelhamento(bot.profit);
             }
@@ -10942,6 +11303,21 @@ function buy() {
         payload.duration_unit = dUnit;
         payload.duration      = Math.min(dMax, Math.max(dMin, parseInt(est.duracao) || 1));
         delete payload.barrier;
+
+    } else if (est.tipo === 'garra_m1') {
+        // CALL = RISE | PUT = FALL (contratos de subida/queda da Deriv)
+        const _m1Dir   = (bot._m1Direcao || 'CALL').toUpperCase();
+        const _m1DUnit = est.duracao_unit || 'm';
+        // Duração: minutos (1-5) ou segundos (10-30-60 → usa "s" se Deriv suportar, senão "m")
+        const _m1DMax  = _m1DUnit === 'm' ? 5 : 60;
+        const _m1DMin  = _m1DUnit === 'm' ? 1 : 5;
+        payload.contract_type = _m1Dir;   // 'CALL' ou 'PUT'
+        payload.duration_unit = _m1DUnit;
+        payload.duration      = Math.min(_m1DMax, Math.max(_m1DMin, parseInt(est.duracao) || 1));
+        delete payload.barrier;
+        // Usa a stake configurada na estratégia (não o mgr externo para evitar Martingale)
+        payload.amount = Math.max(0.35, parseFloat(est.stake) || 0.35);
+        bot.stake      = payload.amount;
     }
 
     // Espelha o mesmo trade na conta secundária (se conectada)
