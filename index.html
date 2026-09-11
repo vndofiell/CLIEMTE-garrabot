@@ -9983,10 +9983,15 @@ function initWebSocket(wssUrl) {
                     // 5. Analisa a vela que acabou de fechar — chama o motor no servidor
                     if (!bot._m1Analisando && bot._m1Velas.length >= 5) {
                         bot._m1Analisando = true;
+                        const _m1Agora = Date.now() / 1000;
+                        // ts_vela_atual = timestamp de abertura da nova vela (início do minuto atual)
+                        // Usamos o epoch do tick (já capturado em _m1MinAtual * 60) para ficar
+                        // em sincronia com o relógio da Deriv e não com o browser.
+                        const _m1TsVelaAtual = bot._m1VelaAtual.timestamp;
                         const _m1Payload = {
                             velas:          bot._m1Velas,
-                            ts_vela_atual:  bot._m1VelaAtual.timestamp,
-                            ts_agora:       Date.now() / 1000,
+                            ts_vela_atual:  _m1TsVelaAtual,
+                            ts_agora:       _m1Agora,
                             cfg_override: {
                                 ativo:                     est.ativo             || 'R_10',
                                 duracao:                   est.duracao           || 1,

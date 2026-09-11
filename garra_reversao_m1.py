@@ -333,12 +333,14 @@ class GarraReversaoM1Engine:
         # atual    = velas[-1]  # timestamp da vela recém-aberta
 
         # ── JANELA DE ENTRADA ─────────────────────────────────────────────
+        # O controle da janela de entrada (N segundos após virada) é feito
+        # inteiramente no front-end. O servidor apenas analisa e retorna o score.
+        # Mantemos a verificação apenas para rejeitar chamadas muito atrasadas
+        # (> 55s significa que é do ciclo anterior — bug de timing).
         seg_desde_abertura = ts_now - ts_vela
-        if seg_desde_abertura < 0:
-            return self._aguardar("Abertura não confirmada", 0, 0, cfg)
-        if seg_desde_abertura > janela:
+        if seg_desde_abertura > 55:
             return self._aguardar(
-                f"Janela perdida ({seg_desde_abertura:.1f}s > {janela}s)",
+                f"Chamada fora do ciclo ({seg_desde_abertura:.0f}s)",
                 0, 0, cfg
             )
 
