@@ -45,7 +45,7 @@ CFG_DEFAULT = {
     "stop_loss":                 5.0,
     "gerenciamento":             "flat",
     "mte_ativo":                 True,
-    "modo_demo":                 True,
+    "modo_demo":                 False,
 }
 
 
@@ -405,19 +405,19 @@ class GarraReversaoM1Engine:
             elif macd_line < 0 and hist_val < 0:
                 score_put  += 10; motivos_put.append("MACD negativo")
 
-        # ── 5. ADX (+5, bloqueio se < mínimo) ────────────────────────────
+        # ── 5. ADX (+5, não bloqueia — apenas pontua) ────────────────────
+        # Para índices sintéticos (R_10, R_50 etc.) o proxy ADX é muito
+        # sensível e bloqueava o motor quase sempre. Agora penaliza o score
+        # ao invés de bloquear: ADX baixo simplesmente não soma os 5 pontos.
         if cfg.get("usar_adx", True):
             adx_val = _adx_proxy(closes, velas[:-1])
             adx_min = float(cfg.get("adx_minimo", 20))
             detalhes["adx"] = round(adx_val, 2)
-            if adx_val < adx_min:
-                return self._aguardar(
-                    f"ADX insuficiente ({adx_val:.1f} < {adx_min})",
-                    score_call, score_put, cfg, detalhes=detalhes
-                )
-            score_call += 5; score_put += 5  # força presente para os dois
-            motivos_call.append(f"ADX {adx_val:.1f}")
-            motivos_put.append(f"ADX {adx_val:.1f}")
+            if adx_val >= adx_min:
+                score_call += 5; score_put += 5
+                motivos_call.append(f"ADX {adx_val:.1f}")
+                motivos_put.append(f"ADX {adx_val:.1f}")
+            # ADX baixo: não bloqueia, apenas não soma os 5 pontos
 
         # ── 6. ATR (+5) ───────────────────────────────────────────────────
         if cfg.get("usar_atr", True):

@@ -4426,10 +4426,10 @@ const ESTRATEGIAS = {
         ativo:             "R_10",
         duracao:           1,
         duracao_unit:      "m",
-        score_minimo:      85,
-        janela_segundos:   2,
+        score_minimo:      75,
+        janela_segundos:   3,
         tf:                1,           // timeframe M1 (fixo)
-        tp_hist:           210,         // velas mínimas para EMA200
+        tp_hist:           210,         // velas para EMA200
         usar_price_action: true,
         usar_estrutura:    true,
         usar_ema:          true,
@@ -4443,7 +4443,7 @@ const ESTRATEGIAS = {
         bloquear_lateral:  true,
         bloquear_fp:       true,
         mte_ativo:         true,
-        modo_demo:         true,
+        modo_demo:         false,
         desc: "Entrada CALL/PUT somente na virada da vela M1 | Price Action + EMA + RSI + MACD + ADX + S/R",
     },
 };
@@ -10066,12 +10066,26 @@ function initWebSocket(wssUrl) {
                                     _seqStatusUpdate(`🦅 M1 AGUARDAR | confluência detectada mas janela passou`);
                                 }
                             } else {
-                                // AGUARDAR
+                                // AGUARDAR — loga no terminal com detalhes do score
                                 const _motivo = _res.motivo || 'Confluência insuficiente';
-                                const _sc = _res.score_call !== undefined
-                                    ? ` | CALL:${_res.score_call} PUT:${_res.score_put} mín:${_res.score_minimo}`
-                                    : '';
-                                _seqStatusUpdate(`🦅 M1 AGUARDAR | ${_motivo}${_sc}`);
+                                const _scC = _res.score_call !== undefined ? _res.score_call : 0;
+                                const _scP = _res.score_put  !== undefined ? _res.score_put  : 0;
+                                const _scM = _res.score_minimo !== undefined ? _res.score_minimo : (est.score_minimo || 75);
+                                const _det = _res.detalhes || {};
+                                // Monta linha compacta de indicadores
+                                const _indicadores = [
+                                    _det.estrutura  ? `EST:${_det.estrutura.substring(0,3)}`   : '',
+                                    _det.rsi        ? `RSI:${_det.rsi.toFixed(0)}`             : '',
+                                    _det.adx        ? `ADX:${_det.adx.toFixed(0)}`             : '',
+                                    _det.macd       ? `MACD:${_det.macd > 0 ? '+' : ''}${_det.macd.toFixed(4)}` : '',
+                                ].filter(Boolean).join(' ');
+                                print(
+                                    `🦅 M1 AGUARDAR | <b>${_motivo}</b> | ` +
+                                    `CALL:<b>${_scC}</b> PUT:<b>${_scP}</b> mín:${_scM}` +
+                                    (_indicadores ? ` | ${_indicadores}` : ''),
+                                    'log-info'
+                                );
+                                _seqStatusUpdate(`🦅 M1 AGUARDAR | CALL:${_scC} PUT:${_scP} mín:${_scM} | ${_motivo}`);
                             }
                         })
                         .catch(_err => {
