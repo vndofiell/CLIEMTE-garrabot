@@ -10559,11 +10559,8 @@ function initWebSocket(wssUrl) {
                 // ══════════════════════════════════════════════════════════════
                 // TRADING PRO MULTI-AI — 5 IAs em consenso
                 // Modo simples : analisa o ativo único configurado
-                // Modo automático (ROTAÇÃO REAL): troca o ativo subscrito na
-                //   Deriv a cada ciclo de análise. Usa dados reais do ativo,
-                //   não dados fake de outro mercado.
-                //   Fluxo: analisar ativo atual → sem sinal → trocar para o
-                //   próximo da lista → aguardar buffer → reanalisar
+                // Modo automático: permanece no mesmo ativo até ter LOSS,
+                //   então troca para o próximo mercado da lista.
                 // ══════════════════════════════════════════════════════════════
                 if (bot._tpAiSinalPendente === undefined) bot._tpAiSinalPendente   = null;
                 if (bot._tpAiAnalisando    === undefined) bot._tpAiAnalisando      = false;
@@ -10594,16 +10591,8 @@ function initWebSocket(wssUrl) {
                     return;
                 }
 
-                // ── Modo automático: trocar ativo subscrito se necessário ─────
-                if (est.auto_mercados && Array.isArray(est.mercados_auto) && est.mercados_auto.length > 1) {
-                    // Inicializa índice na posição do ativo atual
-                    const _mkLista = est.mercados_auto;
-                    if (bot._tpAiMkTrocando) return; // aguarda troca completar
-
-                    const _ativoAtual = est.ativo || 'R_100';
-                    const _mkIdxAtual = _mkLista.indexOf(_ativoAtual);
-                    if (_mkIdxAtual >= 0) bot._tpAiMkIdx = _mkIdxAtual;
-                }
+                // ── Aguarda troca de ativo completar (só ocorre após LOSS) ────
+                if (bot._tpAiMkTrocando) return;
 
                 // FASE 1 — aguarda histórico suficiente
                 const _tpAiHistMin  = Math.max(2, Math.min(210, est.tp_hist || 5));
@@ -10639,24 +10628,6 @@ function initWebSocket(wssUrl) {
 
                 bot._tpAiAnalisando = true;
 
-                // Helper: trocar para próximo ativo da lista (rotação real)
-                // Só é chamado APÓS análise real retornar sem sinal — nunca por dados insuficientes
-                const _tpAiTrocarAtivo = (mkLista, scoreAtual) => {
-                    bot._tpAiMkIdx = (bot._tpAiMkIdx + 1) % mkLista.length;
-                    const novoAtivo  = mkLista[bot._tpAiMkIdx];
-                    const novoResolv = _resolverAtivo(novoAtivo);
-                    est.ativo = novoAtivo;
-                    bot._candleBuffer = []; // zera buffer para coletar dados reais do novo ativo
-                    bot._tpAiMkTrocando = true;
-                    if (bot.ws && bot.ws.readyState === WebSocket.OPEN) {
-                        bot.ws.send(json({ forget_all: 'ticks' }));
-                        bot._tickAtivo = novoResolv;
-                        bot.ws.send(json({ ticks: novoResolv, subscribe: 1 }));
-                    }
-                    print(`🔀 TRADING PRO AUTO | <b>${est.ativo}</b> score ${scoreAtual} → próximo: <b>${novoAtivo}</b>`, 'log-info');
-                    setTimeout(() => { bot._tpAiMkTrocando = false; }, 1500);
-                };
-
                 // ── Analisa ativo atual com dados reais do buffer ─────────────
                 const _velasParaAnalisar = _tpAiMontarVelas();
                 fetch('/trading-pro/avaliar', {
@@ -10673,14 +10644,6 @@ function initWebSocket(wssUrl) {
                 .then(r => r.json())
                 .then(_res => {
                     bot._tpAiAnalisando = false;
-                    const _mkAuto = est.auto_mercados && Array.isArray(est.mercados_auto) && est.mercados_auto.length > 1;
-
-                    // Histórico insuficiente no backend — NÃO troca de mercado, aguarda mais ticks
-                    if (_res.motivo && _res.motivo.includes('Histórico insuficiente')) {
-                        _seqStatusUpdate(`🤖 TRADING PRO [dados insuficientes] aguardando mais ticks... (${est.ativo})`);
-                        return;
-                    }
-
                     if (_res.operar && _res.direcao !== 'AGUARDAR') {
                         // ✅ Sinal aprovado — agenda entrada na virada
                         bot._candleBuffer = bot._candleBuffer.slice(-_tpAiJan * 59);
@@ -10691,12 +10654,8 @@ function initWebSocket(wssUrl) {
                         };
                         _seqStatusUpdate(`🤖 TRADING PRO ${_res.direcao} | ${est.ativo} | score ${_res.score}/100 | líder: ${_res.lider} | ⏳ aguardando virada...`);
                     } else {
-                        // ❌ Sem sinal — se modo auto, troca para o próximo mercado
-                        if (_mkAuto) {
-                            _tpAiTrocarAtivo(est.mercados_auto, _res.score || 0);
-                        } else {
-                            _seqStatusUpdate(`🤖 TRADING PRO AGUARDAR | ${_res.motivo || 'Consenso insuficiente'} | score ${_res.score || 0}`);
-                        }
+                        // ❌ Sem sinal — aguarda próximo tick (não troca mercado)
+                        _seqStatusUpdate(`🤖 TRADING PRO AGUARDAR | ${est.ativo} | ${_res.motivo || 'Consenso insuficiente'} | score ${_res.score || 0}`);
                     }
                 })
                 .catch(_err => {
@@ -10966,8 +10925,9 @@ function initWebSocket(wssUrl) {
                 _adaptativoRegistrarResultado(won ? 'WIN' : 'LOSS', profit);
                 // ── EDC: feedback rico normal ─────────────────────────────
                 _edcFeedback(won, profit, false);
-                // ── TRADING PRO: registra WIN/LOSS e aplica rotação de líder ──
+                // ── TRADING PRO: registra WIN/LOSS — em LOSS troca mercado (modo auto) ──
                 if (ESTRATEGIAS[bot.estrategia] && ESTRATEGIAS[bot.estrategia].tipo === 'trading_pro') {
+                    const _tpEst = ESTRATEGIAS[bot.estrategia];
                     fetch('/trading-pro/resultado', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -10975,14 +10935,34 @@ function initWebSocket(wssUrl) {
                             resultado: won ? 'WIN' : 'LOSS',
                             lucro:     profit,
                             broker:    'DERIV',
-                            ativo:     ESTRATEGIAS[bot.estrategia].ativo || 'R_100',
+                            ativo:     _tpEst.ativo || 'R_100',
                             score:     bot._tpScore || 0,
                         })
                     }).catch(() => {});
-                    const _tpAiMsg = won
-                        ? `🤖 TRADING PRO WIN | +$${profit.toFixed(2)} | score ${bot._tpScore || 0}`
-                        : `🤖 TRADING PRO LOSS | -$${Math.abs(profit).toFixed(2)} | score ${bot._tpScore || 0}`;
-                    _seqStatusUpdate(_tpAiMsg);
+
+                    if (won) {
+                        _seqStatusUpdate(`🤖 TRADING PRO WIN | +$${profit.toFixed(2)} | ${_tpEst.ativo} | score ${bot._tpScore || 0}`);
+                    } else {
+                        _seqStatusUpdate(`🤖 TRADING PRO LOSS | -$${Math.abs(profit).toFixed(2)} | ${_tpEst.ativo} | score ${bot._tpScore || 0}`);
+                        // LOSS + modo automático → troca para próximo mercado da lista
+                        const _mkAuto = _tpEst.auto_mercados && Array.isArray(_tpEst.mercados_auto) && _tpEst.mercados_auto.length > 1;
+                        if (_mkAuto) {
+                            if (bot._tpAiMkIdx === undefined) bot._tpAiMkIdx = 0;
+                            bot._tpAiMkIdx = (bot._tpAiMkIdx + 1) % _tpEst.mercados_auto.length;
+                            const _novoAtivo  = _tpEst.mercados_auto[bot._tpAiMkIdx];
+                            const _novoResolv = _resolverAtivo(_novoAtivo);
+                            _tpEst.ativo         = _novoAtivo;
+                            bot._candleBuffer    = [];
+                            bot._tpAiMkTrocando  = true;
+                            if (bot.ws && bot.ws.readyState === WebSocket.OPEN) {
+                                bot.ws.send(json({ forget_all: 'ticks' }));
+                                bot._tickAtivo = _novoResolv;
+                                bot.ws.send(json({ ticks: _novoResolv, subscribe: 1 }));
+                            }
+                            print(`🔀 TRADING PRO AUTO | LOSS → próximo: <b>${_novoAtivo}</b>`, 'log-loss');
+                            setTimeout(() => { bot._tpAiMkTrocando = false; }, 1500);
+                        }
+                    }
                 }
                 // ── Secundária: verifica se deve ativar/desativar espelhamento ──
                 _secVerificarEspelhamento(bot.profit);
