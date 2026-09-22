@@ -10637,36 +10637,33 @@ function initWebSocket(wssUrl) {
                     ? Math.abs(bot.profit) / Math.max(1, bot.stake * 10)
                     : 0;
 
-                // Descarta 1 vela para reanalisar rápido após entrada
-                bot._candleBuffer = bot._candleBuffer.slice(-_tpAiJan * 59);
                 bot._tpAiAnalisando = true;
 
                 // Helper: trocar para próximo ativo da lista (rotação real)
-                const _tpAiTrocarAtivo = (mkLista) => {
+                // Só é chamado APÓS análise real retornar sem sinal — nunca por dados insuficientes
+                const _tpAiTrocarAtivo = (mkLista, scoreAtual) => {
                     bot._tpAiMkIdx = (bot._tpAiMkIdx + 1) % mkLista.length;
-                    const novoAtivo   = mkLista[bot._tpAiMkIdx];
-                    const novoResolv  = _resolverAtivo(novoAtivo);
-                    if (novoAtivo !== est.ativo) {
-                        est.ativo = novoAtivo;
-                        bot._candleBuffer = []; // zera buffer para novo ativo
-                        bot._tpAiMkTrocando = true;
-                        if (bot.ws && bot.ws.readyState === WebSocket.OPEN) {
-                            bot.ws.send(json({ forget_all: 'ticks' }));
-                            bot._tickAtivo = novoResolv;
-                            bot.ws.send(json({ ticks: novoResolv, subscribe: 1 }));
-                        }
-                        print(`🔀 TRADING PRO AUTO | trocando para <b>${novoAtivo}</b> — coletando dados...`, 'log-info');
-                        // Libera flag de troca após 1s (tempo para primeiro tick chegar)
-                        setTimeout(() => { bot._tpAiMkTrocando = false; }, 1000);
+                    const novoAtivo  = mkLista[bot._tpAiMkIdx];
+                    const novoResolv = _resolverAtivo(novoAtivo);
+                    est.ativo = novoAtivo;
+                    bot._candleBuffer = []; // zera buffer para coletar dados reais do novo ativo
+                    bot._tpAiMkTrocando = true;
+                    if (bot.ws && bot.ws.readyState === WebSocket.OPEN) {
+                        bot.ws.send(json({ forget_all: 'ticks' }));
+                        bot._tickAtivo = novoResolv;
+                        bot.ws.send(json({ ticks: novoResolv, subscribe: 1 }));
                     }
+                    print(`🔀 TRADING PRO AUTO | <b>${est.ativo}</b> score ${scoreAtual} → próximo: <b>${novoAtivo}</b>`, 'log-info');
+                    setTimeout(() => { bot._tpAiMkTrocando = false; }, 1500);
                 };
 
-                // ── Analisa ativo atual (modo simples ou auto com dados reais) ─
+                // ── Analisa ativo atual com dados reais do buffer ─────────────
+                const _velasParaAnalisar = _tpAiMontarVelas();
                 fetch('/trading-pro/avaliar', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        velas:        _tpAiMontarVelas(),
+                        velas:        _velasParaAnalisar,
                         broker:       'DERIV',
                         ativo:        est.ativo || 'R_100',
                         drawdown_pct: _tpAiDd,
@@ -10676,7 +10673,17 @@ function initWebSocket(wssUrl) {
                 .then(r => r.json())
                 .then(_res => {
                     bot._tpAiAnalisando = false;
+                    const _mkAuto = est.auto_mercados && Array.isArray(est.mercados_auto) && est.mercados_auto.length > 1;
+
+                    // Histórico insuficiente no backend — NÃO troca de mercado, aguarda mais ticks
+                    if (_res.motivo && _res.motivo.includes('Histórico insuficiente')) {
+                        _seqStatusUpdate(`🤖 TRADING PRO [dados insuficientes] aguardando mais ticks... (${est.ativo})`);
+                        return;
+                    }
+
                     if (_res.operar && _res.direcao !== 'AGUARDAR') {
+                        // ✅ Sinal aprovado — agenda entrada na virada
+                        bot._candleBuffer = bot._candleBuffer.slice(-_tpAiJan * 59);
                         bot._tpAiSinalPendente = {
                             dir:   _res.direcao,
                             score: _res.score  || 0,
@@ -10684,13 +10691,11 @@ function initWebSocket(wssUrl) {
                         };
                         _seqStatusUpdate(`🤖 TRADING PRO ${_res.direcao} | ${est.ativo} | score ${_res.score}/100 | líder: ${_res.lider} | ⏳ aguardando virada...`);
                     } else {
-                        // Sem sinal — se modo auto, toca para próximo mercado
-                        const _mkAuto = est.auto_mercados && Array.isArray(est.mercados_auto) && est.mercados_auto.length > 1;
+                        // ❌ Sem sinal — se modo auto, troca para o próximo mercado
                         if (_mkAuto) {
-                            _seqStatusUpdate(`🤖 TRADING PRO AUTO | ${est.ativo} sem sinal (score ${_res.score || 0}) → trocando mercado...`);
-                            _tpAiTrocarAtivo(est.mercados_auto);
+                            _tpAiTrocarAtivo(est.mercados_auto, _res.score || 0);
                         } else {
-                            _seqStatusUpdate(`🤖 TRADING PRO AGUARDAR | ${_res.motivo || 'Consenso insuficiente'}`);
+                            _seqStatusUpdate(`🤖 TRADING PRO AGUARDAR | ${_res.motivo || 'Consenso insuficiente'} | score ${_res.score || 0}`);
                         }
                     }
                 })
