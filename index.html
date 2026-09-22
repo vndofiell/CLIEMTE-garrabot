@@ -7643,7 +7643,7 @@ function selecionarEstrategia(nome) {
         campo('Timeframe (min por vela de análise)', 'cfg-tf', 'select', est.tf || 1,
               undefined, undefined, undefined, [1,2,5,15]);
         campo('Histórico mínimo (velas) — min 50, max 210', 'cfg-tp-hist', 'number', est.tp_hist || 210, 50, 210, 10);
-        campo('Score mínimo para entrar (0-100)', 'cfg-score-min', 'number', est.score_min || 92, 50, 100, 5);
+        campo('Score mínimo para entrar (0-100)', 'cfg-score-min', 'number', est.score_min || 60, 1, 100, 1);
         campo('Unidade do contrato (m=minutos / t=ticks)', 'cfg-duracao-unit', 'select', est.duracao_unit || 't',
               undefined, undefined, undefined, ['m','t']);
         campo('Duração do contrato', 'cfg-duracao', 'select', est.duracao || 1,
@@ -7660,7 +7660,7 @@ function selecionarEstrategia(nome) {
         campo('Timeframe (ticks por vela)', 'cfg-tf', 'select', est.tf || 1,
               undefined, undefined, undefined, [1,2,5,15]);
         campo('Histórico mínimo (velas)', 'cfg-tp-hist', 'number', est.tp_hist || 60, 2, 210, 1);
-        campo('Score mínimo consenso (0-100)', 'cfg-score-min', 'number', est.score_min || 78, 50, 100, 2);
+        campo('Score mínimo consenso (0-100)', 'cfg-score-min', 'number', est.score_min || 60, 1, 100, 1);
         campo('Unidade do contrato (m=min / t=ticks)', 'cfg-duracao-unit', 'select', est.duracao_unit || 't',
               undefined, undefined, undefined, ['t','m']);
         campo('Duração do contrato', 'cfg-duracao', 'select', est.duracao || 1,
@@ -7749,7 +7749,7 @@ function confirmarEstrategia() {
         est.tp_hist = Math.max(_tpMin, Math.min(210, parseInt(tpHist.value) || (est.tipo === 'trading_pro' ? 60 : 210)));
     }
     const scoreMin = document.getElementById('cfg-score-min');
-    if (scoreMin)     est.score_min = Math.max(40, Math.min(100, parseInt(scoreMin.value) || 60));
+    if (scoreMin)     est.score_min = Math.max(1, Math.min(100, parseInt(scoreMin.value) || 60));
     if (seqGat)       est.seq_gatilho   = Math.max(0, parseInt(seqGat.value) || 0);
     // Campos pct_hist
     const pctJanela = document.getElementById('cfg-pct-janela');
