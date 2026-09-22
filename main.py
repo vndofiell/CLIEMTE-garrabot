@@ -2030,6 +2030,667 @@ def clear_token():
     print("[Token] Token limpo pelo front-end (nova conexão iniciada).")
     return jsonify({"ok": True})
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# QUOTEX — Integração com a corretora Quotex via pyquotex
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# ── SSID Hunter — captura automática via Chrome ───────────────────────────────
+try:
+    from quotex_ssid_hunter import (
+        ssid_hunter_iniciar,
+        ssid_hunter_parar,
+        ssid_hunter_status,
+    )
+    _SSID_HUNTER_OK = True
+    print("[Quotex] ✅ SSID Hunter carregado (captura automática ativa).")
+except ImportError as _sh_err:
+    _SSID_HUNTER_OK = False
+    print(f"[Quotex] ⚠️  SSID Hunter não disponível: {_sh_err}")
+    def ssid_hunter_iniciar():
+        return {"ok": False, "erro": "selenium não instalado."}
+    def ssid_hunter_parar():
+        pass
+    def ssid_hunter_status():
+        return {"status": "indisponivel", "ssid": "", "erro": "selenium não instalado."}
+
+
+@app.route('/quotex/ssid-hunter/iniciar', methods=['POST'])
+def rota_ssid_hunter_iniciar():
+    """Abre o Chrome e aguarda login na Quotex para capturar SSID automaticamente."""
+    return jsonify(ssid_hunter_iniciar())
+
+
+@app.route('/quotex/ssid-hunter/status', methods=['GET'])
+def rota_ssid_hunter_status():
+    """Retorna o estado atual do hunter (idle|abrindo|aguardando_login|capturado|erro)."""
+    return jsonify(ssid_hunter_status())
+
+
+@app.route('/quotex/ssid-hunter/parar', methods=['POST'])
+def rota_ssid_hunter_parar():
+    """Cancela a captura e fecha o Chrome."""
+    ssid_hunter_parar()
+    return jsonify({"ok": True, "status": "idle"})
+
+
+# ── Fila de OTP: frontend envia o código 2FA via /quotex/otp ──────────────────
+import queue as _queue
+_quotex_otp_queue: "_queue.Queue[str]" = _queue.Queue()
+_QUOTEX_OTP_STATE = {"aguardando": False, "prompt": ""}
+_QUOTEX_OTP_LOCK  = threading.Lock()
+
+def _otp_callback_flask(prompt: str) -> str:
+    """
+    Callback chamado pela pyquotex quando a Quotex exige código OTP (2FA).
+    Bloqueia até o frontend enviar o código via POST /quotex/otp.
+    """
+    print(f"[Quotex] ⚠️  OTP solicitado: {prompt}")
+    with _QUOTEX_OTP_LOCK:
+        _QUOTEX_OTP_STATE["aguardando"] = True
+        _QUOTEX_OTP_STATE["prompt"]     = prompt
+    try:
+        codigo = _quotex_otp_queue.get(timeout=300)
+    except _queue.Empty:
+        codigo = ""
+    with _QUOTEX_OTP_LOCK:
+        _QUOTEX_OTP_STATE["aguardando"] = False
+    return codigo
+
+
+@app.route('/quotex/otp', methods=['POST'])
+def rota_quotex_otp():
+    """Recebe o código OTP digitado pelo usuário e o passa para o callback de autenticação."""
+    dados  = request.get_json(silent=True) or {}
+    codigo = str(dados.get("codigo", "")).strip()
+    if not codigo:
+        return jsonify({"ok": False, "erro": "Código OTP vazio."}), 400
+    _quotex_otp_queue.put(codigo)
+    return jsonify({"ok": True, "msg": "Código enviado."})
+
+
+@app.route('/quotex/otp-status', methods=['GET'])
+def rota_quotex_otp_status():
+    """Retorna se a Quotex está aguardando um código OTP."""
+    with _QUOTEX_OTP_LOCK:
+        return jsonify({
+            "aguardando": _QUOTEX_OTP_STATE["aguardando"],
+            "prompt":     _QUOTEX_OTP_STATE["prompt"],
+        })
+
+
+try:
+    from quotex_connector import (
+        quotex_conectar,
+        quotex_desconectar,
+        quotex_status,
+        quotex_conectado,
+        quotex_get_saldo,
+        quotex_duracao_alinhada,
+        quotex_get_ativos,
+        quotex_operar,
+        quotex_resultado,
+        quotex_cfg_carregar,
+    )
+    _QUOTEX_DISPONIVEL = True
+    print("[Quotex] ✅ Módulo quotex_connector carregado com sucesso.")
+except ImportError as _qx_err:
+    _QUOTEX_DISPONIVEL = False
+    print(f"[Quotex] ⚠️  Módulo quotex_connector não disponível: {_qx_err}")
+
+    # Stubs para não quebrar as rotas se pyquotex não estiver instalado
+    def quotex_conectar(*a, **kw):
+        return {"ok": False, "erro": "pyquotex não instalado. Execute: pip install pyquotex"}
+    def quotex_desconectar():
+        return {"ok": False, "erro": "pyquotex não instalado."}
+    def quotex_status():
+        return {"status": "indisponivel", "erro": "pyquotex não instalado."}
+    def quotex_conectado():
+        return False
+    def quotex_get_saldo():
+        return {"ok": False, "erro": "pyquotex não instalado."}
+    def quotex_get_ativos():
+        return {"ok": False, "erro": "pyquotex não instalado.", "ativos": []}
+    def quotex_operar(*a, **kw):
+        return {"ok": False, "erro": "pyquotex não instalado."}
+    def quotex_resultado(*a, **kw):
+        return {"ok": False, "erro": "pyquotex não instalado."}
+    def quotex_cfg_carregar():
+        return {"email": "", "senha": "", "tipo_conta": "DEMO"}
+    def quotex_duracao_alinhada(minutos: int = 1) -> int:
+        import time
+        seg = time.time() % 60
+        ate_virada = 60 - seg
+        if ate_virada < 3:
+            ate_virada += 60
+        return max(5, int(ate_virada) + (minutos - 1) * 60)
+
+
+# Contador de versão — incrementado toda vez que o saldo é atualizado via frontend.
+# Permite que o index.html detecte mudanças em até 1s sem WebSocket.
+_quotex_saldo_versao = {"v": 0}
+
+# Fila de resultados Quotex para o frontend processar o gerenciamento (bot.mgr)
+_quotex_resultados_fila = []
+_quotex_resultados_lock = threading.Lock()
+
+# ── Rota: poll de evento de saldo (para atualização imediata no index.html) ───
+@app.route('/quotex/saldo-evento', methods=['GET'])
+def rota_quotex_saldo_evento():
+    """
+    Retorna a versão atual do saldo. O index.html faz poll a cada 1s e,
+    quando a versão muda, chama _qxAtualizarSaldoImediato() imediatamente.
+    Muito mais barato que Server-Sent Events.
+    """
+    return jsonify({"v": _quotex_saldo_versao["v"]})
+
+
+# ── Rota: resultados pendentes para o frontend atualizar o gerenciamento ──────
+@app.route('/quotex/resultados-pendentes', methods=['GET'])
+def rota_quotex_resultados_pendentes():
+    """
+    Retorna e limpa a fila de resultados de trades Quotex.
+    O index.html faz poll a cada 1s; quando há itens na lista, processa
+    cada resultado com bot.mgr.updateResult() igual ao fluxo Deriv.
+    """
+    with _quotex_resultados_lock:
+        pendentes = list(_quotex_resultados_fila)
+        _quotex_resultados_fila.clear()
+    return jsonify({"resultados": pendentes})
+
+
+# ── Rota: conectar à Quotex ───────────────────────────────────────────────────
+@app.route('/quotex/conectar', methods=['POST'])
+def rota_quotex_conectar():
+    """
+    Autentica na Quotex com email e senha.
+
+    Payload JSON:
+      { "email": "...", "senha": "...", "tipo_conta": "DEMO" | "REAL" }
+
+    Se email/senha não forem enviados, tenta usar as credenciais salvas em disco.
+    """
+    dados      = request.get_json(silent=True) or {}
+    cfg_salva  = quotex_cfg_carregar()
+
+    email      = (dados.get("email")      or cfg_salva.get("email")      or "").strip()
+    senha      = (dados.get("senha")      or cfg_salva.get("senha")      or "").strip()
+    tipo_conta = (dados.get("tipo_conta") or cfg_salva.get("tipo_conta") or "DEMO").upper()
+    ssid       = (dados.get("ssid")       or "").strip()
+
+    # Com SSID não precisa de senha — sem SSID exige email + senha
+    if not ssid and (not email or not senha):
+        return jsonify({"ok": False, "erro": "Informe email e senha, ou cole o SSID da Quotex."}), 400
+    if not email:
+        return jsonify({"ok": False, "erro": "Campo 'email' obrigatório (mesmo usando SSID)."}), 400
+
+    resultado = quotex_conectar(email=email, senha=senha, tipo_conta=tipo_conta,
+                                otp_callback=_otp_callback_flask, ssid=ssid)
+    return jsonify(resultado)
+
+
+# ── Rota: status da conexão ───────────────────────────────────────────────────
+@app.route('/quotex/status', methods=['GET'])
+def rota_quotex_status():
+    """Retorna o estado atual da conexão com a Quotex (inclui estado OTP)."""
+    dados = quotex_status()
+    # Injeta estado do OTP para o frontend exibir campo de 2FA quando necessário
+    with _QUOTEX_OTP_LOCK:
+        dados["otp_aguardando"] = _QUOTEX_OTP_STATE["aguardando"]
+        dados["otp_prompt"]     = _QUOTEX_OTP_STATE["prompt"]
+    return jsonify(dados)
+
+
+# ── Rota: desconectar ─────────────────────────────────────────────────────────
+@app.route('/quotex/desconectar', methods=['POST'])
+def rota_quotex_desconectar():
+    """Encerra a sessão com a Quotex."""
+    return jsonify(quotex_desconectar())
+
+
+# ── Rota: saldo ───────────────────────────────────────────────────────────────
+@app.route('/quotex/saldo', methods=['GET'])
+def rota_quotex_saldo():
+    """Retorna o saldo atual da conta Quotex."""
+    return jsonify(quotex_get_saldo())
+
+
+# ── Rota: ativos disponíveis ──────────────────────────────────────────────────
+@app.route('/quotex/ativos', methods=['GET'])
+def rota_quotex_ativos():
+    """
+    Lista todos os ativos disponíveis na Quotex.
+    Parâmetro opcional: ?apenas_abertos=1 — filtra só ativos com mercado aberto.
+    """
+    resultado      = quotex_get_ativos()
+    apenas_abertos = request.args.get("apenas_abertos", "0") == "1"
+    if apenas_abertos and resultado.get("ok") and resultado.get("ativos"):
+        resultado["ativos"] = [a for a in resultado["ativos"] if a.get("aberto")]
+        resultado["total"]  = len(resultado["ativos"])
+    return jsonify(resultado)
+
+
+# ── Rota: candles históricos ─────────────────────────────────────────────────
+@app.route('/quotex/candles', methods=['GET'])
+def rota_quotex_candles():
+    import asyncio as _asyncio
+    from quotex_connector import _QUOTEX_STATE, _QUOTEX_LOCK
+
+    ativo   = request.args.get("ativo", "EURUSD_otc")
+    periodo = int(request.args.get("periodo", 60))
+    limite  = int(request.args.get("limite", 100))
+
+    # Quantidade de segundos de histórico = limite × período
+    qtd_segundos = limite * periodo
+
+    with _QUOTEX_LOCK:
+        client = _QUOTEX_STATE.get("client")
+        loop   = _QUOTEX_STATE.get("loop")
+
+    if not client or not loop:
+        return jsonify({"ok": False, "erro": "Quotex não conectada.", "candles": []})
+
+    try:
+        # get_historical_candles retorna 100+ velas via abordagem paralela
+        fut     = _asyncio.run_coroutine_threadsafe(
+            client.get_historical_candles(ativo, qtd_segundos, periodo),
+            loop
+        )
+        candles = fut.result(timeout=45) or []
+
+        result = []
+        for c in candles[-limite:]:
+            if not isinstance(c, dict):
+                continue
+            ts = int(c.get("time") or 0)
+            o  = float(c.get("open")  or 0)
+            h  = float(c.get("high")  or c.get("max") or o)
+            l  = float(c.get("low")   or c.get("min") or o)
+            cl = float(c.get("close") or o)
+            if ts > 0 and o > 0:
+                result.append({"time": ts, "open": o, "high": h, "low": l, "close": cl})
+
+        result.sort(key=lambda x: x["time"])
+        return jsonify({"ok": True, "candles": result, "ativo": ativo, "periodo": periodo,
+                        "total": len(result)})
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return jsonify({"ok": False, "erro": str(e), "candles": []})
+
+
+# ── Rota: ativos com payout — usada pelo painel de sinais Quotex ─────────────
+@app.route('/quotex/ativos-payout', methods=['GET'])
+def rota_quotex_ativos_payout():
+    from quotex_connector import _QUOTEX_STATE, _QUOTEX_LOCK
+
+    with _QUOTEX_LOCK:
+        client = _QUOTEX_STATE.get("client")
+
+    if not client:
+        return jsonify({"ok": False, "erro": "Quotex não conectada.", "ativos": []})
+
+    try:
+        # get_payment() é síncrono: chave = nome amigável, valor = dict com info
+        dados  = client.get_payment()
+
+        # Monta mapa: nome_amigavel -> id_interno usando client.api.instruments
+        # instruments: lista de [id_num, id_interno, nome_amigavel, ...]
+        nome_para_id: dict = {}
+        instr = getattr(client.api, "instruments", None) or []
+        for item in instr:
+            if isinstance(item, (list, tuple)) and len(item) >= 3:
+                nome_para_id[str(item[2])] = str(item[1])
+
+        ativos = []
+        for nome, info in (dados or {}).items():
+            if isinstance(info, dict):
+                aberto = bool(info.get("open", False))
+                payout = int(info.get("payment") or info.get("turbo_payment") or 0)
+                id_interno = nome_para_id.get(nome, nome)
+                ativos.append({"id": id_interno, "nome": nome, "payout": payout, "aberto": aberto})
+
+        ativos.sort(key=lambda x: (-int(x["aberto"]), -x["payout"], x["nome"]))
+        return jsonify({"ok": True, "ativos": ativos})
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return jsonify({"ok": False, "erro": str(e), "ativos": []})
+
+
+
+# ── Rota: tick atual (vela em formação) ──────────────────────────────────────
+@app.route('/quotex/tick', methods=['GET'])
+def rota_quotex_tick():
+    """
+    Retorna o preço atual do ativo em tempo real para o frontend
+    atualizar a última vela do gráfico (vela em formação).
+    """
+    import asyncio as _asyncio
+    import time as _time
+    from quotex_connector import _QUOTEX_STATE, _QUOTEX_LOCK
+
+    ativo   = request.args.get("ativo", "EURUSD_otc")
+    periodo = int(request.args.get("periodo", 60))
+
+    with _QUOTEX_LOCK:
+        client = _QUOTEX_STATE.get("client")
+        loop   = _QUOTEX_STATE.get("loop")
+
+    if not client or not loop:
+        return jsonify({"ok": False, "erro": "Quotex não conectada."})
+
+    try:
+        fut   = _asyncio.run_coroutine_threadsafe(
+            client.get_realtime_price(ativo), loop)
+        ticks = fut.result(timeout=3) or []
+
+        if not ticks:
+            fut2 = _asyncio.run_coroutine_threadsafe(
+                client.start_realtime_price(ativo, periodo, 6), loop)
+            fut2.result(timeout=8)
+            fut3  = _asyncio.run_coroutine_threadsafe(
+                client.get_realtime_price(ativo), loop)
+            ticks = fut3.result(timeout=3) or []
+
+        if not ticks:
+            return jsonify({"ok": False, "erro": "Sem dados RT ainda.", "preco": 0})
+
+        ultimo = ticks[-1] if isinstance(ticks, list) else ticks
+        ts    = float(ultimo.get("time") or ultimo.get("ts") or _time.time())
+        preco = float(ultimo.get("price") or ultimo.get("value") or ultimo.get("close") or 0)
+        ts_abertura = int(ts // periodo) * periodo
+
+        return jsonify({
+            "ok":          True,
+            "ativo":       ativo,
+            "preco":       preco,
+            "ts":          ts,
+            "ts_abertura": ts_abertura,
+            "periodo":     periodo,
+        })
+    except Exception as e:
+        return jsonify({"ok": False, "erro": str(e), "preco": 0})
+
+
+# ── Rota: executar operação ───────────────────────────────────────────────────
+@app.route('/quotex/operar', methods=['POST'])
+def rota_quotex_operar():
+    """
+    Executa uma operação binária na Quotex.
+
+    Payload JSON:
+      {
+        "ativo":            "EURUSD",   # par/ativo
+        "direcao":          "call" | "put",
+        "valor":            1.00,
+        "duracao":          60,         # duração fixa em segundos (ignorado se alinhar_minuto=true)
+        "minutos":          1,          # número de velas completas (padrão: 1)
+        "alinhar_minuto":   true        # se true, calcula duração até a virada do minuto (padrão: true)
+      }
+
+    Com alinhar_minuto=true (padrão):
+      A duração é calculada automaticamente para que a operação expire
+      exatamente na virada da próxima vela M1, independente de quando
+      a ordem foi enviada no meio da vela.
+    """
+    dados           = request.get_json(silent=True) or {}
+    ativo           = (dados.get("ativo") or "").strip()
+    direcao         = (dados.get("direcao") or "").strip().lower()
+    valor           = dados.get("valor")
+    minutos         = int(dados.get("minutos") or 1)
+    alinhar_minuto  = dados.get("alinhar_minuto", True)  # padrão: alinhado
+
+    # Calcula duração:
+    # - alinhar_minuto=True  → expira exatamente na virada do N-ésimo minuto
+    # - alinhar_minuto=False → usa o valor fixo de "duracao" (comportamento antigo)
+    if alinhar_minuto:
+        duracao = quotex_duracao_alinhada(minutos=minutos)
+        print(f"[Quotex] ⏱️  Duração alinhada ao minuto: {duracao}s (minutos={minutos})")
+    else:
+        duracao = int(dados.get("duracao") or 60)
+
+    if not ativo:
+        return jsonify({"ok": False, "erro": "Campo 'ativo' obrigatório."}), 400
+    if direcao not in ("call", "put"):
+        return jsonify({"ok": False, "erro": "Campo 'direcao' deve ser 'call' ou 'put'."}), 400
+    if valor is None:
+        return jsonify({"ok": False, "erro": "Campo 'valor' obrigatório."}), 400
+
+    try:
+        valor = float(valor)
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "erro": "Campo 'valor' deve ser numérico."}), 400
+
+    if valor <= 0:
+        return jsonify({"ok": False, "erro": "Campo 'valor' deve ser maior que zero."}), 400
+
+    resultado = quotex_operar(ativo=ativo, direcao=direcao, valor=valor, duracao=duracao)
+    return jsonify(resultado)
+
+
+# ── Rota: verificar resultado de operação ────────────────────────────────────
+@app.route('/quotex/resultado/<op_id>', methods=['GET'])
+def rota_quotex_resultado(op_id: str):
+    """
+    Aguarda e retorna o resultado (win/loss) de uma operação.
+    ATENÇÃO: bloqueia a requisição até o resultado chegar (pode demorar até a duração da operação).
+    Use chamadas assíncronas ou timeout no cliente.
+
+    Ex.: GET /quotex/resultado/abc123
+    """
+    if not op_id:
+        return jsonify({"ok": False, "erro": "ID da operação obrigatório."}), 400
+    return jsonify(quotex_resultado(op_id))
+
+
+# ── Rota: sincronizar saldo via Frontend ─────────────────────────────────────
+@app.route('/quotex/sincronizar-saldo', methods=['POST'])
+def rota_quotex_sincronizar_saldo():
+    """
+    Recebe o saldo atual lido pelo JavaScript do painel da Quotex no browser
+    e atualiza o estado interno do conector sem precisar de uma chamada WS.
+
+    Payload JSON:
+      { "saldo": 1234.56 }
+
+    Isso permite que o frontend force uma sincronização de saldo imediata
+    após cada fechamento de trade, sem depender do polling de 30s.
+    """
+    if not _QUOTEX_DISPONIVEL:
+        return jsonify({"ok": False, "erro": "Módulo Quotex não disponível."}), 503
+
+    dados = request.get_json(silent=True) or {}
+    novo_saldo = dados.get("saldo")
+
+    if novo_saldo is None:
+        return jsonify({"ok": False, "erro": "Campo 'saldo' obrigatório."}), 400
+
+    try:
+        novo_saldo = float(novo_saldo)
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "erro": "Campo 'saldo' deve ser numérico."}), 400
+
+    if novo_saldo < 0:
+        return jsonify({"ok": False, "erro": "Saldo não pode ser negativo."}), 400
+
+    try:
+        from quotex_connector import _QUOTEX_LOCK, _QUOTEX_STATE
+        with _QUOTEX_LOCK:
+            _QUOTEX_STATE["saldo"] = novo_saldo
+        _quotex_saldo_versao["v"] += 1          # sinaliza ao poll de evento
+        print(f"[Quotex] 🔄 Saldo sincronizado via frontend: ${novo_saldo:.2f}")
+        return jsonify({"ok": True, "saldo": novo_saldo})
+    except Exception as e:
+        return jsonify({"ok": False, "erro": str(e)}), 500
+
+
+# ── Rota: receber resultado de trade Quotex e notificar Telegram ─────────────
+@app.route('/quotex/notificar-resultado', methods=['POST'])
+def rota_quotex_notificar_resultado():
+    """
+    Chamada pelo Tampermonkey (quotex_sync_banca.js) após cada fechamento de trade.
+
+    Payload JSON esperado:
+      {
+        "win":          true | false,
+        "lucro":        12.50,          # valor ganho (positivo) ou perdido (negativo)
+        "saldo":        1234.56,        # saldo pós-trade
+        "ativo":        "EURUSD_otc",
+        "direcao":      "call" | "put",
+        "modo":         "real" | "demo",
+        "estrategia":   "Garra M1",
+        "wins":         5,
+        "losses":       2,
+        "profit_total": 47.30,
+        "prox_stake":   5.0
+      }
+
+    Ações:
+      1. Atualiza _QUOTEX_STATE["saldo"] com o saldo recebido.
+      2. Enfileira o resultado para o frontend processar (gerenciamento).
+      3. Lê configuração Telegram.
+      4. Se enabled + resultados → envia mensagem de texto via Telegram.
+    """
+    dados = request.get_json(silent=True) or {}
+
+    win          = dados.get("win", False)
+    lucro        = dados.get("lucro", 0.0)
+    saldo        = dados.get("saldo")
+    ativo        = dados.get("ativo", "—")
+    direcao      = dados.get("direcao", "—").upper()
+    modo         = dados.get("modo", "demo").upper()
+    estrategia   = dados.get("estrategia", "Quotex")
+    wins         = int(dados.get("wins", 0))
+    losses       = int(dados.get("losses", 0))
+    profit_total = dados.get("profit_total", 0.0)
+    prox_stake   = dados.get("prox_stake")
+
+    # 1. Atualiza saldo interno
+    if saldo is not None and _QUOTEX_DISPONIVEL:
+        try:
+            from quotex_connector import _QUOTEX_LOCK, _QUOTEX_STATE
+            with _QUOTEX_LOCK:
+                _QUOTEX_STATE["saldo"] = float(saldo)
+            _quotex_saldo_versao["v"] += 1      # sinaliza ao poll de evento
+        except Exception:
+            pass
+
+    # 2. Enfileira resultado para o frontend processar o gerenciamento
+    with _quotex_resultados_lock:
+        _quotex_resultados_fila.append({
+            "win":          bool(win),
+            "lucro":        float(lucro),
+            "saldo":        float(saldo) if saldo is not None else None,
+            "ativo":        ativo,
+            "direcao":      direcao,
+            "modo":         modo,
+            "estrategia":   estrategia,
+            "wins":         wins,
+            "losses":       losses,
+            "profit_total": float(profit_total),
+            "prox_stake":   float(prox_stake) if prox_stake is not None else None,
+        })
+
+    # 3. Monta mensagem Telegram
+    emoji_res  = "✅" if win else "❌"
+    emoji_dir  = "🟢" if direcao == "CALL" else "🔴"
+    sinal_lucro = "+" if lucro >= 0 else ""
+    saldo_fmt  = f"${float(saldo):.2f}" if saldo is not None else "—"
+
+    linhas = [
+        f"{emoji_res} <b>{'WIN' if win else 'LOSS'}</b>  {emoji_dir} {direcao}",
+        f"📊 Ativo: <code>{ativo}</code>  |  Modo: {modo}",
+        f"💰 Resultado: <b>{sinal_lucro}${float(lucro):.2f}</b>",
+        f"🏦 Saldo: <b>{saldo_fmt}</b>",
+        f"📈 Profit total: {'+' if profit_total >= 0 else ''}${float(profit_total):.2f}",
+        f"🏆 Wins: {wins}  💔 Losses: {losses}",
+    ]
+    if prox_stake is not None:
+        linhas.append(f"🎯 Próxima entrada: <b>${float(prox_stake):.2f}</b>")
+    linhas.append(f"\n🤖 <i>{estrategia}</i>")
+    mensagem = "\n".join(linhas)
+
+    # 4. Envia via Telegram (em thread daemon — não bloqueia)
+    try:
+        cfg = _tg_carregar()
+        token   = cfg.get("token", "")
+        chat_id = cfg.get("chat_id", "")
+
+        if cfg.get("enabled") and cfg.get("resultados") and token and chat_id:
+            _tg_dispatch(lambda t=token, c=chat_id, m=mensagem: _tg_enviar_texto(t, c, m))
+            print(f"[Quotex→TG] resultado {'WIN' if win else 'LOSS'} de {ativo} enviado ao Telegram.")
+        else:
+            motivo = (
+                "TG desabilitado" if not cfg.get("enabled") else
+                "resultados desligado" if not cfg.get("resultados") else
+                "token/chat_id ausentes"
+            )
+            print(f"[Quotex→TG] notificação ignorada: {motivo}")
+    except Exception as e:
+        print(f"[Quotex→TG] erro ao enviar Telegram: {e}")
+
+    return jsonify({"ok": True})
+
+
+# ── Rota: servir o script de sincronização para o Tampermonkey ───────────────
+@app.route('/quotex/sync-script', methods=['GET'])
+def rota_quotex_sync_script():
+    """
+    Serve o arquivo quotex_sync_banca.js para instalação direta no Tampermonkey.
+
+    Como usar:
+      1. Abra o Tampermonkey → Dashboard → Utilitários → Instalar do URL
+      2. Cole: https://garrabot.duckdns.org/quotex/sync-script
+      3. Confirme a instalação
+
+    Ou acesse a URL no navegador e salve o arquivo .js manualmente.
+    """
+    script_path = os.path.join(_BASE_DIR, "quotex_sync_banca.js")
+    if not os.path.exists(script_path):
+        return "// Script não encontrado no servidor.", 404, {"Content-Type": "application/javascript"}
+    try:
+        with open(script_path, "r", encoding="utf-8") as f:
+            conteudo = f.read()
+        return conteudo, 200, {
+            "Content-Type":        "application/javascript; charset=utf-8",
+            "Content-Disposition": "inline; filename=quotex_sync_banca.js",
+            "Cache-Control":       "no-cache",
+        }
+    except Exception as e:
+        return f"// Erro ao ler script: {e}", 500, {"Content-Type": "application/javascript"}
+
+
+# ── Rota: salvar/ler credenciais Quotex ──────────────────────────────────────
+@app.route('/quotex/config', methods=['GET', 'POST'])
+def rota_quotex_config():
+    """
+    GET  — retorna configuração salva (sem expor a senha).
+    POST — salva novas credenciais { email, senha, tipo_conta }.
+    """
+    if request.method == 'GET':
+        cfg = quotex_cfg_carregar()
+        return jsonify({
+            "email":      cfg.get("email", ""),
+            "tipo_conta": cfg.get("tipo_conta", "DEMO"),
+            "tem_senha":  bool(cfg.get("senha", "")),
+        })
+
+    # POST — salva
+    try:
+        from quotex_connector import quotex_cfg_salvar
+    except ImportError:
+        return jsonify({"ok": False, "erro": "pyquotex não instalado."}), 503
+
+    dados      = request.get_json(silent=True) or {}
+    email      = (dados.get("email")      or "").strip()
+    senha      = (dados.get("senha")      or "").strip()
+    tipo_conta = (dados.get("tipo_conta") or "DEMO").upper()
+
+    if not email or not senha:
+        return jsonify({"ok": False, "erro": "email e senha são obrigatórios."}), 400
+
+    quotex_cfg_salvar(email, senha, tipo_conta)
+    return jsonify({"ok": True, "msg": "Credenciais Quotex salvas com sucesso."})
+
+
 # ─────────────────────────────────────────────────────────
 # TELEGRAM — config (salva/lê telegram_config.json)
 # ─────────────────────────────────────────────────────────
@@ -10732,7 +11393,7 @@ from garra_reversao_m1 import get_engine as _get_m1_engine
 def garra_m1_avaliar():
     """
     Avalia o mercado com os dados de velas M1 enviados pelo front-end.
-    Retorna: { operar, direcao, score, motivos, detalhes, cfg }
+    Retorna: { operar, direcao, score, motivos, detalhes }
     """
     dados     = request.get_json(force=True, silent=True) or {}
     engine    = _get_m1_engine()
@@ -10743,14 +11404,100 @@ def garra_m1_avaliar():
         try:
             cfg_tg = _tg_carregar()
             if cfg_tg.get("enabled"):
-                dir_txt = resultado["direcao"]
-                score   = resultado.get("score", 0)
-                ativo   = resultado.get("cfg", {}).get("ativo", "")
+                dir_txt    = resultado["direcao"]
+                score      = resultado.get("score", 0)
+                ativo      = dados.get("ativo", "")
+                zona       = resultado.get("zona", "—")
+                exaustao   = resultado.get("exaustao_nivel", "—")
+                candlestick= resultado.get("candlestick", "—")
+                confianca  = resultado.get("confianca", "—")
+                motivos    = "\n".join(f"  ✓ {m}" for m in resultado.get("motivos", [])[:5])
                 msg = (
-                    f"🦅 *GARRA REVERSÃO M1 PRO*\n\n"
-                    f"{'🟢' if dir_txt == 'CALL' else '🔴'} *{dir_txt}* | Score: {score}/100\n"
-                    f"📊 Ativo: {ativo}\n"
+                    f"🦅 *GARRA REVERSÃO M1 — WICK EXHAUSTION*\n\n"
+                    f"{'🟢' if dir_txt == 'CALL' else '🔴'} *{dir_txt}* | Score: *{score}/100*\n"
+                    f"📊 Ativo: `{ativo}` | Zona: {zona}\n"
+                    f"🕯 Padrão: {candlestick} | Exaustão: {exaustao}\n"
+                    f"🎯 Confiança: {confianca}\n"
                     f"⏱ Entrada: VIRADA DA VELA\n"
+                    f"{motivos}\n"
+                    f"🕐 {_hora_brt('%H:%M:%S')}"
+                )
+                _tg_dispatch(lambda: _tg_enviar_texto(cfg_tg["token"], cfg_tg["chat_id"], msg))
+        except Exception:
+            pass
+
+    return jsonify(resultado)
+
+
+# ── Rota dedicada para o modal Quotex — GARRA REVERSÃO M1 ─────────────────────
+@app.route('/quotex/garra-reversao/avaliar', methods=['POST'])
+def quotex_garra_reversao_avaliar():
+    """
+    Avalia candles Quotex com o motor GARRA REVERSÃO M1 — WICK EXHAUSTION.
+
+    Payload JSON:
+      {
+        "ativo":          "EURUSD_otc",
+        "candles":        [...],   // candles Quotex {time, open, high, low, close}
+        "ts_vela_atual":  1234567890,
+        "ts_agora":       1234567895
+      }
+
+    Os candles da Quotex usam open/high/low/close.
+    O motor usa abertura/maxima/minima/fechamento — a rota converte.
+    """
+    dados   = request.get_json(force=True, silent=True) or {}
+    ativo   = str(dados.get("ativo", "")).strip()
+    candles = dados.get("candles") or []
+    ts_vel  = float(dados.get("ts_vela_atual", 0))
+    ts_now  = float(dados.get("ts_agora", 0)) or float(__import__("time").time())
+    cfg_ov  = dados.get("cfg_override") or {}
+
+    if not candles:
+        return jsonify({"operar": False, "direcao": "AGUARDAR",
+                        "motivo": "Nenhum candle recebido", "score_call": 0, "score_put": 0})
+
+    # Converte formato Quotex → formato do motor
+    velas = []
+    for c in candles:
+        velas.append({
+            "abertura":   float(c.get("open",  c.get("abertura",  0))),
+            "fechamento": float(c.get("close", c.get("fechamento",0))),
+            "maxima":     float(c.get("high",  c.get("maxima",    0))),
+            "minima":     float(c.get("low",   c.get("minima",    0))),
+        })
+
+    engine    = _get_m1_engine()
+    resultado = engine.avaliar({
+        "velas":         velas,
+        "ts_vela_atual": ts_vel,
+        "ts_agora":      ts_now,
+        "ativo":         ativo,
+        "cfg_override":  cfg_ov,
+    })
+
+    # Notificação Telegram
+    if resultado.get("operar"):
+        try:
+            cfg_tg = _tg_carregar()
+            if cfg_tg.get("enabled"):
+                dir_txt     = resultado["direcao"]
+                score       = resultado.get("score", 0)
+                zona        = resultado.get("zona", "—")
+                exaustao    = resultado.get("exaustao_nivel", "—")
+                candlestick = resultado.get("candlestick", "—")
+                confianca   = resultado.get("confianca", "—")
+                testes      = resultado.get("zona_testes", 0)
+                mercado     = resultado.get("mercado", "—")
+                motivos     = "\n".join(f"  ✓ {m}" for m in resultado.get("motivos", [])[:5])
+                msg = (
+                    f"🦅 *GARRA REVERSÃO M1 — WICK EXHAUSTION*\n\n"
+                    f"{'🟢' if dir_txt == 'CALL' else '🔴'} *{dir_txt}* | Score: *{score}/100*\n"
+                    f"📊 Ativo: `{ativo}` ({mercado}) | Zona: {zona} ({testes} testes)\n"
+                    f"🕯 Padrão: {candlestick} | Exaustão: {exaustao}\n"
+                    f"🎯 Confiança: {confianca}\n"
+                    f"⏱ Entrada: VIRADA DA VELA\n"
+                    f"{motivos}\n"
                     f"🕐 {_hora_brt('%H:%M:%S')}"
                 )
                 _tg_dispatch(lambda: _tg_enviar_texto(cfg_tg["token"], cfg_tg["chat_id"], msg))
@@ -10773,7 +11520,7 @@ def garra_m1_config():
 
 @app.route('/garra-m1/resultado', methods=['POST'])
 def garra_m1_resultado():
-    """Registra resultado (WIN/LOSS) para estatísticas e MTE."""
+    """Registra resultado (WIN/LOSS) para estatísticas, MTE e memória de zonas."""
     dados  = request.get_json(force=True, silent=True) or {}
     engine = _get_m1_engine()
     if "resultado" not in dados:
@@ -10783,7 +11530,7 @@ def garra_m1_resultado():
     try:
         mte_registrar(
             resultado  = str(dados["resultado"]).upper(),
-            estrategia = "GARRA_REVERSAO_M1_PRO",
+            estrategia = "GARRA_REVERSAO_M1_WICK_EXHAUSTION",
             ativo      = dados.get("ativo", ""),
             regime     = dados.get("regime", "DESCONHECIDO"),
             confianca  = float(dados.get("score", 0)),
@@ -10797,6 +11544,127 @@ def garra_m1_resultado():
 def garra_m1_stats():
     """Retorna estatísticas acumuladas."""
     return jsonify(_get_m1_engine().estatisticas())
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TRADING PRO MULTI-AI — Rotas Flask
+# ═══════════════════════════════════════════════════════════════════════════════
+from trading_pro_multi_ai import get_orchestrator as _get_trading_pro
+
+@app.route('/trading-pro/avaliar', methods=['POST'])
+def trading_pro_avaliar():
+    """
+    Avalia o mercado com o orquestrador de 5 IAs.
+
+    Payload JSON:
+      {
+        "velas":        [...],   // list[dict] OHLC {abertura, fechamento, maxima, minima, timestamp}
+        "broker":       "QUOTEX" | "DERIV",
+        "ativo":        "EURUSD_OTC",
+        "drawdown_pct": 0.02     // drawdown atual (0.0 a 1.0), opcional
+      }
+
+    Retorna:
+      { operar, direcao, score, lider, motivo, votos, regime }
+    """
+    dados        = request.get_json(force=True, silent=True) or {}
+    velas        = dados.get("velas") or []
+    broker       = str(dados.get("broker", "DERIV")).upper()
+    ativo        = str(dados.get("ativo", ""))
+    drawdown_pct = float(dados.get("drawdown_pct", 0.0))
+    score_min    = dados.get("score_min")  # opcional: sobrescreve min_consensus do cfg
+
+    # Normaliza campos Quotex (open/close/high/low → abertura/fechamento/maxima/minima)
+    velas_norm = []
+    for v in velas:
+        velas_norm.append({
+            "abertura":   float(v.get("abertura",   v.get("open",  0))),
+            "fechamento": float(v.get("fechamento", v.get("close", 0))),
+            "maxima":     float(v.get("maxima",     v.get("high",  0))),
+            "minima":     float(v.get("minima",     v.get("low",   0))),
+            "timestamp":  float(v.get("timestamp",  v.get("time",  0))),
+        })
+
+    orc = _get_trading_pro()
+    # Aplica score_min do frontend temporariamente se enviado
+    if score_min is not None:
+        try:
+            orc.cfg["min_consensus"] = int(score_min)
+        except (TypeError, ValueError):
+            pass
+
+    resultado = orc.avaliar(velas_norm, broker=broker, ativo=ativo,
+                            drawdown_pct=drawdown_pct)
+
+    # Notificação Telegram quando aprovado
+    if resultado.get("operar"):
+        try:
+            cfg_tg = _tg_carregar()
+            if cfg_tg.get("enabled"):
+                dir_txt = resultado["direcao"]
+                score   = resultado.get("score", 0)
+                lider   = resultado.get("lider", "—")
+                regime  = resultado.get("regime", "—")
+                msg = (
+                    f"🤖 *TRADING PRO MULTI-AI*\n\n"
+                    f"{'🟢' if dir_txt == 'CALL' else '🔴'} *{dir_txt}* | Score: *{score}/100*\n"
+                    f"🧠 Líder: `{lider}`\n"
+                    f"📈 Regime: {regime}\n"
+                    f"📊 Ativo: `{ativo}` ({broker})\n"
+                    f"🕐 {_hora_brt('%H:%M:%S')}"
+                )
+                _tg_dispatch(lambda: _tg_enviar_texto(cfg_tg["token"], cfg_tg["chat_id"], msg))
+        except Exception:
+            pass
+
+    return jsonify(resultado)
+
+
+@app.route('/trading-pro/resultado', methods=['POST'])
+def trading_pro_resultado():
+    """
+    Registra resultado de uma operação e aplica rotação de líder se necessário.
+
+    Payload JSON:
+      {
+        "resultado": "WIN" | "LOSS",
+        "lucro":     0.85,
+        "broker":    "QUOTEX",
+        "ativo":     "EURUSD_OTC",
+        "score":     82.5
+      }
+    """
+    dados    = request.get_json(force=True, silent=True) or {}
+    resultado = str(dados.get("resultado", "")).upper()
+    if resultado not in ("WIN", "LOSS"):
+        return jsonify({"ok": False, "erro": "Campo 'resultado' deve ser WIN ou LOSS"}), 400
+
+    orc = _get_trading_pro()
+    orc.registrar_resultado(
+        resultado = resultado,
+        lucro     = float(dados.get("lucro", 0.0)),
+        broker    = str(dados.get("broker", "DERIV")).upper(),
+        ativo     = str(dados.get("ativo", "")),
+        score     = float(dados.get("score", 0.0)),
+    )
+    return jsonify({"ok": True, "status": orc.status()})
+
+
+@app.route('/trading-pro/status', methods=['GET'])
+def trading_pro_status():
+    """Retorna estado atual do orquestrador (líder, contadores, win rate)."""
+    return jsonify(_get_trading_pro().status())
+
+
+@app.route('/trading-pro/config', methods=['GET', 'POST'])
+def trading_pro_config():
+    """Lê ou salva a configuração do orquestrador."""
+    orc = _get_trading_pro()
+    if request.method == 'GET':
+        return jsonify(orc.cfg)
+    dados = request.get_json(force=True, silent=True) or {}
+    orc.salvar_config(dados)
+    return jsonify({"ok": True, "config": orc.cfg})
 
 
 def start_server():

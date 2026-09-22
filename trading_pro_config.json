@@ -1,0 +1,14 @@
+{
+  "timeframe": "M1",
+  "min_consensus": 60,
+  "min_lead_confidence": 55,
+  "max_consecutive_losses": 3,
+  "cooldown_candles_after_loss": 1,
+  "rotate_on_loss": true,
+  "reset_leader_after_wins": 2,
+  "require_new_candle": true,
+  "min_candles": 5,
+  "veto_lateral_adx": 10,
+  "veto_max_drawdown_pct": 0.15,
+  "veto_max_losses_seguidos": 5
+}

@@ -1096,8 +1096,13 @@
     <span class="mob-nav-label">HOME</span>
   </div>
   <div class="mob-nav-item" id="mob-nav-estrategias" onclick="mobNavClick('estrategias')">
-    <span class="mob-nav-icon">📊</span>
-    <span class="mob-nav-label">ESTRATÉGIAS</span>
+    <span class="mob-nav-icon">🎯</span>
+    <span class="mob-nav-label">ESTRAT.</span>
+  </div>
+  <div class="mob-nav-item" id="mob-nav-quotex" onclick="mobNavClick('quotex')"
+       style="position:relative;">
+    <span class="mob-nav-icon" style="font-size:1.2rem;">🟠</span>
+    <span class="mob-nav-label">QUOTEX</span>
   </div>
   <div class="mob-nav-item" id="mob-nav-config" onclick="mobNavClick('config')">
     <span class="mob-nav-icon">⚙️</span>
@@ -1237,6 +1242,165 @@
                 💰 REAL<div style="font-size:0.65rem;color:#aaa;margin-top:4px;">Conta real</div>
             </button>
         </div>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     MODAL — CONEXÃO QUOTEX
+════════════════════════════════════════ -->
+<div id="modal-quotex" class="modal-overlay" style="display:none;">
+    <div class="modal-box" style="max-width:380px;">
+        <div class="modal-title" style="color:#ff6b00;">🟠 CONECTAR QUOTEX</div>
+        <div class="modal-sub" id="qx-modal-sub">Informe suas credenciais da Quotex</div>
+
+        <!-- Status badge -->
+        <div id="qx-status-badge" style="
+            display:none; margin:8px 0 4px; padding:6px 10px; border-radius:4px;
+            font-family:'Share Tech Mono'; font-size:0.72rem;
+            letter-spacing:1px; text-align:center;
+        "></div>
+
+        <!-- Abas: SENHA ou SSID -->
+        <div style="display:flex; gap:0; margin-bottom:10px; border:1px solid rgba(255,107,0,0.3); border-radius:4px; overflow:hidden;">
+            <button id="qx-tab-senha" onclick="qxMostrarAba('senha')"
+                style="flex:1; padding:7px; background:rgba(255,107,0,0.15); border:none;
+                       color:#ff6b00; font-family:'Share Tech Mono'; font-size:0.7rem;
+                       letter-spacing:1px; cursor:pointer; border-bottom:2px solid #ff6b00;">
+                🔑 EMAIL / SENHA
+            </button>
+            <button id="qx-tab-ssid" onclick="qxMostrarAba('ssid')"
+                style="flex:1; padding:7px; background:transparent; border:none;
+                       color:#888; font-family:'Share Tech Mono'; font-size:0.7rem;
+                       letter-spacing:1px; cursor:pointer; border-bottom:2px solid transparent;">
+                🍪 SSID (sem 403)
+            </button>
+        </div>
+
+        <!-- Campos de login — aba SENHA -->
+        <div id="qx-form-fields">
+            <div style="margin-bottom:8px;">
+                <label style="font-size:0.65rem; color:#888; letter-spacing:1px;">EMAIL</label>
+                <input id="qx-email" type="email" autocomplete="off" placeholder="seu@email.com"
+                    style="width:100%; background:#0a0a12; border:1px solid rgba(255,107,0,0.5);
+                           color:#ff6b00; padding:8px 10px; font-family:'Share Tech Mono';
+                           font-size:0.8rem; border-radius:4px; outline:none; margin-top:3px;">
+            </div>
+            <div style="margin-bottom:12px;">
+                <label style="font-size:0.65rem; color:#888; letter-spacing:1px;">SENHA</label>
+                <input id="qx-senha" type="password" autocomplete="off" placeholder="••••••••"
+                    style="width:100%; background:#0a0a12; border:1px solid rgba(255,107,0,0.5);
+                           color:#ff6b00; padding:8px 10px; font-family:'Share Tech Mono';
+                           font-size:0.8rem; border-radius:4px; outline:none; margin-top:3px;">
+            </div>
+            <div style="display:flex; gap:8px; margin-bottom:12px;">
+                <button onclick="quotexConectar('DEMO')"
+                    style="flex:1; padding:9px; background:rgba(255,107,0,0.08);
+                           border:1px solid #ff6b00; color:#ff6b00;
+                           font-family:'Share Tech Mono'; font-size:0.75rem;
+                           letter-spacing:1px; cursor:pointer; border-radius:4px;">
+                    🧪 DEMO
+                </button>
+                <button onclick="quotexConectar('REAL')"
+                    style="flex:1; padding:9px; background:rgba(255,107,0,0.08);
+                           border:1px solid #ff4400; color:#ff4400;
+                           font-family:'Share Tech Mono'; font-size:0.75rem;
+                           letter-spacing:1px; cursor:pointer; border-radius:4px;">
+                    💰 REAL
+                </button>
+            </div>
+        </div>
+
+        <!-- Campos de login — aba SSID -->
+        <div id="qx-form-ssid" style="display:none;">
+
+            <!-- BOTÃO CAPTURA AUTOMÁTICA -->
+            <button id="qx-btn-capturar" onclick="qxCapturarSsidAuto()"
+                style="width:100%; padding:11px; margin-bottom:10px;
+                       background:rgba(0,255,65,0.08); border:1px solid #00ff41;
+                       color:#00ff41; font-family:'Share Tech Mono'; font-size:0.8rem;
+                       letter-spacing:2px; cursor:pointer; border-radius:4px; font-weight:bold;">
+                🤖 CAPTURAR SSID AUTOMATICAMENTE
+            </button>
+
+            <!-- Status da captura automática -->
+            <div id="qx-hunter-status" style="
+                display:none; text-align:center; padding:10px 8px; margin-bottom:10px;
+                background:rgba(0,0,0,0.3); border:1px solid rgba(0,255,65,0.25);
+                border-radius:4px; font-family:'Share Tech Mono'; font-size:0.7rem;">
+                <div id="qx-hunter-icone" style="font-size:1.6rem; margin-bottom:4px;">⏳</div>
+                <div id="qx-hunter-msg" style="color:#ffbd2e; letter-spacing:1px;">Abrindo Chrome...</div>
+                <div id="qx-hunter-sub" style="color:#555; font-size:0.62rem; margin-top:4px;">
+                    Faça login na janela do Chrome que abriu
+                </div>
+                <button onclick="qxCancelarHunter()"
+                    style="margin-top:8px; padding:5px 14px; background:transparent;
+                           border:1px solid #f44; color:#f44; font-family:'Share Tech Mono';
+                           font-size:0.65rem; cursor:pointer; border-radius:3px;">
+                    ✕ Cancelar
+                </button>
+            </div>
+
+            <div style="text-align:center; margin:6px 0 10px;
+                        font-size:0.6rem; color:#444; letter-spacing:1px;">
+                — ou cole manualmente —
+            </div>
+
+            <div style="margin-bottom:8px;">
+                <label style="font-size:0.65rem; color:#888; letter-spacing:1px;">EMAIL DA CONTA</label>
+                <input id="qx-email-ssid" type="email" autocomplete="off" placeholder="seu@email.com"
+                    style="width:100%; background:#0a0a12; border:1px solid rgba(255,107,0,0.5);
+                           color:#ff6b00; padding:8px 10px; font-family:'Share Tech Mono';
+                           font-size:0.8rem; border-radius:4px; outline:none; margin-top:3px;">
+            </div>
+            <div style="margin-bottom:12px;">
+                <label style="font-size:0.65rem; color:#ffbd2e; letter-spacing:1px;">SSID (cookie)</label>
+                <input id="qx-ssid-input" type="text" autocomplete="off" placeholder="Cole aqui ou use captura automática"
+                    style="width:100%; background:#0a0a12; border:1px solid rgba(255,189,46,0.5);
+                           color:#ffbd2e; padding:8px 10px; font-family:'Share Tech Mono';
+                           font-size:0.72rem; border-radius:4px; outline:none; margin-top:3px;">
+            </div>
+            <div style="display:flex; gap:8px; margin-bottom:12px;">
+                <button onclick="quotexConectarSsid('DEMO')"
+                    style="flex:1; padding:9px; background:rgba(255,107,0,0.08);
+                           border:1px solid #ff6b00; color:#ff6b00;
+                           font-family:'Share Tech Mono'; font-size:0.75rem;
+                           letter-spacing:1px; cursor:pointer; border-radius:4px;">
+                    🧪 DEMO
+                </button>
+                <button onclick="quotexConectarSsid('REAL')"
+                    style="flex:1; padding:9px; background:rgba(255,107,0,0.08);
+                           border:1px solid #ff4400; color:#ff4400;
+                           font-family:'Share Tech Mono'; font-size:0.75rem;
+                           letter-spacing:1px; cursor:pointer; border-radius:4px;">
+                    💰 REAL
+                </button>
+            </div>
+        </div>
+
+        <!-- Painel conectado -->
+        <div id="qx-painel-conectado" style="display:none; text-align:center; padding:4px 0;">
+            <div style="font-size:1.8rem; margin-bottom:6px;">🟢</div>
+            <div style="font-family:'Share Tech Mono'; color:#00ff41; font-size:0.8rem; letter-spacing:2px;">CONECTADA</div>
+            <div style="color:#aaa; font-size:0.7rem; margin:6px 0 2px;" id="qx-info-conta"></div>
+            <div style="color:#ff6b00; font-size:1rem; font-weight:bold; margin:8px 0;" id="qx-info-saldo"></div>
+            <!-- Resetar sessão direto do modal de conexão -->
+            <button onclick="qxResetarSessaoModal()"
+                style="width:100%; padding:9px; margin-top:4px;
+                       background:rgba(255,189,46,0.08); border:1px solid rgba(255,189,46,0.6);
+                       color:#ffbd2e; font-family:'Share Tech Mono';
+                       font-size:0.75rem; letter-spacing:1px; cursor:pointer; border-radius:4px;">
+                🔄 RESETAR SESSÃO (reconectar)
+            </button>
+            <button onclick="quotexDesconectar()"
+                style="width:100%; padding:9px; margin-top:6px;
+                       background:rgba(255,68,68,0.08); border:1px solid #f44;
+                       color:#f44; font-family:'Share Tech Mono';
+                       font-size:0.75rem; letter-spacing:1px; cursor:pointer; border-radius:4px;">
+                🔌 DESCONECTAR
+            </button>
+        </div>
+
+        <button class="modal-cancel" onclick="fecharModal('modal-quotex')" style="margin-top:4px;">✕ Fechar</button>
     </div>
 </div>
 
@@ -1849,6 +2013,11 @@
         conectar
         <span class="cmd-label">Login na Deriv</span>
     </button>
+    <button class="cmd-btn" id="btn-quotex-conectar" onclick="quotexAbrirModal()"
+        style="border-color:rgba(255,80,0,0.55); color:#ff6b00;">
+        🟠 Quotex
+        <span class="cmd-label" id="lbl-quotex-status" style="color:#57606a;">Desconectada</span>
+    </button>
     <button class="cmd-btn" id="btn-trocar-conta" onclick="trocarContaPrincipal()"
         style="display:none; border-color:rgba(251,191,36,0.5); color:#fbbf24;">
         🔑 conta teste
@@ -2005,6 +2174,13 @@
 ════════════════════════════════════════ -->
 <div class="cmd-panel" id="mob-painel-dir">
     <div class="cmd-panel-title">🛠️ AÇÕES</div>
+
+    <div class="cmd-section">▸ QUOTEX TRADING</div>
+    <button class="cmd-btn" id="btn-qx-chart" onclick="qxChartAbrir()"
+        style="border-color:rgba(255,107,0,0.6); color:#ff6b00; font-weight:bold;">
+        📊 Gráfico Quotex
+        <span class="cmd-label" id="lbl-qx-chart" style="color:#57606a;">Velas + Operar</span>
+    </button>
 
     <div class="cmd-section">▸ PLACAR</div>
     <button class="cmd-btn" onclick="resetarPlacar()" style="border-color:rgba(255,189,46,0.4); color:#ffbd2e;">
@@ -4420,31 +4596,16 @@ const ESTRATEGIAS = {
     // ── Slot dinâmico ECT — sobrescrito a cada ciclo do monitor ──────────────
     "🤖 ECT Dinâmica":      { tipo: "digit", contract: "DIGITUNDER", barrier: 7, duracao: 1,
                                seq_gatilho: 0, ativo: "R_100", desc: "Estratégia criada ao vivo pela IA ECT" },
-    // ── GARRA REVERSÃO M1 PRO ─────────────────────────────────────────────────
-    "🦅 GARRA REVERSÃO M1 PRO": {
-        tipo:              "garra_m1",
-        ativo:             "R_10",
-        duracao:           1,
-        duracao_unit:      "m",
-        score_minimo:      75,
-        janela_segundos:   3,
-        tf:                1,           // timeframe M1 (fixo)
-        tp_hist:           210,         // velas para EMA200
-        usar_price_action: true,
-        usar_estrutura:    true,
-        usar_ema:          true,
-        usar_rsi:          true,
-        usar_macd:         true,
-        usar_adx:          true,
-        usar_atr:          true,
-        usar_sr:           true,
-        usar_bollinger:    true,
-        usar_anti_doji:    true,
-        bloquear_lateral:  true,
-        bloquear_fp:       true,
-        mte_ativo:         true,
-        modo_demo:         false,
-        desc: "Entrada CALL/PUT somente na virada da vela M1 | Price Action + EMA + RSI + MACD + ADX + S/R",
+    // ── TRADING PRO MULTI-AI ──────────────────────────────────────────────────
+    "🤖 TRADING PRO AI": {
+        tipo:          "trading_pro",
+        ativo:         "R_100",
+        duracao:       1,
+        duracao_unit:  "t",
+        tf:            1,
+        tp_hist:       5,
+        score_min:     60,
+        desc: "5 IAs em consenso | Tendência + Price Action + Estatística + Regime + Supervisor",
     },
 };
 
@@ -6207,6 +6368,11 @@ function _cfgAplicar(cfg) {
                             ESTRATEGIAS[k].contract   = ESTRATEGIAS[k].contract || 'DIGITUNDER';
                             ESTRATEGIAS[k].nivel_gale = 0;
                         }
+                        // Trading Pro: garante valores mínimos corretos (ignora cache antigo)
+                        if (ESTRATEGIAS[k].tipo === 'trading_pro') {
+                            if ((ESTRATEGIAS[k].tp_hist  || 0) > 10) ESTRATEGIAS[k].tp_hist  = 5;
+                            if ((ESTRATEGIAS[k].score_min|| 0) > 70) ESTRATEGIAS[k].score_min = 60;
+                        }
                     }
                 }
             }
@@ -6216,6 +6382,7 @@ function _cfgAplicar(cfg) {
             if (est.tipo === 'dupla')              lblEst = `Over ${est.barrier_over} + Under ${est.barrier_under}`;
             else if (est.tipo === 'gatilho_duplo') lblEst = `Barr.${est.gatilho}${est.rep_gatilho} → UNDER+OVER`;
             else if (est.tipo === 'garra_dupla')   lblEst = `${est.contract || 'DIGITUNDER'} barr.5 | gatilho=${est.qtd_gatilho}x`;
+            else if (est.tipo === 'trading_pro')   lblEst = `score≥${est.score_min || 60} | ${est.duracao || 1}${est.duracao_unit || 't'} | ${est.ativo || 'R_100'}`;
             document.getElementById('btn-estrategia').innerHTML =
                 `${cfg.estrategia}<span class="cmd-label">${lblEst}</span>`;
         }
@@ -7485,56 +7652,63 @@ function selecionarEstrategia(nome) {
               undefined, undefined, undefined,
               ['R_10','R_25','R_50','R_75','R_100','1HZ10V','1HZ25V','1HZ50V','1HZ75V','1HZ100V']);
 
-    } else if (est.tipo === 'garra_m1') {
-        // Timeframe M1 — fixo, apenas info
-        const tfDiv = document.createElement('div');
-        tfDiv.style.cssText = 'background:rgba(0,255,255,0.06);border:1px solid rgba(0,255,255,0.25);border-radius:4px;padding:8px 10px;font-size:0.72rem;color:#0ff;font-family:"Share Tech Mono";';
-        tfDiv.innerHTML = '⏱ TIMEFRAME: <b>M1</b> (fixo) — análise da vela fechada, entrada na virada';
-        campos.appendChild(tfDiv);
-        campo('Score mínimo de confluência (0-100)', 'cfg-score-min',  'number', est.score_minimo || 85, 50, 100, 5);
-        campo('Janela de entrada após virada (seg)', 'cfg-m1-janela',  'number', est.janela_segundos || 2, 1, 10, 1);
+    } else if (est.tipo === 'trading_pro') {
+        const tpDiv = document.createElement('div');
+        tpDiv.style.cssText = 'background:rgba(0,255,65,0.06);border:1px solid rgba(0,255,65,0.3);border-radius:4px;padding:8px 10px;font-size:0.72rem;color:#00ff41;font-family:"Share Tech Mono";margin-bottom:8px;';
+        tpDiv.innerHTML = '🤖 5 IAs em consenso — Tendência · Price Action · Estatística · Regime · Supervisor';
+        campos.appendChild(tpDiv);
+        campo('Timeframe (ticks por vela)', 'cfg-tf', 'select', est.tf || 1,
+              undefined, undefined, undefined, [1,2,5,15]);
+        campo('Histórico mínimo (velas)', 'cfg-tp-hist', 'number', est.tp_hist || 60, 2, 210, 1);
+        campo('Score mínimo consenso (0-100)', 'cfg-score-min', 'number', est.score_min || 78, 50, 100, 2);
+        campo('Unidade do contrato (m=min / t=ticks)', 'cfg-duracao-unit', 'select', est.duracao_unit || 't',
+              undefined, undefined, undefined, ['t','m']);
         campo('Duração do contrato', 'cfg-duracao', 'select', est.duracao || 1,
-              undefined, undefined, undefined, [1,2,3,5,10,15,30]);
-        campo('Unidade (m=min / s=seg)', 'cfg-duracao-unit', 'select', est.duracao_unit || 'm',
-              undefined, undefined, undefined, ['m','s']);
-        campo('Ativo (mercado)', 'cfg-ativo', 'select', est.ativo || 'R_10',
-              undefined, undefined, undefined,
-              ['R_10','R_25','R_50','R_75','R_100','1HZ10V','1HZ25V','1HZ50V','1HZ75V','1HZ100V']);
-        // Filtros (checkboxes)
-        const filtros = [
-            ['usar_price_action','✅ Price Action',true],
-            ['usar_estrutura',   '✅ Estrutura HH/HL',true],
-            ['usar_ema',         '✅ EMA 20/50/200',true],
-            ['usar_rsi',         '✅ RSI',true],
-            ['usar_macd',        '✅ MACD',true],
-            ['usar_adx',         '✅ ADX',true],
-            ['usar_atr',         '✅ ATR',true],
-            ['usar_sr',          '✅ Suporte/Resistência',true],
-            ['usar_bollinger',   '✅ Bollinger',true],
-            ['usar_anti_doji',   '⛔ Anti-Doji',true],
-            ['bloquear_lateral', '⛔ Bloquear lateral',true],
-            ['bloquear_fp',      '⛔ Bloquear falso rompimento',true],
-            ['mte_ativo',        '🧠 Memory Time Engine',true],
-            ['modo_demo',        '🧪 Modo Sinal (sem operar)',true],
-        ];
-        filtros.forEach(([id, label, def]) => {
-            const row = document.createElement('div');
-            row.style.cssText = 'display:flex;align-items:center;gap:8px;';
-            const chk = document.createElement('input');
-            chk.type = 'checkbox'; chk.id = 'cfg-m1-' + id;
-            chk.checked = est[id] !== undefined ? est[id] : def;
-            chk.style.accentColor = '#00ff41'; chk.style.width = '14px'; chk.style.height = '14px';
-            const lbl2 = document.createElement('label');
-            lbl2.htmlFor = chk.id;
-            lbl2.style.cssText = 'font-size:0.72rem;color:#c9d1d9;font-family:"Share Tech Mono";cursor:pointer;';
-            lbl2.textContent = label;
-            row.appendChild(chk); row.appendChild(lbl2);
-            campos.appendChild(row);
+              undefined, undefined, undefined, [1,2,3,5,10]);
+
+        // ── Toggle modo automático ──────────────────────────────────────────
+        const autoRow = document.createElement('div');
+        autoRow.style.cssText = 'display:flex;align-items:center;gap:8px;margin-top:4px;';
+        const autoChk = document.createElement('input');
+        autoChk.type = 'checkbox'; autoChk.id = 'cfg-tp-auto-mercados';
+        autoChk.checked = est.auto_mercados === true;
+        autoChk.style.cssText = 'accent-color:#00ff41;width:14px;height:14px;';
+        const autoLbl = document.createElement('label');
+        autoLbl.htmlFor = 'cfg-tp-auto-mercados';
+        autoLbl.style.cssText = 'font-size:0.72rem;color:#00ff41;font-family:"Share Tech Mono";cursor:pointer;';
+        autoLbl.textContent = '🔁 Modo Automático — analisar todos os mercados';
+        autoRow.appendChild(autoChk); autoRow.appendChild(autoLbl);
+        campos.appendChild(autoRow);
+
+        // ── Seleção de mercados ─────────────────────────────────────────────
+        const mkLbl = document.createElement('div');
+        mkLbl.style.cssText = 'font-size:0.65rem;color:#57606a;margin-top:10px;margin-bottom:4px;letter-spacing:1px;font-family:"Share Tech Mono";';
+        mkLbl.textContent = 'MERCADOS PARA ANALISAR';
+        campos.appendChild(mkLbl);
+
+        const _todosAtivos = ['R_10','R_25','R_50','R_75','R_100','1HZ10V','1HZ25V','1HZ50V','1HZ75V','1HZ100V'];
+        const _ativosSel   = est.mercados_auto || ['R_10','R_25','R_50','R_75','R_100'];
+        const mkGrid = document.createElement('div');
+        mkGrid.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:4px;';
+        _todosAtivos.forEach(a => {
+            const row2 = document.createElement('div');
+            row2.style.cssText = 'display:flex;align-items:center;gap:6px;';
+            const chkA = document.createElement('input');
+            chkA.type = 'checkbox'; chkA.id = 'cfg-tp-mk-' + a;
+            chkA.checked = _ativosSel.includes(a);
+            chkA.style.cssText = 'accent-color:#0ff;width:13px;height:13px;';
+            const lblA = document.createElement('label');
+            lblA.htmlFor = 'cfg-tp-mk-' + a;
+            lblA.style.cssText = 'font-size:0.68rem;color:#c9d1d9;font-family:"Share Tech Mono";cursor:pointer;';
+            lblA.textContent = a;
+            row2.appendChild(chkA); row2.appendChild(lblA);
+            mkGrid.appendChild(row2);
         });
-        // Campos de gerenciamento financeiro
-        campo('Entrada ($)', 'cfg-m1-stake',    'number', est.stake    || 0.35, 0.35, 1000, 0.01);
-        campo('Stop Win ($)', 'cfg-m1-stopwin', 'number', est.stop_win || 10.0, 0.1, 10000, 0.1);
-        campo('Stop Loss ($)','cfg-m1-stoploss','number', est.stop_loss|| 5.0,  0.1, 10000, 0.1);
+        campos.appendChild(mkGrid);
+
+        // ── Ativo único (quando automático desligado) ───────────────────────
+        campo('Ativo único (quando automático desligado)', 'cfg-ativo', 'select', est.ativo || 'R_100',
+              undefined, undefined, undefined, _todosAtivos);
     }
 
     fecharModal('modal-estrategia');
@@ -7570,9 +7744,12 @@ function confirmarEstrategia() {
     const duracaoUnit = document.getElementById('cfg-duracao-unit');
     if (duracaoUnit)  est.duracao_unit  = duracaoUnit.value;
     const tpHist  = document.getElementById('cfg-tp-hist');
-    if (tpHist)       est.tp_hist   = Math.max(50, Math.min(210, parseInt(tpHist.value)  || 210));
+    if (tpHist) {
+        const _tpMin = (est.tipo === 'trading_pro') ? 2 : 50;
+        est.tp_hist = Math.max(_tpMin, Math.min(210, parseInt(tpHist.value) || (est.tipo === 'trading_pro' ? 60 : 210)));
+    }
     const scoreMin = document.getElementById('cfg-score-min');
-    if (scoreMin)     est.score_min = Math.max(50, Math.min(100, parseInt(scoreMin.value) || 92));
+    if (scoreMin)     est.score_min = Math.max(40, Math.min(100, parseInt(scoreMin.value) || 60));
     if (seqGat)       est.seq_gatilho   = Math.max(0, parseInt(seqGat.value) || 0);
     // Campos pct_hist
     const pctJanela = document.getElementById('cfg-pct-janela');
@@ -7599,25 +7776,16 @@ function confirmarEstrategia() {
     if (satJanela)   est.sat_janela    = Math.max(10, parseInt(satJanela.value)   || 25);
     if (satLimiar)   est.sat_limiar    = Math.max(51, parseInt(satLimiar.value)   || 70);
     if (satSmartMin) est.sat_smart_min = Math.max(1,  parseInt(satSmartMin.value) || 10);
-    // Campos garra_m1
-    if (est.tipo === 'garra_m1') {
-        const m1ScoreEl   = document.getElementById('cfg-score-min');
-        const m1JanelaEl  = document.getElementById('cfg-m1-janela');
-        const m1StakeEl   = document.getElementById('cfg-m1-stake');
-        const m1StopWinEl = document.getElementById('cfg-m1-stopwin');
-        const m1StopLossEl= document.getElementById('cfg-m1-stoploss');
-        if (m1ScoreEl)    est.score_minimo      = Math.max(50, Math.min(100, parseInt(m1ScoreEl.value)    || 85));
-        if (m1JanelaEl)   est.janela_segundos   = Math.max(1,  Math.min(10,  parseInt(m1JanelaEl.value)   || 2));
-        if (m1StakeEl)    est.stake             = Math.max(0.35, parseFloat(m1StakeEl.value)              || 0.35);
-        if (m1StopWinEl)  est.stop_win          = Math.max(0.1,  parseFloat(m1StopWinEl.value)           || 10.0);
-        if (m1StopLossEl) est.stop_loss         = Math.max(0.1,  parseFloat(m1StopLossEl.value)          || 5.0);
-        const _m1Checks = ['usar_price_action','usar_estrutura','usar_ema','usar_rsi','usar_macd',
-                           'usar_adx','usar_atr','usar_sr','usar_bollinger','usar_anti_doji',
-                           'bloquear_lateral','bloquear_fp','mte_ativo','modo_demo'];
-        _m1Checks.forEach(k => {
-            const el = document.getElementById('cfg-m1-' + k);
-            if (el) est[k] = el.checked;
+    // Campos trading_pro — auto mercados
+    if (est.tipo === 'trading_pro') {
+        const _autoChk = document.getElementById('cfg-tp-auto-mercados');
+        if (_autoChk) est.auto_mercados = _autoChk.checked;
+        const _todosAtvs = ['R_10','R_25','R_50','R_75','R_100','1HZ10V','1HZ25V','1HZ50V','1HZ75V','1HZ100V'];
+        est.mercados_auto = _todosAtvs.filter(a => {
+            const el = document.getElementById('cfg-tp-mk-' + a);
+            return el && el.checked;
         });
+        if (est.mercados_auto.length === 0) est.mercados_auto = ['R_100'];
     }
     // Reseta contador de sequência ao confirmar
     bot._seqContador = 0;
@@ -7629,12 +7797,11 @@ function confirmarEstrategia() {
     bot._candleSinalPendente = null;  // cancela sinal pendente de virada (candle)
     bot._tpSinalPendente     = null;  // cancela sinal pendente de virada (trend_pro)
     bot._tpAnalisando        = false; // cancela flag de análise em andamento
-    // garra_m1 — reseta buffer de velas M1 e estado do motor
-    bot._m1Velas             = [];    // buffer de candles M1 fechados
-    bot._m1VelaAtual         = null;  // vela M1 em formação (ainda aberta)
-    bot._m1SinalPendente     = null;  // sinal aguardando virada de vela
-    bot._m1Analisando        = false; // evita dupla chamada à API
-
+    bot._tpScore             = null;  // limpa score do último sinal (trend_pro)
+    bot._tpAiSinalPendente   = null;  // cancela sinal pendente (trading_pro)
+    bot._tpAiAnalisando      = false; // cancela flag análise (trading_pro)
+    bot._tpAiMkIdx           = 0;     // reseta índice de mercado (modo auto)
+    bot._tpAiMkTrocando      = false; // reseta flag de troca de ativo
     // Re-subscreve ticks se o ativo mudou e jhconexo WS ativa
     const novoAtivo = _resolverAtivo(est.ativo);
     if (bot.ws && bot.ws.readyState === WebSocket.OPEN && novoAtivo !== bot._tickAtivo) {
@@ -7646,8 +7813,8 @@ function confirmarEstrategia() {
 
     // Atualiza boto do painel
     let resumo = nome;
-    if (est.tipo === 'garra_m1') {
-        resumo = `M1 | score≥${est.score_minimo || 85} | ${est.duracao || 1}${est.duracao_unit || 'm'}${est.modo_demo ? ' | SINAL' : ''}`;
+    if (est.tipo === 'trading_pro') {
+        resumo = `score≥${est.score_min || 60} | ${est.duracao || 1}${est.duracao_unit || 't'} | ${est.ativo || 'R_100'}`;
     } else if (est.tipo === 'garra_dupla') {
         resumo = `${est.contract || 'DIGITUNDER'} barr.5 | gatilho=${est.qtd_gatilho}x | gale×${est.fator_gale}`;
     } else if (est.tipo === 'gatilho_duplo') {
@@ -7667,8 +7834,8 @@ function confirmarEstrategia() {
         `${nome}<span class="cmd-label">${resumo.replace(nome,'').substring(0,36) || est.desc.substring(0,28)}</span>`;
 
     fecharModal('modal-cfg-estrategia');
-    if (est.tipo === 'garra_m1') {
-        print(`🦅 GARRA REVERSÃO M1 PRO ativada | score≥<b>${est.score_minimo || 85}</b> | janela: <b>${est.janela_segundos || 2}s</b> | ativo: <b>${est.ativo || 'R_10'}</b> | ${est.modo_demo ? '🧪 MODO SINAL (sem operar)' : '💰 MODO REAL'}`, "log-win");
+    if (est.tipo === 'trading_pro') {
+        print(`🤖 TRADING PRO AI ativado | score≥<b>${est.score_min || 60}</b> | ${est.duracao || 1}${est.duracao_unit || 't'} | ativo: <b>${est.ativo || 'R_100'}</b>`, "log-win");
     } else if (est.tipo === 'gatilho_duplo') {
         print(`🎯 GATILHO DUPLO: barreira=<b>${est.gatilho}</b> | repetições=<b>${est.rep_gatilho}</b>`
             + (ativo ? ` | Ativo: <b>${est.ativo}</b>` : ''), "log-win");
@@ -8024,12 +8191,22 @@ function tgEnviarResultado(win, lucro, prox_stake, _origemSec, _overrides) {
     const _modoEspelhoAtivo = (typeof _sec !== 'undefined' && _sec.pronto && _sec.espelhandoAtivo);
     const _lvVirtual        = bot.lv && bot.lv.ativo && !bot.lv.emRecuperacao;
 
+    // ── Diagnóstico: recarrega config TG se token estiver vazio ──────────
+    if (!_tgCfg.token || !_tgCfg.chat_id) {
+        fetch('/tg-config').then(r => r.json()).then(d => {
+            Object.assign(_tgCfg, d);
+            console.warn('[TG] Config recarregada por estar vazia:', d.enabled, d.token ? d.token.slice(0,10)+'...' : 'SEM TOKEN');
+        }).catch(() => {});
+    }
+
     // ── Cyber Sort ativo: bloqueia apenas a conta TESTE (principal) ──
     // Se _origemSec=true (chamado da SEC autônoma), deixa passar sempre
-    if (typeof _csAtivo !== 'undefined' && _csAtivo && !_modoEspelhoAtivo && !_origemSec) return;
+    if (typeof _csAtivo !== 'undefined' && _csAtivo && !_modoEspelhoAtivo && !_origemSec) {
+        console.warn('[TG] BLOQUEADO: Cyber Sort ativo (_csAtivo=true)');
+        return;
+    }
 
     // ── Modo Virtual (LV acumulando losses virtuais) ──────────────────────
-    // Bot está "analisando" — não há operação real — envia notificação informativa
     if (_lvVirtual) {
         const msgVirtual = { virtual: true, texto: '🤖 Robô Garra analisando...' };
         if (_tgCfg.enabled && _tgCfg.resultados && _tgCfg.token && _tgCfg.chat_id) {
@@ -8037,14 +8214,10 @@ function tgEnviarResultado(win, lucro, prox_stake, _origemSec, _overrides) {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ token: _tgCfg.token, chat_id: _tgCfg.chat_id, ...msgVirtual }),
-            }).catch(() => {});
+            }).catch(e => console.error('[TG] Erro fetch virtual:', e));
         }
         if (_waNotifAtivo) {
-            fetch('/wa-send', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(msgVirtual),
-            }).catch(() => {});
+            fetch('/wa-send', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(msgVirtual) }).catch(()=>{});
         }
         return;
     }
@@ -8071,7 +8244,6 @@ function tgEnviarResultado(win, lucro, prox_stake, _origemSec, _overrides) {
             conta:           'SECUNDARIA',
         };
     } else {
-        // ── Modo Normal: usa dados da conta principal ────────────────────
         const saldo = parseFloat(document.getElementById('hd-balance').textContent.replace('$','')) || 0;
         payload = {
             win:             win,
@@ -8092,21 +8264,29 @@ function tgEnviarResultado(win, lucro, prox_stake, _origemSec, _overrides) {
     }
 
     // ── Telegram ──────────────────────────────────────────
-    if (_tgCfg.enabled && _tgCfg.resultados && _tgCfg.token && _tgCfg.chat_id) {
+    if (!_tgCfg.enabled) {
+        console.warn('[TG] BLOQUEADO: enabled=false');
+    } else if (!_tgCfg.resultados) {
+        console.warn('[TG] BLOQUEADO: resultados=false');
+    } else if (!_tgCfg.token) {
+        console.warn('[TG] BLOQUEADO: token vazio');
+    } else if (!_tgCfg.chat_id) {
+        console.warn('[TG] BLOQUEADO: chat_id vazio');
+    } else {
+        console.log('[TG] Enviando resultado ' + (win ? 'WIN' : 'LOSS') + ' lucro=' + lucro);
         fetch('/tg-send', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ token: _tgCfg.token, chat_id: _tgCfg.chat_id, ...payload }),
-        }).catch(() => {});
+        })
+        .then(r => r.json())
+        .then(d => { if (!d.ok) console.error('[TG] /tg-send retornou erro:', d); })
+        .catch(e => console.error('[TG] Erro de rede em /tg-send:', e));
     }
 
     // ── WhatsApp ──────────────────────────────────────────
     if (_waNotifAtivo) {
-        fetch('/wa-send', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-        }).catch(() => {});
+        fetch('/wa-send', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) }).catch(()=>{});
     }
 }
 
@@ -8224,26 +8404,6 @@ function processCommand(cmd) {
                     bot._tickAtivo = _ativoInic;
                     bot.ws.send(json({ ticks: _ativoInic, subscribe: 1 }));
                 }
-                // ── GARRA M1: busca histórico de candles M1 imediatamente ──────────
-                // Usa ticks_history com granularity=60 para obter 250 velas M1 prontas
-                // em vez de esperar tick a tick (evita a espera de 3h30)
-                if (est && est.tipo === 'garra_m1') {
-                    bot._m1Velas         = [];
-                    bot._m1VelaAtual     = null;
-                    bot._m1SinalPendente = null;
-                    bot._m1Analisando    = false;
-                    const _m1Ativo = _resolverAtivo(est.ativo || 'R_10');
-                    print(`🦅 GARRA M1 | Buscando histórico M1 de <b>${_m1Ativo}</b>...`, 'log-info');
-                    bot.ws.send(json({
-                        ticks_history: _m1Ativo,
-                        adjust_start_time: 1,
-                        count: 250,
-                        end: 'latest',
-                        granularity: 60,
-                        style: 'candles',
-                        req_id: 9001,
-                    }));
-                }
             }
             print(`▶ ROBÔ ATIVO | Estratégia: <b>${bot.estrategia}</b> | Gerenciamento: <b>${bot.gerenciamento}</b> | Entrada: <b>$${bot.stake.toFixed(2)}</b> | SW: <b>$${bot.stopWin < 999 ? bot.stopWin : '—'}</b>`, "log-win");
             _timer.iniciar();
@@ -8257,9 +8417,7 @@ function processCommand(cmd) {
         bot._candleSinalPendente  = null;  // cancela sinal pendente (candle)
         bot._tpSinalPendente      = null;  // cancela sinal pendente (trend_pro)
         bot._tpAnalisando         = false; // cancela flag de análise em andamento
-        // Cancela estado GARRA M1
-        bot._m1SinalPendente      = null;
-        bot._m1Analisando         = false;
+        bot._tpScore              = null;  // limpa score do último sinal (trend_pro)
         _seqStatusClear();
         // Para conta secundária se estiver operando
         if (typeof _sec !== 'undefined' && _sec.espelhandoAtivo) {
@@ -9568,7 +9726,7 @@ function initWebSocket(wssUrl) {
                 // A análise e entrada ficam bloqueadas por bot._buying, mas o buffer
                 // continua crescendo para que a vela não perca ticks durante operações.
                 const _estCdl = bot.running && ESTRATEGIAS[bot.estrategia];
-                if (_estCdl && (_estCdl.tipo === 'candle' || _estCdl.tipo === 'trend_pro')) {
+                if (_estCdl && (_estCdl.tipo === 'candle' || _estCdl.tipo === 'trend_pro' || _estCdl.tipo === 'trading_pro')) {
                     if (!bot._candleBuffer) bot._candleBuffer = [];
                     const _tfCdl  = _estCdl.tf || 1;
                     const _tamCdl = Math.max(6, _tfCdl * 8);
@@ -9860,253 +10018,6 @@ function initWebSocket(wssUrl) {
                     bot._garraDuplaSeq = [digit];
                     _seqStatusUpdate(`🦾 GARRA DUPLA [1/${qtdN}] ${'█'}${'░'.repeat(qtdN - 1)} dígito=${digit} — novo início`);
                     setTimeout(_seqStatusClear, 1200);
-                }
-
-            } else if (est.tipo === 'garra_m1') {
-                // ══════════════════════════════════════════════════════════════════════
-                // GARRA REVERSÃO M1 PRO — Motor de velas M1 reais via WebSocket Deriv
-                //
-                // Cada tick alimenta a vela M1 em formação.
-                // Ao detectar a virada (epoch mudou de minuto), a vela anterior é
-                // fechada, enviada ao servidor para análise e, se o score >= mínimo,
-                // a entrada é executada nos primeiros `janela_segundos` da nova vela.
-                //
-                // Regra absoluta: NUNCA entra no meio de uma vela. Se a janela
-                // de entrada (padrão 2s) passar, descarta o sinal e aguarda a próxima.
-                // ══════════════════════════════════════════════════════════════════════
-
-                // ── Inicializa buffers se necessário ─────────────────────────────────
-                if (!bot._m1Velas)         bot._m1Velas         = [];
-                if (!bot._m1VelaAtual)     bot._m1VelaAtual     = null;
-                if (bot._m1SinalPendente === undefined) bot._m1SinalPendente = null;
-                if (bot._m1Analisando    === undefined) bot._m1Analisando    = false;
-                if (!bot._m1StopWinAcum)  bot._m1StopWinAcum  = 0;
-                if (!bot._m1StopLossAcum) bot._m1StopLossAcum = 0;
-
-                const _m1Preco    = parseFloat(data.tick.quote);
-                const _m1Epoch    = data.tick.epoch;              // unix timestamp em segundos
-                const _m1MinAtual = Math.floor(_m1Epoch / 60);   // número do minuto atual
-
-                // ── Alimenta a vela M1 em formação ───────────────────────────────────
-                if (!bot._m1VelaAtual) {
-                    // Primeira chegada sem histórico pré-carregado — inicia nova vela pelo tick
-                    bot._m1VelaAtual = {
-                        abertura:    _m1Preco,
-                        fechamento:  _m1Preco,
-                        maxima:      _m1Preco,
-                        minima:      _m1Preco,
-                        timestamp:   _m1MinAtual * 60,
-                        minuto:      _m1MinAtual,
-                    };
-                } else if (_m1MinAtual !== bot._m1VelaAtual.minuto &&
-                           _m1MinAtual > bot._m1VelaAtual.minuto) {
-                    // Garante que só avança (nunca retroage por diferença de fuso)
-                    // ── VIRADA DE VELA: novo minuto detectado ─────────────────────────
-                    // 1. Fecha a vela anterior
-                    const _m1VelaFechada = { ...bot._m1VelaAtual };
-
-                    // 2. Inicia a nova vela
-                    bot._m1VelaAtual = {
-                        abertura:   _m1Preco,
-                        fechamento: _m1Preco,
-                        maxima:     _m1Preco,
-                        minima:     _m1Preco,
-                        timestamp:  _m1MinAtual * 60,
-                        minuto:     _m1MinAtual,
-                    };
-
-                    // 3. Empilha a vela fechada no buffer (máx 250 para EMA200 + margem)
-                    bot._m1Velas.push(_m1VelaFechada);
-                    if (bot._m1Velas.length > 250) bot._m1Velas.shift();
-
-                    // 4. Se havia sinal pendente da vela anterior, PROCESSA AGORA
-                    //    (primeiro tick da nova vela = virada = entrada autorizada)
-                    if (bot._m1SinalPendente && !bot._buying) {
-                        const _sinal = bot._m1SinalPendente;
-                        bot._m1SinalPendente = null;
-                        // Verifica janela de entrada: o tick de virada é sempre dentro dos primeiros segundos
-                        const _agora       = Date.now() / 1000;
-                        const _tsVirada    = bot._m1VelaAtual.timestamp;
-                        const _segPassados = _agora - _tsVirada;
-                        const _janela      = est.janela_segundos || 2;
-
-                        if (_segPassados <= _janela) {
-                            // Dentro da janela — autoriza entrada
-                            if (est.modo_demo) {
-                                // MODO SINAL: apenas exibe, não opera
-                                const _barras = (cat, val) => {
-                                    const p = Math.round(val / 10);
-                                    return `${'█'.repeat(p)}${'░'.repeat(10-p)} ${val}`;
-                                };
-                                const _det  = _sinal.detalhes || {};
-                                const _mots = (_sinal.motivos || []).slice(0,4).join(' | ');
-                                print(
-                                    `╔══════════════════════════════════════╗<br>` +
-                                    `║ 🦅 GARRA REVERSÃO M1 PRO             ║<br>` +
-                                    `╠══════════════════════════════════════╣<br>` +
-                                    `║ ATIVO: ${(est.ativo||'R_10').padEnd(6)} | M1 | ⏱ VIRADA ║<br>` +
-                                    `║ ${_sinal.direcao === 'CALL' ? '🟢' : '🔴'} SINAL: <b>${_sinal.direcao}</b> | SCORE: <b>${_sinal.score}/100</b>   ║<br>` +
-                                    `║ ${_mots || 'confluência detectada'}   ║<br>` +
-                                    `╚══════════════════════════════════════╝`,
-                                    _sinal.direcao === 'CALL' ? 'log-win' : 'log-loss'
-                                );
-                                _seqStatusUpdate(`🦅 M1 ${_sinal.direcao} | score ${_sinal.score}/100 | 🧪 SINAL (sem operar)`);
-                                // Registra no servidor para estatísticas/MTE mesmo em modo demo
-                                fetch('/garra-m1/resultado', {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({
-                                        resultado: 'SINAL',
-                                        ativo:   est.ativo || 'R_10',
-                                        direcao: _sinal.direcao,
-                                        score:   _sinal.score,
-                                        regime:  'DEMO',
-                                    })
-                                }).catch(() => {});
-                            } else {
-                                // MODO REAL: executa a operação
-                                bot._buying   = true;
-                                bot._m1Direcao = _sinal.direcao;  // sinaliza para buy() qual contrato
-                                bot._m1Score   = _sinal.score;
-                                const _dir = _sinal.direcao === 'CALL' ? '🟢 CALL' : '🔴 PUT';
-                                print(`🦅 GARRA M1 ${_dir} | score <b>${_sinal.score}/100</b> | ativo: <b>${est.ativo}</b> | ⏱ VIRADA`, 'log-win');
-                                _seqStatusUpdate(`🦅 M1 ${_sinal.direcao} | score ${_sinal.score}/100 | entrando...`);
-                                _edcEntrar(() => buy());
-                            }
-                        } else {
-                            print(`🦅 GARRA M1 | janela perdida (${_segPassados.toFixed(1)}s > ${_janela}s) — aguardando próxima vela`, 'log-info');
-                            _seqStatusUpdate(`🦅 M1 AGUARDAR | janela perdida — próxima vela`);
-                        }
-                        return;
-                    }
-
-                    // 5. Analisa a vela que acabou de fechar — chama o motor no servidor
-                    if (!bot._m1Analisando && bot._m1Velas.length >= 5) {
-                        bot._m1Analisando = true;
-                        const _m1Agora = Date.now() / 1000;
-                        // ts_vela_atual = timestamp de abertura da nova vela (início do minuto atual)
-                        // Usamos o epoch do tick (já capturado em _m1MinAtual * 60) para ficar
-                        // em sincronia com o relógio da Deriv e não com o browser.
-                        const _m1TsVelaAtual = bot._m1VelaAtual.timestamp;
-                        const _m1Payload = {
-                            velas:          bot._m1Velas,
-                            ts_vela_atual:  _m1TsVelaAtual,
-                            ts_agora:       _m1Agora,
-                            cfg_override: {
-                                ativo:                     est.ativo             || 'R_10',
-                                duracao:                   est.duracao           || 1,
-                                duracao_unidade:           est.duracao_unit      || 'm',
-                                score_minimo:              est.score_minimo      || 85,
-                                janela_entrada_segundos:   est.janela_segundos   || 2,
-                                usar_price_action:         est.usar_price_action !== false,
-                                usar_estrutura:            est.usar_estrutura    !== false,
-                                usar_ema:                  est.usar_ema          !== false,
-                                usar_rsi:                  est.usar_rsi          !== false,
-                                usar_macd:                 est.usar_macd         !== false,
-                                usar_adx:                  est.usar_adx          !== false,
-                                usar_atr:                  est.usar_atr          !== false,
-                                usar_sr:                   est.usar_sr           !== false,
-                                usar_bollinger:            est.usar_bollinger    !== false,
-                                usar_anti_doji:            est.usar_anti_doji    !== false,
-                                bloquear_lateral:          est.bloquear_lateral  !== false,
-                                bloquear_falso_rompimento: est.bloquear_fp       !== false,
-                                stake:                     est.stake             || 0.35,
-                                gerenciamento:             'flat',
-                            },
-                        };
-                        fetch('/garra-m1/avaliar', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(_m1Payload),
-                        })
-                        .then(r => r.json())
-                        .then(_res => {
-                            bot._m1Analisando = false;
-                            if (_res.operar && _res.direcao !== 'AGUARDAR') {
-                                // Guarda sinal — será executado no próximo tick (virada já ocorreu,
-                                // então verifica se ainda estamos na janela de entrada)
-                                const _agora2      = Date.now() / 1000;
-                                const _tsV2        = bot._m1VelaAtual ? bot._m1VelaAtual.timestamp : _agora2;
-                                const _segDec      = _agora2 - _tsV2;
-                                const _janelaDec   = est.janela_segundos || 2;
-                                if (_segDec <= _janelaDec && !bot._buying) {
-                                    // Análise concluída ainda dentro da janela — entra agora
-                                    if (est.modo_demo) {
-                                        const _mots2 = (_res.motivos || []).slice(0,4).join(' | ');
-                                        print(
-                                            `╔══════════════════════════════════════╗<br>` +
-                                            `║ 🦅 GARRA REVERSÃO M1 PRO             ║<br>` +
-                                            `╠══════════════════════════════════════╣<br>` +
-                                            `║ ATIVO: ${(est.ativo||'R_10').padEnd(6)} | M1 | ⏱ VIRADA ║<br>` +
-                                            `║ ${_res.direcao === 'CALL' ? '🟢' : '🔴'} SINAL: <b>${_res.direcao}</b> | SCORE: <b>${_res.score}/100</b>   ║<br>` +
-                                            `║ ${_mots2 || 'confluência detectada'}   ║<br>` +
-                                            `╚══════════════════════════════════════╝`,
-                                            _res.direcao === 'CALL' ? 'log-win' : 'log-loss'
-                                        );
-                                        _seqStatusUpdate(`🦅 M1 ${_res.direcao} | score ${_res.score}/100 | 🧪 SINAL`);
-                                        fetch('/garra-m1/resultado', {
-                                            method: 'POST',
-                                            headers: { 'Content-Type': 'application/json' },
-                                            body: JSON.stringify({ resultado: 'SINAL', ativo: est.ativo || 'R_10', direcao: _res.direcao, score: _res.score, regime: 'DEMO' })
-                                        }).catch(() => {});
-                                    } else {
-                                        bot._buying    = true;
-                                        bot._m1Direcao = _res.direcao;
-                                        bot._m1Score   = _res.score;
-                                        const _dir2 = _res.direcao === 'CALL' ? '🟢 CALL' : '🔴 PUT';
-                                        print(`🦅 GARRA M1 ${_dir2} | score <b>${_res.score}/100</b> | ativo: <b>${est.ativo}</b>`, 'log-win');
-                                        _edcEntrar(() => buy());
-                                    }
-                                } else if (_segDec <= _janelaDec + 1) {
-                                    // Análise quase na hora — guarda como pendente para o próximo tick
-                                    bot._m1SinalPendente = _res;
-                                } else {
-                                    // Janela já passou
-                                    print(`🦅 GARRA M1 | sinal ${_res.direcao} score ${_res.score} — janela passou (${_segDec.toFixed(1)}s)`, 'log-info');
-                                    _seqStatusUpdate(`🦅 M1 AGUARDAR | confluência detectada mas janela passou`);
-                                }
-                            } else {
-                                // AGUARDAR — loga no terminal com detalhes do score
-                                const _motivo = _res.motivo || 'Confluência insuficiente';
-                                const _scC = _res.score_call !== undefined ? _res.score_call : 0;
-                                const _scP = _res.score_put  !== undefined ? _res.score_put  : 0;
-                                const _scM = _res.score_minimo !== undefined ? _res.score_minimo : (est.score_minimo || 75);
-                                const _det = _res.detalhes || {};
-                                // Monta linha compacta de indicadores
-                                const _indicadores = [
-                                    _det.estrutura  ? `EST:${_det.estrutura.substring(0,3)}`   : '',
-                                    _det.rsi        ? `RSI:${_det.rsi.toFixed(0)}`             : '',
-                                    _det.adx        ? `ADX:${_det.adx.toFixed(0)}`             : '',
-                                    _det.macd       ? `MACD:${_det.macd > 0 ? '+' : ''}${_det.macd.toFixed(4)}` : '',
-                                ].filter(Boolean).join(' ');
-                                print(
-                                    `🦅 M1 AGUARDAR | <b>${_motivo}</b> | ` +
-                                    `CALL:<b>${_scC}</b> PUT:<b>${_scP}</b> mín:${_scM}` +
-                                    (_indicadores ? ` | ${_indicadores}` : ''),
-                                    'log-info'
-                                );
-                                _seqStatusUpdate(`🦅 M1 AGUARDAR | CALL:${_scC} PUT:${_scP} mín:${_scM} | ${_motivo}`);
-                            }
-                        })
-                        .catch(_err => {
-                            bot._m1Analisando = false;
-                            console.warn('[GARRA M1]', _err);
-                        });
-                    }
-                } else {
-                    // ── Mesmo minuto: atualiza vela em formação ───────────────────────
-                    bot._m1VelaAtual.fechamento = _m1Preco;
-                    if (_m1Preco > bot._m1VelaAtual.maxima) bot._m1VelaAtual.maxima = _m1Preco;
-                    if (_m1Preco < bot._m1VelaAtual.minima) bot._m1VelaAtual.minima = _m1Preco;
-                    // Exibe estado atual — aguardando virada da vela
-                    const _m1Total = est.tp_hist || 210;
-                    if (bot._m1Velas.length < 5) {
-                        // Histórico insuficiente (< 5 velas) — ainda aguardando API
-                        _seqStatusUpdate(`🦅 M1 | aguardando histórico M1...`);
-                    } else if (bot._m1Velas.length < _m1Total) {
-                        // Histórico parcial (carregado mas abaixo do ideal) — já analisa assim que virar
-                        _seqStatusUpdate(`🦅 M1 PRONTO | ${bot._m1Velas.length} velas | aguardando virada...`);
-                    }
                 }
 
             } else if (est.tipo === 'pct_hist') {
@@ -10413,8 +10324,9 @@ function initWebSocket(wssUrl) {
                     bot._candleBuffer = bot._candleBuffer.slice(-_tpJanela * 59);
                     _seqStatusClear();
                     if (!lvVerificar(digit)) return;
-                    bot._canaleDir = _tpS.dir;
-                    bot._buying    = true;
+                    bot._canaleDir  = _tpS.dir;
+                    bot._tpScore    = _tpS.score;   // salva para usar na notificação do resultado
+                    bot._buying     = true;
                     print(`🏛️ GARRA TREND PRO V2.0 ${_tpS.dir} | score ${_tpS.score}/100 | ENTRADA NA VIRADA ✅`, 'log-win');
                     print(`   ${_tpS.resumo}`, 'log-info');
                     _edcEntrar(() => buy());
@@ -10642,6 +10554,150 @@ function initWebSocket(wssUrl) {
 
                 bot._tpSinalPendente = { dir: _tpDirecao, score: _tpScoreTotal, resumo: _tpResumo };
                 _seqStatusUpdate(`🏛️ TREND PRO V2.0 ${_tpDirecao} | score ${_tpScoreTotal} | ⏳ aguardando virada para entrar...`);
+
+            } else if (est.tipo === 'trading_pro') {
+                // ══════════════════════════════════════════════════════════════
+                // TRADING PRO MULTI-AI — 5 IAs em consenso
+                // Modo simples : analisa o ativo único configurado
+                // Modo automático (ROTAÇÃO REAL): troca o ativo subscrito na
+                //   Deriv a cada ciclo de análise. Usa dados reais do ativo,
+                //   não dados fake de outro mercado.
+                //   Fluxo: analisar ativo atual → sem sinal → trocar para o
+                //   próximo da lista → aguardar buffer → reanalisar
+                // ══════════════════════════════════════════════════════════════
+                if (bot._tpAiSinalPendente === undefined) bot._tpAiSinalPendente   = null;
+                if (bot._tpAiAnalisando    === undefined) bot._tpAiAnalisando      = false;
+                if (bot._tpAiMkIdx         === undefined) bot._tpAiMkIdx           = 0;
+                if (bot._tpAiMkTrocando    === undefined) bot._tpAiMkTrocando      = false;
+
+                const _tpAiTf    = est.tf || 1;
+                const _tpAiJan   = Math.max(1, _tpAiTf * 3);
+
+                // FASE 2 — sinal pendente: entra na virada
+                if (bot._tpAiSinalPendente) {
+                    if (bot._buying) {
+                        bot._tpAiSinalPendente = null;
+                        bot._candleBuffer = bot._candleBuffer.slice(-_tpAiJan * 59);
+                        _seqStatusUpdate(`🤖 TRADING PRO — operação em andamento...`);
+                        return;
+                    }
+                    const _tpAiS = bot._tpAiSinalPendente;
+                    bot._tpAiSinalPendente = null;
+                    bot._candleBuffer = bot._candleBuffer.slice(-_tpAiJan * 59);
+                    _seqStatusClear();
+                    if (!lvVerificar(digit)) return;
+                    bot._canaleDir = _tpAiS.dir;
+                    bot._tpScore   = _tpAiS.score;
+                    bot._buying    = true;
+                    print(`🤖 TRADING PRO AI ${_tpAiS.dir} | score <b>${_tpAiS.score}/100</b> | líder: <b>${_tpAiS.lider}</b> | ativo: <b>${est.ativo}</b> | ENTRADA NA VIRADA ✅`, 'log-win');
+                    _edcEntrar(() => buy());
+                    return;
+                }
+
+                // ── Modo automático: trocar ativo subscrito se necessário ─────
+                if (est.auto_mercados && Array.isArray(est.mercados_auto) && est.mercados_auto.length > 1) {
+                    // Inicializa índice na posição do ativo atual
+                    const _mkLista = est.mercados_auto;
+                    if (bot._tpAiMkTrocando) return; // aguarda troca completar
+
+                    const _ativoAtual = est.ativo || 'R_100';
+                    const _mkIdxAtual = _mkLista.indexOf(_ativoAtual);
+                    if (_mkIdxAtual >= 0) bot._tpAiMkIdx = _mkIdxAtual;
+                }
+
+                // FASE 1 — aguarda histórico suficiente
+                const _tpAiHistMin  = Math.max(2, Math.min(210, est.tp_hist || 5));
+                const _tpAiMinTicks = _tpAiJan * _tpAiHistMin;
+                if (bot._candleBuffer.length < _tpAiMinTicks) {
+                    const _tpAiN = Math.floor(bot._candleBuffer.length / _tpAiJan);
+                    _seqStatusUpdate(`🤖 TRADING PRO [${_tpAiN}/${_tpAiHistMin} velas] coletando... (${est.ativo || 'R_100'})`);
+                    return;
+                }
+
+                if (bot._tpAiAnalisando) return;
+
+                // Helper: monta velas OHLC a partir do candleBuffer atual
+                const _tpAiMontarVelas = () => {
+                    const buf = bot._candleBuffer.slice(-_tpAiJan * 210);
+                    const vs  = [];
+                    for (let _i = 0; _i + _tpAiJan <= buf.length; _i += _tpAiJan) {
+                        const sl = buf.slice(_i, _i + _tpAiJan);
+                        vs.push({
+                            abertura:   sl[0],
+                            fechamento: sl[sl.length - 1],
+                            maxima:     Math.max(...sl),
+                            minima:     Math.min(...sl),
+                            timestamp:  Date.now() / 1000 - (buf.length - _i) * 0.5,
+                        });
+                    }
+                    return vs;
+                };
+
+                const _tpAiDd = bot.profit < 0
+                    ? Math.abs(bot.profit) / Math.max(1, bot.stake * 10)
+                    : 0;
+
+                // Descarta 1 vela para reanalisar rápido após entrada
+                bot._candleBuffer = bot._candleBuffer.slice(-_tpAiJan * 59);
+                bot._tpAiAnalisando = true;
+
+                // Helper: trocar para próximo ativo da lista (rotação real)
+                const _tpAiTrocarAtivo = (mkLista) => {
+                    bot._tpAiMkIdx = (bot._tpAiMkIdx + 1) % mkLista.length;
+                    const novoAtivo   = mkLista[bot._tpAiMkIdx];
+                    const novoResolv  = _resolverAtivo(novoAtivo);
+                    if (novoAtivo !== est.ativo) {
+                        est.ativo = novoAtivo;
+                        bot._candleBuffer = []; // zera buffer para novo ativo
+                        bot._tpAiMkTrocando = true;
+                        if (bot.ws && bot.ws.readyState === WebSocket.OPEN) {
+                            bot.ws.send(json({ forget_all: 'ticks' }));
+                            bot._tickAtivo = novoResolv;
+                            bot.ws.send(json({ ticks: novoResolv, subscribe: 1 }));
+                        }
+                        print(`🔀 TRADING PRO AUTO | trocando para <b>${novoAtivo}</b> — coletando dados...`, 'log-info');
+                        // Libera flag de troca após 1s (tempo para primeiro tick chegar)
+                        setTimeout(() => { bot._tpAiMkTrocando = false; }, 1000);
+                    }
+                };
+
+                // ── Analisa ativo atual (modo simples ou auto com dados reais) ─
+                fetch('/trading-pro/avaliar', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        velas:        _tpAiMontarVelas(),
+                        broker:       'DERIV',
+                        ativo:        est.ativo || 'R_100',
+                        drawdown_pct: _tpAiDd,
+                        score_min:    est.score_min || 60,
+                    }),
+                })
+                .then(r => r.json())
+                .then(_res => {
+                    bot._tpAiAnalisando = false;
+                    if (_res.operar && _res.direcao !== 'AGUARDAR') {
+                        bot._tpAiSinalPendente = {
+                            dir:   _res.direcao,
+                            score: _res.score  || 0,
+                            lider: _res.lider  || '—',
+                        };
+                        _seqStatusUpdate(`🤖 TRADING PRO ${_res.direcao} | ${est.ativo} | score ${_res.score}/100 | líder: ${_res.lider} | ⏳ aguardando virada...`);
+                    } else {
+                        // Sem sinal — se modo auto, toca para próximo mercado
+                        const _mkAuto = est.auto_mercados && Array.isArray(est.mercados_auto) && est.mercados_auto.length > 1;
+                        if (_mkAuto) {
+                            _seqStatusUpdate(`🤖 TRADING PRO AUTO | ${est.ativo} sem sinal (score ${_res.score || 0}) → trocando mercado...`);
+                            _tpAiTrocarAtivo(est.mercados_auto);
+                        } else {
+                            _seqStatusUpdate(`🤖 TRADING PRO AGUARDAR | ${_res.motivo || 'Consenso insuficiente'}`);
+                        }
+                    }
+                })
+                .catch(_err => {
+                    bot._tpAiAnalisando = false;
+                    console.warn('[TRADING PRO]', _err);
+                });
             }
         }
 
@@ -10884,7 +10940,19 @@ function initWebSocket(wssUrl) {
                 // updateHeader(bot._lastBalance);
                 bot.ws.send(json({ balance: 1 }));  // confirma saldo real com a Deriv
                 // Enquanto secundária estiver conectada (standby ou espelhando), bloqueia notif da principal
-                if (!(_sec && _sec.pronto)) tgEnviarResultado(won, profit, bot.stake);
+                if (!(_sec && _sec.pronto)) {
+                    // ── Trend Pro: enriquece nome da estratégia com score ──────
+                    const _estAtual = ESTRATEGIAS[bot.estrategia];
+                    if (_estAtual && _estAtual.tipo === 'trend_pro' && bot._tpScore) {
+                        tgEnviarResultado(won, profit, bot.stake, false, {
+                            estrategia: `🏛️ TREND PRO — ${_estAtual.ativo || ''} | score ${bot._tpScore}/100`,
+                            modo:       bot.gerenciamento,
+                        });
+                        bot._tpScore = null;   // limpa após usar
+                    } else {
+                        tgEnviarResultado(won, profit, bot.stake);
+                    }
+                }
                 // ── Planilha JC: registra histórico ──────────────────────
                 if (bot.mgr && bot.mgr.modo === "💹 Juros Compostos") {
                     jcRegistrarResultado(won ? 'WIN' : 'LOSS', bot.stake, profit, bot.mgr._jcBanca);
@@ -10893,27 +10961,23 @@ function initWebSocket(wssUrl) {
                 _adaptativoRegistrarResultado(won ? 'WIN' : 'LOSS', profit);
                 // ── EDC: feedback rico normal ─────────────────────────────
                 _edcFeedback(won, profit, false);
-                // ── GARRA M1: registra WIN/LOSS no servidor e alimenta MTE ──
-                if (ESTRATEGIAS[bot.estrategia] && ESTRATEGIAS[bot.estrategia].tipo === 'garra_m1') {
-                    const _m1Est = ESTRATEGIAS[bot.estrategia];
-                    const _m1Res = won ? 'WIN' : 'LOSS';
-                    fetch('/garra-m1/resultado', {
+                // ── TRADING PRO: registra WIN/LOSS e aplica rotação de líder ──
+                if (ESTRATEGIAS[bot.estrategia] && ESTRATEGIAS[bot.estrategia].tipo === 'trading_pro') {
+                    fetch('/trading-pro/resultado', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
-                            resultado: _m1Res,
-                            ativo:     _m1Est.ativo   || 'R_10',
-                            direcao:   bot._m1Direcao || '',
-                            score:     bot._m1Score   || 0,
-                            regime:    'REAL',
-                            profit:    profit,
+                            resultado: won ? 'WIN' : 'LOSS',
+                            lucro:     profit,
+                            broker:    'DERIV',
+                            ativo:     ESTRATEGIAS[bot.estrategia].ativo || 'R_100',
+                            score:     bot._tpScore || 0,
                         })
                     }).catch(() => {});
-                    const _m1Icone = won ? '✅' : '❌';
-                    const _m1Msg   = won
-                        ? `🦅 GARRA M1 WIN | +$${profit.toFixed(2)} | score ${bot._m1Score || 0}`
-                        : `🦅 GARRA M1 LOSS | -$${Math.abs(profit).toFixed(2)} | score ${bot._m1Score || 0}`;
-                    _seqStatusUpdate(_m1Msg);
+                    const _tpAiMsg = won
+                        ? `🤖 TRADING PRO WIN | +$${profit.toFixed(2)} | score ${bot._tpScore || 0}`
+                        : `🤖 TRADING PRO LOSS | -$${Math.abs(profit).toFixed(2)} | score ${bot._tpScore || 0}`;
+                    _seqStatusUpdate(_tpAiMsg);
                 }
                 // ── Secundária: verifica se deve ativar/desativar espelhamento ──
                 _secVerificarEspelhamento(bot.profit);
@@ -11388,20 +11452,14 @@ function buy() {
         payload.duration      = Math.min(dMax, Math.max(dMin, parseInt(est.duracao) || 1));
         delete payload.barrier;
 
-    } else if (est.tipo === 'garra_m1') {
-        // CALL = RISE | PUT = FALL (contratos de subida/queda da Deriv)
-        const _m1Dir   = (bot._m1Direcao || 'CALL').toUpperCase();
-        const _m1DUnit = est.duracao_unit || 'm';
-        // Duração: minutos (1-5) ou segundos (10-30-60 → usa "s" se Deriv suportar, senão "m")
-        const _m1DMax  = _m1DUnit === 'm' ? 5 : 60;
-        const _m1DMin  = _m1DUnit === 'm' ? 1 : 5;
-        payload.contract_type = _m1Dir;   // 'CALL' ou 'PUT'
-        payload.duration_unit = _m1DUnit;
-        payload.duration      = Math.min(_m1DMax, Math.max(_m1DMin, parseInt(est.duracao) || 1));
+    } else if (est.tipo === 'trading_pro') {
+        const dir   = (bot._canaleDir || 'CALL').toUpperCase();
+        const dUnit = est.duracao_unit || 't';
+        const dMax  = dUnit === 't' ? 10 : 5;
+        payload.contract_type = dir;
+        payload.duration_unit = dUnit;
+        payload.duration      = Math.min(dMax, Math.max(1, parseInt(est.duracao) || 1));
         delete payload.barrier;
-        // Usa a stake configurada na estratégia (não o mgr externo para evitar Martingale)
-        payload.amount = Math.max(0.35, parseFloat(est.stake) || 0.35);
-        bot.stake      = payload.amount;
     }
 
     // Espelha o mesmo trade na conta secundária (se conectada)
@@ -18615,7 +18673,7 @@ function mobToggleBot() {
 }
 
 function mobNavClick(aba) {
-  ['home','estrategias','config','perfil'].forEach(id => {
+  ['home','estrategias','quotex','config','perfil'].forEach(id => {
     document.getElementById('mob-nav-' + id)?.classList.remove('active');
   });
   document.getElementById('mob-nav-' + aba)?.classList.add('active');
@@ -18630,6 +18688,22 @@ function mobNavClick(aba) {
       painel.classList.add('mob-open');
       if (overlay) overlay.style.display = 'block';
       if (btn) btn.textContent = '✕';
+    }
+  } else if (aba === 'quotex') {
+    mobFecharMenu();
+    // Aba Quotex: abre direto o modal do gráfico de velas
+    if (typeof qxChartAbrir === 'function') qxChartAbrir();
+    // Depois de fechar o gráfico volta o estado da nav para home
+    const modal = document.getElementById('modal-qx-chart');
+    if (modal) {
+      const _obs = new MutationObserver(() => {
+        if (modal.style.display === 'none') {
+          document.getElementById('mob-nav-quotex')?.classList.remove('active');
+          document.getElementById('mob-nav-home')?.classList.add('active');
+          _obs.disconnect();
+        }
+      });
+      _obs.observe(modal, { attributes: true, attributeFilter: ['style'] });
     }
   } else if (aba === 'config') {
     mobFecharMenu();
@@ -24756,6 +24830,2231 @@ function _adaptativoRegistrarResultado(resultado, lucro) {
 
 
 </script>
+
+<!-- ══════════════════════════════════════════════════════════
+     QUOTEX — Lógica de conexão e modal
+════════════════════════════════════════════════════════════ -->
+<script>
+// ── Estado local Quotex ──────────────────────────────────────────────────────
+const _qx = {
+    status:     'desconectado',   // desconectado | conectando | conectado | erro
+    pollTimer:  null,
+    pollCount:  0,
+};
+
+// ── Helpers UI ───────────────────────────────────────────────────────────────
+function _qxBadge(msg, cor) {
+    const el = document.getElementById('qx-status-badge');
+    if (!el) return;
+    el.style.display = 'block';
+    el.style.color = cor || '#aaa';
+    el.style.border = '1px solid ' + (cor || '#333');
+    el.style.background = 'rgba(0,0,0,0.4)';
+    el.textContent = msg;
+}
+
+function _qxAtualizarBotao(status, extra) {
+    const btn = document.getElementById('btn-quotex-conectar');
+    const lbl = document.getElementById('lbl-quotex-status');
+    if (!btn || !lbl) return;
+    if (status === 'conectado') {
+        btn.style.borderColor = 'rgba(0,255,65,0.6)';
+        btn.style.color = '#00ff41';
+        btn.firstChild.textContent = '🟢 Quotex';
+        lbl.style.color = '#00ff41';
+        lbl.textContent = extra || 'Conectada';
+    } else if (status === 'conectando') {
+        btn.style.borderColor = 'rgba(255,189,46,0.6)';
+        btn.style.color = '#ffbd2e';
+        btn.firstChild.textContent = '🟡 Quotex';
+        lbl.style.color = '#ffbd2e';
+        lbl.textContent = 'Conectando...';
+    } else if (status === 'erro') {
+        btn.style.borderColor = 'rgba(255,68,68,0.6)';
+        btn.style.color = '#f44';
+        btn.firstChild.textContent = '🔴 Quotex';
+        lbl.style.color = '#f44';
+        lbl.textContent = extra || 'Erro';
+    } else {
+        btn.style.borderColor = 'rgba(255,80,0,0.55)';
+        btn.style.color = '#ff6b00';
+        btn.firstChild.textContent = '🟠 Quotex';
+        lbl.style.color = '#57606a';
+        lbl.textContent = 'Desconectada';
+    }
+}
+
+// ── Abrir modal ───────────────────────────────────────────────────────────────
+// ── Chave localStorage para persistir email ───────────────────────────────────
+const _QX_EMAIL_KEY = 'qx_ultimo_email';
+
+function quotexAbrirModal() {
+    // Pré-preenche email salvo no localStorage
+    _qxRestaurarEmail();
+    // Mostra estado atual ao abrir
+    fetch('/quotex/status')
+        .then(r => r.json())
+        .then(d => _qxRenderizarEstado(d))
+        .catch(() => {});
+    const m = document.getElementById('modal-quotex');
+    if (m) m.style.display = 'flex';
+}
+
+// ── Salva email no localStorage ───────────────────────────────────────────────
+function _qxSalvarEmail(email) {
+    if (!email) return;
+    try { localStorage.setItem(_QX_EMAIL_KEY, email); } catch (_) {}
+}
+
+// ── Restaura email nos campos do modal ────────────────────────────────────────
+function _qxRestaurarEmail() {
+    try {
+        const email = localStorage.getItem(_QX_EMAIL_KEY) || '';
+        if (!email) return;
+        const f1 = document.getElementById('qx-email');
+        const f2 = document.getElementById('qx-email-ssid');
+        if (f1 && !f1.value) f1.value = email;
+        if (f2 && !f2.value) f2.value = email;
+    } catch (_) {}
+}
+
+// ── Resetar sessão: para o automático, zera contadores, mantém conectado ─────
+function qxResetarSessao() {
+    _qxPararAnalise();
+    _qxModo.lucroSessao  = 0;
+    _qxModo.galeAtual    = 0;
+    _qxModo.sorosLucro   = 0;
+    _qxModo.qsrIdx       = 0;
+    _qxModo.masIdx       = 0;
+    _qxModo._lrDivida    = 0;
+    _qxModo.opBloqueada  = false;
+    _qxChart.historico   = [];
+    _qxRenderHistorico();
+    // Reseta input de valor para o base
+    const vBase = _qxModo._valorBase || parseFloat(document.getElementById('qx-valor-input')?.value || 1);
+    _qxModo.valorAtual = vBase;
+    const inp = document.getElementById('qx-valor-input');
+    if (inp) inp.value = vBase.toFixed(2);
+    _qxRecalcPagamento();
+    _qxOpStatusMsg('🔄 Sessão resetada — gerenciamento e histórico zerados', '#ffbd2e');
+}
+
+// ── Resetar sessão pelo modal de conexão (reinicia análise automática) ────────
+function qxResetarSessaoModal() {
+    qxResetarSessao();
+    fecharModal('modal-quotex');
+    // Reabre o gráfico já resetado
+    setTimeout(() => qxChartAbrir(), 200);
+}
+
+// ── Resetar só o placar (wins/losses/lucro) da sessão Quotex ─────────────────
+function qxResetarPlacarLocal() {
+    _qxChart.historico  = [];
+    _qxModo.lucroSessao = 0;
+    _qxRenderHistorico();
+    _qxOpStatusMsg('🗑️ Placar da sessão zerado', '#f87171');
+}
+
+// ── Renderizar estado no modal ────────────────────────────────────────────────
+function _qxRenderizarEstado(d) {
+    const form    = document.getElementById('qx-form-fields');
+    const formSsid = document.getElementById('qx-form-ssid');
+    const painel  = document.getElementById('qx-painel-conectado');
+    const otpArea = document.getElementById('qx-otp-area');
+    const sub     = document.getElementById('qx-modal-sub');
+    const infoConta = document.getElementById('qx-info-conta');
+    const infoSaldo = document.getElementById('qx-info-saldo');
+
+    if (!form || !painel) return;
+    _qx.status = d.status || 'desconectado';
+
+    // OTP pendente — mostra campo de código 2FA
+    if (d.otp_aguardando) {
+        form.style.display    = 'none';
+        if (formSsid) formSsid.style.display = 'none';
+        painel.style.display  = 'none';
+        if (otpArea) {
+            otpArea.style.display = 'block';
+            const pr = document.getElementById('qx-otp-prompt');
+            if (pr) pr.textContent = d.otp_prompt || 'Verifique seu e-mail e insira o código recebido:';
+        }
+        if (sub) sub.textContent = '🔐 Verificação em duas etapas';
+        _qxBadge('⏳ AGUARDANDO CÓDIGO OTP...', '#ffbd2e');
+        _qxAtualizarBotao('conectando');
+        return;
+    }
+    if (otpArea) otpArea.style.display = 'none';
+
+    if (d.status === 'conectado') {
+        form.style.display    = 'none';
+        if (formSsid) formSsid.style.display = 'none';
+        painel.style.display  = 'block';
+        if (sub) sub.textContent = 'Sessão ativa na Quotex';
+        if (infoConta) infoConta.textContent = (d.email || '') + ' — ' + (d.tipo_conta || 'DEMO');
+        if (infoSaldo) infoSaldo.textContent = 'Saldo: $' + parseFloat(d.saldo || 0).toFixed(2);
+        _qxBadge('✅ CONECTADA — ' + (d.tipo_conta || 'DEMO'), '#00ff41');
+        _qxAtualizarBotao('conectado', (d.tipo_conta || 'DEMO') + ' • $' + parseFloat(d.saldo || 0).toFixed(2));
+        if (d.saldo > 0 && typeof updateHeader === 'function') updateHeader(d.saldo);
+
+    } else if (d.status === 'conectando') {
+        form.style.display    = 'none';
+        if (formSsid) formSsid.style.display = 'none';
+        painel.style.display  = 'none';
+        if (sub) sub.textContent = 'Aguardando autenticação...';
+        _qxBadge('⏳ CONECTANDO...', '#ffbd2e');
+        _qxAtualizarBotao('conectando');
+
+    } else if (d.status === 'erro') {
+        form.style.display    = 'block';
+        painel.style.display  = 'none';
+        if (sub) sub.textContent = 'Informe suas credenciais da Quotex';
+        _qxBadge('❌ ERRO: ' + (d.erro || 'falha na conexão'), '#f44');
+        _qxAtualizarBotao('erro', d.erro ? d.erro.substring(0, 30) : 'Erro');
+
+    } else {
+        form.style.display    = 'block';
+        painel.style.display  = 'none';
+        if (sub) sub.textContent = 'Informe suas credenciais da Quotex';
+        const badge = document.getElementById('qx-status-badge');
+        if (badge) badge.style.display = 'none';
+        _qxAtualizarBotao('desconectado');
+    }
+}
+
+// ── Alterna abas SENHA / SSID no modal ───────────────────────────────────────
+function qxMostrarAba(aba) {
+    const formSenha = document.getElementById('qx-form-fields');
+    const formSsid  = document.getElementById('qx-form-ssid');
+    const tabSenha  = document.getElementById('qx-tab-senha');
+    const tabSsid   = document.getElementById('qx-tab-ssid');
+    if (aba === 'ssid') {
+        if (formSenha) formSenha.style.display = 'none';
+        if (formSsid)  formSsid.style.display  = 'block';
+        if (tabSsid)  { tabSsid.style.color  = '#ffbd2e'; tabSsid.style.borderBottom  = '2px solid #ffbd2e'; tabSsid.style.background  = 'rgba(255,189,46,0.10)'; }
+        if (tabSenha) { tabSenha.style.color = '#888';    tabSenha.style.borderBottom = '2px solid transparent'; tabSenha.style.background = 'transparent'; }
+    } else {
+        if (formSenha) formSenha.style.display = 'block';
+        if (formSsid)  formSsid.style.display  = 'none';
+        if (tabSenha) { tabSenha.style.color = '#ff6b00'; tabSenha.style.borderBottom = '2px solid #ff6b00'; tabSenha.style.background = 'rgba(255,107,0,0.15)'; }
+        if (tabSsid)  { tabSsid.style.color  = '#888';   tabSsid.style.borderBottom  = '2px solid transparent'; tabSsid.style.background = 'transparent'; }
+    }
+}
+
+// ── SSID Hunter — captura automática ─────────────────────────────────────────
+let _hunterTimer = null;
+
+function qxCapturarSsidAuto() {
+    const btn    = document.getElementById('qx-btn-capturar');
+    const painel = document.getElementById('qx-hunter-status');
+    if (btn)    btn.style.display    = 'none';
+    if (painel) painel.style.display = 'block';
+    _qxHunterMsg('⏳', 'Abrindo Chrome...', 'Faça login na janela que vai abrir', '#ffbd2e');
+    fetch('/quotex/ssid-hunter/iniciar', { method: 'POST' })
+        .then(r => r.json())
+        .then(d => {
+            if (!d.ok) { _qxHunterMsg('❌', 'Erro: ' + (d.erro || 'falha'), '', '#f44'); return; }
+            _qxHunterPoll();
+        })
+        .catch(() => _qxHunterMsg('❌', 'Sem resposta do servidor', '', '#f44'));
+}
+
+function _qxHunterMsg(icone, msg, sub, cor) {
+    const ei = document.getElementById('qx-hunter-icone');
+    const em = document.getElementById('qx-hunter-msg');
+    const es = document.getElementById('qx-hunter-sub');
+    if (ei) ei.textContent = icone;
+    if (em) { em.textContent = msg; em.style.color = cor || '#ffbd2e'; }
+    if (es) es.textContent = sub || '';
+}
+
+function _qxHunterPoll() {
+    clearInterval(_hunterTimer);
+    _hunterTimer = setInterval(() => {
+        fetch('/quotex/ssid-hunter/status')
+            .then(r => r.json())
+            .then(d => {
+                if (d.status === 'aguardando_login') {
+                    _qxHunterMsg('🌐', 'Chrome aberto!', 'Faça login na Quotex — o SSID será capturado automaticamente', '#00ff41');
+                } else if (d.status === 'capturado' && d.ssid) {
+                    clearInterval(_hunterTimer);
+                    _qxHunterMsg('✅', 'SSID CAPTURADO!', 'Preenchido automaticamente — clique DEMO ou REAL', '#00ff41');
+                    const inp = document.getElementById('qx-ssid-input');
+                    if (inp) inp.value = d.ssid;
+                    setTimeout(() => {
+                        const painel = document.getElementById('qx-hunter-status');
+                        const btn    = document.getElementById('qx-btn-capturar');
+                        if (painel) painel.style.display = 'none';
+                        if (btn)    btn.style.display    = 'block';
+                        _qxBadge('✅ SSID capturado! Clique DEMO ou REAL para conectar.', '#00ff41');
+                    }, 3000);
+                } else if (d.status === 'erro') {
+                    clearInterval(_hunterTimer);
+                    _qxHunterMsg('❌', 'Erro: ' + (d.erro || 'falha'), '', '#f44');
+                    setTimeout(() => {
+                        const painel = document.getElementById('qx-hunter-status');
+                        const btn    = document.getElementById('qx-btn-capturar');
+                        if (painel) painel.style.display = 'none';
+                        if (btn)    btn.style.display    = 'block';
+                    }, 4000);
+                }
+            }).catch(() => {});
+    }, 1500);
+}
+
+function qxCancelarHunter() {
+    clearInterval(_hunterTimer);
+    fetch('/quotex/ssid-hunter/parar', { method: 'POST' }).catch(() => {});
+    const painel = document.getElementById('qx-hunter-status');
+    const btn    = document.getElementById('qx-btn-capturar');
+    if (painel) painel.style.display = 'none';
+    if (btn)    btn.style.display    = 'block';
+}
+
+// ── Reconectar via SSID direto do painel ─────────────────────────────────────
+function qxChartReconectar() {
+    quotexAbrirModal();
+    setTimeout(() => qxMostrarAba('ssid'), 150);
+    setTimeout(() => qxCapturarSsidAuto(), 300);
+}
+
+// ── Conectar via email/senha ──────────────────────────────────────────────────
+function quotexConectar(tipo) {
+    const email = (document.getElementById('qx-email') || {}).value || '';
+    const senha = (document.getElementById('qx-senha') || {}).value || '';
+    if (!email || !senha) { _qxBadge('⚠️ Informe email e senha', '#ffbd2e'); return; }
+    _qxSalvarEmail(email);   // salva email para próximas conexões
+    _qxBadge('⏳ CONECTANDO...', '#ffbd2e');
+    _qxAtualizarBotao('conectando');
+    fetch('/quotex/conectar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, senha, tipo_conta: tipo })
+    }).then(r => r.json()).then(d => {
+        if (d.ok) { _qxStartPoll(); }
+        else { _qxBadge('❌ ' + (d.erro || 'Erro'), '#f44'); _qxAtualizarBotao('erro', d.erro || 'Erro'); }
+    }).catch(e => { _qxBadge('❌ Erro de rede: ' + e.message, '#f44'); _qxAtualizarBotao('erro', 'Sem resposta'); });
+}
+
+// ── Conectar via SSID (sem senha — evita HTTP 403) ───────────────────────────
+function quotexConectarSsid(tipo) {
+    const email = (document.getElementById('qx-email-ssid') || {}).value || '';
+    const ssid  = (document.getElementById('qx-ssid-input')  || {}).value || '';
+    if (!email) { _qxBadge('⚠️ Informe o email da conta', '#ffbd2e'); return; }
+    if (!ssid)  { _qxBadge('⚠️ Cole o valor do cookie ssid', '#ffbd2e'); return; }
+    _qxSalvarEmail(email);   // salva email para próximas conexões
+    _qxBadge('⏳ CONECTANDO VIA SSID...', '#ffbd2e');
+    _qxAtualizarBotao('conectando');
+    fetch('/quotex/conectar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, senha: '', ssid, tipo_conta: tipo })
+    }).then(r => r.json()).then(d => {
+        if (d.ok) { _qxStartPoll(); }
+        else { _qxBadge('❌ ' + (d.erro || 'Erro'), '#f44'); _qxAtualizarBotao('erro', d.erro || 'Erro'); }
+    }).catch(() => { _qxBadge('❌ Sem resposta do servidor', '#f44'); _qxAtualizarBotao('erro', 'Sem resposta'); });
+}
+
+// ── Polling de status (aguarda conectar) ─────────────────────────────────────
+function _qxStartPoll() {
+    _qx.pollCount = 0;
+    clearInterval(_qx.pollTimer);
+    _qx.pollTimer = setInterval(() => {
+        _qx.pollCount++;
+        fetch('/quotex/status')
+            .then(r => r.json())
+            .then(d => {
+                _qxRenderizarEstado(d);
+                if (d.status === 'conectado' || d.status === 'erro') {
+                    clearInterval(_qx.pollTimer);
+                    if (d.status === 'conectado') {
+                        if (typeof print === 'function')
+                            print('🟢 QUOTEX conectada — ' + (d.tipo_conta || '') + ' | Saldo: $' + parseFloat(d.saldo || 0).toFixed(2), 'log-info');
+                        // Sincroniza saldo imediatamente ao conectar
+                        _qxSincronizarSaldo();
+                    }
+                }
+            })
+            .catch(() => {});
+        if (_qx.pollCount > 60) clearInterval(_qx.pollTimer); // timeout 60s
+    }, 1000);
+}
+
+// ── Desconectar ───────────────────────────────────────────────────────────────
+function quotexDesconectar() {
+    fetch('/quotex/desconectar', { method: 'POST' })
+        .then(r => r.json())
+        .then(() => {
+            _qxRenderizarEstado({ status: 'desconectado' });
+            if (typeof print === 'function')
+                print('🔌 QUOTEX desconectada.', 'log-info');
+        })
+        .catch(() => {});
+}
+
+// ── Sincronização de saldo via Frontend ──────────────────────────────────────
+// Lê o saldo diretamente do DOM da Quotex (painel injetado no browser) e envia
+// ao backend para manter _QUOTEX_STATE["saldo"] sempre atualizado sem esperar
+// o polling de 30 segundos.
+function _qxSincronizarSaldo() {
+    if (_qx.status !== 'conectado') return;
+
+    // Tenta extrair o saldo do label do botão lateral (ex.: "DEMO • $1234.56")
+    // e também do painel modal conectado (ex.: "Saldo: $1234.56")
+    let saldoNum = 0;
+
+    const lbl = document.getElementById('lbl-quotex-status');
+    if (lbl) {
+        const match = lbl.textContent.match(/\$([0-9]+(?:[.,][0-9]+)?)/);
+        if (match) saldoNum = parseFloat(match[1].replace(',', '.')) || 0;
+    }
+
+    // Fallback: painel do modal
+    if (!saldoNum) {
+        const infoSaldo = document.getElementById('qx-info-saldo');
+        if (infoSaldo) {
+            const match = infoSaldo.textContent.match(/\$([0-9]+(?:[.,][0-9]+)?)/);
+            if (match) saldoNum = parseFloat(match[1].replace(',', '.')) || 0;
+        }
+    }
+
+    if (saldoNum <= 0) return;
+
+    fetch('/quotex/sincronizar-saldo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ saldo: saldoNum })
+    }).catch(() => {});
+}
+
+// ── Atualiza saldo da Quotex no header imediatamente (sem esperar o poll) ────
+function _qxAtualizarSaldoImediato() {
+    fetch('/quotex/saldo')
+        .then(r => r.json())
+        .then(d => {
+            if (!d.ok || !d.saldo) return;
+            const v = parseFloat(d.saldo || 0);
+            if (v <= 0) return;
+            _qxUltimoSaldoValido = v;
+            const lbl = document.getElementById('lbl-quotex-status');
+            if (lbl) lbl.textContent = (d.tipo_conta || 'DEMO') + (d.cache ? ' ⚠' : '') + ' • $' + v.toFixed(2);
+            const infoSaldo = document.getElementById('qx-info-saldo');
+            if (infoSaldo) infoSaldo.textContent = 'Saldo: $' + v.toFixed(2);
+            if (typeof updateHeader === 'function') updateHeader(v);
+        })
+        .catch(() => {});
+}
+
+// ── Poll periódico de keep-alive (a cada 5s) ─────────────────────────────────
+// Roda sempre que a Quotex já foi conectada pelo menos uma vez (_qxUltimoSaldo > 0),
+// mesmo que o status temporariamente vá para "erro" (WS morto / gráfico sumido).
+// Isso garante que o hd-balance nunca trave enquanto o backend tiver cache.
+let _qxUltimoSaldoValido = 0;  // guarda o último saldo exibido
+setInterval(() => {
+    // Roda se: conectado OU se já temos um saldo conhecido (cache no backend)
+    if (_qx.status !== 'conectado' && _qxUltimoSaldoValido === 0) return;
+
+    fetch('/quotex/saldo')
+        .then(r => r.json())
+        .then(d => {
+            // ok=true → saldo fresco OU saldo do cache do backend
+            if (!d.ok || !d.saldo) return;
+            const _qxSaldoNum = parseFloat(d.saldo || 0);
+            if (_qxSaldoNum <= 0) return;
+
+            _qxUltimoSaldoValido = _qxSaldoNum;
+            // mantém saldo sincronizado para gerenciamentos % da banca
+            if (typeof _qxModo !== 'undefined') _qxModo.saldoAtual = _qxSaldoNum;
+
+            const lbl = document.getElementById('lbl-quotex-status');
+            if (lbl) lbl.textContent = (d.tipo_conta || 'DEMO') + (d.cache ? ' ⚠' : '') + ' • $' + _qxSaldoNum.toFixed(2);
+            const infoSaldo = document.getElementById('qx-info-saldo');
+            if (infoSaldo) infoSaldo.textContent = 'Saldo: $' + _qxSaldoNum.toFixed(2);
+
+            // ── Atualiza o header principal do bot IMEDIATAMENTE ─────────────
+            if (typeof updateHeader === 'function') {
+                updateHeader(_qxSaldoNum);
+            }
+
+            // Propaga para o estado interno do backend (só quando conectado)
+            if (_qx.status === 'conectado') _qxSincronizarSaldo();
+        })
+        .catch(() => {});
+}, 5000);
+
+// Expõe globalmente para scripts externos (ex: script injetado na Quotex)
+window.qxSincronizarSaldo = _qxSincronizarSaldo;
+
+// ── Poll de evento de saldo (a cada 1s) — reage imediatamente à mudança ──────
+// Quando o Tampermonkey envia um novo saldo, o backend incrementa um contador.
+// Aqui detectamos essa mudança e atualizamos o hd-balance sem esperar os 5s.
+let _qxSaldoEventoVersao = -1;
+setInterval(() => {
+    if (_qxUltimoSaldoValido === 0 && _qx.status !== 'conectado') return;
+    fetch('/quotex/saldo-evento')
+        .then(r => r.json())
+        .then(d => {
+            if (d.v !== undefined && d.v !== _qxSaldoEventoVersao) {
+                _qxSaldoEventoVersao = d.v;
+                if (d.v > 0) _qxAtualizarSaldoImediato();
+            }
+        })
+        .catch(() => {});
+}, 1000);
+
+// ── Poll de resultados Quotex (a cada 1s) — aplica gerenciamento no frontend ──
+// Quando o Tampermonkey detecta WIN/LOSS, o backend enfileira o resultado.
+// Aqui consumimos a fila e aplicamos bot.mgr.updateResult() igual ao fluxo Deriv.
+setInterval(() => {
+    if (_qxUltimoSaldoValido === 0 && _qx.status !== 'conectado') return;
+    fetch('/quotex/resultados-pendentes')
+        .then(r => r.json())
+        .then(d => {
+            if (!d.resultados || d.resultados.length === 0) return;
+            d.resultados.forEach(r => _qxProcessarResultado(r));
+        })
+        .catch(() => {});
+}, 1000);
+
+/**
+ * Processa um resultado de trade Quotex:
+ * - Atualiza bot.wins / bot.losses / bot.profit
+ * - Chama bot.mgr.updateResult(won, profit) → todos os gerenciamentos funcionam
+ * - Atualiza bot.stake com a próxima entrada calculada pelo gerenciador
+ * - Imprime log na tela e atualiza o header
+ * - Verifica Stop Win / Stop Loss
+ */
+function _qxProcessarResultado(res) {
+    if (!bot || !bot.mgr) return;
+
+    const won    = !!res.win;
+    const profit = parseFloat(res.lucro) || 0;
+    const saldo  = res.saldo != null ? parseFloat(res.saldo) : null;
+    const ativo  = res.ativo  || '—';
+    const dir    = res.direcao || '—';
+
+    // Atualiza contadores do bot
+    bot.profit += profit;
+    if (won) {
+        bot.wins++;
+        bot._seqWinAtual  = (bot._seqWinAtual  || 0) + 1;
+        bot._seqLossAtual = 0;
+    } else {
+        bot.losses++;
+        bot._seqLossAtual = (bot._seqLossAtual || 0) + 1;
+        bot._seqWinAtual  = 0;
+    }
+
+    // Atualiza gerenciador e obtém próxima stake
+    bot.mgr.updateResult(won, profit);
+    const proxStake = bot.mgr.getStake();
+    bot.stake = proxStake;
+    if (bot.stake > (bot._maxStakeUsada || 0)) bot._maxStakeUsada = bot.stake;
+
+    // Juros Compostos: sincroniza banca interna com o saldo real
+    if (bot.mgr.modo === '💹 Juros Compostos' && saldo && saldo > 0) {
+        bot.mgr._jcBanca = saldo;
+        if (typeof bot.mgr._recalcJC === 'function') bot.mgr._recalcJC();
+        bot.stake = bot.mgr.getStake();
+    }
+
+    // Log no terminal do bot
+    const prefixo = won ? '✅ [QX] GANHOU' : '🔁 [QX] PERDEU';
+    const sldTxt  = saldo != null ? ` | Saldo: $${saldo.toFixed(2)}` : '';
+    const mgmtSt  = (typeof bot.mgr.status === 'function') ? ` | ${bot.mgr.status()}` : '';
+    if (won) {
+        print(`${prefixo} | ${ativo} ${dir} | +$${profit.toFixed(2)}${sldTxt} | Próxima: $${proxStake.toFixed(2)}${mgmtSt}`, 'log-win');
+    } else {
+        print(`${prefixo} | ${ativo} ${dir} | -$${Math.abs(profit).toFixed(2)}${sldTxt} | Próxima: $${proxStake.toFixed(2)}${mgmtSt}`, 'log-loss');
+    }
+
+    // Atualiza header (banca, wins, losses, profit)
+    if (saldo && saldo > 0 && typeof updateHeader === 'function') {
+        updateHeader(saldo);
+    } else if (typeof updateHeader === 'function') {
+        updateHeader();
+    }
+
+    // Verifica Stop Win / Stop Loss (igual ao fluxo Deriv)
+    const _saldoAtual = saldo || parseFloat((document.getElementById('hd-balance') || {}).textContent?.replace('$','')) || 0;
+
+    // Stop Loss
+    if (bot.stopLoss < 999 && bot.profit <= -Math.abs(bot.stopLoss)) {
+        print(`🛑 [QX] STOP LOSS ATINGIDO! Lucro: -$${Math.abs(bot.profit).toFixed(2)}`, 'log-loss');
+        if (typeof pararBot === 'function') pararBot();
+        return;
+    }
+
+    // Stop Win
+    if (bot.stopWin < 999 && bot.profit >= bot.stopWin) {
+        print(`🏆 [QX] STOP WIN ATINGIDO! Lucro: +$${bot.profit.toFixed(2)}`, 'log-win');
+        if (typeof stopWinExibirModal === 'function') {
+            stopWinExibirModal(bot.profit, bot.wins, bot.losses, _saldoAtual, res.estrategia || 'Quotex', bot.gerenciamento);
+        }
+        if (typeof pararBot === 'function') pararBot();
+        return;
+    }
+
+    // Juros Compostos: verifica meta/stop próprios
+    if (bot.mgr.modo === '💹 Juros Compostos' && typeof bot.mgr.jcVerificarMeta === 'function') {
+        const _jcStatus = bot.mgr.jcVerificarMeta();
+        if (_jcStatus === 'meta') {
+            print(`🏆 [QX] META JC ATINGIDA! Banca: $${bot.mgr._jcBanca.toFixed(2)}`, 'log-win');
+            if (typeof pararBot === 'function') pararBot();
+        } else if (_jcStatus === 'stop') {
+            const _jcPerda = bot.mgr._jcBancaInicial - bot.mgr._jcBanca;
+            print(`🛑 [QX] STOP LOSS JC! Banca: $${bot.mgr._jcBanca.toFixed(2)} | Perda: -$${_jcPerda.toFixed(2)}`, 'log-loss');
+            if (typeof pararBot === 'function') pararBot();
+        }
+    }
+}
+
+// ── Ao carregar a página: verifica se já tem sessão ativa ─────────────────────
+window.addEventListener('load', () => {
+    setTimeout(() => {
+        fetch('/quotex/status')
+            .then(r => r.json())
+            .then(d => {
+                _qxAtualizarBotao(d.status,
+                    d.status === 'conectado'
+                        ? (d.tipo_conta || 'DEMO') + ' • $' + parseFloat(d.saldo || 0).toFixed(2)
+                        : null);
+                // Se já estava conectada, sincroniza o header imediatamente
+                if (d.status === 'conectado' && d.saldo > 0 && typeof updateHeader === 'function') {
+                    updateHeader(d.saldo);
+                    _qx.status = 'conectado';
+                }
+            })
+            .catch(() => {});
+    }, 2000);
+});
+</script>
+
+<!-- ══════════════════════════════════════════════════════════
+     MODAL — GRÁFICO DE VELAS QUOTEX (Trading Panel)
+════════════════════════════════════════════════════════════ -->
+<div id="modal-qx-chart" style="
+    display:none; position:fixed; top:0; left:0; width:100%; height:100%;
+    background:rgba(0,0,0,0.92); z-index:9900;
+    font-family:'Share Tech Mono',monospace;">
+
+  <!-- Cabeçalho -->
+  <div style="display:flex; align-items:center; justify-content:space-between;
+              padding:8px 14px; background:#0d0d1a; border-bottom:1px solid rgba(255,107,0,0.4);">
+    <div style="display:flex; align-items:center; gap:10px;">
+      <span style="color:#ff6b00; font-size:0.9rem; letter-spacing:2px; font-weight:bold;">📊 QUOTEX</span>
+      <select id="qx-ativo-sel"
+          style="background:#0a0a12; border:1px solid rgba(255,107,0,0.5); color:#ff6b00;
+                 padding:4px 8px; font-family:'Share Tech Mono'; font-size:0.75rem;
+                 border-radius:3px; outline:none; cursor:pointer; max-width:160px;"
+          onchange="qxChartCarregar()">
+        <option value="EURUSD_otc">EUR/USD (OTC)</option>
+      </select>
+      <select id="qx-periodo-sel"
+          style="background:#0a0a12; border:1px solid rgba(255,107,0,0.3); color:#aaa;
+                 padding:4px 6px; font-family:'Share Tech Mono'; font-size:0.7rem;
+                 border-radius:3px; outline:none; cursor:pointer;"
+          onchange="qxChartCarregar()">
+        <option value="5">5s</option>
+        <option value="10">10s</option>
+        <option value="15">15s</option>
+        <option value="30">30s</option>
+        <option value="60" selected>1m</option>
+        <option value="120">2m</option>
+        <option value="300">5m</option>
+        <option value="900">15m</option>
+      </select>
+      <span id="qx-payout-badge"
+          style="background:rgba(0,255,65,0.1); border:1px solid rgba(0,255,65,0.4);
+                 color:#00ff41; padding:3px 8px; font-size:0.7rem; border-radius:3px;">
+        --% payout
+      </span>
+      <span id="qx-preco-atual"
+          style="color:#fff; font-size:0.85rem; font-weight:bold; letter-spacing:1px;">
+        --
+      </span>
+      <span id="qx-preco-dir" style="font-size:0.8rem;">⬆️</span>
+    </div>
+    <div style="display:flex; align-items:center; gap:8px;">
+      <span style="font-size:0.7rem; color:#aaa;">Saldo:</span>
+      <span id="qx-chart-saldo" style="color:#ff6b00; font-weight:bold; font-size:0.8rem;">$--</span>
+      <span id="qx-chart-tipo"
+          style="font-size:0.62rem; color:#555; border:1px solid #333;
+                 padding:2px 6px; border-radius:3px;">DEMO</span>
+      <button onclick="qxChartFechar()"
+          style="background:transparent; border:1px solid #f44; color:#f44;
+                 padding:4px 10px; font-family:'Share Tech Mono'; font-size:0.7rem;
+                 cursor:pointer; border-radius:3px; letter-spacing:1px;">
+        ✕ FECHAR
+      </button>
+    </div>
+  </div>
+
+  <!-- Corpo: gráfico + painel de operação -->
+  <div style="display:flex; height:calc(100vh - 44px);">
+
+    <!-- Gráfico de velas -->
+    <div style="flex:1; position:relative; background:#0d0e17;">
+      <div id="qx-chart-container" style="width:100%; height:100%;"></div>
+
+      <div id="qx-vela-timer" style="
+          position:absolute; right:68px;
+          background:rgba(30,34,45,0.95); border:1px solid rgba(255,255,255,0.15);
+          color:#c8d0e0; font-family:'Share Tech Mono',monospace;
+          font-size:0.74rem; padding:1px 7px; border-radius:3px;
+          pointer-events:none; z-index:6; letter-spacing:1px;
+          white-space:nowrap; display:none;">
+        00:00
+      </div>
+
+      <div id="qx-op-timer-overlay" style="
+          position:absolute; left:50%; transform:translateX(-50%);
+          display:none; pointer-events:none; z-index:8;
+          flex-direction:column; align-items:center; gap:3px;">
+        <div id="qx-op-timer-bubble" style="
+            background:rgba(30,34,45,0.97);
+            border:2px solid #27c93f;
+            border-radius:20px; padding:3px 12px;
+            font-family:'Share Tech Mono',monospace;
+            font-size:0.78rem; color:#fff;
+            letter-spacing:2px; white-space:nowrap;
+            box-shadow:0 2px 12px rgba(0,0,0,0.6);">
+          $1 • 00:00
+        </div>
+      </div>
+
+      <div id="qx-op-linha-entrada" style="
+          position:absolute; left:0; right:68px;
+          height:1px; pointer-events:none; z-index:7;
+          display:none; border-top:1px dashed #27c93f;">
+      </div>
+
+      <div id="qx-chart-loading" style="
+          position:absolute; top:0; left:0; width:100%; height:100%;
+          display:flex; align-items:center; justify-content:center;
+          background:rgba(13,14,23,0.88); z-index:10; flex-direction:column; gap:10px;">
+        <div style="font-size:1.5rem;">📊</div>
+        <div style="color:#ff6b00; font-size:0.8rem; letter-spacing:2px;" id="qx-chart-loading-msg">
+          CARREGANDO CANDLES...
+        </div>
+      </div>
+
+      <div id="qx-chart-erro" style="
+          display:none; position:absolute; top:0; left:0; width:100%; height:100%;
+          align-items:center; justify-content:center; background:rgba(13,14,23,0.92);
+          z-index:11; flex-direction:column; gap:10px; text-align:center; padding:20px;">
+        <div style="font-size:2rem;">❌</div>
+        <div id="qx-chart-erro-msg" style="color:#f44; font-size:0.8rem;"></div>
+        <button onclick="qxChartCarregar()"
+            style="margin-top:8px; padding:8px 16px; background:rgba(255,107,0,0.1);
+                   border:1px solid #ff6b00; color:#ff6b00; font-family:'Share Tech Mono';
+                   font-size:0.75rem; cursor:pointer; border-radius:3px;">
+          🔄 TENTAR NOVAMENTE
+        </button>
+      </div>
+    </div>
+
+    <!-- Painel direito: operar -->
+    <div style="width:260px; flex-shrink:0; background:#0d0d1a;
+                border-left:1px solid rgba(255,107,0,0.25);
+                display:flex; flex-direction:column; overflow-y:auto; overflow-x:hidden;">
+
+      <div id="qx-banner-desconectado" style="
+          display:none; padding:10px 12px; background:rgba(255,80,0,0.08);
+          border-bottom:2px solid rgba(255,80,0,0.5); text-align:center;">
+        <div style="font-size:0.68rem; color:#ff6b00; letter-spacing:1px; margin-bottom:6px;">
+          🔌 QUOTEX DESCONECTADA
+        </div>
+        <button onclick="qxChartReconectar()"
+            style="width:100%; padding:9px; background:rgba(0,255,65,0.08);
+                   border:1px solid #00ff41; color:#00ff41;
+                   font-family:'Share Tech Mono'; font-size:0.72rem;
+                   letter-spacing:1px; cursor:pointer; border-radius:4px; font-weight:bold;">
+          🤖 RECONECTAR COM SSID
+        </button>
+      </div>
+
+      <!-- MODO DE OPERAÇÃO -->
+      <div style="padding:10px 12px 8px; border-bottom:1px solid rgba(255,255,255,0.06);">
+        <div style="font-size:0.6rem; color:#555; letter-spacing:1px; margin-bottom:8px;">MODO DE OPERAÇÃO</div>
+        <div style="display:flex; flex-direction:column; gap:4px;" id="qx-modo-lista">
+
+          <div class="qx-modo-item qx-modo-ativo" data-modo="manual" onclick="qxSelecionarModo('manual')"
+              style="display:flex; align-items:center; gap:8px; padding:7px 9px; border-radius:5px;
+                     cursor:pointer; border:1px solid rgba(255,255,255,0.12); background:rgba(255,255,255,0.04);">
+            <span style="font-size:0.85rem;">⚪</span>
+            <div>
+              <div style="font-size:0.68rem; color:#c8d0e0; letter-spacing:1px;">MANUAL</div>
+              <div style="font-size:0.58rem; color:#555;">Operação controlada pelo usuário</div>
+            </div>
+          </div>
+
+          <div class="qx-modo-item" data-modo="price_action" onclick="qxSelecionarModo('price_action')"
+              style="display:flex; align-items:center; gap:8px; padding:7px 9px; border-radius:5px;
+                     cursor:pointer; border:1px solid rgba(255,255,255,0.06); background:transparent;">
+            <span style="font-size:0.85rem;">🔵</span>
+            <div>
+              <div style="font-size:0.68rem; color:#c8d0e0; letter-spacing:1px;">PRICE ACTION PRO</div>
+              <div style="font-size:0.58rem; color:#555;">Estratégia de Price Action</div>
+            </div>
+          </div>
+
+          <div class="qx-modo-item" data-modo="fluxo" onclick="qxSelecionarModo('fluxo')"
+              style="display:flex; align-items:center; gap:8px; padding:7px 9px; border-radius:5px;
+                     cursor:pointer; border:1px solid rgba(255,255,255,0.06); background:transparent;">
+            <span style="font-size:0.85rem;">🟣</span>
+            <div>
+              <div style="font-size:0.68rem; color:#c8d0e0; letter-spacing:1px;">FLUXO PRO</div>
+              <div style="font-size:0.58rem; color:#555;">Estratégia baseada em fluxo</div>
+            </div>
+          </div>
+
+          <div class="qx-modo-item" data-modo="automatico" onclick="qxSelecionarModo('automatico')"
+              style="display:flex; align-items:center; gap:8px; padding:7px 9px; border-radius:5px;
+                     cursor:pointer; border:1px solid rgba(255,255,255,0.06); background:transparent;">
+            <span style="font-size:0.85rem;">🟢</span>
+            <div>
+              <div style="font-size:0.68rem; color:#c8d0e0; letter-spacing:1px;">AUTOMÁTICO</div>
+              <div style="font-size:0.58rem; color:#555;">Analisa ativos em tempo real</div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Duração -->
+      <div style="padding:12px 12px 8px; border-bottom:1px solid rgba(255,255,255,0.06);">
+        <div style="font-size:0.62rem; color:#555; letter-spacing:1px; margin-bottom:6px;">TEMPO</div>
+        <div style="display:flex; gap:6px; flex-wrap:wrap;">
+          <button class="qx-dur-btn" data-s="30"  onclick="qxSetDuracao(30)"  style="padding:5px 8px;">30s</button>
+          <button class="qx-dur-btn qx-dur-ativo" data-s="60"  onclick="qxSetDuracao(60)"  style="padding:5px 8px;">1m</button>
+          <button class="qx-dur-btn" data-s="120" onclick="qxSetDuracao(120)" style="padding:5px 8px;">2m</button>
+          <button class="qx-dur-btn" data-s="300" onclick="qxSetDuracao(300)" style="padding:5px 8px;">5m</button>
+        </div>
+        <div style="display:flex; align-items:center; gap:6px; margin-top:8px;">
+          <button onclick="qxAjustarDuracao(-30)"
+              style="padding:5px 10px; background:#0a0a12; border:1px solid #333;
+                     color:#aaa; cursor:pointer; border-radius:3px; font-size:0.9rem;">−</button>
+          <div style="flex:1; text-align:center; color:#0ff; font-size:1rem; font-weight:bold;"
+               id="qx-dur-display">00:01:00</div>
+          <button onclick="qxAjustarDuracao(30)"
+              style="padding:5px 10px; background:#0a0a12; border:1px solid #333;
+                     color:#aaa; cursor:pointer; border-radius:3px; font-size:0.9rem;">+</button>
+        </div>
+      </div>
+
+      <!-- Valor -->
+      <div style="padding:10px 12px; border-bottom:1px solid rgba(255,255,255,0.06);">
+        <div style="font-size:0.62rem; color:#555; letter-spacing:1px; margin-bottom:6px;">INVESTIMENTO</div>
+        <div style="display:flex; align-items:center; gap:6px;">
+          <button onclick="qxAjustarValor(-1)"
+              style="padding:5px 12px; background:#0a0a12; border:1px solid #333;
+                     color:#aaa; cursor:pointer; border-radius:3px; font-size:1rem;">−</button>
+          <div style="flex:1; position:relative;">
+            <input id="qx-valor-input" type="number" min="1" step="1" value="1"
+                style="width:100%; background:#0a0a12; border:1px solid rgba(255,107,0,0.4);
+                       color:#ff6b00; padding:6px 28px 6px 8px; font-family:'Share Tech Mono';
+                       font-size:0.9rem; border-radius:3px; outline:none; text-align:center;">
+            <span style="position:absolute; right:8px; top:50%; transform:translateY(-50%);
+                         color:#555; font-size:0.8rem;">$</span>
+          </div>
+          <button onclick="qxAjustarValor(1)"
+              style="padding:5px 12px; background:#0a0a12; border:1px solid #333;
+                     color:#aaa; cursor:pointer; border-radius:3px; font-size:1rem;">+</button>
+        </div>
+        <div style="display:flex; gap:4px; margin-top:6px;">
+          <button onclick="qxSetValor(1)"  style="flex:1; padding:4px; background:#0a0a12; border:1px solid #222; color:#666; font-family:'Share Tech Mono'; font-size:0.62rem; cursor:pointer; border-radius:2px;">$1</button>
+          <button onclick="qxSetValor(5)"  style="flex:1; padding:4px; background:#0a0a12; border:1px solid #222; color:#666; font-family:'Share Tech Mono'; font-size:0.62rem; cursor:pointer; border-radius:2px;">$5</button>
+          <button onclick="qxSetValor(10)" style="flex:1; padding:4px; background:#0a0a12; border:1px solid #222; color:#666; font-family:'Share Tech Mono'; font-size:0.62rem; cursor:pointer; border-radius:2px;">$10</button>
+          <button onclick="qxSetValor(25)" style="flex:1; padding:4px; background:#0a0a12; border:1px solid #222; color:#666; font-family:'Share Tech Mono'; font-size:0.62rem; cursor:pointer; border-radius:2px;">$25</button>
+        </div>
+      </div>
+
+      <!-- Pagamento estimado -->
+      <div style="padding:8px 12px; border-bottom:1px solid rgba(255,255,255,0.06);
+                  display:flex; justify-content:space-between; align-items:center;">
+        <span style="font-size:0.62rem; color:#555;">Pagamento estimado</span>
+        <span id="qx-pagamento-est" style="color:#00ff41; font-weight:bold; font-size:0.8rem;">$--</span>
+      </div>
+
+      <!-- Botões CALL / PUT -->
+      <div style="padding:12px; display:flex; flex-direction:column; gap:10px;">
+        <button id="qx-btn-call" onclick="qxOperar('call')"
+            style="width:100%; padding:14px; background:rgba(39,201,63,0.12);
+                   border:2px solid #27c93f; color:#27c93f;
+                   font-family:'Share Tech Mono'; font-size:0.9rem;
+                   letter-spacing:2px; cursor:pointer; border-radius:6px; font-weight:bold;">
+          ▲ PARA CIMA
+        </button>
+        <button id="qx-btn-put" onclick="qxOperar('put')"
+            style="width:100%; padding:14px; background:rgba(244,68,68,0.12);
+                   border:2px solid #f44; color:#f44;
+                   font-family:'Share Tech Mono'; font-size:0.9rem;
+                   letter-spacing:2px; cursor:pointer; border-radius:6px; font-weight:bold;">
+          ▼ PARA BAIXO
+        </button>
+      </div>
+
+      <!-- Botão Resetar Sessão + Status da última operação -->
+      <div style="padding:0 12px 4px; display:flex; gap:6px;">
+        <button onclick="qxResetarSessao()"
+            style="flex:1; padding:7px 4px; background:rgba(255,189,46,0.08);
+                   border:1px solid rgba(255,189,46,0.5); color:#ffbd2e;
+                   font-family:'Share Tech Mono'; font-size:0.62rem;
+                   letter-spacing:1px; cursor:pointer; border-radius:4px;">
+          🔄 RESET SESSÃO
+        </button>
+        <button onclick="qxResetarPlacarLocal()"
+            style="flex:1; padding:7px 4px; background:rgba(255,68,68,0.06);
+                   border:1px solid rgba(255,68,68,0.35); color:#f87171;
+                   font-family:'Share Tech Mono'; font-size:0.62rem;
+                   letter-spacing:1px; cursor:pointer; border-radius:4px;">
+          🗑️ RESET PLACAR
+        </button>
+      </div>
+
+      <!-- Status da última operação -->
+      <div id="qx-op-status" style="
+          margin:0 12px 8px; padding:8px 10px; border-radius:4px;
+          font-size:0.7rem; text-align:center; display:none;
+          border:1px solid #333; background:rgba(0,0,0,0.3);">
+      </div>
+
+      <!-- Painel de sinais (Price Action / Fluxo / Automático) -->
+      <div id="qx-painel-sinais" style="display:none; border-top:1px solid rgba(255,255,255,0.06); width:100%;">
+        <div style="padding:8px 12px 6px; display:flex; justify-content:space-between; align-items:center;">
+          <span id="qx-sinais-titulo" style="font-size:0.6rem; color:#555; letter-spacing:1px;">ANÁLISE</span>
+          <div style="display:flex; gap:5px; align-items:center;">
+            <button id="qx-sinais-cfg-btn" onclick="qxAbrirGerenciamento()"
+                style="font-size:0.58rem; padding:2px 7px; background:transparent;
+                       border:1px solid rgba(255,107,0,0.5); color:#ff6b00;
+                       cursor:pointer; border-radius:3px; font-family:'Share Tech Mono';">⚙ CFG</button>
+            <button id="qx-sinais-toggle"
+                style="font-size:0.58rem; padding:2px 7px; background:transparent;
+                       border:1px solid rgba(0,255,65,0.5); color:#00ff41;
+                       cursor:pointer; border-radius:3px; font-family:'Share Tech Mono';"
+                onclick="qxToggleAnalise()">▶ INICIAR</button>
+          </div>
+        </div>
+        <div style="padding:0 12px 6px; display:flex; align-items:center; gap:6px;">
+          <span style="font-size:0.58rem; color:#555;">Payout mín:</span>
+          <span id="qx-payout-min-badge" style="font-size:0.62rem; color:#ffbd2e; font-weight:bold;">90%</span>
+          <span style="font-size:0.58rem; color:#555; margin-left:4px;">Estratégia:</span>
+          <span id="qx-estrategia-badge" style="font-size:0.62rem; color:#60a5fa;">--</span>
+        </div>
+        <div id="qx-sinais-lista" style="
+            padding:0 6px 8px;
+            display:flex; flex-direction:column; gap:4px;
+            overflow-y:auto; max-height:420px; min-height:80px;">
+          <div style="color:#333; font-size:0.62rem; text-align:center; margin-top:20px; padding:0 8px;">
+            Clique em ▶ INICIAR para começar a análise
+          </div>
+        </div>
+      </div>
+
+      <!-- Histórico de operações -->
+      <div id="qx-painel-historico" style="padding:10px 12px; border-top:1px solid rgba(255,255,255,0.06); flex:1;">
+        <div style="font-size:0.62rem; color:#555; letter-spacing:1px; margin-bottom:8px;">
+          OPERAÇÕES — <span id="qx-hist-count">0</span>
+        </div>
+        <div id="qx-hist-lista" style="
+            display:flex; flex-direction:column; gap:4px; max-height:250px; overflow-y:auto;">
+          <div style="color:#333; font-size:0.65rem; text-align:center; margin-top:20px;">
+            Nenhuma operação nesta sessão
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     MODAL — GERENCIAMENTO E ESTRATÉGIA (Quotex)
+════════════════════════════════════════════════════════════ -->
+<div id="modal-qx-gerenciamento" style="
+    display:none; position:fixed; top:0; left:0; width:100%; height:100%;
+    background:rgba(0,0,0,0.7); z-index:10500;
+    align-items:center; justify-content:center;">
+  <div style="
+      background:#0d0d1a; border:1px solid rgba(255,107,0,0.35);
+      border-radius:8px; width:340px; max-height:90vh; overflow-y:auto;
+      font-family:'Share Tech Mono',monospace; padding:0;">
+
+    <div style="padding:12px 16px; border-bottom:1px solid rgba(255,255,255,0.07);
+                display:flex; justify-content:space-between; align-items:center;">
+      <span style="color:#ff6b00; font-size:0.8rem; letter-spacing:2px;">⚙ GERENCIAMENTO E ESTRATÉGIA</span>
+      <button onclick="document.getElementById('modal-qx-gerenciamento').style.display='none'"
+          style="background:transparent; border:none; color:#555; font-size:1rem; cursor:pointer;">✕</button>
+    </div>
+
+    <div style="padding:14px 16px; display:flex; flex-direction:column; gap:14px;">
+
+      <div>
+        <div style="font-size:0.6rem; color:#555; letter-spacing:1px; margin-bottom:6px;">MODO ATIVO</div>
+        <div id="qx-ger-modo-badge" style="
+            padding:6px 12px; background:rgba(255,107,0,0.08);
+            border:1px solid rgba(255,107,0,0.4); border-radius:4px;
+            color:#ff6b00; font-size:0.72rem; text-align:center;">
+          ⚪ MANUAL
+        </div>
+      </div>
+
+      <div>
+        <div style="font-size:0.6rem; color:#555; letter-spacing:1px; margin-bottom:6px;">PAYOUT MÍNIMO (%)</div>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <input id="qx-ger-payout" type="number" min="50" max="100" value="90"
+              style="flex:1; background:#0a0a12; border:1px solid rgba(255,107,0,0.4);
+                     color:#ffbd2e; padding:6px 10px; font-family:'Share Tech Mono';
+                     font-size:0.85rem; border-radius:4px; outline:none; text-align:center;">
+          <span style="color:#555; font-size:0.8rem;">%</span>
+        </div>
+      </div>
+
+      <div>
+        <div style="font-size:0.6rem; color:#555; letter-spacing:1px; margin-bottom:6px;">ESTRATÉGIA</div>
+        <div style="display:flex; flex-direction:column; gap:4px;" id="qx-ger-estrategia-opts">
+          <label style="display:flex; align-items:center; gap:8px; cursor:pointer; padding:5px 8px;
+                         border-radius:4px; border:1px solid rgba(255,255,255,0.06);">
+            <input type="radio" name="qx-estrategia" value="price_action" style="accent-color:#3b82f6;">
+            <div>
+              <div style="font-size:0.68rem; color:#c8d0e0;">🔵 Price Action Pro</div>
+              <div style="font-size:0.57rem; color:#555;">Estrutura, zona, candle, confirmação</div>
+            </div>
+          </label>
+          <label style="display:flex; align-items:center; gap:8px; cursor:pointer; padding:5px 8px;
+                         border-radius:4px; border:1px solid rgba(255,255,255,0.06);">
+            <input type="radio" name="qx-estrategia" value="fluxo" style="accent-color:#a855f7;">
+            <div>
+              <div style="font-size:0.68rem; color:#c8d0e0;">🟣 Fluxo Pro</div>
+              <div style="font-size:0.57rem; color:#555;">Fluxo, aceleração, reteste, sinal</div>
+            </div>
+          </label>
+          <label style="display:flex; align-items:center; gap:8px; cursor:pointer; padding:5px 8px;
+                         border-radius:4px; border:1px solid rgba(255,255,255,0.06);">
+            <input type="radio" name="qx-estrategia" value="ambas" checked style="accent-color:#22c55e;">
+            <div>
+              <div style="font-size:0.68rem; color:#c8d0e0;">🟢 Ambas — Automático</div>
+              <div style="font-size:0.57rem; color:#555;">Price Action + Fluxo combinados</div>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <div>
+        <div style="font-size:0.6rem; color:#555; letter-spacing:1px; margin-bottom:6px;">GERENCIAMENTO</div>
+        <select id="qx-ger-gerenciamento"
+            onchange="qxGerMostrarParams()"
+            style="width:100%; background:#0a0a12; border:1px solid rgba(255,107,0,0.4);
+                   color:#c8d0e0; padding:7px 10px; font-family:'Share Tech Mono';
+                   font-size:0.72rem; border-radius:4px; outline:none; margin-bottom:8px;">
+          <option value="fixo">💰 Fixo — stake constante</option>
+          <option value="martingale">🔄 Martingale — dobra no loss</option>
+          <option value="sorosgale">⚡ SorosGale — reinveste no win</option>
+          <option value="loss_recovery">📉 Loss Recovery — recupera gradual</option>
+          <option value="recovery_cons">🛡️ Recovery Conservador — 1 gale max</option>
+          <option value="qsr">📐 QSR — sequência proporcional</option>
+          <option value="masaniello">📊 Masaniello — ciclos calculados</option>
+          <option value="ral">🏦 RAL — % dinâmica da banca</option>
+          <option value="ccr">🔒 CCR — controle de capital restrito</option>
+          <option value="ma_adaptativo">📐 MA-Adaptativo — ajuste por resultado</option>
+        </select>
+
+        <!-- Painel de parâmetros dinâmicos por gerenciamento -->
+        <div id="qx-ger-params" style="display:flex; flex-direction:column; gap:6px;"></div>
+      </div>
+
+      <div style="display:flex; gap:10px;">
+        <div style="flex:1;">
+          <div style="font-size:0.6rem; color:#555; letter-spacing:1px; margin-bottom:6px;">STOP WIN ($)</div>
+          <input id="qx-ger-stop-win" type="number" min="0" step="0.5" placeholder="0 = sem limite"
+              style="width:100%; background:#0a0a12; border:1px solid rgba(39,201,63,0.4);
+                     color:#27c93f; padding:6px 8px; font-family:'Share Tech Mono';
+                     font-size:0.78rem; border-radius:4px; outline:none; text-align:center;">
+        </div>
+        <div style="flex:1;">
+          <div style="font-size:0.6rem; color:#555; letter-spacing:1px; margin-bottom:6px;">STOP LOSS ($)</div>
+          <input id="qx-ger-stop-loss" type="number" min="0" step="0.5" placeholder="0 = sem limite"
+              style="width:100%; background:#0a0a12; border:1px solid rgba(244,68,68,0.4);
+                     color:#f44; padding:6px 8px; font-family:'Share Tech Mono';
+                     font-size:0.78rem; border-radius:4px; outline:none; text-align:center;">
+        </div>
+      </div>
+
+      <div>
+        <div style="font-size:0.6rem; color:#555; letter-spacing:1px; margin-bottom:6px;">CONFIRMAÇÕES</div>
+        <div style="display:flex; flex-direction:column; gap:4px;">
+          <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:0.65rem; color:#aaa;">
+            <input type="checkbox" id="qx-conf-fechamento" checked style="accent-color:#ff6b00;">
+            Aguardar fechamento da vela
+          </label>
+          <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:0.65rem; color:#aaa;">
+            <input type="checkbox" id="qx-conf-payout" checked style="accent-color:#ff6b00;">
+            Filtro de payout mínimo
+          </label>
+          <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:0.65rem; color:#aaa;">
+            <input type="checkbox" id="qx-conf-bloquear-baixa" checked style="accent-color:#ff6b00;">
+            Bloquear sinais de baixa qualidade
+          </label>
+        </div>
+      </div>
+
+      <div style="display:flex; gap:8px; padding-top:4px;">
+        <button onclick="document.getElementById('modal-qx-gerenciamento').style.display='none'"
+            style="flex:1; padding:9px; background:transparent; border:1px solid #333;
+                   color:#555; font-family:'Share Tech Mono'; font-size:0.72rem;
+                   cursor:pointer; border-radius:4px; letter-spacing:1px;">
+          CANCELAR
+        </button>
+        <button onclick="qxSalvarGerenciamento()"
+            style="flex:1; padding:9px; background:rgba(255,107,0,0.1);
+                   border:1px solid #ff6b00; color:#ff6b00;
+                   font-family:'Share Tech Mono'; font-size:0.72rem;
+                   cursor:pointer; border-radius:4px; letter-spacing:1px; font-weight:bold;">
+          ✓ ATIVAR
+        </button>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<style>
+.qx-dur-btn {
+  background: #0a0a12; border: 1px solid #333; color: #666;
+  font-family: 'Share Tech Mono', monospace; font-size: 0.68rem;
+  cursor: pointer; border-radius: 3px; transition: all 0.1s;
+}
+.qx-dur-btn:hover { border-color: #ff6b00; color: #ff6b00; }
+.qx-dur-btn.qx-dur-ativo { border-color: #0ff; color: #0ff; background: rgba(0,255,255,0.05); }
+.qx-modo-item { transition: all 0.15s; }
+.qx-modo-item:hover { background: rgba(255,255,255,0.04) !important; border-color: rgba(255,107,0,0.4) !important; }
+.qx-modo-item.qx-modo-ativo { background: rgba(255,107,0,0.06) !important; border-color: rgba(255,107,0,0.5) !important; }
+.qx-sinal-card {
+  padding: 7px 9px; border-radius: 5px; border: 1px solid rgba(255,255,255,0.06);
+  background: rgba(255,255,255,0.02); cursor: pointer; transition: all 0.1s;
+}
+.qx-sinal-card:hover { border-color: rgba(255,107,0,0.3); }
+.qx-sinal-card.sinal-call { border-left: 3px solid #27c93f; }
+.qx-sinal-card.sinal-put  { border-left: 3px solid #ef5350; }
+.qx-sinal-card.sinal-aguardando { border-left: 3px solid #555; }
+</style>
+
+<!-- ══ QUOTEX CHART SCRIPT ══ -->
+<script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
+<script>
+// ── Estado do painel de trading ──────────────────────────────────────────────
+const _qxChart = {
+    chart: null, series: null,
+    ativo: 'EURUSD_otc', periodo: 60, duracao: 60, valor: 1, payout: 0,
+    ativos: [], historico: [], rtTimer: null, lastPreco: 0,
+    velaAtual: null, tsAbertura: 0,
+    opAtiva: null, priceLine: null,
+};
+
+// ── Abrir / fechar modal ──────────────────────────────────────────────────────
+function qxChartAbrir() {
+    const m = document.getElementById('modal-qx-chart');
+    if (m) m.style.display = 'block';
+    fetch('/quotex/status').then(r => r.json()).then(d => {
+        const banner = document.getElementById('qx-banner-desconectado');
+        if (banner) banner.style.display = (d.status === 'conectado') ? 'none' : 'block';
+        if (d.status !== 'conectado') {
+            document.getElementById('qx-chart-loading').style.display = 'none';
+            document.getElementById('qx-chart-erro-msg').textContent =
+                '❌ Quotex não conectada. Clique em "RECONECTAR COM SSID" no painel à direita.';
+            document.getElementById('qx-chart-erro').style.display = 'flex';
+            return;
+        }
+        document.getElementById('qx-chart-saldo').textContent = '$' + parseFloat(d.saldo || 0).toFixed(2);
+        document.getElementById('qx-chart-tipo').textContent  = d.tipo_conta || 'DEMO';
+        const lbl = document.getElementById('lbl-qx-chart');
+        if (lbl) lbl.textContent = (d.tipo_conta || 'DEMO') + ' • $' + parseFloat(d.saldo || 0).toFixed(2);
+        _qxCarregarAtivos().then(() => qxChartCarregar());
+    }).catch(() => {
+        document.getElementById('qx-chart-erro-msg').textContent = '❌ Erro ao verificar conexão.';
+        document.getElementById('qx-chart-erro').style.display   = 'flex';
+        document.getElementById('qx-chart-loading').style.display = 'none';
+    });
+    _qxIniciarChart();
+    _qxIniciarRT();
+}
+
+function qxChartFechar() {
+    const m = document.getElementById('modal-qx-chart');
+    if (m) m.style.display = 'none';
+    clearInterval(_qxChart.rtTimer);
+}
+
+// ── Inicializa lightweight-charts ─────────────────────────────────────────────
+function _qxIniciarChart() {
+    if (_qxChart.chart) return;
+    const container = document.getElementById('qx-chart-container');
+    if (!container || typeof LightweightCharts === 'undefined') return;
+    _qxChart.chart = LightweightCharts.createChart(container, {
+        width: container.clientWidth || 800, height: container.clientHeight || 500,
+        layout: { background: { color: '#0d0e17' }, textColor: '#787b86' },
+        grid: { vertLines: { color: 'rgba(42,46,57,0.8)' }, horzLines: { color: 'rgba(42,46,57,0.8)' } },
+        crosshair: {
+            mode: LightweightCharts.CrosshairMode.Normal,
+            vertLine: { color: 'rgba(255,255,255,0.25)', style: 1, labelBackgroundColor: '#1e293b' },
+            horzLine: { color: 'rgba(255,255,255,0.25)', style: 1, labelBackgroundColor: '#1e293b' },
+        },
+        rightPriceScale: { borderColor: 'rgba(42,46,57,0.8)', textColor: '#787b86', scaleMargins: { top: 0.1, bottom: 0.1 } },
+        timeScale: { borderColor: 'rgba(42,46,57,0.8)', textColor: '#787b86', timeVisible: true, secondsVisible: false, rightOffset: 5, barSpacing: 8, minBarSpacing: 2 },
+        handleScale: { axisPressedMouseMove: { time: true, price: true } },
+    });
+    _qxChart.series = _qxChart.chart.addCandlestickSeries({
+        upColor: '#26a69a', downColor: '#ef5350', borderVisible: false,
+        wickUpColor: '#26a69a', wickDownColor: '#ef5350',
+    });
+    window.addEventListener('resize', () => {
+        if (_qxChart.chart && document.getElementById('modal-qx-chart').style.display !== 'none') {
+            _qxChart.chart.applyOptions({ width: container.clientWidth, height: container.clientHeight });
+        }
+    });
+}
+
+// ── Carregar candles históricos ───────────────────────────────────────────────
+function qxChartCarregar() {
+    _qxChart.ativo   = document.getElementById('qx-ativo-sel').value;
+    _qxChart.periodo = parseInt(document.getElementById('qx-periodo-sel').value);
+    _qxChart.velaAtual = null; _qxChart.tsAbertura = 0;
+    const temDados = _qxChart.series && _qxChart.lastPreco > 0;
+    if (!temDados) {
+        document.getElementById('qx-chart-loading').style.display = 'flex';
+        document.getElementById('qx-chart-loading-msg').textContent = 'CARREGANDO CANDLES...';
+    }
+    document.getElementById('qx-chart-erro').style.display = 'none';
+    fetch(`/quotex/candles?ativo=${encodeURIComponent(_qxChart.ativo)}&periodo=${_qxChart.periodo}&limite=100`)
+        .then(r => r.json())
+        .then(d => {
+            document.getElementById('qx-chart-loading').style.display = 'none';
+            if (!d.ok || !d.candles || d.candles.length === 0) {
+                if (!temDados) {
+                    document.getElementById('qx-chart-erro-msg').textContent = d.erro || 'Nenhum candle retornado.';
+                    document.getElementById('qx-chart-erro').style.display = 'flex';
+                }
+                return;
+            }
+            const seen = new Set();
+            const candles = d.candles.filter(c => c.time > 0 && c.open > 0)
+                .sort((a, b) => a.time - b.time)
+                .filter(c => { if (seen.has(c.time)) return false; seen.add(c.time); return true; });
+            if (candles.length === 0) return;
+            if (_qxChart.series) {
+                _qxChart.series.setData(candles);
+                const ts = _qxChart.chart.timeScale();
+                ts.applyOptions({ barSpacing: 8, rightOffset: 5 });
+                ts.scrollToRealTime();
+            }
+            if (candles.length > 0) _qxChart.tsAbertura = candles[candles.length - 1].time + _qxChart.periodo;
+            _qxAtualizarPayout();
+        })
+        .catch(e => {
+            document.getElementById('qx-chart-loading').style.display = 'none';
+            if (!temDados) {
+                document.getElementById('qx-chart-erro-msg').textContent = '❌ ' + e.message;
+                document.getElementById('qx-chart-erro').style.display = 'flex';
+            }
+        });
+}
+
+// ── Carregar ativos ───────────────────────────────────────────────────────────
+async function _qxCarregarAtivos() {
+    try {
+        const d = await fetch('/quotex/ativos-payout').then(r => r.json());
+        if (!d.ok || !d.ativos) return;
+        _qxChart.ativos = d.ativos;
+        const abertos = d.ativos.filter(a => a.id && a.aberto);
+        const sel = document.getElementById('qx-ativo-sel');
+        if (!sel) return;
+        const atvAnterior = sel.value || _qxChart.ativo;
+        sel.innerHTML = '';
+        abertos.forEach(a => {
+            const opt = document.createElement('option');
+            opt.value = a.id; opt.dataset.nome = a.nome;
+            opt.textContent = a.nome + (a.payout ? ' (' + a.payout + '%)' : '');
+            if (a.id === atvAnterior || a.nome === atvAnterior) opt.selected = true;
+            sel.appendChild(opt);
+        });
+        if (abertos.length > 0 && !abertos.find(a => a.id === atvAnterior)) {
+            sel.value = abertos[0].id; _qxChart.ativo = abertos[0].id;
+        }
+    } catch (e) {}
+}
+
+setInterval(() => { if (_qx.status === 'conectado') _qxCarregarAtivos(); }, 60000);
+setInterval(() => {
+    const modal = document.getElementById('modal-qx-chart');
+    if (!modal || modal.style.display === 'none') return;
+    if (_qx.status !== 'conectado') return;
+    qxChartCarregar();
+}, 120000);
+
+function _qxAtualizarPayout() {
+    const a = _qxChart.ativos.find(x => x.id === _qxChart.ativo || x.nome === _qxChart.ativo);
+    if (a && a.payout) {
+        _qxChart.payout = parseFloat(a.payout);
+        document.getElementById('qx-payout-badge').textContent = a.payout + '% payout';
+        _qxRecalcPagamento();
+    }
+}
+
+// ── Tick real-time ────────────────────────────────────────────────────────────
+function _qxIniciarRT() {
+    clearInterval(_qxChart.rtTimer);
+    _qxChart.rtTimer = setInterval(() => {
+        const modal = document.getElementById('modal-qx-chart');
+        if (!modal || modal.style.display === 'none') return;
+        if (!_qxChart.series) return;
+        const agora = Math.floor(Date.now() / 1000);
+        const restam = Math.max(0, (_qxChart.tsAbertura + _qxChart.periodo) - agora);
+        const mm = String(Math.floor(restam / 60)).padStart(2, '0');
+        const ss = String(restam % 60).padStart(2, '0');
+        const timerEl = document.getElementById('qx-vela-timer');
+        if (timerEl) {
+            timerEl.textContent = mm + ':' + ss;
+            timerEl.style.color = restam <= 10 ? '#ef5350' : '#c8d0e0';
+            timerEl.style.borderColor = restam <= 10 ? 'rgba(239,83,80,0.6)' : 'rgba(255,255,255,0.15)';
+            if (_qxChart.series && _qxChart.velaAtual) {
+                try {
+                    const chartH = document.getElementById('qx-chart-container')?.clientHeight || 500;
+                    const y = _qxChart.series.priceToCoordinate(_qxChart.velaAtual.close);
+                    if (y !== null && y > 10 && y < chartH - 30) { timerEl.style.top = Math.round(y) + 'px'; timerEl.style.display = 'block'; }
+                } catch (_) {}
+            }
+        }
+        fetch(`/quotex/tick?ativo=${encodeURIComponent(_qxChart.ativo)}&periodo=${_qxChart.periodo}`)
+            .then(r => r.json())
+            .then(d => {
+                if (!d.ok || !d.preco) return;
+                const preco = parseFloat(d.preco);
+                const tsAbertura = d.ts_abertura;
+                const dir = preco > _qxChart.lastPreco ? '▲' : preco < _qxChart.lastPreco ? '▼' : '●';
+                const cor = preco > _qxChart.lastPreco ? '#22c55e' : preco < _qxChart.lastPreco ? '#ef4444' : '#aaa';
+                const el = document.getElementById('qx-preco-atual');
+                if (el) { el.textContent = preco.toFixed(5); el.style.color = cor; }
+                const eld = document.getElementById('qx-preco-dir');
+                if (eld) eld.textContent = dir;
+                if (_qxChart.velaAtual && tsAbertura === _qxChart.velaAtual.time) {
+                    const v = _qxChart.velaAtual;
+                    v.high = Math.max(v.high, preco); v.low = Math.min(v.low, preco); v.close = preco;
+                    _qxChart.series.update(v);
+                } else if (tsAbertura > (_qxChart.velaAtual?.time || 0)) {
+                    _qxChart.velaAtual = { time: tsAbertura, open: preco, high: preco, low: preco, close: preco };
+                    _qxChart.series.update(_qxChart.velaAtual);
+                    _qxChart.chart.timeScale().scrollToRealTime();
+                }
+                _qxChart.lastPreco = preco; _qxChart.tsAbertura = tsAbertura;
+            }).catch(() => {});
+    }, 500);
+}
+
+// ── Controles ─────────────────────────────────────────────────────────────────
+function qxSetDuracao(seg) {
+    _qxChart.duracao = seg;
+    document.querySelectorAll('.qx-dur-btn').forEach(b => b.classList.toggle('qx-dur-ativo', parseInt(b.dataset.s) === seg));
+    _qxAtualizarDuracaoDisplay(); _qxRecalcPagamento();
+}
+function qxAjustarDuracao(delta) { _qxChart.duracao = Math.max(5, _qxChart.duracao + delta); _qxAtualizarDuracaoDisplay(); _qxRecalcPagamento(); }
+function _qxAtualizarDuracaoDisplay() {
+    const s = _qxChart.duracao, h = Math.floor(s/3600), m = Math.floor((s%3600)/60), sec = s%60;
+    document.getElementById('qx-dur-display').textContent = String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(sec).padStart(2,'0');
+}
+function qxSetValor(v) { _qxChart.valor = v; document.getElementById('qx-valor-input').value = v; _qxRecalcPagamento(); }
+function qxAjustarValor(delta) {
+    const inp = document.getElementById('qx-valor-input');
+    const v = Math.max(1, parseFloat(inp.value || 1) + delta);
+    inp.value = v; _qxChart.valor = v; _qxRecalcPagamento();
+}
+document.addEventListener('DOMContentLoaded', () => {
+    const inp = document.getElementById('qx-valor-input');
+    if (inp) inp.addEventListener('input', () => { _qxChart.valor = parseFloat(inp.value || 1); _qxRecalcPagamento(); });
+});
+function _qxRecalcPagamento() {
+    const valor = parseFloat(document.getElementById('qx-valor-input')?.value || 1);
+    const payout = _qxChart.payout || 0;
+    const pag = payout > 0 ? (valor * (1 + payout / 100)).toFixed(2) : '--';
+    const el = document.getElementById('qx-pagamento-est');
+    if (el) el.textContent = pag !== '--' ? '$' + pag : '$--';
+}
+
+// ── Operar ────────────────────────────────────────────────────────────────────
+function qxOperar(direcao) {
+    const ativo    = _qxChart.ativo;
+    const valor    = parseFloat(document.getElementById('qx-valor-input')?.value || 1);
+    const periodo  = _qxChart.periodo || 60;   // período da vela selecionada
+    const btnCall  = document.getElementById('qx-btn-call');
+    const btnPut   = document.getElementById('qx-btn-put');
+    if (_qx.status !== 'conectado') { _qxOpStatusMsg('❌ Quotex não conectada.', '#f44'); return; }
+    if (!ativo) { _qxOpStatusMsg('❌ Nenhum ativo selecionado.', '#f44'); return; }
+    if (btnCall) btnCall.disabled = true;
+    if (btnPut)  btnPut.disabled  = true;
+    _qxOpStatusMsg('⏳ Enviando operação...', '#ffbd2e');
+    // Sempre envia alinhar_minuto=true — o backend calcula a duração exata
+    // para expirar na virada da próxima vela (2s antes do fechamento atual)
+    fetch('/quotex/operar', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ativo, direcao, valor, periodo, alinhar_minuto: true })
+    }).then(r => r.json()).then(d => {
+        if (btnCall) btnCall.disabled = false;
+        if (btnPut)  btnPut.disabled  = false;
+        if (d.ok) {
+            const emoji    = direcao === 'call' ? '▲' : '▼';
+            const cor      = direcao === 'call' ? '#27c93f' : '#f44';
+            // Usa a duração real retornada pelo backend (alinhada à vela)
+            const duracaoReal = d.duracao || periodo;
+            _qxOpStatusMsg(`${emoji} Operação enviada! ${duracaoReal}s | ID: ${d.id || '--'}`, cor);
+            const tsAgora = Date.now();
+            _qxAdicionarHistorico({ id: d.id || '', direcao, valor, duracao: duracaoReal, ativo, ts: tsAgora, status: 'aguardando' });
+            _qxIniciarOpAtiva({ id: d.id || '', direcao, valor, duracao: duracaoReal, ts: tsAgora, precoEntrada: _qxChart.lastPreco || 0 });
+            if (d.id) _qxAguardarResultado(d.id, duracaoReal);
+        } else {
+            const msg = d.erro || 'Erro ao enviar operação';
+            _qxOpStatusMsg('❌ ' + msg, '#f44');
+            if (msg.toLowerCase().includes('não conectada') || msg.toLowerCase().includes('nao conectada')) {
+                _qx.status = 'desconectado'; _qxAtualizarBotao('desconectado');
+            }
+        }
+    }).catch(e => {
+        if (btnCall) btnCall.disabled = false;
+        if (btnPut)  btnPut.disabled  = false;
+        _qxOpStatusMsg('❌ Erro de rede: ' + e.message, '#f44');
+    });
+}
+
+function _qxOpStatusMsg(msg, cor) {
+    const el = document.getElementById('qx-op-status');
+    if (!el) return;
+    el.style.display = 'block'; el.style.color = cor || '#aaa'; el.style.borderColor = cor || '#333'; el.textContent = msg;
+}
+
+// ── Operação ativa no gráfico ─────────────────────────────────────────────────
+function _qxIniciarOpAtiva(op) {
+    _qxEncerrarOpAtiva(null);
+    if (!_qxChart.series) return;
+    const corDir = op.direcao === 'call' ? '#27c93f' : '#ef5350';
+    const tsVelaAtual = _qxChart.tsAbertura || (Math.floor(Date.now() / 1000 / 60) * 60);
+    try {
+        _qxChart.series.setMarkers([{ time: tsVelaAtual, position: op.direcao === 'call' ? 'belowBar' : 'aboveBar', color: corDir, shape: op.direcao === 'call' ? 'arrowUp' : 'arrowDown', text: '$' + parseFloat(op.valor).toFixed(2), size: 1.5 }]);
+    } catch (_) {}
+    try {
+        if (_qxChart.priceLine) { _qxChart.series.removePriceLine(_qxChart.priceLine); _qxChart.priceLine = null; }
+        if (op.precoEntrada > 0) {
+            _qxChart.priceLine = _qxChart.series.createPriceLine({ price: op.precoEntrada, color: corDir, lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: op.direcao === 'call' ? '▲ ENTRADA' : '▼ ENTRADA' });
+        }
+    } catch (_) {}
+    const linhaEl  = document.getElementById('qx-op-linha-entrada');
+    const timerEl  = document.getElementById('qx-op-timer-overlay');
+    const bubbleEl = document.getElementById('qx-op-timer-bubble');
+    if (linhaEl)  { linhaEl.style.borderColor = corDir; linhaEl.style.display = 'block'; }
+    if (timerEl)  { timerEl.style.display = 'flex'; }
+    if (bubbleEl) { bubbleEl.style.borderColor = corDir; }
+    const _posicionarLinha = () => {
+        if (!_qxChart.series || !op.precoEntrada) return;
+        try {
+            const y = _qxChart.series.priceToCoordinate(op.precoEntrada);
+            if (y !== null && y > 10) {
+                if (linhaEl) linhaEl.style.top = Math.round(y) + 'px';
+                if (timerEl) timerEl.style.top = (Math.round(y) - 18) + 'px';
+            }
+        } catch (_) {}
+    };
+    _qxChart.opAtiva = { ...op, corDir, tsVelaAtual };
+    const tsFimMs = op.ts + op.duracao * 1000;
+    _qxChart.opAtiva.timerInterval = setInterval(() => {
+        const restamMs = Math.max(0, tsFimMs - Date.now());
+        const restamS  = Math.ceil(restamMs / 1000);
+        const mm = String(Math.floor(restamS / 60)).padStart(2, '0');
+        const ss = String(restamS % 60).padStart(2, '0');
+        if (bubbleEl) bubbleEl.textContent = '$' + parseFloat(op.valor).toFixed(2) + ' • ' + mm + ':' + ss;
+        _posicionarLinha();
+        if (restamMs <= 0) clearInterval(_qxChart.opAtiva?.timerInterval);
+    }, 500);
+    _posicionarLinha();
+}
+
+function _qxEncerrarOpAtiva(resultado) {
+    if (_qxChart.opAtiva?.timerInterval) clearInterval(_qxChart.opAtiva.timerInterval);
+    if (_qxChart.priceLine && _qxChart.series) {
+        try { _qxChart.series.removePriceLine(_qxChart.priceLine); } catch (_) {}
+        _qxChart.priceLine = null;
+    }
+    const linhaEl = document.getElementById('qx-op-linha-entrada');
+    const timerEl = document.getElementById('qx-op-timer-overlay');
+    if (linhaEl) linhaEl.style.display = 'none';
+    if (timerEl) timerEl.style.display = 'none';
+    if (resultado && _qxChart.series && _qxChart.opAtiva) {
+        const win = resultado === 'win';
+        const corRes = win ? '#27c93f' : '#ef5350';
+        const periodo = _qxChart.periodo || 60;
+        const tsSaida = (_qxChart.opAtiva.tsVelaAtual || 0) + periodo;
+        try {
+            _qxChart.series.setMarkers([
+                { time: _qxChart.opAtiva.tsVelaAtual || Math.floor(Date.now()/1000), position: _qxChart.opAtiva.direcao === 'call' ? 'belowBar' : 'aboveBar', color: _qxChart.opAtiva.corDir, shape: _qxChart.opAtiva.direcao === 'call' ? 'arrowUp' : 'arrowDown', text: '$' + parseFloat(_qxChart.opAtiva.valor).toFixed(2), size: 1.5 },
+                { time: tsSaida, position: win ? 'aboveBar' : 'belowBar', color: corRes, shape: 'circle', text: win ? '✓ WIN' : '✗ LOSS', size: 1.2 }
+            ]);
+        } catch (_) {}
+    } else if (_qxChart.series) {
+        try { _qxChart.series.setMarkers([]); } catch (_) {}
+    }
+    _qxChart.opAtiva = null;
+}
+
+// ── Aguarda resultado ─────────────────────────────────────────────────────────
+function _qxAguardarResultado(opId, duracao) {
+    setTimeout(() => {
+        fetch(`/quotex/resultado/${opId}`).then(r => r.json()).then(d => {
+            if (!d.ok) { _qxModo.opBloqueada = false; _qxEncerrarOpAtiva(null); return; }
+                const win = d.win, lucro = parseFloat(d.lucro || 0), res = win ? 'win' : 'loss';
+                _qxEncerrarOpAtiva(res);
+                _qxAtualizarHistorico(opId, res, lucro);
+                if (_qxModo.rodando) _qxModo.lucroSessao += win ? Math.abs(lucro) : -Math.abs(lucro);
+    
+                // ── Aplica gerenciamento e calcula próxima stake ──────────────────
+                const valorBase = _qxModo._valorBase || parseFloat(document.getElementById('qx-valor-input')?.value || 1);
+                _qxAplicarGerenciamento(win, lucro, valorBase);
+                const proxStake = _qxModo.valorAtual;
+    
+                // Atualiza status com resultado + próxima stake
+                const emoji  = win ? '✅ WIN' : '❌ LOSS';
+                const valStr = win ? `+$${lucro.toFixed(2)}` : `-$${Math.abs(lucro).toFixed(2)}`;
+                const mgr    = _qxModo.gerenciamento;
+                const mgrStr = mgr !== 'fixo' ? ` | 📐 Próx: $${proxStake.toFixed(2)}` : '';
+                _qxOpStatusMsg(`${emoji} ${valStr}${mgrStr}`, win ? '#27c93f' : '#f44');
+    
+                _qxModo.opBloqueada = false;
+                _qxSincronizarSaldo();
+        }).catch(() => { _qxEncerrarOpAtiva(null); _qxModo.opBloqueada = false; });
+    }, (duracao + 3) * 1000);
+}
+
+// ── Gerenciamento de recuperação — todos os modos ────────────────────────────
+function _qxAplicarGerenciamento(win, lucro, valorBase) {
+    const mgr     = _qxModo.gerenciamento;
+    const mult    = _qxModo.multGale    || 2.0;
+    const maxG    = _qxModo.maxGales    || 3;
+    const pctB    = _qxModo.pctBanca    || 2.0;
+    const saldo   = _qxModo.saldoAtual  || 0;
+
+    // ── FIXO ─────────────────────────────────────────────
+    if (mgr === 'fixo') {
+        _qxModo.valorAtual = valorBase;
+        _qxModo.galeAtual  = 0;
+
+    // ── MARTINGALE ───────────────────────────────────────
+    } else if (mgr === 'martingale') {
+        if (win) {
+            _qxModo.valorAtual = valorBase;
+            _qxModo.galeAtual  = 0;
+        } else {
+            if (_qxModo.galeAtual < maxG) {
+                _qxModo.valorAtual = parseFloat((_qxModo.valorAtual * mult).toFixed(2));
+                _qxModo.galeAtual++;
+            } else {
+                _qxModo.valorAtual = valorBase;
+                _qxModo.galeAtual  = 0;
+                _qxOpStatusMsg('⚠️ Max gales atingido — resetando stake', '#ffbd2e');
+            }
+        }
+
+    // ── SOROSGALE ─────────────────────────────────────────
+    } else if (mgr === 'sorosgale') {
+        if (win) {
+            _qxModo.galeAtual++;
+            _qxModo.sorosLucro += Math.abs(lucro);
+            if (_qxModo.galeAtual >= _qxModo.sorosCiclos) {
+                _qxModo.valorAtual = valorBase;
+                _qxModo.galeAtual  = 0;
+                _qxModo.sorosLucro = 0;
+            } else {
+                // reinveste o lucro no próximo ciclo
+                _qxModo.valorAtual = parseFloat((valorBase + _qxModo.sorosLucro).toFixed(2));
+            }
+        } else {
+            _qxModo.valorAtual = valorBase;
+            _qxModo.galeAtual  = 0;
+            _qxModo.sorosLucro = 0;
+        }
+
+    // ── LOSS RECOVERY (recuperação gradual) ──────────────
+    } else if (mgr === 'loss_recovery') {
+        if (win) {
+            if (_qxModo.galeAtual > 0) {
+                // continua tentando recuperar com stake aumentada até zerar dívida
+                const recuperado = Math.abs(lucro);
+                const devia = _qxModo._lrDivida || 0;
+                _qxModo._lrDivida = Math.max(0, devia - recuperado);
+                if (_qxModo._lrDivida <= 0) {
+                    _qxModo.valorAtual = valorBase;
+                    _qxModo.galeAtual  = 0;
+                    _qxModo._lrDivida  = 0;
+                }
+            } else {
+                _qxModo.valorAtual = valorBase;
+                _qxModo.galeAtual  = 0;
+            }
+        } else {
+            if (_qxModo.galeAtual < maxG) {
+                _qxModo._lrDivida = (_qxModo._lrDivida || 0) + Math.abs(lucro);
+                _qxModo.valorAtual = parseFloat((_qxModo.valorAtual * mult).toFixed(2));
+                _qxModo.galeAtual++;
+            } else {
+                _qxModo.valorAtual = valorBase;
+                _qxModo.galeAtual  = 0;
+                _qxModo._lrDivida  = 0;
+            }
+        }
+
+    // ── RECOVERY CONSERVADOR (1 gale máximo) ─────────────
+    } else if (mgr === 'recovery_cons') {
+        if (win) {
+            _qxModo.valorAtual = valorBase;
+            _qxModo.galeAtual  = 0;
+        } else {
+            if (_qxModo.galeAtual < 1) {
+                _qxModo.valorAtual = parseFloat((_qxModo.valorAtual * mult).toFixed(2));
+                _qxModo.galeAtual++;
+            } else {
+                _qxModo.valorAtual = valorBase;
+                _qxModo.galeAtual  = 0;
+            }
+        }
+
+    // ── QSR (Quick Sequence Recovery) ────────────────────
+    } else if (mgr === 'qsr') {
+        if (win) {
+            _qxModo.qsrIdx     = 0;
+            _qxModo.valorAtual = valorBase;
+        } else {
+            _qxModo.qsrIdx++;
+            if (_qxModo.qsrIdx < _qxModo.qsrSeq.length) {
+                _qxModo.valorAtual = _qxModo.qsrSeq[_qxModo.qsrIdx];
+            } else {
+                _qxModo.qsrIdx     = 0;
+                _qxModo.valorAtual = valorBase;
+            }
+        }
+
+    // ── MASANIELLO ────────────────────────────────────────
+    } else if (mgr === 'masaniello') {
+        const n   = _qxModo.masOps     || 10;
+        const wr  = (_qxModo.masWinRate || 70) / 100;
+        const vb  = valorBase;
+        // recalcula stake do ciclo com fórmula simplificada de Masaniello
+        _qxModo.masIdx = (_qxModo.masIdx || 0) + 1;
+        if (_qxModo.masIdx >= n) {
+            _qxModo.masIdx   = 0;
+            _qxModo.masStake = vb; // reset ciclo
+        }
+        if (win) {
+            _qxModo.valorAtual = parseFloat((_qxModo.masStake * (1 + (1 - wr) / (n * wr))).toFixed(2));
+        } else {
+            _qxModo.valorAtual = parseFloat((_qxModo.masStake * (1 + wr / (n * (1 - wr)))).toFixed(2));
+        }
+        _qxModo.masStake = _qxModo.valorAtual;
+
+    // ── RAL (% dinâmica da banca) ─────────────────────────
+    } else if (mgr === 'ral') {
+        if (win) {
+            _qxModo.galeAtual  = 0;
+        } else {
+            _qxModo.galeAtual++;
+        }
+        if (saldo > 0) {
+            const fator = win ? 1 : Math.min(mult, 1 + (_qxModo.galeAtual * 0.5));
+            _qxModo.valorAtual = parseFloat((saldo * (pctB / 100) * fator).toFixed(2));
+            if (_qxModo.valorAtual < 1) _qxModo.valorAtual = 1;
+            if (_qxModo.galeAtual >= maxG) { _qxModo.valorAtual = parseFloat((saldo * (pctB / 100)).toFixed(2)); _qxModo.galeAtual = 0; }
+        } else {
+            // sem saldo sincronizado, cai em fixo
+            if (win) _qxModo.valorAtual = valorBase;
+        }
+
+    // ── CCR (controle de capital restrito — nunca ultrapassa % da banca) ────────
+    } else if (mgr === 'ccr') {
+        if (win) {
+            _qxModo.valorAtual = valorBase;
+            _qxModo.galeAtual  = 0;
+        } else {
+            if (saldo > 0) {
+                const maxStake = parseFloat((saldo * (pctB / 100)).toFixed(2));
+                const proposta = parseFloat((_qxModo.valorAtual * 1.5).toFixed(2));
+                _qxModo.valorAtual = Math.min(proposta, maxStake);
+                if (_qxModo.valorAtual < 1) _qxModo.valorAtual = 1;
+            }
+            _qxModo.galeAtual++;
+        }
+
+    // ── MA-ADAPTATIVO (ajusta stake por sequência de wins/losses) ────────────
+    } else if (mgr === 'ma_adaptativo') {
+        if (win) {
+            // após win, leve aumento (aproveitar momento)
+            if (_qxModo.galeAtual === 0) {
+                _qxModo.valorAtual = parseFloat((_qxModo.valorAtual * mult).toFixed(2));
+                const maxAdapt = valorBase * 4;
+                if (_qxModo.valorAtual > maxAdapt) _qxModo.valorAtual = maxAdapt;
+            } else {
+                _qxModo.valorAtual = valorBase;
+            }
+            _qxModo.galeAtual = 0;
+        } else {
+            if (_qxModo.galeAtual < maxG) {
+                _qxModo.valorAtual = parseFloat((_qxModo.valorAtual * mult).toFixed(2));
+                _qxModo.galeAtual++;
+            } else {
+                _qxModo.valorAtual = valorBase;
+                _qxModo.galeAtual  = 0;
+            }
+        }
+    }
+
+    const inp = document.getElementById('qx-valor-input');
+    if (inp) inp.value = _qxModo.valorAtual.toFixed(2);
+    _qxRecalcPagamento();
+}
+
+// ── Histórico de operações ────────────────────────────────────────────────────
+function _qxAdicionarHistorico(op) { _qxChart.historico.unshift(op); _qxRenderHistorico(); }
+function _qxAtualizarHistorico(id, status, lucro) {
+    const op = _qxChart.historico.find(o => o.id === id);
+    if (op) { op.status = status; op.lucro = lucro; }
+    _qxRenderHistorico();
+}
+function _qxRenderHistorico() {
+    const lista = document.getElementById('qx-hist-lista');
+    const count = document.getElementById('qx-hist-count');
+    if (!lista) return;
+    if (count) count.textContent = _qxChart.historico.length;
+    lista.innerHTML = _qxChart.historico.slice(0, 20).map(op => {
+        const emoji = op.direcao === 'call' ? '▲' : '▼';
+        const cor = op.status === 'win' ? '#27c93f' : op.status === 'loss' ? '#f44' : '#ffbd2e';
+        const lucroStr = op.lucro != null ? (op.lucro > 0 ? '+$' + op.lucro.toFixed(2) : '-$' + Math.abs(op.lucro).toFixed(2)) : '';
+        const horario = new Date(op.ts).toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+        return `<div style="display:flex; justify-content:space-between; align-items:center; padding:5px 6px; background:rgba(255,255,255,0.03); border-radius:3px; border-left:2px solid ${cor};">
+            <span style="color:${cor}; font-size:0.68rem;">${emoji} ${op.ativo}</span>
+            <span style="color:#888; font-size:0.62rem;">${horario}</span>
+            <span style="color:${cor}; font-size:0.7rem; font-weight:bold;">${op.status === 'aguardando' ? '⏳' : lucroStr}</span>
+        </div>`;
+    }).join('') || '<div style="color:#333; font-size:0.65rem; text-align:center; margin-top:20px;">Nenhuma operação</div>';
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MODO DE OPERAÇÃO — Price Action PRO / Fluxo PRO / Automático
+// ═══════════════════════════════════════════════════════════════════════════════
+const _qxModo = {
+    atual: 'manual', rodando: false, timer: null, payoutMin: 90,
+    estrategia: 'ambas', gerenciamento: 'fixo', stopWin: 0, stopLoss: 0,
+    lucroSessao: 0, confFechamento: true, confPayout: true, confBloquearBaixa: true,
+    opBloqueada: false, valorAtual: 1, galeAtual: 0, _entradaTimer: null,
+    // parâmetros extras de gerenciamento
+    multGale: 2.0,       // multiplicador Martingale / Loss Recovery
+    maxGales: 3,         // máximo de gales consecutivos
+    pctBanca: 2.0,       // % da banca para RAL / CCR
+    sorosCiclos: 3,      // ciclos Soros antes de resetar
+    sorosLucro: 0,       // acumulado Soros
+    qsrSeq: [1,2,3,4],   // sequência QSR
+    qsrIdx: 0,
+    masOps: 10,          // Masaniello: operações por ciclo
+    masWinRate: 70,      // Masaniello: % alvo
+    masIdx: 0,
+    masStake: 1,
+    saldoAtual: 0,       // saldo sincronizado para gerenciamentos % banca
+};
+
+function qxSelecionarModo(modo) {
+    _qxModo.atual = modo;
+    document.querySelectorAll('.qx-modo-item').forEach(el => el.classList.toggle('qx-modo-ativo', el.dataset.modo === modo));
+    const painelSinais    = document.getElementById('qx-painel-sinais');
+    const painelHistorico = document.getElementById('qx-painel-historico');
+    const btnsCall = document.getElementById('qx-btn-call');
+    const btnsPut  = document.getElementById('qx-btn-put');
+    if (modo === 'manual') {
+        if (painelSinais)    painelSinais.style.display    = 'none';
+        if (painelHistorico) painelHistorico.style.display = 'block';
+        if (btnsCall) btnsCall.style.opacity = '1';
+        if (btnsPut)  btnsPut.style.opacity  = '1';
+        _qxPararAnalise();
+    } else {
+        if (painelSinais) {
+            painelSinais.style.display = 'block';
+            const titulos = {
+                price_action:   '🔵 PRICE ACTION PRO',
+                fluxo:          '🟣 FLUXO PRO',
+                automatico:     '🟢 AUTOMÁTICO',
+            };
+            const tituloEl = document.getElementById('qx-sinais-titulo');
+            if (tituloEl) tituloEl.textContent = titulos[modo] || 'ANÁLISE';
+        }
+        if (painelHistorico) painelHistorico.style.display = 'none';
+        qxAbrirGerenciamento();
+    }
+}
+
+function qxAbrirGerenciamento() {
+    const m = document.getElementById('modal-qx-gerenciamento');
+    if (!m) return;
+    const nomes = { manual:'⚪ MANUAL', price_action:'🔵 PRICE ACTION PRO', fluxo:'🟣 FLUXO PRO', automatico:'🟢 AUTOMÁTICO' };
+    const badge = document.getElementById('qx-ger-modo-badge');
+    if (badge) badge.textContent = nomes[_qxModo.atual] || _qxModo.atual;
+    const radio = document.querySelector(`input[name="qx-estrategia"][value="${_qxModo.estrategia}"]`);
+    if (radio) radio.checked = true;
+    const payoutEl = document.getElementById('qx-ger-payout');
+    const swEl = document.getElementById('qx-ger-stop-win');
+    const slEl = document.getElementById('qx-ger-stop-loss');
+    if (payoutEl) payoutEl.value = _qxModo.payoutMin;
+    if (swEl)     swEl.value     = _qxModo.stopWin  || '';
+    if (slEl)     slEl.value     = _qxModo.stopLoss || '';
+    // restaura select e carrega campos dinâmicos do gerenciamento atual
+    const selMgr = document.getElementById('qx-ger-gerenciamento');
+    if (selMgr) selMgr.value = _qxModo.gerenciamento || 'fixo';
+    qxGerMostrarParams();
+    m.style.display = 'flex';
+}
+
+// ── Parâmetros dinâmicos por gerenciamento ────────────────────────────────────
+function qxGerMostrarParams() {
+    const mgr = document.getElementById('qx-ger-gerenciamento')?.value || 'fixo';
+    const box = document.getElementById('qx-ger-params');
+    if (!box) return;
+    const _inp = (id, label, val, min, max, step, cor) =>
+        `<div style="display:flex;flex-direction:column;gap:2px;">
+           <div style="font-size:0.58rem;color:${cor||'#888'};letter-spacing:1px;">${label}</div>
+           <input id="${id}" type="number" value="${val}" min="${min}" max="${max}" step="${step}"
+             style="width:100%;background:#0a0a12;border:1px solid rgba(255,107,0,0.35);
+                    color:#c8d0e0;font-family:'Share Tech Mono';font-size:0.78rem;
+                    padding:5px 8px;border-radius:4px;outline:none;">
+         </div>`;
+    const _grid = (...fields) =>
+        `<div style="display:grid;grid-template-columns:${fields.map(()=>'1fr').join(' ')};gap:6px;">${fields.join('')}</div>`;
+
+    const defs = {
+        fixo:          '',
+        martingale:    _grid(
+            _inp('qx-p-mult','MULTIPLICADOR',_qxModo.multGale,1.1,10,0.1,'#fbbf24'),
+            _inp('qx-p-maxg','MAX GALES',_qxModo.maxGales,1,10,1,'#f87171')
+        ),
+        sorosgale:     _grid(
+            _inp('qx-p-scic','CICLOS SOROS',_qxModo.sorosCiclos,1,10,1,'#a78bfa'),
+            _inp('qx-p-maxg','MAX GALES',_qxModo.maxGales,1,10,1,'#f87171')
+        ),
+        loss_recovery: _grid(
+            _inp('qx-p-mult','MULTIPLICADOR',_qxModo.multGale,1.1,5,0.1,'#fbbf24'),
+            _inp('qx-p-maxg','MAX GALES',_qxModo.maxGales,1,10,1,'#f87171')
+        ),
+        recovery_cons: _grid(
+            _inp('qx-p-mult','MULTIPLICADOR',_qxModo.multGale,1.1,5,0.1,'#fbbf24'),
+            _inp('qx-p-maxg','MAX GALES',1,1,3,1,'#f87171')
+        ),
+        qsr:           _grid(
+            _inp('qx-p-maxg','NÍVEIS QSR',_qxModo.maxGales,2,8,1,'#60a5fa')
+        ),
+        masaniello:    _grid(
+            _inp('qx-p-masops','OPS/CICLO',_qxModo.masOps,4,50,1,'#00ffcc'),
+            _inp('qx-p-maswr','WIN RATE ALV%',_qxModo.masWinRate,50,90,5,'#4ade80')
+        ),
+        ral:           _grid(
+            _inp('qx-p-pct','% DA BANCA',_qxModo.pctBanca,0.5,20,0.5,'#00ff88'),
+            _inp('qx-p-maxg','MAX GALES',_qxModo.maxGales,1,10,1,'#f87171')
+        ),
+        ccr:           _grid(
+            _inp('qx-p-pct','% MAX RISCO',_qxModo.pctBanca,0.5,10,0.5,'#f87171')
+        ),
+        ma_adaptativo: _grid(
+            _inp('qx-p-mult','MULT GAIN',_qxModo.multGale,1.05,3,0.05,'#4ade80'),
+            _inp('qx-p-maxg','MAX GALES',_qxModo.maxGales,1,10,1,'#f87171')
+        ),
+    };
+    box.innerHTML = defs[mgr] || '';
+}
+
+function qxSalvarGerenciamento() {
+    _qxModo.payoutMin      = parseInt(document.getElementById('qx-ger-payout')?.value  || 90);
+    _qxModo.stopWin        = parseFloat(document.getElementById('qx-ger-stop-win')?.value  || 0);
+    _qxModo.stopLoss       = parseFloat(document.getElementById('qx-ger-stop-loss')?.value || 0);
+    _qxModo.gerenciamento  = document.getElementById('qx-ger-gerenciamento')?.value || 'fixo';
+    _qxModo.estrategia     = document.querySelector('input[name="qx-estrategia"]:checked')?.value || 'ambas';
+    _qxModo.confFechamento    = document.getElementById('qx-conf-fechamento')?.checked    ?? true;
+    _qxModo.confPayout        = document.getElementById('qx-conf-payout')?.checked        ?? true;
+    _qxModo.confBloquearBaixa = document.getElementById('qx-conf-bloquear-baixa')?.checked ?? true;
+    // parâmetros extras
+    _qxModo.multGale    = parseFloat(document.getElementById('qx-p-mult')?.value  || 2);
+    _qxModo.maxGales    = parseInt(document.getElementById('qx-p-maxg')?.value    || 3);
+    _qxModo.pctBanca    = parseFloat(document.getElementById('qx-p-pct')?.value   || 2);
+    _qxModo.sorosCiclos = parseInt(document.getElementById('qx-p-scic')?.value    || 3);
+    _qxModo.masOps      = parseInt(document.getElementById('qx-p-masops')?.value  || 10);
+    _qxModo.masWinRate  = parseInt(document.getElementById('qx-p-maswr')?.value   || 70);
+    // reset estado de gales ao trocar gerenciamento
+    _qxModo.galeAtual = 0; _qxModo.sorosLucro = 0; _qxModo.qsrIdx = 0;
+    _qxModo.masIdx = 0; _qxModo.masStake = _qxModo.valorAtual;
+    // QSR: gera sequência proporcional com o nível escolhido
+    const nQsr = _qxModo.maxGales || 4;
+    _qxModo.qsrSeq = Array.from({length: nQsr}, (_, i) => parseFloat(((i + 1) * _qxModo._valorBase || 1).toFixed(2)));
+    const pb = document.getElementById('qx-payout-min-badge');
+    if (pb) pb.textContent = _qxModo.payoutMin + '%';
+    const eb = document.getElementById('qx-estrategia-badge');
+    if (eb) { const labels = { price_action:'Price Action Pro', fluxo:'Fluxo Pro', ambas:'Ambas' }; eb.textContent = labels[_qxModo.estrategia] || _qxModo.estrategia; }
+    document.getElementById('modal-qx-gerenciamento').style.display = 'none';
+    // ── Auto-iniciar análise ao clicar ATIVAR — qualquer modo exceto manual ──
+    if (_qxModo.atual !== 'manual') {
+        if (_qxModo.rodando) _qxPararAnalise();   // reinicia limpo com novas configs
+        _qxIniciarAnalise();
+    }
+}
+
+function qxToggleAnalise() { if (_qxModo.rodando) _qxPararAnalise(); else _qxIniciarAnalise(); }
+
+function _qxPararAnalise() {
+    _qxModo.rodando = false; _qxModo.opBloqueada = false;
+    clearInterval(_qxModo.timer);
+    clearInterval(_qxModo._viradaWatcher);
+    clearTimeout(_qxModo._entradaTimer);
+    clearInterval(_qxModo._entradaWatch);
+    _qxModo.timer = null;
+    _qxModo._viradaWatcher = null;
+    _qxModo._entradaTimer = null;
+    const btn = document.getElementById('qx-sinais-toggle');
+    if (btn) { btn.textContent = '▶ INICIAR'; btn.style.borderColor = 'rgba(0,255,65,0.5)'; btn.style.color = '#00ff41'; }
+}
+
+function _qxIniciarAnalise() {
+    if (_qxModo.atual === 'manual') return;
+    _qxModo.rodando      = true;
+    _qxModo.opBloqueada  = false;
+    _qxModo.lucroSessao  = 0;
+    _qxModo.galeAtual    = 0;
+    _qxModo.sorosLucro   = 0;
+    _qxModo.qsrIdx       = 0;
+    _qxModo.masIdx       = 0;
+    _qxModo._lrDivida    = 0;
+    _qxModo._cicloRodando = false;
+    _qxModo._ultimaVirada = 0;
+    const vBase = parseFloat(document.getElementById('qx-valor-input')?.value || 1);
+    _qxModo.valorAtual   = vBase;
+    _qxModo._valorBase   = vBase;
+    _qxModo.masStake     = vBase;
+    const nQsr = _qxModo.maxGales || 4;
+    _qxModo.qsrSeq = Array.from({length: nQsr}, (_, i) => parseFloat(((i + 1) * vBase).toFixed(2)));
+    const btn = document.getElementById('qx-sinais-toggle');
+    if (btn) { btn.textContent = '⏹ PARAR'; btn.style.borderColor = 'rgba(244,68,68,0.6)'; btn.style.color = '#f44'; }
+
+    // Roda imediatamente
+    _qxExecutarCicloAnalise();
+
+    // Watcher de virada da vela — verifica a cada 500ms se está na janela de análise
+    // Dispara o ciclo quando faltam ≤ 4s para a vela fechar (ou nos primeiros 3s da nova vela)
+    _qxModo._viradaWatcher = setInterval(() => {
+        if (!_qxModo.rodando) return;
+        if (_qxModo._cicloRodando) return;   // ciclo já em execução
+        const periodo   = _qxChart.periodo || 60;
+        const agora     = Math.floor(Date.now() / 1000);
+        const tsAb      = _qxChart.tsAbertura || (Math.floor(agora / periodo) * periodo);
+        const segundos  = agora - tsAb;           // segundos dentro da vela atual
+        const restam    = periodo - segundos;      // segundos até a virada
+        // Analisa nos primeiros 3s de cada nova vela (após virada) — vela anterior já fechou
+        const novaVela  = segundos >= 0 && segundos <= 3 && tsAb !== _qxModo._ultimaVirada;
+        if (novaVela) {
+            _qxModo._ultimaVirada = tsAb;
+            _qxExecutarCicloAnalise();
+        }
+    }, 500);
+}
+
+async function _qxExecutarCicloAnalise() {
+    if (!_qxModo.rodando) return;
+    if (_qx.status !== 'conectado') return;
+    if (_qxModo._cicloRodando) return;   // evita ciclo sobreposto
+    _qxModo._cicloRodando = true;
+    const tsCiclo = Date.now(); _qxModo._tsCicloAtual = tsCiclo;
+    const lista = document.getElementById('qx-sinais-lista');
+    if (lista) lista.innerHTML = '<div style="color:#555; font-size:0.62rem; text-align:center; padding:12px;">🔍 Analisando...</div>';
+    let ativos = [];
+    try {
+        const d = await fetch('/quotex/ativos-payout').then(r => r.json());
+        if (d.ok && d.ativos) {
+            ativos = d.ativos.filter(a => {
+                if (!a.aberto || !a.id) return false;
+                if (_qxModo.confPayout) return parseInt(a.payout || 0) >= parseInt(_qxModo.payoutMin || 0);
+                return true;
+            });
+        }
+    } catch (_) { _qxModo._cicloRodando = false; return; }
+    if (ativos.length === 0) {
+        if (lista) lista.innerHTML = '<div style="color:#555; font-size:0.62rem; text-align:center; padding:12px;">Nenhum ativo' + (_qxModo.confPayout ? ' com payout ≥ ' + _qxModo.payoutMin + '%' : ' aberto') + '</div>';
+        _qxModo._cicloRodando = false;
+        return;
+    }
+    // Top 5 ativos por payout — analisa só os melhores
+    const ativosParaAnalisar = [...ativos]
+        .sort((a, b) => parseInt(b.payout || 0) - parseInt(a.payout || 0))
+        .slice(0, 5);
+
+    const resultados = [];
+    for (const ativo of ativosParaAnalisar) {
+        try { const r = await _qxAnalisarAtivo(ativo); if (r) resultados.push(r); } catch (_) {}
+    }
+    _qxModo._cicloRodando = false;   // libera para o próximo ciclo
+    if (_qxModo._tsCicloAtual !== tsCiclo || !_qxModo.rodando) return;
+
+    // Ordena: com sinal primeiro, depois por score decrescente
+    resultados.sort((a, b) => {
+        const aS = (a.sinal === 'CALL' || a.sinal === 'PUT') ? 1 : 0;
+        const bS = (b.sinal === 'CALL' || b.sinal === 'PUT') ? 1 : 0;
+        if (bS !== aS) return bS - aS;
+        return (b.confluencias || 0) - (a.confluencias || 0);
+    });
+
+    // Renderiza sempre os 5
+    _qxRenderizarSinais(resultados);
+
+    // ── Entrada automática ────────────────────────────────────────────────────
+    const melhor = resultados.find(r => r.sinal === 'CALL' || r.sinal === 'PUT');
+    if (!melhor) return;
+
+    if (_qxModo.stopWin  > 0 && _qxModo.lucroSessao >=  _qxModo.stopWin)  { _qxPararAnalise(); _qxOpStatusMsg('🏆 Stop Win: +$' + _qxModo.lucroSessao.toFixed(2), '#27c93f'); return; }
+    if (_qxModo.stopLoss > 0 && _qxModo.lucroSessao <= -_qxModo.stopLoss) { _qxPararAnalise(); _qxOpStatusMsg('🛑 Stop Loss: -$' + Math.abs(_qxModo.lucroSessao).toFixed(2), '#ef5350'); return; }
+    if (_qxModo.opBloqueada) { _qxOpStatusMsg('⏳ Aguardando resultado anterior...', '#ffbd2e'); return; }
+
+    // Muda ativo no gráfico se necessário
+    if (melhor.ativo !== _qxChart.ativo) {
+        _qxChart.ativo = melhor.ativo;
+        const sel = document.getElementById('qx-ativo-sel');
+        if (sel) { const opt = Array.from(sel.options).find(o => o.value === melhor.ativo); if (opt) sel.value = melhor.ativo; }
+        qxChartCarregar();
+    }
+
+    // Guarda contexto para registrar resultado no backend
+    _qxAgendarEntrada(melhor);
+}
+
+// ── Agenda entrada na virada da vela com watcher de segurança ─────────────────
+function _qxAgendarEntrada(melhor) {
+    const direcao    = melhor.sinal === 'CALL' ? 'call' : 'put';
+    const periodo    = (_qxChart.periodo || 60);
+    const periodoMs  = periodo * 1000;
+    const ANTEC_MS   = 1500;   // entra 1.5s antes do fechamento
+
+    clearTimeout(_qxModo._entradaTimer);
+    clearInterval(_qxModo._entradaWatch);
+
+    const prefixo = `⏳ ${melhor.sinal} ${melhor.nome||melhor.ativo}`;
+
+    // Função que calcula ms até a virada e dispara a entrada
+    const _tentarEntrar = () => {
+        if (!_qxModo.rodando || _qxModo.opBloqueada) return;
+        // Usa tsAbertura do chart (atualizado pelo tick RT a cada 500ms)
+        const agora      = Date.now();
+        const tsAb       = _qxChart.tsAbertura || Math.floor(agora / 1000 / periodo) * periodo;
+        const tsFech_ms  = (tsAb + periodo) * 1000;
+        const msAte      = tsFech_ms - agora - ANTEC_MS;
+
+        if (msAte > periodoMs + 5000) {
+            // tsAbertura desatualizado (ainda da vela anterior) — espera tick atualizar
+            _qxModo._entradaTimer = setTimeout(_tentarEntrar, 600);
+            return;
+        }
+
+        if (msAte > 200) {
+            // Agenda para o momento exato
+            _qxOpStatusMsg(`${prefixo} — ⏱ ${Math.round(msAte/1000)}s`, direcao === 'call' ? '#27c93f' : '#ef5350');
+            _qxModo._entradaTimer = setTimeout(() => {
+                if (!_qxModo.rodando || _qxModo.opBloqueada) return;
+                _qxOperarAuto(direcao);
+            }, msAte);
+        } else if (msAte > -3000) {
+            // Dentro da janela de entrada — opera agora
+            if (!_qxModo.opBloqueada) _qxOperarAuto(direcao);
+        } else {
+            // Vela já fechou e nova ainda não atualizou — watch por 3s esperando tick
+            let tentativas = 0;
+            _qxModo._entradaWatch = setInterval(() => {
+                tentativas++;
+                const agoraW     = Date.now();
+                const tsAbW      = _qxChart.tsAbertura || 0;
+                const tsFechW_ms = (tsAbW + periodo) * 1000;
+                const msAteW     = tsFechW_ms - agoraW - ANTEC_MS;
+                if (msAteW > 200 && msAteW < periodoMs) {
+                    clearInterval(_qxModo._entradaWatch);
+                    _qxOpStatusMsg(`${prefixo} — ⏱ ${Math.round(msAteW/1000)}s`, direcao === 'call' ? '#27c93f' : '#ef5350');
+                    _qxModo._entradaTimer = setTimeout(() => {
+                        if (!_qxModo.rodando || _qxModo.opBloqueada) return;
+                        _qxOperarAuto(direcao);
+                    }, msAteW);
+                } else if (msAteW >= -500 && msAteW <= 200) {
+                    clearInterval(_qxModo._entradaWatch);
+                    if (!_qxModo.opBloqueada) _qxOperarAuto(direcao);
+                } else if (tentativas > 10) {
+                    clearInterval(_qxModo._entradaWatch);
+                    _qxOpStatusMsg('⚠️ Timing perdido — aguardando próxima vela', '#ffbd2e');
+                }
+            }, 400);
+        }
+    };
+
+    _tentarEntrar();
+}
+
+function _qxOperarAuto(direcao) {
+    if (!_qxModo.rodando || _qxModo.opBloqueada) return;
+    _qxModo.opBloqueada = true;
+    const inp = document.getElementById('qx-valor-input');
+    if (inp) inp.value = _qxModo.valorAtual.toFixed(2);
+    qxOperar(direcao);
+}
+
+async function _qxAnalisarAtivo(ativo) {
+    let candles = [];
+    try {
+        const d = await fetch(`/quotex/candles?ativo=${encodeURIComponent(ativo.id)}&periodo=60&limite=60`).then(r => r.json());
+        if (!d.ok || !d.candles || d.candles.length < 5) return null;
+        candles = d.candles.filter(c => c.open > 0).sort((a, b) => a.time - b.time);
+    } catch (_) { return null; }
+
+    const modo = _qxModo.atual, estrategia = _qxModo.estrategia;
+
+    let paResult = null, fluxoResult = null;
+    if (modo === 'price_action' || estrategia === 'price_action' || estrategia === 'ambas' || modo === 'automatico') paResult = _qxAnalisePriceAction(candles);
+    if (modo === 'fluxo' || estrategia === 'fluxo' || estrategia === 'ambas' || modo === 'automatico') fluxoResult = _qxAnaliseFluxo(candles);
+    let sinal = 'AGUARDANDO', confluencias = 0, detalhes = [];
+    if (paResult && fluxoResult && estrategia === 'ambas') {
+        if (paResult.sinal === fluxoResult.sinal && paResult.sinal !== 'NEUTRO') { sinal = paResult.sinal; confluencias = paResult.score + fluxoResult.score; detalhes = [...paResult.detalhes, ...fluxoResult.detalhes]; }
+        else if (paResult.sinal !== 'NEUTRO' || fluxoResult.sinal !== 'NEUTRO') { const melhorR = (paResult.score >= fluxoResult.score) ? paResult : fluxoResult; if (melhorR.sinal !== 'NEUTRO') { sinal = melhorR.sinal; confluencias = melhorR.score; detalhes = melhorR.detalhes; } }
+    } else if (paResult && (modo === 'price_action' || estrategia === 'price_action')) { sinal = paResult.sinal !== 'NEUTRO' ? paResult.sinal : 'AGUARDANDO'; confluencias = paResult.score; detalhes = paResult.detalhes; }
+    else if (fluxoResult && (modo === 'fluxo' || estrategia === 'fluxo')) { sinal = fluxoResult.sinal !== 'NEUTRO' ? fluxoResult.sinal : 'AGUARDANDO'; confluencias = fluxoResult.score; detalhes = fluxoResult.detalhes; }
+    else if (paResult || fluxoResult) { const r = paResult || fluxoResult; sinal = r.sinal !== 'NEUTRO' ? r.sinal : 'AGUARDANDO'; confluencias = r.score; detalhes = r.detalhes; }
+    const threshold = estrategia === 'ambas' ? 3 : 2;
+    if (_qxModo.confBloquearBaixa && confluencias < threshold) sinal = 'AGUARDANDO';
+    return { ativo: ativo.id, nome: ativo.nome, payout: ativo.payout, sinal, confluencias, detalhes, pa: paResult, fluxo: fluxoResult, ts: Date.now() };
+}
+
+function _qxAnalisePriceAction(candles) {
+    if (candles.length < 5) return { sinal: 'NEUTRO', score: 0, detalhes: [] };
+    const n = candles.length, ultimas = candles.slice(-10), c = candles[n-1], prev = candles[n-2];
+    const detalhes = []; let scoreCall = 0, scorePut = 0;
+    let maximas = 0, minimas = 0;
+    for (let i = 1; i < ultimas.length; i++) { if (ultimas[i].high > ultimas[i-1].high) maximas++; if (ultimas[i].low < ultimas[i-1].low) minimas++; }
+    const estrutura = maximas > minimas ? 'ALTA' : minimas > maximas ? 'BAIXA' : 'LATERAL';
+    detalhes.push('Estrutura: ' + estrutura);
+    if (estrutura === 'ALTA')  scoreCall += 1;
+    if (estrutura === 'BAIXA') scorePut  += 1;
+    const highs = ultimas.map(x => x.high), lows = ultimas.map(x => x.low);
+    const maxH = Math.max(...highs), minL = Math.min(...lows), range = maxH - minL;
+    const zona = range > 0 && (c.close - minL) / range < 0.35 ? 'SUPORTE' : range > 0 && (c.close - minL) / range > 0.65 ? 'RESISTÊNCIA' : 'MEIO';
+    detalhes.push('Zona: ' + zona);
+    if (zona === 'SUPORTE')     scoreCall += 1;
+    if (zona === 'RESISTÊNCIA') scorePut  += 1;
+    const corpo = Math.abs(c.close - c.open), sombra = (c.high - c.low) || 0.0001, forca = corpo / sombra;
+    detalhes.push('Força: ' + (forca > 0.6 ? 'ALTA' : forca > 0.3 ? 'MÉDIA' : 'FRACA'));
+    const engolfo = c.close > c.open && prev.close < prev.open && c.open <= prev.close && c.close >= prev.open;
+    const engolfoPut = c.close < c.open && prev.close > prev.open && c.open >= prev.close && c.close <= prev.open;
+    const rejeicaoBull = c.close > c.open && (c.open - c.low) / sombra > 0.4;
+    const rejeicaoBear = c.close < c.open && (c.high - c.open) / sombra > 0.4;
+    if (engolfo)      { scoreCall += 2; detalhes.push('Padrão: ENGOLFO ALTA'); }
+    if (engolfoPut)   { scorePut  += 2; detalhes.push('Padrão: ENGOLFO BAIXA'); }
+    if (rejeicaoBull) { scoreCall += 1; detalhes.push('Rejeição: BULL'); }
+    if (rejeicaoBear) { scorePut  += 1; detalhes.push('Rejeição: BEAR'); }
+    if (c.close > c.open) { scoreCall += 1; detalhes.push('Conf: ALTA ✓'); }
+    else                  { scorePut  += 1; detalhes.push('Conf: BAIXA ✓'); }
+    const score = Math.max(scoreCall, scorePut);
+    const sinal = scoreCall > scorePut && scoreCall >= 3 ? 'CALL' : scorePut > scoreCall && scorePut >= 3 ? 'PUT' : 'NEUTRO';
+    return { sinal, score, detalhes, estrutura, zona, scoreCall, scorePut };
+}
+
+function _qxAnaliseFluxo(candles) {
+    if (candles.length < 5) return { sinal: 'NEUTRO', score: 0, detalhes: [] };
+    const n = candles.length, detalhes = []; let scoreCall = 0, scorePut = 0;
+    const ult5 = candles.slice(-5);
+    const altas = ult5.filter(c => c.close > c.open).length, baixas = ult5.filter(c => c.close < c.open).length;
+    if (altas  >= 3) { scoreCall += 1; detalhes.push('Pressão: COMPRADORA (' + altas  + '/5)'); }
+    if (baixas >= 3) { scorePut  += 1; detalhes.push('Pressão: VENDEDORA ('  + baixas + '/5)'); }
+    const c = candles[n-1], prev = candles[n-2];
+    const corpoAtual = Math.abs(c.close - c.open), corpoPrev = Math.abs(prev.close - prev.open);
+    if (corpoAtual > corpoPrev * 1.2) { detalhes.push('Aceleração: SIM'); if (c.close > c.open) scoreCall += 1; else scorePut += 1; }
+    const ult3 = candles.slice(-3);
+    if (ult3.every(x => x.close > x.open)) { scoreCall += 1; detalhes.push('Sequência: 3 ALTAS'); }
+    if (ult3.every(x => x.close < x.open)) { scorePut  += 1; detalhes.push('Sequência: 3 BAIXAS'); }
+    const ult4 = candles.slice(-4);
+    const retesteBull = ult4[0].close > ult4[0].open && ult4[1].close < ult4[1].open && ult4[2].close > ult4[2].open && ult4[3].close > ult4[3].open;
+    const retesteBear = ult4[0].close < ult4[0].open && ult4[1].close > ult4[1].open && ult4[2].close < ult4[2].open && ult4[3].close < ult4[3].open;
+    if (retesteBull) { scoreCall += 2; detalhes.push('Reteste: BULL'); }
+    if (retesteBear) { scorePut  += 2; detalhes.push('Reteste: BEAR'); }
+    const sombra = (c.high - c.low) || 0.0001, corpo = Math.abs(c.close - c.open);
+    if (corpo / sombra < 0.15) { detalhes.push('Indecisão: BLOQUEADO'); return { sinal: 'NEUTRO', score: 0, detalhes }; }
+    const score = Math.max(scoreCall, scorePut);
+    const sinal = scoreCall > scorePut && scoreCall >= 3 ? 'CALL' : scorePut > scoreCall && scorePut >= 3 ? 'PUT' : 'NEUTRO';
+    return { sinal, score, detalhes, scoreCall, scorePut };
+}
+
+// Map global para guardar dados dos sinais — evita JSON no onclick
+const _qxSinaisMap = new Map();
+
+function _qxRenderizarSinais(resultados) {
+    const lista = document.getElementById('qx-sinais-lista');
+    if (!lista) return;
+    if (resultados.length === 0) {
+        _qxSinaisMap.clear();
+        lista.innerHTML = '<div style="color:#555; font-size:0.62rem; text-align:center; padding:12px;">Nenhum ativo qualificado</div>';
+        return;
+    }
+    _qxSinaisMap.clear();
+    resultados.forEach((r, i) => _qxSinaisMap.set(i, r));
+
+    lista.innerHTML = resultados.map((r, idx) => {
+        const temSinal = r.sinal === 'CALL' || r.sinal === 'PUT';
+        const cor    = r.sinal === 'CALL' ? '#27c93f' : r.sinal === 'PUT' ? '#ef5350' : '#4b5563';
+        const emoji  = r.sinal === 'CALL' ? '▲' : r.sinal === 'PUT' ? '▼' : '●';
+        const classe = r.sinal === 'CALL' ? 'sinal-call' : r.sinal === 'PUT' ? 'sinal-put' : 'sinal-aguardando';
+        const horario = new Date(r.ts).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
+        // onclick usa índice numérico — sem JSON no HTML
+        const click = `onclick="qxEntrarSinalIdx(${idx})"`;
+
+        // ── Card padrão (Price Action / Fluxo / Automático) ──────────────────
+        const conf   = r.confluencias || 0;
+        const pct    = Math.min(100, Math.round((conf / 10) * 100));
+        const barCor = pct >= 60 ? '#27c93f' : pct >= 35 ? '#ffbd2e' : '#4b5563';
+        const paStr    = r.pa    ? 'PA:' + (r.pa.sinal==='NEUTRO'?'—':r.pa.sinal)+'('+( r.pa.score||0)+')' : '';
+        const fluxoStr = r.fluxo ? 'FL:' + (r.fluxo.sinal==='NEUTRO'?'—':r.fluxo.sinal)+'('+(r.fluxo.score||0)+')' : '';
+        return `<div class="qx-sinal-card ${classe}" ${click}>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:2px;">
+            <span style="color:${temSinal?'#fff':'#787b86'}; font-size:0.68rem; font-weight:bold;">${r.nome||r.ativo}</span>
+            <span style="color:#ffbd2e; font-size:0.58rem; font-weight:bold;">${r.payout}%</span>
+          </div>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:3px;">
+            <span style="color:${cor}; font-size:0.75rem; font-weight:bold; letter-spacing:1px;">${emoji} ${r.sinal}</span>
+            <span style="color:#555; font-size:0.58rem;">${horario}</span>
+          </div>
+          <div style="height:2px; background:#1e2130; border-radius:1px; margin-bottom:3px;">
+            <div style="height:100%; width:${pct}%; background:${barCor}; border-radius:1px;"></div>
+          </div>
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <span style="color:#4b5563; font-size:0.55rem;">${paStr} ${fluxoStr}</span>
+            <span style="color:${barCor}; font-size:0.55rem; font-weight:bold;">Score:${conf}</span>
+          </div>
+          ${temSinal ? `<div style="display:flex; gap:4px; margin-top:5px;">
+            <button onclick="event.stopPropagation();qxOperar('call')" style="flex:1;padding:3px 0;background:rgba(39,201,63,0.1);border:1px solid #27c93f;color:#27c93f;font-family:'Share Tech Mono';font-size:0.58rem;cursor:pointer;border-radius:3px;">▲ CALL</button>
+            <button onclick="event.stopPropagation();qxOperar('put')"  style="flex:1;padding:3px 0;background:rgba(239,83,80,0.1);border:1px solid #ef5350;color:#ef5350;font-family:'Share Tech Mono';font-size:0.58rem;cursor:pointer;border-radius:3px;">▼ PUT</button>
+          </div>` : ''}
+        </div>`;
+    }).join('');
+}
+
+function qxEntrarSinalIdx(idx) {
+    const sinal = _qxSinaisMap.get(idx);
+    if (!sinal) return;
+    qxEntrarSinal(sinal);
+}
+
+function qxEntrarSinal(sinal) {
+    if (!sinal || sinal.sinal === 'AGUARDANDO' || sinal.sinal === 'NEUTRO') return;
+    const sel = document.getElementById('qx-ativo-sel');
+    if (sel) {
+        const opt = Array.from(sel.options).find(o => o.value === sinal.ativo);
+        if (opt) { sel.value = sinal.ativo; _qxChart.ativo = sinal.ativo; qxChartCarregar(); }
+    }
+    qxOperar(sinal.sinal === 'CALL' ? 'call' : 'put');
+}
+</script>
+
+
 
 </body>
 </html>

@@ -5,3 +5,4 @@ gunicorn
 pillow
 youtube-transcript-api
 pandas
+git+https://github.com/cleitonleonel/pyquotex.git
