@@ -97,23 +97,24 @@
         btn.disabled = true;
         status.textContent = 'INICIALIZANDO PROTOCOLO OAUTH...';
         const clientId    = '33qw17TW2WM9OqeTqtRaC';
-        const redirectUri = 'https://garrabot.duckdns.org/callback.html';
+        // Usa sempre a origem atual (ngrok ou qualquer domínio) como redirect
+        const localOrigin = window.location.origin;
+        const redirectUri = localOrigin + '/callback.html';
         const verifier    = Array.from(crypto.getRandomValues(new Uint8Array(32))).map(b=>b.toString(16).padStart(2,'0')).join('');
         const state       = Math.random().toString(36).substring(2);
         sessionStorage.setItem('pkce_verifier', verifier);
         sessionStorage.setItem('oauth_state',   state);
         const challenge = await generateChallenge(verifier);
 
-        // Envia o verifier para a VPS antes de redirecionar
-        // (necessário pois a VPS não tem sessionStorage do browser)
+        // Envia o verifier para o servidor local
         status.textContent = 'ENVIANDO CREDENCIAIS...';
         try {
-            await fetch('https://garrabot.duckdns.org/store-verifier', {
+            await fetch(localOrigin + '/store-verifier', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ verifier: verifier })
+                body: JSON.stringify({ verifier: verifier, session_id: state })
             });
-        } catch(e) { /* silencioso — fallback funciona */ }
+        } catch(e) { /* silencioso */ }
 
         status.textContent = 'REDIRECIONANDO PARA DERIV...';
         window.location.href = 'https://auth.deriv.com/oauth2/auth?' +

@@ -54,10 +54,30 @@ def _hora_brt(fmt: str = "%H:%M") -> str:
 
 app = Flask(__name__)
 
+@app.after_request
+def _add_ngrok_header(resp):
+    resp.headers['ngrok-skip-browser-warning'] = '1'
+    return resp
+
 APP_ID       = "33qw17TW2WM9OqeTqtRaC"
-SERVIDOR_URL = "https://garrabot.duckdns.org/pegar-token-robo"   # Oracle Cloud
-RENDER_URL   = SERVIDOR_URL   # alias de compatibilidade — não usa mais o Render
-SITE_LOGIN   = "https://garrabot.duckdns.org/login"
+
+# ── URL dinâmica: usa ngrok se disponível, senão DuckDNS ──────────────────────
+def _get_base_url():
+    try:
+        import requests as _req
+        t = _req.get("http://localhost:4040/api/tunnels", timeout=2).json()
+        for tun in t.get("tunnels", []):
+            if tun.get("proto") == "https":
+                return tun["public_url"].rstrip("/")
+    except Exception:
+        pass
+    return "https://garrabot2.duckdns.org"
+
+_BASE_URL    = _get_base_url()
+SERVIDOR_URL = f"{_BASE_URL}/pegar-token-robo"
+RENDER_URL   = SERVIDOR_URL
+SITE_LOGIN   = f"{_BASE_URL}/login"
+print(f"[CONFIG] URL base: {_BASE_URL}")
 API_BASE     = "https://api.derivws.com/trading/v1/options"
 
 # Guarda tipo de conta escolhido (DEMO ou REAL)
@@ -1219,7 +1239,7 @@ def index():
     return resp
 
 # URL do callback — agora é a própria VPS (não precisa mais do Netlify)
-CALLBACK_URL = "https://garrabot.duckdns.org/callback.html"
+CALLBACK_URL = f"{_BASE_URL}/callback.html"
 
 @app.route('/callback.html')
 def callback_html():
@@ -1377,7 +1397,15 @@ setInterval(function(){
                 _token_recebido["_bot_confirmou"]    = False
                 _token_recebido.pop("_pkce_verifier", None)
             print(f"[Callback] Token PRINCIPAL armazenado: {access_token[:10]}... ({len(access_token)} chars)")
-        # Sucesso — aguarda o bot confirmar antes de iniciar countdown
+
+        # Login secundário — fecha imediatamente sem esperar bot
+        if _eh_secundaria:
+            return _html('&#9989;', 'CONTA SECUNDÁRIA AUTORIZADA', '#00ff41',
+                'Token recebido com sucesso!<br><br>'
+                '<span style="color:#aaa">&#9658; Feche esta aba<br>'
+                '&#9658; Clique em <b style="color:#00ff41">+ Conectar</b> no modal</span>')
+
+        # Login principal — aguarda o bot confirmar antes de iniciar countdown
         sucesso_body = """
 <div class="icone">&#9989;</div>
 <div class="titulo" style="color:#00ff41;text-shadow:0 0 14px #00ff41">ACESSO AUTORIZADO</div>
@@ -1416,7 +1444,13 @@ function startCountdown(){
 function poll(){
   fetch('/auth/token-confirmado').then(function(r){return r.json();}).then(function(d){
     if(d.ok){startCountdown();}
-    else{tries++;if(tries<30)setTimeout(poll,1000);else{clearInterval(dotT);var s=document.getElementById('stmsg');if(s){s.innerHTML='BOT DEMOROU — FECHE MANUALMENTE';s.style.color='#ffbd2e';}}}
+    else{tries++;if(tries<30)setTimeout(poll,1000);else{
+      // Bot demorou — fecha automaticamente após 2s (token já está salvo)
+      clearInterval(dotT);
+      var s=document.getElementById('stmsg');
+      if(s){s.innerHTML='✅ TOKEN SALVO — fechando...';s.style.color='#00ff41';}
+      setTimeout(function(){window.close();},2000);
+    }}
   }).catch(function(){tries++;if(tries<30)setTimeout(poll,1000);});
 }
 setTimeout(poll,1000);
@@ -1437,16 +1471,46 @@ def auth_token_confirmado():
         ok = bool(_token_recebido.get("_bot_confirmou", False))
     return jsonify({"ok": ok})
 
-@app.route('/store-verifier', methods=['POST'])
+@app.route('/auth/confirmar-bot', methods=['POST', 'OPTIONS'])
+def auth_confirmar_bot():
+    """Chamado pelo bot local para sinalizar ao Oracle que o token foi recebido.
+    Isso faz a página de callback fechar automaticamente."""
+    if request.method == 'OPTIONS':
+        resp = app.make_default_options_response()
+        resp.headers['Access-Control-Allow-Origin']  = '*'
+        resp.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+        return resp
+    with _token_lock:
+        _token_recebido["_bot_confirmou"] = True
+    resp = jsonify({"ok": True})
+    resp.headers['Access-Control-Allow-Origin'] = '*'
+    return resp
+
+@app.route('/store-verifier', methods=['POST', 'OPTIONS'])
 def store_verifier():
     """Recebe e armazena o PKCE verifier antes do redirect para a Deriv.
     Chamado pelo frontend logo antes de redirecionar para auth.deriv.com."""
-    dados    = request.get_json(silent=True) or {}
-    verifier = (dados.get("verifier") or "").strip()
+    if request.method == 'OPTIONS':
+        resp = app.make_default_options_response()
+        resp.headers['Access-Control-Allow-Origin']  = '*'
+        resp.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+        return resp
+    dados      = request.get_json(silent=True) or {}
+    verifier   = (dados.get("verifier")   or "").strip()
+    session_id = (dados.get("session_id") or "").strip()
     if verifier:
         with _token_lock:
             _token_recebido["_pkce_verifier"] = verifier
-        return jsonify({"ok": True})
+            if session_id:
+                _token_recebido["_session_id"] = session_id
+
+        # Rodando local — token chegará diretamente via /callback.html (ngrok)
+        # Não precisa de relay para a Oracle
+        print(f"[LocalAuth] Verifier armazenado — aguardando callback da Deriv via ngrok...")
+
+        resp = app.make_response(jsonify({"ok": True}))
+        resp.headers['Access-Control-Allow-Origin'] = '*'
+        return resp
     return jsonify({"ok": False, "erro": "verifier vazio"}), 400
 
 
@@ -1691,12 +1755,26 @@ def _sec_login_selenium(tipo: str):
     opts.add_argument("--disable-blink-features=AutomationControlled")
     opts.add_experimental_option("excludeSwitches", ["enable-automation"])
 
-    # Usa o chromedriver do snap
-    service = Service(executable_path="/snap/bin/chromium.chromedriver")
+    # Detecta sistema e monta service correto
+    import platform as _plat
+    _os = _plat.system()
+    service = None
+    if _os == "Linux" and os.path.exists("/snap/bin/chromium.chromedriver"):
+        service = Service(executable_path="/snap/bin/chromium.chromedriver")
+    elif _os == "Linux" and os.path.exists("/usr/bin/chromedriver"):
+        service = Service(executable_path="/usr/bin/chromedriver")
+    else:
+        # Windows / Mac — usa webdriver-manager para baixar automaticamente
+        try:
+            from webdriver_manager.chrome import ChromeDriverManager
+            service = Service(ChromeDriverManager().install())
+        except ImportError:
+            # Tenta sem service (Selenium 4.6+ gerencia sozinho)
+            service = Service()
 
     driver = None
     try:
-        driver = webdriver.Chrome(service=service, options=opts)
+        driver = webdriver.Chrome(service=service, options=opts) if service else webdriver.Chrome(options=opts)
         with _SEC_LOGIN_LOCK:
             _SEC_LOGIN_STATE["browser_process"] = driver
             _SEC_LOGIN_STATE["status"] = "aguardando_login"
@@ -1849,7 +1927,11 @@ _token_sec_lock = threading.Lock()
 
 @app.route('/open-login-secundaria')
 def open_login_secundaria():
-    """Inicia Selenium headless no Oracle para fazer login da conta secundária."""
+    """Inicia login da conta secundária.
+    No Oracle Cloud (Linux): usa Selenium headless.
+    No Windows/Mac (local): apenas sinaliza aguardando — usuário abre o link manualmente.
+    """
+    import platform as _plat
     tipo = request.args.get("tipo", "DEMO").upper()
 
     # Verifica se já tem login em andamento
@@ -1864,12 +1946,22 @@ def open_login_secundaria():
         _token_secundaria["ts"]           = 0
         _token_secundaria["aguardando"]   = True
 
-    # Inicia Selenium em thread background
-    t = threading.Thread(target=_sec_login_selenium, args=(tipo,), daemon=True)
-    t.start()
+    _sistema = _plat.system()
+    _eh_linux = (_sistema == "Linux")
 
-    return jsonify({"status": "opened", "url": SITE_LOGIN,
-                    "msg": "Selenium iniciado — aguarde o login ser detectado automaticamente."})
+    if _eh_linux:
+        # Oracle Cloud: Selenium headless intercepta o callback automaticamente
+        t = threading.Thread(target=_sec_login_selenium, args=(tipo,), daemon=True)
+        t.start()
+        msg = "Selenium iniciado — aguarde o login ser detectado automaticamente."
+    else:
+        # Windows/Mac local: apenas aguarda o callback chegar via browser do usuário
+        with _SEC_LOGIN_LOCK:
+            _SEC_LOGIN_STATE["status"] = "aguardando_login"
+            _SEC_LOGIN_STATE["erro"]   = ""
+        msg = "Faça login na aba que abriu — servidor aguardando token..."
+
+    return jsonify({"status": "opened", "url": SITE_LOGIN, "msg": msg})
 
 @app.route('/auth/deriv-secundaria', methods=['POST', 'OPTIONS'])
 def auth_deriv_secundaria():
@@ -2638,7 +2730,7 @@ def rota_quotex_sync_script():
 
     Como usar:
       1. Abra o Tampermonkey → Dashboard → Utilitários → Instalar do URL
-      2. Cole: https://garrabot.duckdns.org/quotex/sync-script
+      2. Cole: https://garrabot2.duckdns.org/quotex/sync-script
       3. Confirme a instalação
 
     Ou acesse a URL no navegador e salve o arquivo .js manualmente.
@@ -10228,7 +10320,7 @@ def wa_ping():
         return jsonify({"online": False, "erro": str(e)})
 
 # URL fixa do servidor Oracle Cloud
-_SELF_URL = "https://garrabot.duckdns.org"
+_SELF_URL = _BASE_URL
 
 def _wa_keepalive_loop():
     """Bate no servidor WA e em si mesmo a cada 30min para manter conexões ativas."""
@@ -11586,10 +11678,16 @@ def trading_pro_avaliar():
         })
 
     orc = _get_trading_pro()
-    # Aplica score_min do frontend temporariamente se enviado
+    # Recarrega config do disco a cada avaliação — garante que mudanças no JSON
+    # sejam aplicadas sem reiniciar o servidor
+    orc.cfg = orc._carregar_config()
+
+    # score_min do frontend é usado apenas como teto máximo, nunca eleva o threshold
     if score_min is not None:
         try:
-            orc.cfg["min_consensus"] = int(score_min)
+            sm = int(score_min)
+            if sm < orc.cfg.get("min_consensus", 35):
+                orc.cfg["min_consensus"] = sm
         except (TypeError, ValueError):
             pass
 
