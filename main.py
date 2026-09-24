@@ -11280,8 +11280,8 @@ def garra_trend_avaliar():
     dados    = request.get_json(force=True, silent=True) or {}
     resultado = _garra_trend_engine.avaliar_mercado(dados)
 
-    # Se aprovado institucionalmente, dispara notificação opcional via Telegram
-    if resultado["aprovado"]:
+    # Se aprovado institucionalmente, dispara notificação opcional via Telegram — bloqueado no modo ESPELHO
+    if resultado["aprovado"] and _MODO_OPERACAO.get("modo") != "ESPELHO":
         cfg_tg = _tg_carregar()
         if cfg_tg.get("enabled"):
             msg = (
@@ -11584,8 +11584,8 @@ def garra_m1_avaliar():
     engine    = _get_m1_engine()
     resultado = engine.avaliar(dados)
 
-    # Notificação Telegram quando aprovado
-    if resultado.get("operar"):
+    # Notificação Telegram quando aprovado — bloqueado no modo ESPELHO
+    if resultado.get("operar") and _MODO_OPERACAO.get("modo") != "ESPELHO":
         try:
             cfg_tg = _tg_carregar()
             if cfg_tg.get("enabled"):
@@ -11661,8 +11661,8 @@ def quotex_garra_reversao_avaliar():
         "cfg_override":  cfg_ov,
     })
 
-    # Notificação Telegram
-    if resultado.get("operar"):
+    # Notificação Telegram — bloqueado no modo ESPELHO
+    if resultado.get("operar") and _MODO_OPERACAO.get("modo") != "ESPELHO":
         try:
             cfg_tg = _tg_carregar()
             if cfg_tg.get("enabled"):
@@ -11787,8 +11787,8 @@ def trading_pro_avaliar():
     resultado = orc.avaliar(velas_norm, broker=broker, ativo=ativo,
                             drawdown_pct=drawdown_pct)
 
-    # Notificação Telegram quando aprovado
-    if resultado.get("operar"):
+    # Notificação Telegram quando aprovado — bloqueado no modo ESPELHO
+    if resultado.get("operar") and _MODO_OPERACAO.get("modo") != "ESPELHO":
         try:
             cfg_tg = _tg_carregar()
             if cfg_tg.get("enabled"):
