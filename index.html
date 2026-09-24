@@ -8225,26 +8225,21 @@ function tgEnviarResultado(win, lucro, prox_stake, _origemSec, _overrides) {
         return;
     }
 
-    // ── Modo Espelho: usa dados da conta SECUNDÁRIA, ignora a principal ───
+    // ── Modo Espelho: conta TESTE usa mensagem única espelho; SECUNDÁRIA tem notif própria ───
     let payload;
     if (_modoEspelhoAtivo) {
-        const saldoSec = parseFloat(_sec.saldo) || 0;
+        // Conta TESTE (principal no espelho) → mensagem única 🪞
         payload = {
             win:             win,
             lucro:           lucro,
-            profit_total:    _sec.profit,
-            banca:           saldoSec,
-            wins:            _sec.wins,
-            losses:          _sec.losses,
+            profit_total:    bot.profit,
+            banca:           parseFloat(document.getElementById('hd-balance')?.textContent?.replace('$','')) || 0,
+            wins:            bot.wins,
+            losses:          bot.losses,
             prox_stake:      prox_stake,
             modo:            _mcConfig.gerenciamento || bot.gerenciamento,
             estrategia:      bot.estrategia,
-            seq_win:         bot._seqWinAtual,
-            seq_loss:        bot._seqLossAtual,
-            max_win_consec:  bot._maxWinConsec,
-            max_loss_consec: bot._maxLossConsec,
-            max_stake:       bot._maxStakeUsada,
-            conta:           'SECUNDARIA',
+            conta:           'TESTE',
         };
     } else {
         const saldo = parseFloat(document.getElementById('hd-balance').textContent.replace('$','')) || 0;

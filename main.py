@@ -190,10 +190,12 @@ def _tg_espelho_atualizar(token: str, chat_id: str, win: bool, meta: int = 2):
                               "text": texto, "parse_mode": "Markdown"},
                         timeout=8
                     )
-                    if r.ok and r.json().get("ok"):
+                    rj = r.json()
+                    print(f"[TG-ESPELHO] editMessage ok={rj.get('ok')} err={rj.get('description','')}")
+                    if r.ok and rj.get("ok"):
                         return
-                except Exception:
-                    pass
+                except Exception as e:
+                    print(f"[TG-ESPELHO] editMessage exception: {e}")
             # Cria nova mensagem
             try:
                 r = _req.post(
@@ -201,13 +203,13 @@ def _tg_espelho_atualizar(token: str, chat_id: str, win: bool, meta: int = 2):
                     json={"chat_id": chat_id, "text": texto, "parse_mode": "Markdown"},
                     timeout=8
                 )
-                if r.ok:
-                    data = r.json()
-                    if data.get("ok"):
-                        with state["lock"]:
-                            state["message_id"] = data["result"]["message_id"]
-            except Exception:
-                pass
+                rj = r.json()
+                print(f"[TG-ESPELHO] sendMessage ok={rj.get('ok')} err={rj.get('description','')}")
+                if r.ok and rj.get("ok"):
+                    with state["lock"]:
+                        state["message_id"] = rj["result"]["message_id"]
+            except Exception as e:
+                print(f"[TG-ESPELHO] sendMessage exception: {e}")
 
         threading.Thread(target=_editar_ou_criar, daemon=True).start()
 
@@ -2991,20 +2993,20 @@ def tg_send():
     if not token or not chat_id:
         return jsonify({"ok": False, "erro": "token/chat_id ausentes"})
 
-    # ── Conta SECUNDÁRIA: sempre usa mensagem única animada (modo ESPELHO ou duplo) ──
+    # ── Conta TESTE (espelho): mensagem única animada 🪞 ──────────────────────
     conta = str(d.get("conta", "")).upper()
-    if conta == "SECUNDARIA":
+    if conta == "TESTE":
         # Só intercepta resultado WIN/LOSS (não stop_win, não virtual, não texto_direto)
         if not d.get("stop_win") and not d.get("virtual") and not d.get("_texto_direto"):
             win  = bool(d.get("win", False))
             meta = int(d.get("meta_espelho", 2))
-            print(f"[TG] SECUNDARIA → mensagem única espelho win={win} meta={meta}")
+            print(f"[TG] TESTE → mensagem única espelho win={win} meta={meta} msg_id={_TG_ESPELHO_STATE['message_id']}")
             _tg_espelho_atualizar(token, chat_id, win, meta)
             return jsonify({"ok": True, "espelho": True})
-    # ── Modo ESPELHO: bloqueia tudo que não seja SECUNDARIA ──
-    if _MODO_OPERACAO.get("modo") == "ESPELHO" and conta != "SECUNDARIA":
-        print("[TG] Modo ESPELHO: notificação bloqueada (não é conta SECUNDÁRIA).")
-        return jsonify({"ok": True, "bloqueado": True, "motivo": "modo_espelho_conta_nao_secundaria"})
+    # ── Modo ESPELHO: bloqueia notificações que não sejam TESTE ou SECUNDARIA ──
+    if _MODO_OPERACAO.get("modo") == "ESPELHO" and conta not in ("TESTE", "SECUNDARIA", "PRINCIPAL"):
+        print("[TG] Modo ESPELHO: notificação bloqueada.")
+        return jsonify({"ok": True, "bloqueado": True, "motivo": "modo_espelho_bloqueado"})
 
     # Cotação capturada aqui (fora da thread) para não atrasar o envio
     cotacao = _buscar_cotacao()
