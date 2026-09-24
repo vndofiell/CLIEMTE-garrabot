@@ -4604,7 +4604,7 @@ const ESTRATEGIAS = {
         duracao_unit:  "t",
         tf:            1,
         tp_hist:       5,
-        score_min:     60,
+        score_min:     35,
         desc: "5 IAs em consenso | Tendência + Price Action + Estatística + Regime + Supervisor",
     },
 };
@@ -6368,10 +6368,11 @@ function _cfgAplicar(cfg) {
                             ESTRATEGIAS[k].contract   = ESTRATEGIAS[k].contract || 'DIGITUNDER';
                             ESTRATEGIAS[k].nivel_gale = 0;
                         }
-                        // Trading Pro: garante valores mínimos corretos (ignora cache antigo)
+                        // Trading Pro: garante tp_hist correto (ignora cache antigo com valor alto)
                         if (ESTRATEGIAS[k].tipo === 'trading_pro') {
-                            if ((ESTRATEGIAS[k].tp_hist  || 0) > 10) ESTRATEGIAS[k].tp_hist  = 5;
-                            if ((ESTRATEGIAS[k].score_min|| 0) > 70) ESTRATEGIAS[k].score_min = 60;
+                            if ((ESTRATEGIAS[k].tp_hist || 0) > 10) ESTRATEGIAS[k].tp_hist = 5;
+                            // score_min: respeita o que o usuário salvou; só corrige se vier de versão antiga (>= 78)
+                            if ((ESTRATEGIAS[k].score_min || 0) >= 78) ESTRATEGIAS[k].score_min = 35;
                         }
                     }
                 }
@@ -6382,7 +6383,7 @@ function _cfgAplicar(cfg) {
             if (est.tipo === 'dupla')              lblEst = `Over ${est.barrier_over} + Under ${est.barrier_under}`;
             else if (est.tipo === 'gatilho_duplo') lblEst = `Barr.${est.gatilho}${est.rep_gatilho} → UNDER+OVER`;
             else if (est.tipo === 'garra_dupla')   lblEst = `${est.contract || 'DIGITUNDER'} barr.5 | gatilho=${est.qtd_gatilho}x`;
-            else if (est.tipo === 'trading_pro')   lblEst = `score≥${est.score_min || 60} | ${est.duracao || 1}${est.duracao_unit || 't'} | ${est.ativo || 'R_100'}`;
+            else if (est.tipo === 'trading_pro')   lblEst = `score≥${est.score_min || 35} | ${est.duracao || 1}${est.duracao_unit || 't'} | ${est.ativo || 'R_100'}`;
             document.getElementById('btn-estrategia').innerHTML =
                 `${cfg.estrategia}<span class="cmd-label">${lblEst}</span>`;
         }
@@ -7643,7 +7644,7 @@ function selecionarEstrategia(nome) {
         campo('Timeframe (min por vela de análise)', 'cfg-tf', 'select', est.tf || 1,
               undefined, undefined, undefined, [1,2,5,15]);
         campo('Histórico mínimo (velas) — min 50, max 210', 'cfg-tp-hist', 'number', est.tp_hist || 210, 50, 210, 10);
-        campo('Score mínimo para entrar (0-100)', 'cfg-score-min', 'number', est.score_min || 60, 1, 100, 1);
+        campo('Score mínimo para entrar (0-100)', 'cfg-score-min', 'number', est.score_min || 92, 50, 100, 5);
         campo('Unidade do contrato (m=minutos / t=ticks)', 'cfg-duracao-unit', 'select', est.duracao_unit || 't',
               undefined, undefined, undefined, ['m','t']);
         campo('Duração do contrato', 'cfg-duracao', 'select', est.duracao || 1,
@@ -7660,7 +7661,7 @@ function selecionarEstrategia(nome) {
         campo('Timeframe (ticks por vela)', 'cfg-tf', 'select', est.tf || 1,
               undefined, undefined, undefined, [1,2,5,15]);
         campo('Histórico mínimo (velas)', 'cfg-tp-hist', 'number', est.tp_hist || 60, 2, 210, 1);
-        campo('Score mínimo consenso (0-100)', 'cfg-score-min', 'number', est.score_min || 60, 1, 100, 1);
+        campo('Score mínimo consenso (0-100)', 'cfg-score-min', 'number', est.score_min || 78, 50, 100, 2);
         campo('Unidade do contrato (m=min / t=ticks)', 'cfg-duracao-unit', 'select', est.duracao_unit || 't',
               undefined, undefined, undefined, ['t','m']);
         campo('Duração do contrato', 'cfg-duracao', 'select', est.duracao || 1,
@@ -7749,7 +7750,11 @@ function confirmarEstrategia() {
         est.tp_hist = Math.max(_tpMin, Math.min(210, parseInt(tpHist.value) || (est.tipo === 'trading_pro' ? 60 : 210)));
     }
     const scoreMin = document.getElementById('cfg-score-min');
-    if (scoreMin)     est.score_min = Math.max(1, Math.min(100, parseInt(scoreMin.value) || 60));
+    if (scoreMin) {
+        const _smVal = parseInt(scoreMin.value);
+        const _smMin = (est.tipo === 'trading_pro') ? 1 : 40;
+        est.score_min = Math.max(_smMin, Math.min(100, isNaN(_smVal) ? 35 : _smVal));
+    }
     if (seqGat)       est.seq_gatilho   = Math.max(0, parseInt(seqGat.value) || 0);
     // Campos pct_hist
     const pctJanela = document.getElementById('cfg-pct-janela');
@@ -7800,8 +7805,6 @@ function confirmarEstrategia() {
     bot._tpScore             = null;  // limpa score do último sinal (trend_pro)
     bot._tpAiSinalPendente   = null;  // cancela sinal pendente (trading_pro)
     bot._tpAiAnalisando      = false; // cancela flag análise (trading_pro)
-    bot._tpAiMkIdx           = 0;     // reseta índice de mercado (modo auto)
-    bot._tpAiMkTrocando      = false; // reseta flag de troca de ativo
     // Re-subscreve ticks se o ativo mudou e jhconexo WS ativa
     const novoAtivo = _resolverAtivo(est.ativo);
     if (bot.ws && bot.ws.readyState === WebSocket.OPEN && novoAtivo !== bot._tickAtivo) {
@@ -7814,7 +7817,7 @@ function confirmarEstrategia() {
     // Atualiza boto do painel
     let resumo = nome;
     if (est.tipo === 'trading_pro') {
-        resumo = `score≥${est.score_min || 60} | ${est.duracao || 1}${est.duracao_unit || 't'} | ${est.ativo || 'R_100'}`;
+        resumo = `score≥${est.score_min || 35} | ${est.duracao || 1}${est.duracao_unit || 't'} | ${est.ativo || 'R_100'}`;
     } else if (est.tipo === 'garra_dupla') {
         resumo = `${est.contract || 'DIGITUNDER'} barr.5 | gatilho=${est.qtd_gatilho}x | gale×${est.fator_gale}`;
     } else if (est.tipo === 'gatilho_duplo') {
@@ -7835,7 +7838,7 @@ function confirmarEstrategia() {
 
     fecharModal('modal-cfg-estrategia');
     if (est.tipo === 'trading_pro') {
-        print(`🤖 TRADING PRO AI ativado | score≥<b>${est.score_min || 60}</b> | ${est.duracao || 1}${est.duracao_unit || 't'} | ativo: <b>${est.ativo || 'R_100'}</b>`, "log-win");
+        print(`🤖 TRADING PRO AI ativado | score≥<b>${est.score_min || 35}</b> | ${est.duracao || 1}${est.duracao_unit || 't'} | ativo: <b>${est.ativo || 'R_100'}</b>`, "log-win");
     } else if (est.tipo === 'gatilho_duplo') {
         print(`🎯 GATILHO DUPLO: barreira=<b>${est.gatilho}</b> | repetições=<b>${est.rep_gatilho}</b>`
             + (ativo ? ` | Ativo: <b>${est.ativo}</b>` : ''), "log-win");
@@ -8260,6 +8263,7 @@ function tgEnviarResultado(win, lucro, prox_stake, _origemSec, _overrides) {
             max_win_consec:  bot._maxWinConsec,
             max_loss_consec: bot._maxLossConsec,
             max_stake:       bot._maxStakeUsada,
+            conta:           'PRINCIPAL',
         };
     }
 
@@ -8591,11 +8595,12 @@ function _secVerificarEspelhamento(profit_atual) {
             );
         }
 
-        // ── PAUSA a conta TESTE enquanto a secundária opera ────────────────
+        // ── Mantém bot rodando mas bloqueia o buy() da conta TESTE ─────────
+        // bot.running permanece true para que o tick loop continue gerando sinais
+        // A conta TESTE não entra (bloqueada por _sec.espelhandoAtivo no buy())
         _sec._testeEstavRodando = bot.running;
+        bot._buying = false;  // garante que não haja entrada em andamento
         if (bot.running) {
-            bot.running = false;
-            bot._buying = false;
             print(
                 `⏸ CONTA TESTE PAUSADA — secundária assumiu o controle.`,
                 'log-info'
@@ -8955,8 +8960,23 @@ async function _secConectar() {
                     _secEntrarAutonoma({ contract_type: 'DIGITOVER',  barrier: String(est.barrier_over  ?? 3) });
                     _secEntrarAutonoma({ contract_type: 'DIGITUNDER', barrier: String(est.barrier_under ?? 7) });
                     return;
+                } else if (est.tipo === 'trading_pro' || est.tipo === 'trend_pro' || est.tipo === 'candle') {
+                    // Espelha a direção decidida pelo bot principal
+                    // Entra apenas quando o bot principal acabou de decidir (bot._canaleDir definido)
+                    const _dir = bot._canaleDir;
+                    if (!_dir) return;  // ainda sem sinal
+                    const _ctSec = (_dir === 'CALL') ? 'CALL' : 'PUT';
+                    const _durSec = parseInt(est.duracao) || 1;
+                    const _unitSec = est.duracao_unit || 't';
+                    _secEntrarAutonoma({
+                        contract_type:  _ctSec,
+                        duration:       _durSec,
+                        duration_unit:  _unitSec,
+                    });
+                    bot._canaleDir = null;  // consome o sinal — evita entrar múltiplas vezes
+                    return;
                 } else {
-                    // Tipos não suportados em modo autônomo (fluxo, candle, etc.) — ignora
+                    // Tipo não suportado — ignora
                     return;
                 }
 
@@ -9033,8 +9053,9 @@ function _secEntrarAutonoma(opts) {
     const est  = ESTRATEGIAS[bot.estrategia];
     if (!est)  return;
 
-    const ativo = _resolverAtivo(est.ativo);
-    const dur   = Math.min(10, Math.max(1, parseInt(est.duracao) || 1));
+    const ativo     = _resolverAtivo(est.ativo);
+    const dur       = opts.duration      || Math.min(10, Math.max(1, parseInt(est.duracao) || 1));
+    const durUnit   = opts.duration_unit || est.duracao_unit || 't';
     // Usa o gerenciador da secundária se existir, senão usa stake fixa
     const stake = _sec.mgr ? _sec.mgr.getStake() : (_mcConfig.stake || 0.35);
 
@@ -9050,7 +9071,7 @@ function _secEntrarAutonoma(opts) {
         contract_type:     opts.contract_type,
         currency:          _sec.currency || 'USD',
         duration:          dur,
-        duration_unit:     't',
+        duration_unit:     durUnit,
         underlying_symbol: ativo,
     };
     if (opts.barrier !== undefined) p.barrier = opts.barrier;
@@ -10559,13 +10580,11 @@ function initWebSocket(wssUrl) {
                 // ══════════════════════════════════════════════════════════════
                 // TRADING PRO MULTI-AI — 5 IAs em consenso
                 // Modo simples : analisa o ativo único configurado
-                // Modo automático: permanece no mesmo ativo até ter LOSS,
-                //   então troca para o próximo mercado da lista.
+                // Modo automático: varre todos os mercados marcados e entra
+                //                  no ativo com o maior score aprovado
                 // ══════════════════════════════════════════════════════════════
-                if (bot._tpAiSinalPendente === undefined) bot._tpAiSinalPendente   = null;
-                if (bot._tpAiAnalisando    === undefined) bot._tpAiAnalisando      = false;
-                if (bot._tpAiMkIdx         === undefined) bot._tpAiMkIdx           = 0;
-                if (bot._tpAiMkTrocando    === undefined) bot._tpAiMkTrocando      = false;
+                if (bot._tpAiSinalPendente === undefined) bot._tpAiSinalPendente = null;
+                if (bot._tpAiAnalisando    === undefined) bot._tpAiAnalisando    = false;
 
                 const _tpAiTf    = est.tf || 1;
                 const _tpAiJan   = Math.max(1, _tpAiTf * 3);
@@ -10574,32 +10593,38 @@ function initWebSocket(wssUrl) {
                 if (bot._tpAiSinalPendente) {
                     if (bot._buying) {
                         bot._tpAiSinalPendente = null;
-                        bot._candleBuffer = bot._candleBuffer.slice(-_tpAiJan * 59);
                         _seqStatusUpdate(`🤖 TRADING PRO — operação em andamento...`);
                         return;
                     }
                     const _tpAiS = bot._tpAiSinalPendente;
                     bot._tpAiSinalPendente = null;
-                    bot._candleBuffer = bot._candleBuffer.slice(-_tpAiJan * 59);
                     _seqStatusClear();
                     if (!lvVerificar(digit)) return;
+                    // Troca para o ativo vencedor (modo automático pode ter escolhido outro ativo)
+                    if (_tpAiS.ativo && _tpAiS.ativo !== est.ativo) {
+                        const _atResolv = _resolverAtivo(_tpAiS.ativo);
+                        if (bot.ws && bot.ws.readyState === WebSocket.OPEN && _atResolv !== bot._tickAtivo) {
+                            bot.ws.send(json({ forget_all: 'ticks' }));
+                            bot._tickAtivo = _atResolv;
+                            bot.ws.send(json({ ticks: _atResolv, subscribe: 1 }));
+                        }
+                        est.ativo = _tpAiS.ativo;
+                    }
                     bot._canaleDir = _tpAiS.dir;
                     bot._tpScore   = _tpAiS.score;
                     bot._buying    = true;
-                    print(`🤖 TRADING PRO AI ${_tpAiS.dir} | score <b>${_tpAiS.score}/100</b> | líder: <b>${_tpAiS.lider}</b> | ativo: <b>${est.ativo}</b> | ENTRADA NA VIRADA ✅`, 'log-win');
+                    const _atLbl = _tpAiS.ativo || est.ativo || 'R_100';
+                    print(`🤖 TRADING PRO AI ${_tpAiS.dir} | score <b>${_tpAiS.score}/100</b> | líder: <b>${_tpAiS.lider}</b> | ativo: <b>${_atLbl}</b> | ENTRADA NA VIRADA ✅`, 'log-win');
                     _edcEntrar(() => buy());
                     return;
                 }
 
-                // ── Aguarda troca de ativo completar (só ocorre após LOSS) ────
-                if (bot._tpAiMkTrocando) return;
-
-                // FASE 1 — aguarda histórico suficiente
+                // FASE 1 — aguarda histórico suficiente (mínimo 5 velas = 15 ticks)
                 const _tpAiHistMin  = Math.max(2, Math.min(210, est.tp_hist || 5));
                 const _tpAiMinTicks = _tpAiJan * _tpAiHistMin;
                 if (bot._candleBuffer.length < _tpAiMinTicks) {
                     const _tpAiN = Math.floor(bot._candleBuffer.length / _tpAiJan);
-                    _seqStatusUpdate(`🤖 TRADING PRO [${_tpAiN}/${_tpAiHistMin} velas] coletando... (${est.ativo || 'R_100'})`);
+                    _seqStatusUpdate(`🤖 TRADING PRO [${_tpAiN}/${_tpAiHistMin} velas] coletando...`);
                     return;
                 }
 
@@ -10626,42 +10651,86 @@ function initWebSocket(wssUrl) {
                     ? Math.abs(bot.profit) / Math.max(1, bot.stake * 10)
                     : 0;
 
+                // NÃO descarta o buffer — mantém histórico acumulado para análises
                 bot._tpAiAnalisando = true;
 
-                // ── Analisa ativo atual com dados reais do buffer ─────────────
-                const _velasParaAnalisar = _tpAiMontarVelas();
-                fetch('/trading-pro/avaliar', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        velas:        _velasParaAnalisar,
-                        broker:       'DERIV',
-                        ativo:        est.ativo || 'R_100',
-                        drawdown_pct: _tpAiDd,
-                        score_min:    est.score_min || 60,
-                    }),
-                })
-                .then(r => r.json())
-                .then(_res => {
-                    bot._tpAiAnalisando = false;
-                    if (_res.operar && _res.direcao !== 'AGUARDAR') {
-                        // ✅ Sinal aprovado — agenda entrada na virada
-                        bot._candleBuffer = bot._candleBuffer.slice(-_tpAiJan * 59);
+                // ── MODO AUTOMÁTICO: varre todos os mercados marcados ─────────
+                if (est.auto_mercados && Array.isArray(est.mercados_auto) && est.mercados_auto.length > 0) {
+                    const _mkLista  = est.mercados_auto;
+                    const _tpAiVls  = _tpAiMontarVelas();
+                    _seqStatusUpdate(`🤖 TRADING PRO AUTO | varrendo ${_mkLista.length} mercados...`);
+
+                    const _tpAiScoreMin = est.score_min || 35;
+                    Promise.all(_mkLista.map(mk =>
+                        fetch('/trading-pro/avaliar', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                velas:        _tpAiVls,
+                                broker:       'DERIV',
+                                ativo:        mk,
+                                drawdown_pct: _tpAiDd,
+                                score_min:    _tpAiScoreMin,
+                            }),
+                        })
+                        .then(r => r.json())
+                        .then(res => ({ ...res, _mk: mk }))
+                        .catch(() => ({ operar: false, score: 0, _mk: mk }))
+                    ))
+                    .then(todos => {
+                        bot._tpAiAnalisando = false;
+                        // Filtra aprovados e pega o de maior score
+                        const aprovados = todos.filter(r => r.operar && r.direcao !== 'AGUARDAR');
+                        if (aprovados.length === 0) {
+                            // Mostra o melhor score entre os reprovados para debug
+                            const melhorRep = todos.reduce((a, b) => (b.score || 0) > (a.score || 0) ? b : a, todos[0]);
+                            _seqStatusUpdate(`🤖 TRADING PRO AUTO AGUARDAR | melhor score: ${melhorRep?.score || 0} (${melhorRep?._mk}) | ${melhorRep?.motivo || ''}`);
+                            return;
+                        }
+                        const melhor = aprovados.reduce((a, b) => (b.score || 0) > (a.score || 0) ? b : a, aprovados[0]);
                         bot._tpAiSinalPendente = {
-                            dir:   _res.direcao,
-                            score: _res.score  || 0,
-                            lider: _res.lider  || '—',
+                            dir:   melhor.direcao,
+                            score: melhor.score  || 0,
+                            lider: melhor.lider  || '—',
+                            ativo: melhor._mk,
                         };
-                        _seqStatusUpdate(`🤖 TRADING PRO ${_res.direcao} | ${est.ativo} | score ${_res.score}/100 | líder: ${_res.lider} | ⏳ aguardando virada...`);
-                    } else {
-                        // ❌ Sem sinal — aguarda próximo tick (não troca mercado)
-                        _seqStatusUpdate(`🤖 TRADING PRO AGUARDAR | ${est.ativo} | ${_res.motivo || 'Consenso insuficiente'} | score ${_res.score || 0}`);
-                    }
-                })
-                .catch(_err => {
-                    bot._tpAiAnalisando = false;
-                    console.warn('[TRADING PRO]', _err);
-                });
+                        _seqStatusUpdate(`🤖 TRADING PRO AUTO ${melhor.direcao} | ${melhor._mk} | score ${melhor.score}/100 | líder: ${melhor.lider} | ⏳ aguardando virada...`);
+                    })
+                    .catch(() => { bot._tpAiAnalisando = false; });
+
+                } else {
+                    // ── MODO SIMPLES: ativo único ─────────────────────────────
+                    fetch('/trading-pro/avaliar', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            velas:        _tpAiMontarVelas(),
+                            broker:       'DERIV',
+                            ativo:        est.ativo || 'R_100',
+                            drawdown_pct: _tpAiDd,
+                            score_min:    est.score_min || 35,
+                        }),
+                    })
+                    .then(r => r.json())
+                    .then(_res => {
+                        bot._tpAiAnalisando = false;
+                        if (_res.operar && _res.direcao !== 'AGUARDAR') {
+                            bot._tpAiSinalPendente = {
+                                dir:   _res.direcao,
+                                score: _res.score  || 0,
+                                lider: _res.lider  || '—',
+                                ativo: est.ativo   || 'R_100',
+                            };
+                            _seqStatusUpdate(`🤖 TRADING PRO ${_res.direcao} | score ${_res.score}/100 | líder: ${_res.lider} | ⏳ aguardando virada...`);
+                        } else {
+                            _seqStatusUpdate(`🤖 TRADING PRO AGUARDAR | ${_res.motivo || 'Consenso insuficiente'}`);
+                        }
+                    })
+                    .catch(_err => {
+                        bot._tpAiAnalisando = false;
+                        console.warn('[TRADING PRO]', _err);
+                    });
+                }
             }
         }
 
@@ -10925,9 +10994,8 @@ function initWebSocket(wssUrl) {
                 _adaptativoRegistrarResultado(won ? 'WIN' : 'LOSS', profit);
                 // ── EDC: feedback rico normal ─────────────────────────────
                 _edcFeedback(won, profit, false);
-                // ── TRADING PRO: registra WIN/LOSS — em LOSS troca mercado (modo auto) ──
+                // ── TRADING PRO: registra WIN/LOSS e aplica rotação de líder ──
                 if (ESTRATEGIAS[bot.estrategia] && ESTRATEGIAS[bot.estrategia].tipo === 'trading_pro') {
-                    const _tpEst = ESTRATEGIAS[bot.estrategia];
                     fetch('/trading-pro/resultado', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -10935,34 +11003,14 @@ function initWebSocket(wssUrl) {
                             resultado: won ? 'WIN' : 'LOSS',
                             lucro:     profit,
                             broker:    'DERIV',
-                            ativo:     _tpEst.ativo || 'R_100',
+                            ativo:     ESTRATEGIAS[bot.estrategia].ativo || 'R_100',
                             score:     bot._tpScore || 0,
                         })
                     }).catch(() => {});
-
-                    if (won) {
-                        _seqStatusUpdate(`🤖 TRADING PRO WIN | +$${profit.toFixed(2)} | ${_tpEst.ativo} | score ${bot._tpScore || 0}`);
-                    } else {
-                        _seqStatusUpdate(`🤖 TRADING PRO LOSS | -$${Math.abs(profit).toFixed(2)} | ${_tpEst.ativo} | score ${bot._tpScore || 0}`);
-                        // LOSS + modo automático → troca para próximo mercado da lista
-                        const _mkAuto = _tpEst.auto_mercados && Array.isArray(_tpEst.mercados_auto) && _tpEst.mercados_auto.length > 1;
-                        if (_mkAuto) {
-                            if (bot._tpAiMkIdx === undefined) bot._tpAiMkIdx = 0;
-                            bot._tpAiMkIdx = (bot._tpAiMkIdx + 1) % _tpEst.mercados_auto.length;
-                            const _novoAtivo  = _tpEst.mercados_auto[bot._tpAiMkIdx];
-                            const _novoResolv = _resolverAtivo(_novoAtivo);
-                            _tpEst.ativo         = _novoAtivo;
-                            bot._candleBuffer    = [];
-                            bot._tpAiMkTrocando  = true;
-                            if (bot.ws && bot.ws.readyState === WebSocket.OPEN) {
-                                bot.ws.send(json({ forget_all: 'ticks' }));
-                                bot._tickAtivo = _novoResolv;
-                                bot.ws.send(json({ ticks: _novoResolv, subscribe: 1 }));
-                            }
-                            print(`🔀 TRADING PRO AUTO | LOSS → próximo: <b>${_novoAtivo}</b>`, 'log-loss');
-                            setTimeout(() => { bot._tpAiMkTrocando = false; }, 1500);
-                        }
-                    }
+                    const _tpAiMsg = won
+                        ? `🤖 TRADING PRO WIN | +$${profit.toFixed(2)} | score ${bot._tpScore || 0}`
+                        : `🤖 TRADING PRO LOSS | -$${Math.abs(profit).toFixed(2)} | score ${bot._tpScore || 0}`;
+                    _seqStatusUpdate(_tpAiMsg);
                 }
                 // ── Secundária: verifica se deve ativar/desativar espelhamento ──
                 _secVerificarEspelhamento(bot.profit);
@@ -11377,6 +11425,11 @@ const CONTRACT_MAP = {
 };
 
 function buy() {
+    // Bloqueia buy() da conta TESTE quando a secundária está no controle
+    if (typeof _sec !== 'undefined' && _sec.espelhandoAtivo) {
+        bot._buying = false;
+        return;
+    }
     const reqId = Math.floor(Math.random() * 90000) + 10000;
     bot._pendingReqId = reqId;
     const est   = ESTRATEGIAS[bot.estrategia];
@@ -17445,7 +17498,7 @@ function mcAtualizarFaixa(estado) {
         texto.style.color = '#4ade80';
         texto.textContent = '🔑 Faça login na aba que abriu — servidor aguardando token…';
         botoes.innerHTML  = `
-            <button onclick="window.open('https://garrabot.duckdns.org/login','_blank')" class="mc-btn mc-btn-verde" style="width:auto;padding:5px 12px;font-size:0.72rem;">🔓 Abrir Login</button>
+            <button onclick="window.open(window.location.origin+'/login','_blank')" class="mc-btn mc-btn-verde" style="width:auto;padding:5px 12px;font-size:0.72rem;">🔓 Abrir Login</button>
             <button onclick="mcCancelarLogin()" class="mc-btn mc-btn-vermelho" style="width:auto;padding:5px 12px;font-size:0.72rem;">✕ Cancelar</button>`;
     } else {
         texto.style.color = '#fbbf24';
@@ -17527,14 +17580,14 @@ async function mcFazerLogin(tipo) {
     }
     if (dataSel.status === 'already_opened') {
         // Já tem Selenium rodando — só abre a URL de login no dispositivo
-        window.open('https://garrabot.duckdns.org/login', '_blank');
+        window.open(window.location.origin + '/login', '_blank');
         mcAtualizarFaixa('aguardando_login');
         mcStatus('🔑 Faça login na aba que abriu. O servidor detecta automaticamente…', '#60a5fa');
         return;
     }
 
     // Abre URL de login no dispositivo do usuário enquanto Selenium aguarda no servidor
-    window.open('https://garrabot.duckdns.org/login', '_blank');
+    window.open(window.location.origin + '/login', '_blank');
 
     mcAtualizarFaixa('aguardando_login');
     mcStatus('🔑 Faça login na aba que abriu! O servidor captura o token automaticamente…', '#4ade80');
@@ -17559,12 +17612,16 @@ async function mcFazerLogin(tipo) {
                 mcStatus(`✅ Conta SECUNDÁRIA conectada! ID: ${st.conta_id}`, '#4ade80');
                 mcAtualizarFaixa('com_token');
                 mcCarregarContas();
-            } else if (st.status === 'erro') {
+            } else if (st.status === 'erro' && st.erro && !st.erro.includes('driver') && !st.erro.includes('chrome')) {
+                // Só para o polling em erros reais (não erros de Selenium no Windows)
                 clearInterval(_mcLoginTimer);  _mcLoginTimer   = null;
                 clearTimeout(_mcLoginTimeout); _mcLoginTimeout = null;
                 _mcLoginEmAndamento = false;
                 mcAtualizarFaixa('sem_token');
-                mcStatus(`❌ ${st.erro || 'Erro ao conectar conta secundária.'}`, '#f87171');
+                mcStatus(`❌ ${st.erro}`, '#f87171');
+            } else if (st.status === 'erro') {
+                // Erro de Selenium (Windows) — continua aguardando o callback manual
+                mcStatus('🔑 Faça login na aba que abriu. Aguardando token...', '#60a5fa');
             }
         } catch (_) {}
     }, 2000);
@@ -17572,13 +17629,21 @@ async function mcFazerLogin(tipo) {
 
 // ── Conectar conta secundária ─────────────────────────────────────────────
 async function mcConectarSecundaria() {
-    if (!_mcTokenOk) {
-        const ok = await mcVerificarToken();
-        if (!ok) {
-            mcStatus('⚠️ Faça login na Deriv primeiro (use os botões acima).', '#fbbf24');
+    // Verifica se o token da SECUNDÁRIA está disponível no servidor
+    // (não usa /debug-render que verifica o token principal)
+    try {
+        const vResp = await fetch('/contas/verificar-secundaria', { signal: AbortSignal.timeout(5000) });
+        const vData = await vResp.json();
+        if (!vData.token_pronto && vData.status !== 'token_pronto') {
+            mcStatus('⚠️ Faça login na Deriv primeiro (clique em Abrir Login).', '#fbbf24');
+            mcAtualizarFaixa('sem_token');
             return;
         }
+    } catch (_) {
+        mcStatus('⚠️ Erro ao verificar token. Tente novamente.', '#fbbf24');
+        return;
     }
+
     const tipo = _mcTipoSelecionado;
     const nome = prompt(
         `Nome da conta ${tipo} (pode deixar em branco):`,
@@ -17587,8 +17652,6 @@ async function mcConectarSecundaria() {
     if (nome === null) return;
     mcStatus('Conectando…', '#fbbf24');
     try {
-        // Envia tipo='SECUNDARIA' para que o servidor use EXCLUSIVAMENTE o token
-        // do slot da secundária — nunca o token da conta principal
         const resp = await fetch('/contas/adicionar', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -17596,14 +17659,16 @@ async function mcConectarSecundaria() {
         });
         const data = await resp.json();
         if (data.ok) {
+            _mcTokenOk = true;
             mcStatus(`✅ Conta ${tipo} conectada! ID: ${data.conta.id}`, '#4ade80');
+            mcAtualizarFaixa('com_token');
             mcCarregarContas();
         } else {
-            if (data.erro && (data.erro.includes('Token') || data.erro.includes('Render') || data.erro.includes('token'))) {
+            mcStatus(`❌ ${data.erro}`, '#f87171');
+            if (data.erro && data.erro.toLowerCase().includes('token')) {
                 _mcTokenOk = false;
                 mcAtualizarFaixa('sem_token');
             }
-            mcStatus(`❌ ${data.erro}`, '#f87171');
         }
     } catch (e) {
         mcStatus(`❌ Falha: ${e.message}`, '#f87171');
