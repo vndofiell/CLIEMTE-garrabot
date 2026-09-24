@@ -1,0 +1,73 @@
+{
+  "stake": 0.35,
+  "stopWin": 10,
+  "stopLoss": 100,
+  "estrategia": "🤖 TRADING PRO AI",
+  "gerenciamento": "💰 Stake Fixa",
+  "mgr_cfg": {
+    "stake": 0.35
+  },
+  "mgr_cfgs": {
+    "💰 Stake Fixa": {
+      "stake": 0.35
+    },
+    "🔄 Martingale": {
+      "stake": 0.35
+    }
+  },
+  "estrategias": {
+    "🎯 DIGITUNDER 5": {
+      "barrier": 5,
+      "duracao": 1,
+      "ativo": "R_100",
+      "seq_gatilho": 0
+    },
+    "🤖 ECT Dinâmica": {
+      "barrier": 7,
+      "duracao": 1,
+      "ativo": "R_100",
+      "seq_gatilho": 0
+    },
+    "🤖 TRADING PRO AI": {
+      "duracao": 1,
+      "ativo": "R_10",
+      "tf": 1
+    }
+  },
+  "lv": {
+    "ativo": false,
+    "qtd": 3,
+    "quando": "sempre",
+    "modo": "proximo_sinal",
+    "reativacao": "imediata",
+    "seguirAteWin": false
+  },
+  "tickRecovery": {
+    "ativo": false
+  },
+  "bloqHist": {
+    "ativo": false,
+    "janelaRecente": 30,
+    "margemDominio": 10,
+    "maxSeqPerda": 2,
+    "janelaConf": 5,
+    "winsConf": 3
+  },
+  "rotacao": {
+    "ativo": false,
+    "ticksBloq": 30,
+    "lista": [
+      "R_100",
+      "R_75",
+      "R_50",
+      "1HZ10V",
+      "1HZ25V",
+      "1HZ50V"
+    ],
+    "idxAtual": 0
+  },
+  "edcFiltro": false,
+  "modo": "ESPELHO",
+  "_modoIaLivre": false,
+  "modoAdaptativo": "DESLIGADO"
+}

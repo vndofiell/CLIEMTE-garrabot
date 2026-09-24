@@ -346,32 +346,21 @@ class AI04RegimeRisco:
     def analisar(self, velas: list, losses_seguidos: int,
                  drawdown_pct: float, cfg: dict) -> dict:
 
-        if len(velas) < 10:
+        if len(velas) < 3:
             return {"aprovado": False, "motivo_veto": "Histórico insuficiente", "regime": "INDEFINIDO"}
 
-        # ADX — mercado lateral?
-        adx = _adx(velas, 14)
-        if adx < cfg.get("veto_lateral_adx", 20):
+        # ADX — mercado lateral? (só veta se ADX disponível e muito baixo)
+        adx = _adx(velas, 14) if len(velas) >= 14 else 15
+        if adx < cfg.get("veto_lateral_adx", 10):
             return {"aprovado": False, "motivo_veto": f"Mercado lateral (ADX={adx:.1f})", "regime": "LATERAL"}
 
-        # Drawdown excessivo?
-        if drawdown_pct >= cfg.get("veto_max_drawdown_pct", 0.08):
-            return {"aprovado": False,
-                    "motivo_veto": f"Drawdown excessivo ({drawdown_pct*100:.1f}%)",
-                    "regime": "RISCO_ALTO"}
-
-        # Losses seguidos demais?
-        if losses_seguidos >= cfg.get("veto_max_losses_seguidos", 4):
-            return {"aprovado": False,
-                    "motivo_veto": f"Sequência de {losses_seguidos} losses consecutivos",
-                    "regime": "SEQUENCIA_LOSS"}
-
-        # Volatilidade exagerada (ATR > 3x média histórica)
+        # Drawdown: sem veto — Martingale/StopLoss já gerenciam o risco financeiro
+        # Volatilidade exagerada (ATR > 5x média histórica)
         atr_atual = _atr(velas[-5:],  5)  if len(velas) >= 6  else 0
         atr_media = _atr(velas[-50:], 14) if len(velas) >= 51 else 0
-        if atr_media > 0 and atr_atual > atr_media * 3:
+        if atr_media > 0 and atr_atual > atr_media * 5:
             return {"aprovado": False,
-                    "motivo_veto": f"Volatilidade extrema (ATR={atr_atual:.6f} > 3×média)",
+                    "motivo_veto": f"Volatilidade extrema (ATR={atr_atual:.6f} > 5×média)",
                     "regime": "VOLATIL"}
 
         # Define regime
@@ -425,8 +414,8 @@ class AI05Supervisor:
                 "votos":   votos,
             }
 
-        min_consensus      = cfg.get("min_consensus", 78)
-        min_lead_confidence = cfg.get("min_lead_confidence", 72)
+        min_consensus       = cfg.get("min_consensus", 35)
+        min_lead_confidence = cfg.get("min_lead_confidence", 30)
 
         # Contagem ponderada por direção
         score_call = 0
@@ -454,15 +443,7 @@ class AI05Supervisor:
                 "votos":   votos,
             }
 
-        # Conflito: as duas direções com diferença muito pequena (<10)
-        if abs(score_call - score_put) < 10:
-            return {
-                "operar":  False,
-                "direcao": "AGUARDAR",
-                "score":   round(score_total, 1),
-                "motivo":  f"Conflito CALL={score_call:.0f} PUT={score_put:.0f}",
-                "votos":   votos,
-            }
+        # Sem bloqueio por conflito — entra na direção dominante
 
         return {
             "operar":       True,
@@ -555,17 +536,12 @@ class TradingProOrchestrator:
           { operar, direcao, score, lider, motivo, votos, ... }
         """
         with self._lock:
-            min_c = self.cfg.get("min_candles", 30)
+            min_c = self.cfg.get("min_candles", 5)
             if len(velas) < min_c:
                 return self._aguardar(f"Histórico insuficiente ({len(velas)}/{min_c})")
 
-            # Bloqueio pós-loss: exige nova vela
-            if self._aguardando_vela and self.cfg.get("require_new_candle", True):
-                ts_atual = velas[-1].get("timestamp", 0)
-                if ts_atual == self._vela_ultima_op:
-                    return self._aguardar("Aguardando nova vela M1 após loss")
-                # Nova vela chegou — libera
-                self._aguardando_vela = False
+            # Bloqueio pós-loss desativado — frontend já controla o cooldown
+            self._aguardando_vela = False
 
             # Hora para AI03
             import datetime as _dt
@@ -593,19 +569,9 @@ class TradingProOrchestrator:
             # ── Supervisor decide ─────────────────────────────────────────────
             decisao = self._ai05.decidir(votos, self.cfg)
             decisao["lider"] = self.lider_atual
-
-            # Verifica confiança mínima do líder
-            if decisao["operar"]:
-                voto_lider = votos.get(self.lider_atual, {})
-                conf_lider = voto_lider.get("confianca", 0)
-                min_lc     = self.cfg.get("min_lead_confidence", 72)
-                if conf_lider < min_lc:
-                    decisao["operar"]  = False
-                    decisao["direcao"] = "AGUARDAR"
-                    decisao["motivo"]  = (
-                        f"Líder {self.lider_atual} com confiança insuficiente "
-                        f"({conf_lider} < {min_lc})"
-                    )
+            # Confiança do líder é informativa apenas — não bloqueia entrada
+            voto_lider = votos.get(self.lider_atual, {})
+            decisao["conf_lider"] = voto_lider.get("confianca", 0)
 
             if decisao["operar"]:
                 self._ultima_direcao = decisao["direcao"]
@@ -648,21 +614,14 @@ class TradingProOrchestrator:
             if res == "WIN":
                 self._losses_seguidos = 0
                 self._wins_seguidos  += 1
-                # Volta para AI_01 após N wins seguidos
-                if (self.cfg.get("reset_leader_after_wins", 2) > 0
-                        and self._wins_seguidos >= self.cfg["reset_leader_after_wins"]
-                        and self._idx_lider != 0):
-                    self._resetar_lider()
-                    self._wins_seguidos = 0
+                self._aguardando_vela = False
 
             else:  # LOSS
                 self._wins_seguidos   = 0
                 self._losses_seguidos += 1
-                self._aguardando_vela = self.cfg.get("require_new_candle", True)
-
-                # Rotaciona líder se configurado
-                if self.cfg.get("rotate_on_loss", True):
-                    self._rotar_lider()
+                self._aguardando_vela = False   # não bloqueia — frontend controla cooldown
+                # Rotação desativada — AI03/AI04 sem histórico bloqueiam entradas
+                # self._rotar_lider()
 
     # ── Vault ─────────────────────────────────────────────────────────────────
     def _salvar_vault(self, entrada: dict):

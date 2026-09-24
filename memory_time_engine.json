@@ -1,0 +1,1481 @@
+{
+  "config": {
+    "estado": "APRENDIZADO",
+    "dias_coletados": 3,
+    "dias_minimos": 7,
+    "total_raw": 1570,
+    "ultimo_update": "2026-09-24T11:23:56.333575-03:00"
+  },
+  "slots": {
+    "11:20": {
+      "operacoes": 16,
+      "operacoes_real": 16,
+      "wins_w": 7.8,
+      "losses_w": 8.0,
+      "win_rate": 49.4,
+      "status": "NEUTRO",
+      "regime_status": {
+        "R_10": {
+          "wr": 49.4,
+          "status": "NEUTRO"
+        }
+      },
+      "atualizado": 1790259836.333296
+    },
+    "11:25": {
+      "operacoes": 3,
+      "operacoes_real": 3,
+      "wins_w": 2.0,
+      "losses_w": 1.0,
+      "win_rate": 0.0,
+      "status": "APRENDENDO",
+      "regime_status": {
+        "R_10": {
+          "wr": 66.7,
+          "status": "OPERAR"
+        }
+      },
+      "atualizado": 1790087384.18048
+    },
+    "11:30": {
+      "operacoes": 1,
+      "operacoes_real": 1,
+      "wins_w": 0.0,
+      "losses_w": 1.0,
+      "win_rate": 0.0,
+      "status": "APRENDENDO",
+      "regime_status": {
+        "R_10": {
+          "wr": 0.0,
+          "status": "BLOQUEAR"
+        }
+      },
+      "atualizado": 1790087550.608987
+    },
+    "13:05": {
+      "operacoes": 1,
+      "operacoes_real": 1,
+      "wins_w": 0.0,
+      "losses_w": 1.0,
+      "win_rate": 0.0,
+      "status": "APRENDENDO",
+      "regime_status": {
+        "R_25": {
+          "wr": 0.0,
+          "status": "BLOQUEAR"
+        }
+      },
+      "atualizado": 1790093204.592045
+    },
+    "13:15": {
+      "operacoes": 1,
+      "operacoes_real": 1,
+      "wins_w": 0.0,
+      "losses_w": 1.0,
+      "win_rate": 0.0,
+      "status": "APRENDENDO",
+      "regime_status": {
+        "R_25": {
+          "wr": 0.0,
+          "status": "BLOQUEAR"
+        }
+      },
+      "atualizado": 1790093720.552313
+    },
+    "13:40": {
+      "operacoes": 4,
+      "operacoes_real": 4,
+      "wins_w": 2.0,
+      "losses_w": 2.0,
+      "win_rate": 0.0,
+      "status": "APRENDENDO",
+      "regime_status": {
+        "R_10": {
+          "wr": 50.0,
+          "status": "NEUTRO"
+        }
+      },
+      "atualizado": 1790095444.521687
+    },
+    "14:25": {
+      "operacoes": 1,
+      "operacoes_real": 1,
+      "wins_w": 1.0,
+      "losses_w": 0.0,
+      "win_rate": 0.0,
+      "status": "APRENDENDO",
+      "regime_status": {
+        "R_10": {
+          "wr": 100.0,
+          "status": "OPERAR"
+        }
+      },
+      "atualizado": 1790098026.74049
+    },
+    "14:30": {
+      "operacoes": 1,
+      "operacoes_real": 1,
+      "wins_w": 0.0,
+      "losses_w": 1.0,
+      "win_rate": 0.0,
+      "status": "APRENDENDO",
+      "regime_status": {
+        "R_10": {
+          "wr": 0.0,
+          "status": "BLOQUEAR"
+        }
+      },
+      "atualizado": 1790098482.071954
+    },
+    "14:35": {
+      "operacoes": 2,
+      "operacoes_real": 2,
+      "wins_w": 1.0,
+      "losses_w": 1.0,
+      "win_rate": 0.0,
+      "status": "APRENDENDO",
+      "regime_status": {
+        "R_10": {
+          "wr": 50.0,
+          "status": "NEUTRO"
+        }
+      },
+      "atualizado": 1790098664.047134
+    },
+    "15:00": {
+      "operacoes": 1,
+      "operacoes_real": 1,
+      "wins_w": 0.0,
+      "losses_w": 1.0,
+      "win_rate": 0.0,
+      "status": "APRENDENDO",
+      "regime_status": {
+        "R_10": {
+          "wr": 0.0,
+          "status": "BLOQUEAR"
+        }
+      },
+      "atualizado": 1790100028.055237
+    },
+    "15:20": {
+      "operacoes": 1,
+      "operacoes_real": 1,
+      "wins_w": 0.0,
+      "losses_w": 1.0,
+      "win_rate": 0.0,
+      "status": "APRENDENDO",
+      "regime_status": {
+        "R_10": {
+          "wr": 0.0,
+          "status": "BLOQUEAR"
+        }
+      },
+      "atualizado": 1790101476.324621
+    },
+    "15:30": {
+      "operacoes": 3,
+      "operacoes_real": 3,
+      "wins_w": 1.0,
+      "losses_w": 2.0,
+      "win_rate": 0.0,
+      "status": "APRENDENDO",
+      "regime_status": {
+        "R_25": {
+          "wr": 33.3,
+          "status": "BLOQUEAR"
+        }
+      },
+      "atualizado": 1790101940.379382
+    },
+    "15:40": {
+      "operacoes": 5,
+      "operacoes_real": 5,
+      "wins_w": 3.0,
+      "losses_w": 2.0,
+      "win_rate": 60.0,
+      "status": "NEUTRO",
+      "regime_status": {
+        "R_25": {
+          "wr": 60.0,
+          "status": "NEUTRO"
+        }
+      },
+      "atualizado": 1790102680.344887
+    },
+    "15:50": {
+      "operacoes": 9,
+      "operacoes_real": 9,
+      "wins_w": 5.0,
+      "losses_w": 4.0,
+      "win_rate": 55.6,
+      "status": "NEUTRO",
+      "regime_status": {
+        "R_10": {
+          "wr": 55.6,
+          "status": "NEUTRO"
+        }
+      },
+      "atualizado": 1790103296.003798
+    },
+    "15:55": {
+      "operacoes": 28,
+      "operacoes_real": 28,
+      "wins_w": 12.0,
+      "losses_w": 16.0,
+      "win_rate": 42.9,
+      "status": "BLOQUEAR",
+      "regime_status": {
+        "R_10": {
+          "wr": 42.9,
+          "status": "BLOQUEAR"
+        }
+      },
+      "atualizado": 1790103590.016225
+    },
+    "16:00": {
+      "operacoes": 23,
+      "operacoes_real": 23,
+      "wins_w": 7.0,
+      "losses_w": 16.0,
+      "win_rate": 30.4,
+      "status": "BLOQUEAR",
+      "regime_status": {
+        "R_10": {
+          "wr": 30.4,
+          "status": "BLOQUEAR"
+        }
+      },
+      "atualizado": 1790103889.927133
+    },
+    "16:05": {
+      "operacoes": 13,
+      "operacoes_real": 13,
+      "wins_w": 6.8,
+      "losses_w": 5.6,
+      "win_rate": 54.8,
+      "status": "NEUTRO",
+      "regime_status": {
+        "R_10": {
+          "wr": 54.8,
+          "status": "NEUTRO"
+        }
+      },
+      "atualizado": 1790190552.255438
+    },
+    "17:15": {
+      "operacoes": 8,
+      "operacoes_real": 8,
+      "wins_w": 4.0,
+      "losses_w": 4.0,
+      "win_rate": 50.0,
+      "status": "NEUTRO",
+      "regime_status": {
+        "R_10": {
+          "wr": 50.0,
+          "status": "NEUTRO"
+        }
+      },
+      "atualizado": 1790108282.156822
+    },
+    "17:25": {
+      "operacoes": 12,
+      "operacoes_real": 12,
+      "wins_w": 6.0,
+      "losses_w": 6.0,
+      "win_rate": 50.0,
+      "status": "NEUTRO",
+      "regime_status": {
+        "R_10": {
+          "wr": 50.0,
+          "status": "NEUTRO"
+        }
+      },
+      "atualizado": 1790108995.726821
+    },
+    "17:50": {
+      "operacoes": 28,
+      "operacoes_real": 28,
+      "wins_w": 11.7,
+      "losses_w": 15.5,
+      "win_rate": 43.0,
+      "status": "BLOQUEAR",
+      "regime_status": {
+        "R_10": {
+          "wr": 43.0,
+          "status": "BLOQUEAR"
+        }
+      },
+      "atualizado": 1790196873.235761
+    },
+    "17:55": {
+      "operacoes": 24,
+      "operacoes_real": 24,
+      "wins_w": 12.0,
+      "losses_w": 11.9,
+      "win_rate": 50.2,
+      "status": "NEUTRO",
+      "regime_status": {
+        "R_10": {
+          "wr": 50.2,
+          "status": "NEUTRO"
+        }
+      },
+      "atualizado": 1790197184.73551
+    },
+    "18:00": {
+      "operacoes": 32,
+      "operacoes_real": 32,
+      "wins_w": 12.6,
+      "losses_w": 18.7,
+      "win_rate": 40.3,
+      "status": "BLOQUEAR",
+      "regime_status": {
+        "R_10": {
+          "wr": 40.3,
+          "status": "BLOQUEAR"
+        }
+      },
+      "atualizado": 1790197484.704765
+    },
+    "18:05": {
+      "operacoes": 57,
+      "operacoes_real": 57,
+      "wins_w": 23.2,
+      "losses_w": 30.4,
+      "win_rate": 43.3,
+      "status": "BLOQUEAR",
+      "regime_status": {
+        "R_10": {
+          "wr": 43.3,
+          "status": "BLOQUEAR"
+        }
+      },
+      "atualizado": 1790197798.905043
+    },
+    "18:10": {
+      "operacoes": 41,
+      "operacoes_real": 41,
+      "wins_w": 17.2,
+      "losses_w": 21.7,
+      "win_rate": 44.2,
+      "status": "BLOQUEAR",
+      "regime_status": {
+        "R_10": {
+          "wr": 44.2,
+          "status": "BLOQUEAR"
+        }
+      },
+      "atualizado": 1790198094.893279
+    },
+    "18:45": {
+      "operacoes": 28,
+      "operacoes_real": 28,
+      "wins_w": 13.8,
+      "losses_w": 13.5,
+      "win_rate": 50.5,
+      "status": "NEUTRO",
+      "regime_status": {
+        "R_10": {
+          "wr": 50.5,
+          "status": "NEUTRO"
+        }
+      },
+      "atualizado": 1790200162.82021
+    },
+    "18:50": {
+      "operacoes": 39,
+      "operacoes_real": 39,
+      "wins_w": 17.1,
+      "losses_w": 20.1,
+      "win_rate": 46.0,
+      "status": "NEUTRO",
+      "regime_status": {
+        "R_10": {
+          "wr": 46.0,
+          "status": "NEUTRO"
+        }
+      },
+      "atualizado": 1790200492.877334
+    },
+    "18:55": {
+      "operacoes": 43,
+      "operacoes_real": 43,
+      "wins_w": 15.9,
+      "losses_w": 24.9,
+      "win_rate": 39.0,
+      "status": "BLOQUEAR",
+      "regime_status": {
+        "R_10": {
+          "wr": 39.0,
+          "status": "BLOQUEAR"
+        }
+      },
+      "atualizado": 1790200748.812902
+    },
+    "19:00": {
+      "operacoes": 34,
+      "operacoes_real": 34,
+      "wins_w": 19.1,
+      "losses_w": 13.3,
+      "win_rate": 59.0,
+      "status": "NEUTRO",
+      "regime_status": {
+        "R_10": {
+          "wr": 59.0,
+          "status": "NEUTRO"
+        }
+      },
+      "atualizado": 1790201015.045127
+    },
+    "19:05": {
+      "operacoes": 16,
+      "operacoes_real": 16,
+      "wins_w": 9.0,
+      "losses_w": 7.0,
+      "win_rate": 56.2,
+      "status": "NEUTRO",
+      "regime_status": {
+        "R_10": {
+          "wr": 56.2,
+          "status": "NEUTRO"
+        }
+      },
+      "atualizado": 1790114991.932251
+    },
+    "19:10": {
+      "operacoes": 19,
+      "operacoes_real": 19,
+      "wins_w": 9.0,
+      "losses_w": 10.0,
+      "win_rate": 47.4,
+      "status": "NEUTRO",
+      "regime_status": {
+        "R_10": {
+          "wr": 47.4,
+          "status": "NEUTRO"
+        }
+      },
+      "atualizado": 1790115277.822188
+    },
+    "19:15": {
+      "operacoes": 2,
+      "operacoes_real": 2,
+      "wins_w": 1.0,
+      "losses_w": 1.0,
+      "win_rate": 0.0,
+      "status": "APRENDENDO",
+      "regime_status": {
+        "R_10": {
+          "wr": 50.0,
+          "status": "NEUTRO"
+        }
+      },
+      "atualizado": 1790115321.826756
+    },
+    "16:10": {
+      "operacoes": 30,
+      "operacoes_real": 30,
+      "wins_w": 21.0,
+      "losses_w": 9.0,
+      "win_rate": 70.0,
+      "status": "OPERAR",
+      "regime_status": {
+        "R_10": {
+          "wr": 70.0,
+          "status": "OPERAR"
+        }
+      },
+      "atualizado": 1790190888.256771
+    },
+    "16:15": {
+      "operacoes": 23,
+      "operacoes_real": 23,
+      "wins_w": 11.0,
+      "losses_w": 12.0,
+      "win_rate": 47.8,
+      "status": "NEUTRO",
+      "regime_status": {
+        "R_10": {
+          "wr": 47.8,
+          "status": "NEUTRO"
+        }
+      },
+      "atualizado": 1790191191.823443
+    },
+    "16:20": {
+      "operacoes": 15,
+      "operacoes_real": 15,
+      "wins_w": 11.0,
+      "losses_w": 4.0,
+      "win_rate": 73.3,
+      "status": "OPERAR",
+      "regime_status": {
+        "R_10": {
+          "wr": 73.3,
+          "status": "OPERAR"
+        }
+      },
+      "atualizado": 1790191361.821953
+    },
+    "16:40": {
+      "operacoes": 1,
+      "operacoes_real": 1,
+      "wins_w": 0.0,
+      "losses_w": 1.0,
+      "win_rate": 0.0,
+      "status": "APRENDENDO",
+      "regime_status": {
+        "R_10": {
+          "wr": 0.0,
+          "status": "BLOQUEAR"
+        }
+      },
+      "atualizado": 1790192686.222608
+    },
+    "16:45": {
+      "operacoes": 5,
+      "operacoes_real": 5,
+      "wins_w": 2.0,
+      "losses_w": 3.0,
+      "win_rate": 40.0,
+      "status": "BLOQUEAR",
+      "regime_status": {
+        "R_10": {
+          "wr": 40.0,
+          "status": "BLOQUEAR"
+        }
+      },
+      "atualizado": 1790192787.807818
+    },
+    "16:50": {
+      "operacoes": 17,
+      "operacoes_real": 17,
+      "wins_w": 5.0,
+      "losses_w": 12.0,
+      "win_rate": 29.4,
+      "status": "BLOQUEAR",
+      "regime_status": {
+        "R_10": {
+          "wr": 29.4,
+          "status": "BLOQUEAR"
+        }
+      },
+      "atualizado": 1790193294.296927
+    },
+    "16:55": {
+      "operacoes": 17,
+      "operacoes_real": 17,
+      "wins_w": 8.0,
+      "losses_w": 9.0,
+      "win_rate": 47.1,
+      "status": "NEUTRO",
+      "regime_status": {
+        "R_10": {
+          "wr": 47.1,
+          "status": "NEUTRO"
+        }
+      },
+      "atualizado": 1790193575.71131
+    },
+    "17:00": {
+      "operacoes": 24,
+      "operacoes_real": 24,
+      "wins_w": 11.0,
+      "losses_w": 13.0,
+      "win_rate": 45.8,
+      "status": "NEUTRO",
+      "regime_status": {
+        "R_10": {
+          "wr": 45.8,
+          "status": "NEUTRO"
+        }
+      },
+      "atualizado": 1790193867.645272
+    },
+    "17:05": {
+      "operacoes": 16,
+      "operacoes_real": 16,
+      "wins_w": 5.0,
+      "losses_w": 11.0,
+      "win_rate": 31.2,
+      "status": "BLOQUEAR",
+      "regime_status": {
+        "R_10": {
+          "wr": 31.2,
+          "status": "BLOQUEAR"
+        }
+      },
+      "atualizado": 1790194139.750007
+    },
+    "17:10": {
+      "operacoes": 8,
+      "operacoes_real": 8,
+      "wins_w": 4.0,
+      "losses_w": 4.0,
+      "win_rate": 50.0,
+      "status": "NEUTRO",
+      "regime_status": {
+        "R_10": {
+          "wr": 50.0,
+          "status": "NEUTRO"
+        }
+      },
+      "atualizado": 1790194289.625215
+    },
+    "17:40": {
+      "operacoes": 16,
+      "operacoes_real": 16,
+      "wins_w": 7.0,
+      "losses_w": 9.0,
+      "win_rate": 43.8,
+      "status": "BLOQUEAR",
+      "regime_status": {
+        "R_10": {
+          "wr": 43.8,
+          "status": "BLOQUEAR"
+        }
+      },
+      "atualizado": 1790196294.869338
+    },
+    "17:45": {
+      "operacoes": 29,
+      "operacoes_real": 29,
+      "wins_w": 18.0,
+      "losses_w": 11.0,
+      "win_rate": 62.1,
+      "status": "OPERAR",
+      "regime_status": {
+        "R_10": {
+          "wr": 62.1,
+          "status": "OPERAR"
+        }
+      },
+      "atualizado": 1790196595.214497
+    },
+    "18:15": {
+      "operacoes": 8,
+      "operacoes_real": 8,
+      "wins_w": 3.0,
+      "losses_w": 5.0,
+      "win_rate": 37.5,
+      "status": "BLOQUEAR",
+      "regime_status": {
+        "R_10": {
+          "wr": 37.5,
+          "status": "BLOQUEAR"
+        }
+      },
+      "atualizado": 1790198396.805031
+    },
+    "18:20": {
+      "operacoes": 21,
+      "operacoes_real": 21,
+      "wins_w": 12.0,
+      "losses_w": 9.0,
+      "win_rate": 57.1,
+      "status": "NEUTRO",
+      "regime_status": {
+        "R_10": {
+          "wr": 57.1,
+          "status": "NEUTRO"
+        }
+      },
+      "atualizado": 1790198685.029336
+    },
+    "18:25": {
+      "operacoes": 9,
+      "operacoes_real": 9,
+      "wins_w": 3.0,
+      "losses_w": 6.0,
+      "win_rate": 33.3,
+      "status": "BLOQUEAR",
+      "regime_status": {
+        "R_10": {
+          "wr": 33.3,
+          "status": "BLOQUEAR"
+        }
+      },
+      "atualizado": 1790198986.770376
+    },
+    "18:30": {
+      "operacoes": 18,
+      "operacoes_real": 18,
+      "wins_w": 9.0,
+      "losses_w": 9.0,
+      "win_rate": 50.0,
+      "status": "NEUTRO",
+      "regime_status": {
+        "R_10": {
+          "wr": 50.0,
+          "status": "NEUTRO"
+        }
+      },
+      "atualizado": 1790199252.944213
+    },
+    "18:35": {
+      "operacoes": 17,
+      "operacoes_real": 17,
+      "wins_w": 8.0,
+      "losses_w": 9.0,
+      "win_rate": 47.1,
+      "status": "NEUTRO",
+      "regime_status": {
+        "R_10": {
+          "wr": 47.1,
+          "status": "NEUTRO"
+        }
+      },
+      "atualizado": 1790199596.928113
+    },
+    "18:40": {
+      "operacoes": 27,
+      "operacoes_real": 27,
+      "wins_w": 16.0,
+      "losses_w": 11.0,
+      "win_rate": 59.3,
+      "status": "NEUTRO",
+      "regime_status": {
+        "R_10": {
+          "wr": 59.3,
+          "status": "NEUTRO"
+        }
+      },
+      "atualizado": 1790199898.960132
+    },
+    "19:50": {
+      "operacoes": 1,
+      "operacoes_real": 1,
+      "wins_w": 1.0,
+      "losses_w": 0.0,
+      "win_rate": 0.0,
+      "status": "APRENDENDO",
+      "regime_status": {
+        "R_10": {
+          "wr": 100.0,
+          "status": "OPERAR"
+        }
+      },
+      "atualizado": 1790204072.822093
+    },
+    "19:55": {
+      "operacoes": 17,
+      "operacoes_real": 17,
+      "wins_w": 8.0,
+      "losses_w": 9.0,
+      "win_rate": 47.1,
+      "status": "NEUTRO",
+      "regime_status": {
+        "R_10": {
+          "wr": 47.1,
+          "status": "NEUTRO"
+        }
+      },
+      "atualizado": 1790204366.781907
+    },
+    "20:00": {
+      "operacoes": 24,
+      "operacoes_real": 24,
+      "wins_w": 14.0,
+      "losses_w": 10.0,
+      "win_rate": 58.3,
+      "status": "NEUTRO",
+      "regime_status": {
+        "R_10": {
+          "wr": 58.3,
+          "status": "NEUTRO"
+        }
+      },
+      "atualizado": 1790204696.753795
+    },
+    "20:05": {
+      "operacoes": 16,
+      "operacoes_real": 16,
+      "wins_w": 8.0,
+      "losses_w": 8.0,
+      "win_rate": 50.0,
+      "status": "NEUTRO",
+      "regime_status": {
+        "R_10": {
+          "wr": 50.0,
+          "status": "NEUTRO"
+        }
+      },
+      "atualizado": 1790204954.871744
+    },
+    "20:10": {
+      "operacoes": 22,
+      "operacoes_real": 22,
+      "wins_w": 12.0,
+      "losses_w": 10.0,
+      "win_rate": 54.5,
+      "status": "NEUTRO",
+      "regime_status": {
+        "R_10": {
+          "wr": 54.5,
+          "status": "NEUTRO"
+        }
+      },
+      "atualizado": 1790205298.821206
+    },
+    "20:15": {
+      "operacoes": 25,
+      "operacoes_real": 25,
+      "wins_w": 12.0,
+      "losses_w": 13.0,
+      "win_rate": 48.0,
+      "status": "NEUTRO",
+      "regime_status": {
+        "R_10": {
+          "wr": 48.0,
+          "status": "NEUTRO"
+        }
+      },
+      "atualizado": 1790205586.870147
+    },
+    "20:20": {
+      "operacoes": 11,
+      "operacoes_real": 11,
+      "wins_w": 3.0,
+      "losses_w": 8.0,
+      "win_rate": 27.3,
+      "status": "BLOQUEAR",
+      "regime_status": {
+        "R_10": {
+          "wr": 27.3,
+          "status": "BLOQUEAR"
+        }
+      },
+      "atualizado": 1790205880.643973
+    },
+    "20:25": {
+      "operacoes": 26,
+      "operacoes_real": 26,
+      "wins_w": 13.0,
+      "losses_w": 13.0,
+      "win_rate": 50.0,
+      "status": "NEUTRO",
+      "regime_status": {
+        "R_10": {
+          "wr": 50.0,
+          "status": "NEUTRO"
+        }
+      },
+      "atualizado": 1790206188.890191
+    },
+    "20:30": {
+      "operacoes": 8,
+      "operacoes_real": 8,
+      "wins_w": 4.0,
+      "losses_w": 4.0,
+      "win_rate": 50.0,
+      "status": "NEUTRO",
+      "regime_status": {
+        "R_10": {
+          "wr": 50.0,
+          "status": "NEUTRO"
+        }
+      },
+      "atualizado": 1790206480.754545
+    },
+    "20:35": {
+      "operacoes": 16,
+      "operacoes_real": 16,
+      "wins_w": 6.0,
+      "losses_w": 10.0,
+      "win_rate": 37.5,
+      "status": "BLOQUEAR",
+      "regime_status": {
+        "R_10": {
+          "wr": 37.5,
+          "status": "BLOQUEAR"
+        }
+      },
+      "atualizado": 1790206794.706295
+    },
+    "20:40": {
+      "operacoes": 18,
+      "operacoes_real": 18,
+      "wins_w": 8.0,
+      "losses_w": 10.0,
+      "win_rate": 44.4,
+      "status": "BLOQUEAR",
+      "regime_status": {
+        "R_10": {
+          "wr": 44.4,
+          "status": "BLOQUEAR"
+        }
+      },
+      "atualizado": 1790207078.48655
+    },
+    "20:45": {
+      "operacoes": 9,
+      "operacoes_real": 9,
+      "wins_w": 4.0,
+      "losses_w": 5.0,
+      "win_rate": 44.4,
+      "status": "BLOQUEAR",
+      "regime_status": {
+        "R_10": {
+          "wr": 44.4,
+          "status": "BLOQUEAR"
+        }
+      },
+      "atualizado": 1790207302.774687
+    },
+    "08:15": {
+      "operacoes": 10,
+      "operacoes_real": 10,
+      "wins_w": 4.0,
+      "losses_w": 6.0,
+      "win_rate": 40.0,
+      "status": "BLOQUEAR",
+      "regime_status": {
+        "R_10": {
+          "wr": 40.0,
+          "status": "BLOQUEAR"
+        }
+      },
+      "atualizado": 1790248782.582271
+    },
+    "08:20": {
+      "operacoes": 20,
+      "operacoes_real": 20,
+      "wins_w": 9.0,
+      "losses_w": 11.0,
+      "win_rate": 45.0,
+      "status": "BLOQUEAR",
+      "regime_status": {
+        "R_10": {
+          "wr": 45.0,
+          "status": "BLOQUEAR"
+        }
+      },
+      "atualizado": 1790249098.590124
+    },
+    "08:25": {
+      "operacoes": 22,
+      "operacoes_real": 22,
+      "wins_w": 11.0,
+      "losses_w": 11.0,
+      "win_rate": 50.0,
+      "status": "NEUTRO",
+      "regime_status": {
+        "R_10": {
+          "wr": 50.0,
+          "status": "NEUTRO"
+        }
+      },
+      "atualizado": 1790249395.155439
+    },
+    "08:30": {
+      "operacoes": 26,
+      "operacoes_real": 26,
+      "wins_w": 14.0,
+      "losses_w": 12.0,
+      "win_rate": 53.8,
+      "status": "NEUTRO",
+      "regime_status": {
+        "R_10": {
+          "wr": 53.8,
+          "status": "NEUTRO"
+        }
+      },
+      "atualizado": 1790249696.865517
+    },
+    "08:35": {
+      "operacoes": 18,
+      "operacoes_real": 18,
+      "wins_w": 9.0,
+      "losses_w": 9.0,
+      "win_rate": 50.0,
+      "status": "NEUTRO",
+      "regime_status": {
+        "R_10": {
+          "wr": 50.0,
+          "status": "NEUTRO"
+        }
+      },
+      "atualizado": 1790249884.974475
+    },
+    "08:40": {
+      "operacoes": 8,
+      "operacoes_real": 8,
+      "wins_w": 4.0,
+      "losses_w": 4.0,
+      "win_rate": 50.0,
+      "status": "NEUTRO",
+      "regime_status": {
+        "R_10": {
+          "wr": 50.0,
+          "status": "NEUTRO"
+        }
+      },
+      "atualizado": 1790250294.961178
+    },
+    "08:45": {
+      "operacoes": 14,
+      "operacoes_real": 14,
+      "wins_w": 4.0,
+      "losses_w": 10.0,
+      "win_rate": 28.6,
+      "status": "BLOQUEAR",
+      "regime_status": {
+        "R_10": {
+          "wr": 28.6,
+          "status": "BLOQUEAR"
+        }
+      },
+      "atualizado": 1790250574.544239
+    },
+    "08:50": {
+      "operacoes": 17,
+      "operacoes_real": 17,
+      "wins_w": 10.0,
+      "losses_w": 7.0,
+      "win_rate": 58.8,
+      "status": "NEUTRO",
+      "regime_status": {
+        "R_10": {
+          "wr": 58.8,
+          "status": "NEUTRO"
+        }
+      },
+      "atualizado": 1790250892.993635
+    },
+    "08:55": {
+      "operacoes": 23,
+      "operacoes_real": 23,
+      "wins_w": 10.0,
+      "losses_w": 13.0,
+      "win_rate": 43.5,
+      "status": "BLOQUEAR",
+      "regime_status": {
+        "R_10": {
+          "wr": 43.5,
+          "status": "BLOQUEAR"
+        }
+      },
+      "atualizado": 1790251171.177356
+    },
+    "09:00": {
+      "operacoes": 18,
+      "operacoes_real": 18,
+      "wins_w": 10.0,
+      "losses_w": 8.0,
+      "win_rate": 55.6,
+      "status": "NEUTRO",
+      "regime_status": {
+        "R_10": {
+          "wr": 55.6,
+          "status": "NEUTRO"
+        }
+      },
+      "atualizado": 1790251495.187524
+    },
+    "09:05": {
+      "operacoes": 16,
+      "operacoes_real": 16,
+      "wins_w": 10.0,
+      "losses_w": 6.0,
+      "win_rate": 62.5,
+      "status": "OPERAR",
+      "regime_status": {
+        "R_10": {
+          "wr": 62.5,
+          "status": "OPERAR"
+        }
+      },
+      "atualizado": 1790251788.96507
+    },
+    "09:10": {
+      "operacoes": 18,
+      "operacoes_real": 18,
+      "wins_w": 11.0,
+      "losses_w": 7.0,
+      "win_rate": 61.1,
+      "status": "NEUTRO",
+      "regime_status": {
+        "R_10": {
+          "wr": 61.1,
+          "status": "NEUTRO"
+        }
+      },
+      "atualizado": 1790252092.998892
+    },
+    "09:15": {
+      "operacoes": 10,
+      "operacoes_real": 10,
+      "wins_w": 4.0,
+      "losses_w": 6.0,
+      "win_rate": 40.0,
+      "status": "BLOQUEAR",
+      "regime_status": {
+        "R_10": {
+          "wr": 40.0,
+          "status": "BLOQUEAR"
+        }
+      },
+      "atualizado": 1790252274.51547
+    },
+    "09:20": {
+      "operacoes": 11,
+      "operacoes_real": 11,
+      "wins_w": 4.0,
+      "losses_w": 7.0,
+      "win_rate": 36.4,
+      "status": "BLOQUEAR",
+      "regime_status": {
+        "R_10": {
+          "wr": 36.4,
+          "status": "BLOQUEAR"
+        }
+      },
+      "atualizado": 1790252665.397032
+    },
+    "09:25": {
+      "operacoes": 13,
+      "operacoes_real": 13,
+      "wins_w": 6.0,
+      "losses_w": 7.0,
+      "win_rate": 46.2,
+      "status": "NEUTRO",
+      "regime_status": {
+        "R_10": {
+          "wr": 46.2,
+          "status": "NEUTRO"
+        }
+      },
+      "atualizado": 1790252990.482434
+    },
+    "09:30": {
+      "operacoes": 15,
+      "operacoes_real": 15,
+      "wins_w": 7.0,
+      "losses_w": 8.0,
+      "win_rate": 46.7,
+      "status": "NEUTRO",
+      "regime_status": {
+        "R_10": {
+          "wr": 46.7,
+          "status": "NEUTRO"
+        }
+      },
+      "atualizado": 1790253247.190393
+    },
+    "09:35": {
+      "operacoes": 26,
+      "operacoes_real": 26,
+      "wins_w": 13.0,
+      "losses_w": 13.0,
+      "win_rate": 50.0,
+      "status": "NEUTRO",
+      "regime_status": {
+        "R_10": {
+          "wr": 50.0,
+          "status": "NEUTRO"
+        }
+      },
+      "atualizado": 1790253588.491173
+    },
+    "09:40": {
+      "operacoes": 23,
+      "operacoes_real": 23,
+      "wins_w": 8.0,
+      "losses_w": 15.0,
+      "win_rate": 34.8,
+      "status": "BLOQUEAR",
+      "regime_status": {
+        "R_10": {
+          "wr": 34.8,
+          "status": "BLOQUEAR"
+        }
+      },
+      "atualizado": 1790253899.099593
+    },
+    "09:45": {
+      "operacoes": 5,
+      "operacoes_real": 5,
+      "wins_w": 0.0,
+      "losses_w": 5.0,
+      "win_rate": 0.0,
+      "status": "BLOQUEAR",
+      "regime_status": {
+        "R_10": {
+          "wr": 0.0,
+          "status": "BLOQUEAR"
+        }
+      },
+      "atualizado": 1790253974.962552
+    },
+    "09:50": {
+      "operacoes": 5,
+      "operacoes_real": 5,
+      "wins_w": 2.0,
+      "losses_w": 3.0,
+      "win_rate": 40.0,
+      "status": "BLOQUEAR",
+      "regime_status": {
+        "R_10": {
+          "wr": 40.0,
+          "status": "BLOQUEAR"
+        }
+      },
+      "atualizado": 1790254499.402841
+    },
+    "09:55": {
+      "operacoes": 17,
+      "operacoes_real": 17,
+      "wins_w": 8.0,
+      "losses_w": 9.0,
+      "win_rate": 47.1,
+      "status": "NEUTRO",
+      "regime_status": {
+        "R_10": {
+          "wr": 47.1,
+          "status": "NEUTRO"
+        }
+      },
+      "atualizado": 1790254794.914752
+    },
+    "10:00": {
+      "operacoes": 6,
+      "operacoes_real": 6,
+      "wins_w": 2.0,
+      "losses_w": 4.0,
+      "win_rate": 33.3,
+      "status": "BLOQUEAR",
+      "regime_status": {
+        "R_10": {
+          "wr": 33.3,
+          "status": "BLOQUEAR"
+        }
+      },
+      "atualizado": 1790254909.305254
+    },
+    "10:05": {
+      "operacoes": 16,
+      "operacoes_real": 16,
+      "wins_w": 11.0,
+      "losses_w": 5.0,
+      "win_rate": 68.8,
+      "status": "OPERAR",
+      "regime_status": {
+        "R_10": {
+          "wr": 68.8,
+          "status": "OPERAR"
+        }
+      },
+      "atualizado": 1790255373.063256
+    },
+    "10:10": {
+      "operacoes": 11,
+      "operacoes_real": 11,
+      "wins_w": 5.0,
+      "losses_w": 6.0,
+      "win_rate": 45.5,
+      "status": "NEUTRO",
+      "regime_status": {
+        "R_10": {
+          "wr": 45.5,
+          "status": "NEUTRO"
+        }
+      },
+      "atualizado": 1790255690.455713
+    },
+    "10:15": {
+      "operacoes": 15,
+      "operacoes_real": 15,
+      "wins_w": 5.0,
+      "losses_w": 10.0,
+      "win_rate": 33.3,
+      "status": "BLOQUEAR",
+      "regime_status": {
+        "R_10": {
+          "wr": 33.3,
+          "status": "BLOQUEAR"
+        }
+      },
+      "atualizado": 1790255903.102756
+    },
+    "10:20": {
+      "operacoes": 12,
+      "operacoes_real": 12,
+      "wins_w": 6.0,
+      "losses_w": 6.0,
+      "win_rate": 50.0,
+      "status": "NEUTRO",
+      "regime_status": {
+        "R_10": {
+          "wr": 50.0,
+          "status": "NEUTRO"
+        }
+      },
+      "atualizado": 1790256298.931325
+    },
+    "10:25": {
+      "operacoes": 23,
+      "operacoes_real": 23,
+      "wins_w": 7.0,
+      "losses_w": 16.0,
+      "win_rate": 30.4,
+      "status": "BLOQUEAR",
+      "regime_status": {
+        "R_10": {
+          "wr": 30.4,
+          "status": "BLOQUEAR"
+        }
+      },
+      "atualizado": 1790256592.951392
+    },
+    "10:30": {
+      "operacoes": 13,
+      "operacoes_real": 13,
+      "wins_w": 7.0,
+      "losses_w": 6.0,
+      "win_rate": 53.8,
+      "status": "NEUTRO",
+      "regime_status": {
+        "R_10": {
+          "wr": 53.8,
+          "status": "NEUTRO"
+        }
+      },
+      "atualizado": 1790256890.332413
+    },
+    "10:35": {
+      "operacoes": 19,
+      "operacoes_real": 19,
+      "wins_w": 9.0,
+      "losses_w": 10.0,
+      "win_rate": 47.4,
+      "status": "NEUTRO",
+      "regime_status": {
+        "R_10": {
+          "wr": 47.4,
+          "status": "NEUTRO"
+        }
+      },
+      "atualizado": 1790257186.790686
+    },
+    "10:40": {
+      "operacoes": 10,
+      "operacoes_real": 10,
+      "wins_w": 5.0,
+      "losses_w": 5.0,
+      "win_rate": 50.0,
+      "status": "NEUTRO",
+      "regime_status": {
+        "R_10": {
+          "wr": 50.0,
+          "status": "NEUTRO"
+        }
+      },
+      "atualizado": 1790257490.772272
+    },
+    "10:45": {
+      "operacoes": 17,
+      "operacoes_real": 17,
+      "wins_w": 9.0,
+      "losses_w": 8.0,
+      "win_rate": 52.9,
+      "status": "NEUTRO",
+      "regime_status": {
+        "R_10": {
+          "wr": 52.9,
+          "status": "NEUTRO"
+        }
+      },
+      "atualizado": 1790257745.114947
+    },
+    "10:50": {
+      "operacoes": 20,
+      "operacoes_real": 20,
+      "wins_w": 11.0,
+      "losses_w": 9.0,
+      "win_rate": 55.0,
+      "status": "NEUTRO",
+      "regime_status": {
+        "R_10": {
+          "wr": 55.0,
+          "status": "NEUTRO"
+        }
+      },
+      "atualizado": 1790258096.646657
+    },
+    "10:55": {
+      "operacoes": 12,
+      "operacoes_real": 12,
+      "wins_w": 6.0,
+      "losses_w": 6.0,
+      "win_rate": 50.0,
+      "status": "NEUTRO",
+      "regime_status": {
+        "R_10": {
+          "wr": 50.0,
+          "status": "NEUTRO"
+        }
+      },
+      "atualizado": 1790258394.806117
+    },
+    "11:00": {
+      "operacoes": 16,
+      "operacoes_real": 16,
+      "wins_w": 7.0,
+      "losses_w": 9.0,
+      "win_rate": 43.8,
+      "status": "BLOQUEAR",
+      "regime_status": {
+        "R_10": {
+          "wr": 43.8,
+          "status": "BLOQUEAR"
+        }
+      },
+      "atualizado": 1790258696.407933
+    },
+    "11:05": {
+      "operacoes": 12,
+      "operacoes_real": 12,
+      "wins_w": 8.0,
+      "losses_w": 4.0,
+      "win_rate": 66.7,
+      "status": "OPERAR",
+      "regime_status": {
+        "R_10": {
+          "wr": 66.7,
+          "status": "OPERAR"
+        }
+      },
+      "atualizado": 1790258999.245514
+    },
+    "11:10": {
+      "operacoes": 26,
+      "operacoes_real": 26,
+      "wins_w": 14.0,
+      "losses_w": 12.0,
+      "win_rate": 53.8,
+      "status": "NEUTRO",
+      "regime_status": {
+        "R_10": {
+          "wr": 53.8,
+          "status": "NEUTRO"
+        }
+      },
+      "atualizado": 1790259282.910458
+    },
+    "11:15": {
+      "operacoes": 17,
+      "operacoes_real": 17,
+      "wins_w": 7.0,
+      "losses_w": 10.0,
+      "win_rate": 41.2,
+      "status": "BLOQUEAR",
+      "regime_status": {
+        "R_10": {
+          "wr": 41.2,
+          "status": "BLOQUEAR"
+        }
+      },
+      "atualizado": 1790259598.333904
+    }
+  }
+}

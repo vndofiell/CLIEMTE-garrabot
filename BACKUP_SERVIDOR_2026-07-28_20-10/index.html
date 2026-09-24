@@ -957,6 +957,177 @@
 </div>
 
 <!-- ══════════════════════════════════════
+     MODAL — CONEXÃO QUOTEX
+════════════════════════════════════════ -->
+<div id="modal-quotex" class="modal-overlay" style="display:none;">
+    <div class="modal-box" style="max-width:380px;">
+        <div class="modal-title" style="color:#ff6b00;">🟠 CONECTAR QUOTEX</div>
+        <div class="modal-sub" id="qx-modal-sub">Informe suas credenciais da Quotex</div>
+
+        <div id="qx-status-badge" style="
+            display:none; margin:8px 0 4px; padding:6px 10px; border-radius:4px;
+            font-family:'Share Tech Mono'; font-size:0.72rem;
+            letter-spacing:1px; text-align:center;
+        "></div>
+
+        <!-- Abas: SENHA ou SSID -->
+        <div style="display:flex; gap:0; margin-bottom:10px; border:1px solid rgba(255,107,0,0.3); border-radius:4px; overflow:hidden;">
+            <button id="qx-tab-senha" onclick="qxMostrarAba('senha')"
+                style="flex:1; padding:7px; background:rgba(255,107,0,0.15); border:none;
+                       color:#ff6b00; font-family:'Share Tech Mono'; font-size:0.7rem;
+                       letter-spacing:1px; cursor:pointer; border-bottom:2px solid #ff6b00;">
+                🔑 EMAIL / SENHA
+            </button>
+            <button id="qx-tab-ssid" onclick="qxMostrarAba('ssid')"
+                style="flex:1; padding:7px; background:transparent; border:none;
+                       color:#888; font-family:'Share Tech Mono'; font-size:0.7rem;
+                       letter-spacing:1px; cursor:pointer; border-bottom:2px solid transparent;">
+                🍪 SSID (sem 403)
+            </button>
+        </div>
+
+        <!-- Campos de login — aba SENHA -->
+        <div id="qx-form-fields">
+            <div style="margin-bottom:8px;">
+                <label style="font-size:0.65rem; color:#888; letter-spacing:1px;">EMAIL</label>
+                <input id="qx-email" type="email" autocomplete="off" placeholder="seu@email.com"
+                    style="width:100%; background:#0a0a12; border:1px solid rgba(255,107,0,0.5);
+                           color:#ff6b00; padding:8px 10px; font-family:'Share Tech Mono';
+                           font-size:0.8rem; border-radius:4px; outline:none; margin-top:3px;">
+            </div>
+            <div style="margin-bottom:12px;">
+                <label style="font-size:0.65rem; color:#888; letter-spacing:1px;">SENHA</label>
+                <input id="qx-senha" type="password" autocomplete="off" placeholder="••••••••"
+                    style="width:100%; background:#0a0a12; border:1px solid rgba(255,107,0,0.5);
+                           color:#ff6b00; padding:8px 10px; font-family:'Share Tech Mono';
+                           font-size:0.8rem; border-radius:4px; outline:none; margin-top:3px;">
+            </div>
+            <div style="display:flex; gap:8px; margin-bottom:12px;">
+                <button onclick="quotexConectar('DEMO')"
+                    style="flex:1; padding:9px; background:rgba(255,107,0,0.08);
+                           border:1px solid #ff6b00; color:#ff6b00;
+                           font-family:'Share Tech Mono'; font-size:0.75rem;
+                           letter-spacing:1px; cursor:pointer; border-radius:4px;">
+                    🧪 DEMO
+                </button>
+                <button onclick="quotexConectar('REAL')"
+                    style="flex:1; padding:9px; background:rgba(255,107,0,0.08);
+                           border:1px solid #ff4400; color:#ff4400;
+                           font-family:'Share Tech Mono'; font-size:0.75rem;
+                           letter-spacing:1px; cursor:pointer; border-radius:4px;">
+                    💰 REAL
+                </button>
+            </div>
+        </div>
+
+        <!-- Campos de login — aba SSID -->
+        <div id="qx-form-ssid" style="display:none;">
+
+            <!-- BOTÃO CAPTURA AUTOMÁTICA -->
+            <button id="qx-btn-capturar" onclick="qxCapturarSsidAuto()"
+                style="width:100%; padding:11px; margin-bottom:10px;
+                       background:rgba(0,255,65,0.08); border:1px solid #00ff41;
+                       color:#00ff41; font-family:'Share Tech Mono'; font-size:0.8rem;
+                       letter-spacing:2px; cursor:pointer; border-radius:4px; font-weight:bold;">
+                🤖 CAPTURAR SSID AUTOMATICAMENTE
+            </button>
+
+            <!-- Status da captura automática -->
+            <div id="qx-hunter-status" style="
+                display:none; text-align:center; padding:10px 8px; margin-bottom:10px;
+                background:rgba(0,0,0,0.3); border:1px solid rgba(0,255,65,0.25);
+                border-radius:4px; font-family:'Share Tech Mono'; font-size:0.7rem;">
+                <div id="qx-hunter-icone" style="font-size:1.6rem; margin-bottom:4px;">⏳</div>
+                <div id="qx-hunter-msg" style="color:#ffbd2e; letter-spacing:1px;">Abrindo Chrome...</div>
+                <div id="qx-hunter-sub" style="color:#555; font-size:0.62rem; margin-top:4px;">
+                    Faça login na janela do Chrome que abriu
+                </div>
+                <button onclick="qxCancelarHunter()"
+                    style="margin-top:8px; padding:5px 14px; background:transparent;
+                           border:1px solid #f44; color:#f44; font-family:'Share Tech Mono';
+                           font-size:0.65rem; cursor:pointer; border-radius:3px;">
+                    ✕ Cancelar
+                </button>
+            </div>
+
+            <div style="text-align:center; margin:6px 0 10px;
+                        font-size:0.6rem; color:#444; letter-spacing:1px;">
+                — ou cole manualmente —
+            </div>
+
+            <div style="margin-bottom:8px;">
+                <label style="font-size:0.65rem; color:#888; letter-spacing:1px;">EMAIL DA CONTA</label>
+                <input id="qx-email-ssid" type="email" autocomplete="off" placeholder="seu@email.com"
+                    style="width:100%; background:#0a0a12; border:1px solid rgba(255,107,0,0.5);
+                           color:#ff6b00; padding:8px 10px; font-family:'Share Tech Mono';
+                           font-size:0.8rem; border-radius:4px; outline:none; margin-top:3px;">
+            </div>
+            <div style="margin-bottom:12px;">
+                <label style="font-size:0.65rem; color:#ffbd2e; letter-spacing:1px;">SSID (cookie)</label>
+                <input id="qx-ssid-input" type="text" autocomplete="off" placeholder="Cole aqui ou use captura automática"
+                    style="width:100%; background:#0a0a12; border:1px solid rgba(255,189,46,0.5);
+                           color:#ffbd2e; padding:8px 10px; font-family:'Share Tech Mono';
+                           font-size:0.72rem; border-radius:4px; outline:none; margin-top:3px;">
+            </div>
+            <div style="display:flex; gap:8px; margin-bottom:12px;">
+                <button onclick="quotexConectarSsid('DEMO')"
+                    style="flex:1; padding:9px; background:rgba(255,107,0,0.08);
+                           border:1px solid #ff6b00; color:#ff6b00;
+                           font-family:'Share Tech Mono'; font-size:0.75rem;
+                           letter-spacing:1px; cursor:pointer; border-radius:4px;">
+                    🧪 DEMO
+                </button>
+                <button onclick="quotexConectarSsid('REAL')"
+                    style="flex:1; padding:9px; background:rgba(255,107,0,0.08);
+                           border:1px solid #ff4400; color:#ff4400;
+                           font-family:'Share Tech Mono'; font-size:0.75rem;
+                           letter-spacing:1px; cursor:pointer; border-radius:4px;">
+                    💰 REAL
+                </button>
+            </div>
+        </div>
+
+        <!-- Campo OTP — aparece só se a Quotex pedir 2FA -->
+        <div id="qx-otp-area" style="display:none; margin-bottom:12px;">
+            <label style="font-size:0.65rem; color:#ffbd2e; letter-spacing:1px;">
+                ⚠️ CÓDIGO 2FA — verifique seu e-mail
+            </label>
+            <div id="qx-otp-prompt" style="font-size:0.65rem; color:#aaa; margin:4px 0 6px;"></div>
+            <div style="display:flex; gap:8px;">
+                <input id="qx-otp-codigo" type="text" maxlength="8" placeholder="000000"
+                    style="flex:1; background:#0a0a12; border:1px solid rgba(255,189,46,0.6);
+                           color:#ffbd2e; padding:8px 10px; font-family:'Share Tech Mono';
+                           font-size:1rem; letter-spacing:4px; border-radius:4px; outline:none;">
+                <button onclick="quotexEnviarOtp()"
+                    style="padding:8px 14px; background:rgba(255,189,46,0.12);
+                           border:1px solid #ffbd2e; color:#ffbd2e;
+                           font-family:'Share Tech Mono'; font-size:0.75rem;
+                           cursor:pointer; border-radius:4px;">
+                    ✓ ENVIAR
+                </button>
+            </div>
+        </div>
+
+        <!-- Painel conectado -->
+        <div id="qx-painel-conectado" style="display:none; text-align:center; padding:4px 0;">
+            <div style="font-size:1.8rem; margin-bottom:6px;">🟢</div>
+            <div style="font-family:'Share Tech Mono'; color:#00ff41; font-size:0.8rem; letter-spacing:2px;">CONECTADA</div>
+            <div style="color:#aaa; font-size:0.7rem; margin:6px 0 2px;" id="qx-info-conta"></div>
+            <div style="color:#ff6b00; font-size:1rem; font-weight:bold; margin:8px 0;" id="qx-info-saldo"></div>
+            <button onclick="quotexDesconectar()"
+                style="width:100%; padding:9px; margin-top:8px;
+                       background:rgba(255,68,68,0.08); border:1px solid #f44;
+                       color:#f44; font-family:'Share Tech Mono';
+                       font-size:0.75rem; letter-spacing:1px; cursor:pointer; border-radius:4px;">
+                🔌 DESCONECTAR
+            </button>
+        </div>
+
+        <button class="modal-cancel" onclick="fecharModal('modal-quotex')" style="margin-top:4px;">✕ Fechar</button>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════
      MODAL — ESTRATÉGIA (lista)
 ════════════════════════════════════════ -->
 <div id="modal-estrategia" class="modal-overlay">
@@ -1288,6 +1459,11 @@
         conectar
         <span class="cmd-label">Login na Deriv</span>
     </button>
+    <button class="cmd-btn" id="btn-quotex-conectar" onclick="quotexAbrirModal()"
+        style="border-color:rgba(255,80,0,0.55); color:#ff6b00;">
+        🟠 Quotex
+        <span class="cmd-label" id="lbl-quotex-status" style="color:#57606a;">Desconectada</span>
+    </button>
 
     <div class="cmd-section">▸ ROBÔ</div>
     <button class="cmd-btn" id="btn-iniciar" onclick="runCmd('iniciar')">
@@ -1426,6 +1602,13 @@
 ════════════════════════════════════════ -->
 <div class="cmd-panel" id="mob-painel-dir">
     <div class="cmd-panel-title">🛠️ AÇÕES</div>
+
+    <div class="cmd-section">▸ QUOTEX TRADING</div>
+    <button class="cmd-btn" id="btn-qx-chart" onclick="qxChartAbrir()"
+        style="border-color:rgba(255,107,0,0.6); color:#ff6b00; font-weight:bold;">
+        📊 Gráfico Quotex
+        <span class="cmd-label" id="lbl-qx-chart" style="color:#57606a;">Velas + Operar</span>
+    </button>
 
     <div class="cmd-section">▸ PLACAR</div>
     <button class="cmd-btn" onclick="resetarPlacar()" style="border-color:rgba(255,189,46,0.4); color:#ffbd2e;">
@@ -13863,6 +14046,2198 @@ document.getElementById('mob-painel-esq').addEventListener('click', function(e) 
 // ══ PWA — REGISTRAR SERVICE WORKER ═════════════════════
 if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js').catch(() => {});
+}
+</script>
+
+<!-- ══════════════════════════════════════════════════════════
+     QUOTEX — Lógica de conexão, OTP e modal
+════════════════════════════════════════════════════════════ -->
+<script>
+const _qx = { status: 'desconectado', pollTimer: null, pollCount: 0 };
+
+function _qxBadge(msg, cor) {
+    const el = document.getElementById('qx-status-badge');
+    if (!el) return;
+    el.style.display = 'block';
+    el.style.color = cor || '#aaa';
+    el.style.border = '1px solid ' + (cor || '#333');
+    el.style.background = 'rgba(0,0,0,0.4)';
+    el.textContent = msg;
+}
+
+function _qxAtualizarBotao(status, extra) {
+    const btn = document.getElementById('btn-quotex-conectar');
+    const lbl = document.getElementById('lbl-quotex-status');
+    if (!btn || !lbl) return;
+    if (status === 'conectado') {
+        btn.style.borderColor = 'rgba(0,255,65,0.6)'; btn.style.color = '#00ff41';
+        btn.firstChild.textContent = '🟢 Quotex'; lbl.style.color = '#00ff41';
+        lbl.textContent = extra || 'Conectada';
+    } else if (status === 'conectando') {
+        btn.style.borderColor = 'rgba(255,189,46,0.6)'; btn.style.color = '#ffbd2e';
+        btn.firstChild.textContent = '🟡 Quotex'; lbl.style.color = '#ffbd2e';
+        lbl.textContent = 'Conectando...';
+    } else if (status === 'erro') {
+        btn.style.borderColor = 'rgba(255,68,68,0.6)'; btn.style.color = '#f44';
+        btn.firstChild.textContent = '🔴 Quotex'; lbl.style.color = '#f44';
+        lbl.textContent = extra || 'Erro';
+    } else {
+        btn.style.borderColor = 'rgba(255,80,0,0.55)'; btn.style.color = '#ff6b00';
+        btn.firstChild.textContent = '🟠 Quotex'; lbl.style.color = '#57606a';
+        lbl.textContent = 'Desconectada';
+    }
+    // Controla banner de desconexão no painel do gráfico
+    const banner = document.getElementById('qx-banner-desconectado');
+    if (banner) banner.style.display = (status === 'conectado' || status === 'conectando') ? 'none' : 'block';
+}
+
+// ── Reconectar via SSID direto do painel do gráfico ──────────────────────────
+function qxChartReconectar() {
+    // Abre o modal de conexão Quotex na aba SSID automaticamente
+    quotexAbrirModal();
+    setTimeout(() => qxMostrarAba('ssid'), 150);
+    // Dispara captura automática de SSID
+    setTimeout(() => qxCapturarSsidAuto(), 300);
+}
+
+function quotexAbrirModal() {
+    fetch('/quotex/status').then(r => r.json()).then(d => _qxRenderizarEstado(d)).catch(() => {});
+    const m = document.getElementById('modal-quotex');
+    if (m) m.style.display = 'flex';
+}
+
+function _qxRenderizarEstado(d) {
+    const form   = document.getElementById('qx-form-fields');
+    const painel = document.getElementById('qx-painel-conectado');
+    const otpArea = document.getElementById('qx-otp-area');
+    const sub    = document.getElementById('qx-modal-sub');
+    if (!form || !painel) return;
+    _qx.status = d.status || 'desconectado';
+
+    // Trata OTP pendente — mostra campo de código 2FA
+    if (d.otp_aguardando) {
+        form.style.display   = 'none';
+        painel.style.display = 'none';
+        if (otpArea) {
+            otpArea.style.display = 'block';
+            const pr = document.getElementById('qx-otp-prompt');
+            if (pr) pr.textContent = d.otp_prompt || 'Verifique seu e-mail e insira o código recebido:';
+        }
+        if (sub) sub.textContent = '🔐 Verificação em duas etapas';
+        _qxBadge('⏳ AGUARDANDO CÓDIGO OTP...', '#ffbd2e');
+        _qxAtualizarBotao('conectando');
+        return;
+    }
+    if (otpArea) otpArea.style.display = 'none';
+
+    if (d.status === 'conectado') {
+        form.style.display   = 'none';
+        painel.style.display = 'block';
+        if (sub) sub.textContent = 'Sessão ativa na Quotex';
+        const ic = document.getElementById('qx-info-conta');
+        const is = document.getElementById('qx-info-saldo');
+        if (ic) ic.textContent = (d.email || '') + ' — ' + (d.tipo_conta || 'DEMO');
+        if (is) is.textContent = 'Saldo: $' + parseFloat(d.saldo || 0).toFixed(2);
+        _qxBadge('✅ CONECTADA — ' + (d.tipo_conta || 'DEMO'), '#00ff41');
+        _qxAtualizarBotao('conectado', (d.tipo_conta || 'DEMO') + ' • $' + parseFloat(d.saldo || 0).toFixed(2));
+    } else if (d.status === 'conectando') {
+        form.style.display   = 'none';
+        painel.style.display = 'none';
+        if (sub) sub.textContent = 'Aguardando autenticação...';
+        _qxBadge('⏳ CONECTANDO...', '#ffbd2e');
+        _qxAtualizarBotao('conectando');
+    } else if (d.status === 'erro') {
+        form.style.display   = 'block';
+        painel.style.display = 'none';
+        if (sub) sub.textContent = 'Informe suas credenciais da Quotex';
+        _qxBadge('❌ ERRO: ' + (d.erro || 'falha na conexão'), '#f44');
+        _qxAtualizarBotao('erro', d.erro ? d.erro.substring(0, 30) : 'Erro');
+    } else {
+        form.style.display   = 'block';
+        painel.style.display = 'none';
+        if (sub) sub.textContent = 'Informe suas credenciais da Quotex';
+        const badge = document.getElementById('qx-status-badge');
+        if (badge) badge.style.display = 'none';
+        _qxAtualizarBotao('desconectado');
+    }
+}
+
+// ── Alterna abas SENHA / SSID no modal ───────────────────────────────────────
+// ── SSID Hunter — captura automática ─────────────────────────────────────────
+let _hunterTimer = null;
+
+function qxCapturarSsidAuto() {
+    const btn    = document.getElementById('qx-btn-capturar');
+    const painel = document.getElementById('qx-hunter-status');
+    if (btn)    btn.style.display    = 'none';
+    if (painel) painel.style.display = 'block';
+    _qxHunterMsg('⏳', 'Abrindo Chrome...', 'Faça login na janela que vai abrir', '#ffbd2e');
+
+    fetch('/quotex/ssid-hunter/iniciar', { method: 'POST' })
+        .then(r => r.json())
+        .then(d => {
+            if (!d.ok) {
+                _qxHunterMsg('❌', 'Erro: ' + (d.erro || 'falha'), '', '#f44');
+                return;
+            }
+            _qxHunterPoll();
+        })
+        .catch(() => _qxHunterMsg('❌', 'Sem resposta do servidor', '', '#f44'));
+}
+
+function _qxHunterMsg(icone, msg, sub, cor) {
+    const ei = document.getElementById('qx-hunter-icone');
+    const em = document.getElementById('qx-hunter-msg');
+    const es = document.getElementById('qx-hunter-sub');
+    if (ei) ei.textContent = icone;
+    if (em) { em.textContent = msg; em.style.color = cor || '#ffbd2e'; }
+    if (es) es.textContent = sub || '';
+}
+
+function _qxHunterPoll() {
+    clearInterval(_hunterTimer);
+    _hunterTimer = setInterval(() => {
+        fetch('/quotex/ssid-hunter/status')
+            .then(r => r.json())
+            .then(d => {
+                if (d.status === 'aguardando_login') {
+                    _qxHunterMsg('🌐', 'Chrome aberto!', 'Faça login na Quotex — o SSID será capturado automaticamente', '#00ff41');
+                } else if (d.status === 'capturado' && d.ssid) {
+                    clearInterval(_hunterTimer);
+                    _qxHunterMsg('✅', 'SSID CAPTURADO!', 'Preenchido automaticamente — clique DEMO ou REAL', '#00ff41');
+                    // Preenche o campo SSID automaticamente
+                    const inp = document.getElementById('qx-ssid-input');
+                    if (inp) inp.value = d.ssid;
+                    // Oculta o painel de status após 3s
+                    setTimeout(() => {
+                        const painel = document.getElementById('qx-hunter-status');
+                        const btn    = document.getElementById('qx-btn-capturar');
+                        if (painel) painel.style.display = 'none';
+                        if (btn)    btn.style.display    = 'block';
+                        _qxBadge('✅ SSID capturado! Clique DEMO ou REAL para conectar.', '#00ff41');
+                    }, 3000);
+                } else if (d.status === 'erro') {
+                    clearInterval(_hunterTimer);
+                    _qxHunterMsg('❌', 'Erro: ' + (d.erro || 'falha'), '', '#f44');
+                    setTimeout(() => {
+                        const painel = document.getElementById('qx-hunter-status');
+                        const btn    = document.getElementById('qx-btn-capturar');
+                        if (painel) painel.style.display = 'none';
+                        if (btn)    btn.style.display    = 'block';
+                    }, 4000);
+                }
+            }).catch(() => {});
+    }, 1500);
+}
+
+function qxCancelarHunter() {
+    clearInterval(_hunterTimer);
+    fetch('/quotex/ssid-hunter/parar', { method: 'POST' }).catch(() => {});
+    const painel = document.getElementById('qx-hunter-status');
+    const btn    = document.getElementById('qx-btn-capturar');
+    if (painel) painel.style.display = 'none';
+    if (btn)    btn.style.display    = 'block';
+}
+
+function qxMostrarAba(aba) {
+    const formSenha = document.getElementById('qx-form-fields');
+    const formSsid  = document.getElementById('qx-form-ssid');
+    const tabSenha  = document.getElementById('qx-tab-senha');
+    const tabSsid   = document.getElementById('qx-tab-ssid');
+    if (aba === 'ssid') {
+        if (formSenha) formSenha.style.display = 'none';
+        if (formSsid)  formSsid.style.display  = 'block';
+        if (tabSsid)  { tabSsid.style.color  = '#ffbd2e'; tabSsid.style.borderBottom  = '2px solid #ffbd2e'; tabSsid.style.background  = 'rgba(255,189,46,0.10)'; }
+        if (tabSenha) { tabSenha.style.color = '#888';    tabSenha.style.borderBottom = '2px solid transparent'; tabSenha.style.background = 'transparent'; }
+    } else {
+        if (formSenha) formSenha.style.display = 'block';
+        if (formSsid)  formSsid.style.display  = 'none';
+        if (tabSenha) { tabSenha.style.color = '#ff6b00'; tabSenha.style.borderBottom = '2px solid #ff6b00'; tabSenha.style.background = 'rgba(255,107,0,0.15)'; }
+        if (tabSsid)  { tabSsid.style.color  = '#888';   tabSsid.style.borderBottom  = '2px solid transparent'; tabSsid.style.background = 'transparent'; }
+    }
+}
+
+// ── Conectar via email/senha ──────────────────────────────────────────────────
+function quotexConectar(tipo) {
+    const email = (document.getElementById('qx-email') || {}).value || '';
+    const senha = (document.getElementById('qx-senha') || {}).value || '';
+    if (!email || !senha) { _qxBadge('⚠️ Informe email e senha', '#ffbd2e'); return; }
+    _qxBadge('⏳ CONECTANDO...', '#ffbd2e');
+    _qxAtualizarBotao('conectando');
+    fetch('/quotex/conectar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, senha, tipo_conta: tipo })
+    }).then(r => r.json()).then(d => {
+        if (d.ok) { _qxStartPoll(); }
+        else { _qxBadge('❌ ' + (d.erro || 'Erro'), '#f44'); _qxAtualizarBotao('erro', d.erro || 'Erro'); }
+    }).catch(() => {
+        _qxBadge('❌ Sem resposta do servidor', '#f44');
+        _qxAtualizarBotao('erro', 'Sem resposta');
+    });
+}
+
+// ── Conectar via SSID (sem senha — evita HTTP 403) ───────────────────────────
+function quotexConectarSsid(tipo) {
+    const email = (document.getElementById('qx-email-ssid') || {}).value || '';
+    const ssid  = (document.getElementById('qx-ssid-input')  || {}).value || '';
+    if (!email) { _qxBadge('⚠️ Informe o email da conta', '#ffbd2e'); return; }
+    if (!ssid)  { _qxBadge('⚠️ Cole o valor do cookie ssid', '#ffbd2e'); return; }
+    _qxBadge('⏳ CONECTANDO VIA SSID...', '#ffbd2e');
+    _qxAtualizarBotao('conectando');
+    fetch('/quotex/conectar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, senha: '', ssid, tipo_conta: tipo })
+    }).then(r => r.json()).then(d => {
+        if (d.ok) { _qxStartPoll(); }
+        else { _qxBadge('❌ ' + (d.erro || 'Erro'), '#f44'); _qxAtualizarBotao('erro', d.erro || 'Erro'); }
+    }).catch(() => {
+        _qxBadge('❌ Sem resposta do servidor', '#f44');
+        _qxAtualizarBotao('erro', 'Sem resposta');
+    });
+}
+
+function quotexEnviarOtp() {
+    const codigo = (document.getElementById('qx-otp-codigo') || {}).value || '';
+    if (!codigo) { _qxBadge('⚠️ Digite o código OTP', '#ffbd2e'); return; }
+    fetch('/quotex/otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ codigo })
+    }).then(r => r.json()).then(d => {
+        if (d.ok) { _qxBadge('✅ Código enviado, aguardando...', '#00ff41'); }
+        else { _qxBadge('❌ ' + (d.erro || 'Erro'), '#f44'); }
+    }).catch(() => { _qxBadge('❌ Erro ao enviar OTP', '#f44'); });
+}
+
+function _qxStartPoll() {
+    _qx.pollCount = 0;
+    clearInterval(_qx.pollTimer);
+    _qx.pollTimer = setInterval(() => {
+        _qx.pollCount++;
+        fetch('/quotex/status').then(r => r.json()).then(d => {
+            _qxRenderizarEstado(d);
+            if (d.status === 'conectado' || d.status === 'erro') {
+                clearInterval(_qx.pollTimer);
+                if (d.status === 'conectado' && typeof print === 'function')
+                    print('🟢 QUOTEX conectada — ' + (d.tipo_conta || '') + ' | Saldo: $' + parseFloat(d.saldo || 0).toFixed(2), 'log-info');
+            }
+        }).catch(() => {});
+        if (_qx.pollCount > 360) clearInterval(_qx.pollTimer); // timeout 6 min (para OTP)
+    }, 1000);
+}
+
+function quotexDesconectar() {
+    fetch('/quotex/desconectar', { method: 'POST' }).then(r => r.json()).then(() => {
+        _qxRenderizarEstado({ status: 'desconectado' });
+        if (typeof print === 'function') print('🔌 QUOTEX desconectada.', 'log-info');
+    }).catch(() => {});
+}
+
+// ── Atualiza saldo em todos os elementos da UI ───────────────────────────────
+// ── Atualiza saldo em todos os elementos a partir do /quotex/status ──────────
+// (rápido — usa _QUOTEX_STATE["saldo"] atualizado pela task de background a cada 5s)
+function _qxSincronizarSaldo() {
+    if (_qx.status !== 'conectado') return;
+    fetch('/quotex/status').then(r => r.json()).then(d => {
+        if (d.status !== 'conectado') return;
+        const v   = parseFloat(d.saldo || 0).toFixed(2);
+        const tip = d.tipo_conta || 'DEMO';
+        // Header do modal do gráfico
+        const elSaldo = document.getElementById('qx-chart-saldo');
+        if (elSaldo) elSaldo.textContent = '$' + v;
+        const elTipo  = document.getElementById('qx-chart-tipo');
+        if (elTipo)  elTipo.textContent  = tip;
+        // Botão do painel lateral
+        _qxAtualizarBotao('conectado', tip + ' • $' + v);
+        // Modal de conexão (quando aberto)
+        const is = document.getElementById('qx-info-saldo');
+        if (is) is.textContent = 'Saldo: $' + v;
+    }).catch(() => {});
+}
+
+// Keep-alive a cada 30s — sincroniza status
+setInterval(() => {
+    fetch('/quotex/status').then(r => r.json()).then(d => {
+        _qx.status = d.status || 'desconectado';
+        const v = parseFloat(d.saldo || 0).toFixed(2);
+        _qxAtualizarBotao(d.status,
+            d.status === 'conectado' ? (d.tipo_conta || 'DEMO') + ' • $' + v : null);
+        if (d.status === 'conectado') {
+            const elSaldo = document.getElementById('qx-chart-saldo');
+            if (elSaldo) elSaldo.textContent = '$' + v;
+            const is = document.getElementById('qx-info-saldo');
+            if (is) is.textContent = 'Saldo: $' + v;
+        }
+    }).catch(() => {});
+}, 30000);
+
+// Poll de saldo a cada 8s quando o modal do gráfico estiver aberto
+setInterval(() => {
+    const modal = document.getElementById('modal-qx-chart');
+    if (!modal || modal.style.display === 'none') return;
+    _qxSincronizarSaldo();
+}, 8000);
+
+// Ao carregar: verifica sessão ativa e popula _qx.status
+window.addEventListener('load', () => {
+    setTimeout(() => {
+        fetch('/quotex/status').then(r => r.json()).then(d => {
+            _qx.status = d.status || 'desconectado';
+            _qxAtualizarBotao(d.status,
+                d.status === 'conectado' ? (d.tipo_conta || 'DEMO') + ' • $' + parseFloat(d.saldo || 0).toFixed(2) : null);
+        }).catch(() => {});
+    }, 2000);
+});
+</script>
+
+<!-- ══════════════════════════════════════════════════════════
+     MODAL — GRÁFICO DE VELAS QUOTEX (Trading Panel)
+════════════════════════════════════════════════════════════ -->
+<div id="modal-qx-chart" style="
+    display:none; position:fixed; top:0; left:0; width:100%; height:100%;
+    background:rgba(0,0,0,0.92); z-index:9500;
+    font-family:'Share Tech Mono',monospace;">
+
+  <!-- Cabeçalho -->
+  <div style="display:flex; align-items:center; justify-content:space-between;
+              padding:8px 14px; background:#0d0d1a; border-bottom:1px solid rgba(255,107,0,0.4);">
+    <div style="display:flex; align-items:center; gap:10px;">
+      <span style="color:#ff6b00; font-size:0.9rem; letter-spacing:2px; font-weight:bold;">📊 QUOTEX</span>
+      <!-- Seletor de ativo -->
+      <select id="qx-ativo-sel"
+          style="background:#0a0a12; border:1px solid rgba(255,107,0,0.5); color:#ff6b00;
+                 padding:4px 8px; font-family:'Share Tech Mono'; font-size:0.75rem;
+                 border-radius:3px; outline:none; cursor:pointer; max-width:160px;"
+          onchange="qxChartCarregar()">
+        <option value="EURUSD_otc">EUR/USD (OTC)</option>
+      </select>
+      <!-- Seletor de período -->
+      <select id="qx-periodo-sel"
+          style="background:#0a0a12; border:1px solid rgba(255,107,0,0.3); color:#aaa;
+                 padding:4px 6px; font-family:'Share Tech Mono'; font-size:0.7rem;
+                 border-radius:3px; outline:none; cursor:pointer;"
+          onchange="qxChartCarregar()">
+        <option value="5">5s</option>
+        <option value="10">10s</option>
+        <option value="15">15s</option>
+        <option value="30">30s</option>
+        <option value="60" selected>1m</option>
+        <option value="120">2m</option>
+        <option value="300">5m</option>
+        <option value="900">15m</option>
+      </select>
+      <!-- Payout badge -->
+      <span id="qx-payout-badge"
+          style="background:rgba(0,255,65,0.1); border:1px solid rgba(0,255,65,0.4);
+                 color:#00ff41; padding:3px 8px; font-size:0.7rem; border-radius:3px;">
+        --% payout
+      </span>
+      <!-- Preço atual -->
+      <span id="qx-preco-atual"
+          style="color:#fff; font-size:0.85rem; font-weight:bold; letter-spacing:1px;">
+        --
+      </span>
+      <span id="qx-preco-dir" style="font-size:0.8rem;">⬆️</span>
+    </div>
+    <div style="display:flex; align-items:center; gap:8px;">
+      <!-- Saldo -->
+      <span style="font-size:0.7rem; color:#aaa;">Saldo:</span>
+      <span id="qx-chart-saldo" style="color:#ff6b00; font-weight:bold; font-size:0.8rem;">$--</span>
+      <span id="qx-chart-tipo"
+          style="font-size:0.62rem; color:#555; border:1px solid #333;
+                 padding:2px 6px; border-radius:3px;">DEMO</span>
+      <button onclick="qxChartFechar()"
+          style="background:transparent; border:1px solid #f44; color:#f44;
+                 padding:4px 10px; font-family:'Share Tech Mono'; font-size:0.7rem;
+                 cursor:pointer; border-radius:3px; letter-spacing:1px;">
+        ✕ FECHAR
+      </button>
+    </div>
+  </div>
+
+  <!-- Corpo: gráfico + painel de operação -->
+  <div style="display:flex; height:calc(100vh - 44px);">
+
+    <!-- Gráfico de velas -->
+    <div style="flex:1; position:relative; background:#0d0e17;">
+      <div id="qx-chart-container" style="width:100%; height:100%;"></div>
+
+      <!-- Contador regressivo — flutua na linha de preço atual, à esquerda do eixo direito -->
+      <div id="qx-vela-timer" style="
+          position:absolute; right:68px;
+          background:rgba(30,34,45,0.95); border:1px solid rgba(255,255,255,0.15);
+          color:#c8d0e0; font-family:'Share Tech Mono',monospace;
+          font-size:0.74rem; padding:1px 7px; border-radius:3px;
+          pointer-events:none; z-index:6; letter-spacing:1px;
+          white-space:nowrap; display:none;">
+        00:00
+      </div>
+
+      <!-- Timer da OPERAÇÃO ATIVA — flutua na linha de entrada, igual à Quotex -->
+      <div id="qx-op-timer-overlay" style="
+          position:absolute; left:50%; transform:translateX(-50%);
+          display:none; pointer-events:none; z-index:8;
+          flex-direction:column; align-items:center; gap:3px;">
+        <!-- Bolinha com countdown -->
+        <div id="qx-op-timer-bubble" style="
+            background:rgba(30,34,45,0.97);
+            border:2px solid #27c93f;
+            border-radius:20px; padding:3px 12px;
+            font-family:'Share Tech Mono',monospace;
+            font-size:0.78rem; color:#fff;
+            letter-spacing:2px; white-space:nowrap;
+            box-shadow:0 2px 12px rgba(0,0,0,0.6);">
+          $1 • 00:00
+        </div>
+      </div>
+
+      <!-- Linha horizontal de entrada — desenhada via CSS/SVG sobre o gráfico -->
+      <div id="qx-op-linha-entrada" style="
+          position:absolute; left:0; right:68px;
+          height:1px; pointer-events:none; z-index:7;
+          display:none; border-top:1px dashed #27c93f;">
+      </div>
+
+      <!-- Loading overlay -->
+      <div id="qx-chart-loading" style="
+          position:absolute; top:0; left:0; width:100%; height:100%;
+          display:flex; align-items:center; justify-content:center;
+          background:rgba(13,14,23,0.88); z-index:10; flex-direction:column; gap:10px;">
+        <div style="font-size:1.5rem;">📊</div>
+        <div style="color:#ff6b00; font-size:0.8rem; letter-spacing:2px;" id="qx-chart-loading-msg">
+          CARREGANDO CANDLES...
+        </div>
+      </div>
+      <!-- Erro overlay -->
+      <div id="qx-chart-erro" style="
+          display:none; position:absolute; top:0; left:0; width:100%; height:100%;
+          align-items:center; justify-content:center; background:rgba(13,14,23,0.92);
+          z-index:11; flex-direction:column; gap:10px; text-align:center; padding:20px;">
+        <div style="font-size:2rem;">❌</div>
+        <div id="qx-chart-erro-msg" style="color:#f44; font-size:0.8rem;"></div>
+        <button onclick="qxChartCarregar()"
+            style="margin-top:8px; padding:8px 16px; background:rgba(255,107,0,0.1);
+                   border:1px solid #ff6b00; color:#ff6b00; font-family:'Share Tech Mono';
+                   font-size:0.75rem; cursor:pointer; border-radius:3px;">
+          🔄 TENTAR NOVAMENTE
+        </button>
+      </div>
+    </div>
+
+    <!-- Painel direito: operar -->
+    <div style="width:260px; flex-shrink:0; background:#0d0d1a;
+                border-left:1px solid rgba(255,107,0,0.25);
+                display:flex; flex-direction:column; overflow-y:auto;">
+
+      <!-- ══ BANNER DESCONECTADO ══ -->
+      <div id="qx-banner-desconectado" style="
+          display:none; padding:10px 12px; background:rgba(255,80,0,0.08);
+          border-bottom:2px solid rgba(255,80,0,0.5); text-align:center;">
+        <div style="font-size:0.68rem; color:#ff6b00; letter-spacing:1px; margin-bottom:6px;">
+          🔌 QUOTEX DESCONECTADA
+        </div>
+        <button onclick="qxChartReconectar()"
+            style="width:100%; padding:9px; background:rgba(0,255,65,0.08);
+                   border:1px solid #00ff41; color:#00ff41;
+                   font-family:'Share Tech Mono'; font-size:0.72rem;
+                   letter-spacing:1px; cursor:pointer; border-radius:4px; font-weight:bold;">
+          🤖 RECONECTAR COM SSID
+        </button>
+      </div>
+
+      <!-- ══ MODO DE OPERAÇÃO ══ -->
+      <div style="padding:10px 12px 8px; border-bottom:1px solid rgba(255,255,255,0.06);">
+        <div style="font-size:0.6rem; color:#555; letter-spacing:1px; margin-bottom:8px;">MODO DE OPERAÇÃO</div>
+        <div style="display:flex; flex-direction:column; gap:4px;" id="qx-modo-lista">
+
+          <!-- MANUAL -->
+          <div class="qx-modo-item qx-modo-ativo" data-modo="manual" onclick="qxSelecionarModo('manual')"
+              style="display:flex; align-items:center; gap:8px; padding:7px 9px; border-radius:5px;
+                     cursor:pointer; border:1px solid rgba(255,255,255,0.12); background:rgba(255,255,255,0.04);">
+            <span style="font-size:0.85rem;">⚪</span>
+            <div>
+              <div style="font-size:0.68rem; color:#c8d0e0; letter-spacing:1px;">MANUAL</div>
+              <div style="font-size:0.58rem; color:#555;">Operação controlada pelo usuário</div>
+            </div>
+          </div>
+
+          <!-- PRICE ACTION PRO -->
+          <div class="qx-modo-item" data-modo="price_action" onclick="qxSelecionarModo('price_action')"
+              style="display:flex; align-items:center; gap:8px; padding:7px 9px; border-radius:5px;
+                     cursor:pointer; border:1px solid rgba(255,255,255,0.06); background:transparent;">
+            <span style="font-size:0.85rem;">🔵</span>
+            <div>
+              <div style="font-size:0.68rem; color:#c8d0e0; letter-spacing:1px;">PRICE ACTION PRO</div>
+              <div style="font-size:0.58rem; color:#555;">Estratégia de Price Action</div>
+            </div>
+          </div>
+
+          <!-- FLUXO PRO -->
+          <div class="qx-modo-item" data-modo="fluxo" onclick="qxSelecionarModo('fluxo')"
+              style="display:flex; align-items:center; gap:8px; padding:7px 9px; border-radius:5px;
+                     cursor:pointer; border:1px solid rgba(255,255,255,0.06); background:transparent;">
+            <span style="font-size:0.85rem;">🟣</span>
+            <div>
+              <div style="font-size:0.68rem; color:#c8d0e0; letter-spacing:1px;">FLUXO PRO</div>
+              <div style="font-size:0.58rem; color:#555;">Estratégia baseada em fluxo</div>
+            </div>
+          </div>
+
+          <!-- AUTOMÁTICO -->
+          <div class="qx-modo-item" data-modo="automatico" onclick="qxSelecionarModo('automatico')"
+              style="display:flex; align-items:center; gap:8px; padding:7px 9px; border-radius:5px;
+                     cursor:pointer; border:1px solid rgba(255,255,255,0.06); background:transparent;">
+            <span style="font-size:0.85rem;">🟢</span>
+            <div>
+              <div style="font-size:0.68rem; color:#c8d0e0; letter-spacing:1px;">AUTOMÁTICO</div>
+              <div style="font-size:0.58rem; color:#555;">Analisa ativos em tempo real</div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Duração -->
+      <div style="padding:12px 12px 8px; border-bottom:1px solid rgba(255,255,255,0.06);">
+        <div style="font-size:0.62rem; color:#555; letter-spacing:1px; margin-bottom:6px;">TEMPO</div>
+        <div style="display:flex; gap:6px; flex-wrap:wrap;">
+          <button class="qx-dur-btn" data-s="30"  onclick="qxSetDuracao(30)"  style="padding:5px 8px;">30s</button>
+          <button class="qx-dur-btn qx-dur-ativo" data-s="60"  onclick="qxSetDuracao(60)"  style="padding:5px 8px;">1m</button>
+          <button class="qx-dur-btn" data-s="120" onclick="qxSetDuracao(120)" style="padding:5px 8px;">2m</button>
+          <button class="qx-dur-btn" data-s="300" onclick="qxSetDuracao(300)" style="padding:5px 8px;">5m</button>
+        </div>
+        <div style="display:flex; align-items:center; gap:6px; margin-top:8px;">
+          <button onclick="qxAjustarDuracao(-30)"
+              style="padding:5px 10px; background:#0a0a12; border:1px solid #333;
+                     color:#aaa; cursor:pointer; border-radius:3px; font-size:0.9rem;">−</button>
+          <div style="flex:1; text-align:center; color:#0ff; font-size:1rem; font-weight:bold;"
+               id="qx-dur-display">00:01:00</div>
+          <button onclick="qxAjustarDuracao(30)"
+              style="padding:5px 10px; background:#0a0a12; border:1px solid #333;
+                     color:#aaa; cursor:pointer; border-radius:3px; font-size:0.9rem;">+</button>
+        </div>
+      </div>
+
+      <!-- Valor -->
+      <div style="padding:10px 12px; border-bottom:1px solid rgba(255,255,255,0.06);">
+        <div style="font-size:0.62rem; color:#555; letter-spacing:1px; margin-bottom:6px;">INVESTIMENTO</div>
+        <div style="display:flex; align-items:center; gap:6px;">
+          <button onclick="qxAjustarValor(-1)"
+              style="padding:5px 12px; background:#0a0a12; border:1px solid #333;
+                     color:#aaa; cursor:pointer; border-radius:3px; font-size:1rem;">−</button>
+          <div style="flex:1; position:relative;">
+            <input id="qx-valor-input" type="number" min="1" step="1" value="1"
+                style="width:100%; background:#0a0a12; border:1px solid rgba(255,107,0,0.4);
+                       color:#ff6b00; padding:6px 28px 6px 8px; font-family:'Share Tech Mono';
+                       font-size:0.9rem; border-radius:3px; outline:none; text-align:center;">
+            <span style="position:absolute; right:8px; top:50%; transform:translateY(-50%);
+                         color:#555; font-size:0.8rem;">$</span>
+          </div>
+          <button onclick="qxAjustarValor(1)"
+              style="padding:5px 12px; background:#0a0a12; border:1px solid #333;
+                     color:#aaa; cursor:pointer; border-radius:3px; font-size:1rem;">+</button>
+        </div>
+        <!-- Presets rápidos -->
+        <div style="display:flex; gap:4px; margin-top:6px;">
+          <button onclick="qxSetValor(1)"  style="flex:1; padding:4px; background:#0a0a12; border:1px solid #222; color:#666; font-family:'Share Tech Mono'; font-size:0.62rem; cursor:pointer; border-radius:2px;">$1</button>
+          <button onclick="qxSetValor(5)"  style="flex:1; padding:4px; background:#0a0a12; border:1px solid #222; color:#666; font-family:'Share Tech Mono'; font-size:0.62rem; cursor:pointer; border-radius:2px;">$5</button>
+          <button onclick="qxSetValor(10)" style="flex:1; padding:4px; background:#0a0a12; border:1px solid #222; color:#666; font-family:'Share Tech Mono'; font-size:0.62rem; cursor:pointer; border-radius:2px;">$10</button>
+          <button onclick="qxSetValor(25)" style="flex:1; padding:4px; background:#0a0a12; border:1px solid #222; color:#666; font-family:'Share Tech Mono'; font-size:0.62rem; cursor:pointer; border-radius:2px;">$25</button>
+        </div>
+      </div>
+
+      <!-- Pagamento estimado -->
+      <div style="padding:8px 12px; border-bottom:1px solid rgba(255,255,255,0.06);
+                  display:flex; justify-content:space-between; align-items:center;">
+        <span style="font-size:0.62rem; color:#555;">Pagamento estimado</span>
+        <span id="qx-pagamento-est" style="color:#00ff41; font-weight:bold; font-size:0.8rem;">$--</span>
+      </div>
+
+      <!-- Botões CALL / PUT -->
+      <div style="padding:12px; display:flex; flex-direction:column; gap:10px;">
+        <button id="qx-btn-call" onclick="qxOperar('call')"
+            style="width:100%; padding:14px; background:rgba(39,201,63,0.12);
+                   border:2px solid #27c93f; color:#27c93f;
+                   font-family:'Share Tech Mono'; font-size:0.9rem;
+                   letter-spacing:2px; cursor:pointer; border-radius:6px;
+                   font-weight:bold; transition:background 0.15s;">
+          ▲ PARA CIMA
+        </button>
+        <button id="qx-btn-put" onclick="qxOperar('put')"
+            style="width:100%; padding:14px; background:rgba(244,68,68,0.12);
+                   border:2px solid #f44; color:#f44;
+                   font-family:'Share Tech Mono'; font-size:0.9rem;
+                   letter-spacing:2px; cursor:pointer; border-radius:6px;
+                   font-weight:bold; transition:background 0.15s;">
+          ▼ PARA BAIXO
+        </button>
+      </div>
+
+      <!-- Status da última operação -->
+      <div id="qx-op-status" style="
+          margin:0 12px 12px; padding:8px 10px; border-radius:4px;
+          font-size:0.7rem; text-align:center; display:none;
+          border:1px solid #333; background:rgba(0,0,0,0.3);">
+      </div>
+
+      <!-- ══ PAINEL DE SINAIS (Price Action / Fluxo / Automático) ══ -->
+      <div id="qx-painel-sinais" style="display:none; border-top:1px solid rgba(255,255,255,0.06); flex:1; flex-direction:column; overflow-y:auto;">
+
+        <!-- Cabeçalho do modo ativo -->
+        <div style="padding:8px 12px 6px; display:flex; justify-content:space-between; align-items:center;">
+          <span id="qx-sinais-titulo" style="font-size:0.6rem; color:#555; letter-spacing:1px;">ANÁLISE</span>
+          <div style="display:flex; gap:5px; align-items:center;">
+            <button id="qx-sinais-cfg-btn" onclick="qxAbrirGerenciamento()"
+                style="font-size:0.58rem; padding:2px 7px; background:transparent;
+                       border:1px solid rgba(255,107,0,0.5); color:#ff6b00;
+                       cursor:pointer; border-radius:3px; font-family:'Share Tech Mono';">⚙ CFG</button>
+            <button id="qx-sinais-toggle"
+                style="font-size:0.58rem; padding:2px 7px; background:transparent;
+                       border:1px solid rgba(0,255,65,0.5); color:#00ff41;
+                       cursor:pointer; border-radius:3px; font-family:'Share Tech Mono';"
+                onclick="qxToggleAnalise()">▶ INICIAR</button>
+          </div>
+        </div>
+
+        <!-- Payout mínimo badge -->
+        <div style="padding:0 12px 6px; display:flex; align-items:center; gap:6px;">
+          <span style="font-size:0.58rem; color:#555;">Payout mín:</span>
+          <span id="qx-payout-min-badge" style="font-size:0.62rem; color:#ffbd2e; font-weight:bold;">90%</span>
+          <span style="font-size:0.58rem; color:#555; margin-left:4px;">Estratégia:</span>
+          <span id="qx-estrategia-badge" style="font-size:0.62rem; color:#60a5fa;">--</span>
+        </div>
+
+        <!-- Lista de sinais / ativos analisados -->
+        <div id="qx-sinais-lista" style="
+            flex:1; overflow-y:auto; padding:0 8px 8px;
+            display:flex; flex-direction:column; gap:4px;">
+          <div style="color:#333; font-size:0.62rem; text-align:center; margin-top:20px; padding:0 8px;">
+            Clique em ▶ INICIAR para começar a análise
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Histórico de operações da sessão -->
+      <div id="qx-painel-historico" style="padding:10px 12px; border-top:1px solid rgba(255,255,255,0.06); flex:1;">
+        <div style="font-size:0.62rem; color:#555; letter-spacing:1px; margin-bottom:8px;">
+          OPERAÇÕES — <span id="qx-hist-count">0</span>
+        </div>
+        <div id="qx-hist-lista" style="
+            display:flex; flex-direction:column; gap:4px; max-height:250px; overflow-y:auto;">
+          <div style="color:#333; font-size:0.65rem; text-align:center; margin-top:20px;">
+            Nenhuma operação nesta sessão
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     MODAL — GERENCIAMENTO E ESTRATÉGIA (Quotex)
+════════════════════════════════════════════════════════════ -->
+<div id="modal-qx-gerenciamento" style="
+    display:none; position:fixed; top:0; left:0; width:100%; height:100%;
+    background:rgba(0,0,0,0.7); z-index:10500;
+    align-items:center; justify-content:center;">
+  <div style="
+      background:#0d0d1a; border:1px solid rgba(255,107,0,0.35);
+      border-radius:8px; width:340px; max-height:90vh; overflow-y:auto;
+      font-family:'Share Tech Mono',monospace; padding:0;">
+
+    <!-- Header -->
+    <div style="padding:12px 16px; border-bottom:1px solid rgba(255,255,255,0.07);
+                display:flex; justify-content:space-between; align-items:center;">
+      <span style="color:#ff6b00; font-size:0.8rem; letter-spacing:2px;">⚙ GERENCIAMENTO E ESTRATÉGIA</span>
+      <button onclick="document.getElementById('modal-qx-gerenciamento').style.display='none'"
+          style="background:transparent; border:none; color:#555; font-size:1rem; cursor:pointer;">✕</button>
+    </div>
+
+    <div style="padding:14px 16px; display:flex; flex-direction:column; gap:14px;">
+
+      <!-- MODO -->
+      <div>
+        <div style="font-size:0.6rem; color:#555; letter-spacing:1px; margin-bottom:6px;">MODO ATIVO</div>
+        <div id="qx-ger-modo-badge" style="
+            padding:6px 12px; background:rgba(255,107,0,0.08);
+            border:1px solid rgba(255,107,0,0.4); border-radius:4px;
+            color:#ff6b00; font-size:0.72rem; text-align:center;">
+          ⚪ MANUAL
+        </div>
+      </div>
+
+      <!-- PAYOUT MÍNIMO -->
+      <div>
+        <div style="font-size:0.6rem; color:#555; letter-spacing:1px; margin-bottom:6px;">PAYOUT MÍNIMO (%)</div>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <input id="qx-ger-payout" type="number" min="50" max="100" value="90"
+              style="flex:1; background:#0a0a12; border:1px solid rgba(255,107,0,0.4);
+                     color:#ffbd2e; padding:6px 10px; font-family:'Share Tech Mono';
+                     font-size:0.85rem; border-radius:4px; outline:none; text-align:center;">
+          <span style="color:#555; font-size:0.8rem;">%</span>
+        </div>
+      </div>
+
+      <!-- ESTRATÉGIA -->
+      <div>
+        <div style="font-size:0.6rem; color:#555; letter-spacing:1px; margin-bottom:6px;">ESTRATÉGIA</div>
+        <div style="display:flex; flex-direction:column; gap:4px;" id="qx-ger-estrategia-opts">
+          <label style="display:flex; align-items:center; gap:8px; cursor:pointer; padding:5px 8px;
+                         border-radius:4px; border:1px solid rgba(255,255,255,0.06);">
+            <input type="radio" name="qx-estrategia" value="price_action" style="accent-color:#3b82f6;">
+            <div>
+              <div style="font-size:0.68rem; color:#c8d0e0;">🔵 Price Action Pro</div>
+              <div style="font-size:0.57rem; color:#555;">Estrutura, zona, candle, confirmação</div>
+            </div>
+          </label>
+          <label style="display:flex; align-items:center; gap:8px; cursor:pointer; padding:5px 8px;
+                         border-radius:4px; border:1px solid rgba(255,255,255,0.06);">
+            <input type="radio" name="qx-estrategia" value="fluxo" style="accent-color:#a855f7;">
+            <div>
+              <div style="font-size:0.68rem; color:#c8d0e0;">🟣 Fluxo Pro</div>
+              <div style="font-size:0.57rem; color:#555;">Fluxo, aceleração, reteste, sinal</div>
+            </div>
+          </label>
+          <label style="display:flex; align-items:center; gap:8px; cursor:pointer; padding:5px 8px;
+                         border-radius:4px; border:1px solid rgba(255,255,255,0.06);">
+            <input type="radio" name="qx-estrategia" value="ambas" checked style="accent-color:#22c55e;">
+            <div>
+              <div style="font-size:0.68rem; color:#c8d0e0;">🟢 Ambas — Automático</div>
+              <div style="font-size:0.57rem; color:#555;">Price Action + Fluxo combinados</div>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <!-- GERENCIAMENTO -->
+      <div>
+        <div style="font-size:0.6rem; color:#555; letter-spacing:1px; margin-bottom:6px;">GERENCIAMENTO</div>
+        <select id="qx-ger-gerenciamento"
+            style="width:100%; background:#0a0a12; border:1px solid rgba(255,107,0,0.4);
+                   color:#c8d0e0; padding:7px 10px; font-family:'Share Tech Mono';
+                   font-size:0.72rem; border-radius:4px; outline:none;">
+          <option value="fixo">Fixo — valor constante por operação</option>
+          <option value="conservador">Conservador — % da banca</option>
+          <option value="martingale">Martingale — dobra no loss</option>
+          <option value="soros">Soros — reinveste no win</option>
+          <option value="personalizado">Personalizado</option>
+        </select>
+      </div>
+
+      <!-- STOP WIN -->
+      <div style="display:flex; gap:10px;">
+        <div style="flex:1;">
+          <div style="font-size:0.6rem; color:#555; letter-spacing:1px; margin-bottom:6px;">STOP WIN ($)</div>
+          <input id="qx-ger-stop-win" type="number" min="0" step="0.5" placeholder="0 = sem limite"
+              style="width:100%; background:#0a0a12; border:1px solid rgba(39,201,63,0.4);
+                     color:#27c93f; padding:6px 8px; font-family:'Share Tech Mono';
+                     font-size:0.78rem; border-radius:4px; outline:none; text-align:center;">
+        </div>
+        <div style="flex:1;">
+          <div style="font-size:0.6rem; color:#555; letter-spacing:1px; margin-bottom:6px;">STOP LOSS ($)</div>
+          <input id="qx-ger-stop-loss" type="number" min="0" step="0.5" placeholder="0 = sem limite"
+              style="width:100%; background:#0a0a12; border:1px solid rgba(244,68,68,0.4);
+                     color:#f44; padding:6px 8px; font-family:'Share Tech Mono';
+                     font-size:0.78rem; border-radius:4px; outline:none; text-align:center;">
+        </div>
+      </div>
+
+      <!-- CONFIRMAÇÕES -->
+      <div>
+        <div style="font-size:0.6rem; color:#555; letter-spacing:1px; margin-bottom:6px;">CONFIRMAÇÕES</div>
+        <div style="display:flex; flex-direction:column; gap:4px;">
+          <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:0.65rem; color:#aaa;">
+            <input type="checkbox" id="qx-conf-fechamento" checked style="accent-color:#ff6b00;">
+            Aguardar fechamento da vela
+          </label>
+          <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:0.65rem; color:#aaa;">
+            <input type="checkbox" id="qx-conf-payout" checked style="accent-color:#ff6b00;">
+            Filtro de payout mínimo
+          </label>
+          <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:0.65rem; color:#aaa;">
+            <input type="checkbox" id="qx-conf-bloquear-baixa" checked style="accent-color:#ff6b00;">
+            Bloquear sinais de baixa qualidade
+          </label>
+        </div>
+      </div>
+
+      <!-- Botões -->
+      <div style="display:flex; gap:8px; padding-top:4px;">
+        <button onclick="document.getElementById('modal-qx-gerenciamento').style.display='none'"
+            style="flex:1; padding:9px; background:transparent; border:1px solid #333;
+                   color:#555; font-family:'Share Tech Mono'; font-size:0.72rem;
+                   cursor:pointer; border-radius:4px; letter-spacing:1px;">
+          CANCELAR
+        </button>
+        <button onclick="qxSalvarGerenciamento()"
+            style="flex:1; padding:9px; background:rgba(255,107,0,0.1);
+                   border:1px solid #ff6b00; color:#ff6b00;
+                   font-family:'Share Tech Mono'; font-size:0.72rem;
+                   cursor:pointer; border-radius:4px; letter-spacing:1px; font-weight:bold;">
+          ✓ ATIVAR
+        </button>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<style>
+.qx-dur-btn {
+  background: #0a0a12;
+  border: 1px solid #333;
+  color: #666;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.68rem;
+  cursor: pointer;
+  border-radius: 3px;
+  transition: all 0.1s;
+}
+.qx-dur-btn:hover { border-color: #ff6b00; color: #ff6b00; }
+.qx-dur-btn.qx-dur-ativo { border-color: #0ff; color: #0ff; background: rgba(0,255,255,0.05); }
+
+/* Modo de operação */
+.qx-modo-item { transition: all 0.15s; }
+.qx-modo-item:hover { background: rgba(255,255,255,0.04) !important; border-color: rgba(255,107,0,0.4) !important; }
+.qx-modo-item.qx-modo-ativo { background: rgba(255,107,0,0.06) !important; border-color: rgba(255,107,0,0.5) !important; }
+
+/* Card de sinal */
+.qx-sinal-card {
+  padding: 7px 9px; border-radius: 5px; border: 1px solid rgba(255,255,255,0.06);
+  background: rgba(255,255,255,0.02); cursor: pointer; transition: all 0.1s;
+}
+.qx-sinal-card:hover { border-color: rgba(255,107,0,0.3); }
+.qx-sinal-card.sinal-call { border-left: 3px solid #27c93f; }
+.qx-sinal-card.sinal-put  { border-left: 3px solid #ef5350; }
+.qx-sinal-card.sinal-aguardando { border-left: 3px solid #555; }
+</style>
+
+<!-- ══ QUOTEX CHART SCRIPT ══ -->
+<script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
+<script>
+// ── Estado do painel de trading ──────────────────────────────────────────────
+const _qxChart = {
+    chart:        null,
+    series:       null,
+    ativo:        'EURUSD_otc',
+    periodo:      60,
+    duracao:      60,
+    valor:        1,
+    payout:       0,
+    ativos:       [],
+    historico:    [],
+    rtTimer:      null,
+    lastPreco:    0,
+    // Vela em formação: mantida localmente para atualização RT
+    velaAtual:    null,   // { time, open, high, low, close }
+    tsAbertura:   0,      // timestamp de abertura da vela atual
+    // ── Operação ativa no gráfico ──────────────────────────────────────────
+    opAtiva: null,        // { id, direcao, precoEntrada, tsEntrada, duracao, timerInterval }
+    priceLine: null,      // linha horizontal do preço de entrada (ISeriesPrimitivePriceLine)
+};
+
+// ── Abrir / fechar modal ──────────────────────────────────────────────────────
+function qxChartAbrir() {
+    const m = document.getElementById('modal-qx-chart');
+    if (m) m.style.display = 'block';
+
+    // Atualiza status do botão no painel
+    const lbl = document.getElementById('lbl-qx-chart');
+
+    // Verifica se conectado
+    fetch('/quotex/status').then(r => r.json()).then(d => {
+        // Atualiza banner de desconexão no painel direito
+        const banner = document.getElementById('qx-banner-desconectado');
+        if (banner) banner.style.display = (d.status === 'conectado') ? 'none' : 'block';
+
+        if (d.status !== 'conectado') {
+            document.getElementById('qx-chart-loading').style.display = 'none';
+            const erro = document.getElementById('qx-chart-erro');
+            document.getElementById('qx-chart-erro-msg').textContent =
+                '❌ Quotex não conectada. Clique em "RECONECTAR COM SSID" no painel à direita.';
+            if (erro) erro.style.display = 'flex';
+            return;
+        }
+        // Atualiza saldo e tipo
+        document.getElementById('qx-chart-saldo').textContent = '$' + parseFloat(d.saldo || 0).toFixed(2);
+        document.getElementById('qx-chart-tipo').textContent  = d.tipo_conta || 'DEMO';
+        if (lbl) lbl.textContent = (d.tipo_conta || 'DEMO') + ' • $' + parseFloat(d.saldo || 0).toFixed(2);
+
+        // Carrega ativos e depois o gráfico
+        _qxCarregarAtivos().then(() => qxChartCarregar());
+    }).catch(() => {
+        document.getElementById('qx-chart-erro-msg').textContent = '❌ Erro ao verificar conexão.';
+        document.getElementById('qx-chart-erro').style.display   = 'flex';
+        document.getElementById('qx-chart-loading').style.display = 'none';
+    });
+
+    // Inicializa o gráfico lightweight-charts
+    _qxIniciarChart();
+
+    // Inicia atualização em tempo real
+    _qxIniciarRT();
+}
+
+function qxChartFechar() {
+    const m = document.getElementById('modal-qx-chart');
+    if (m) m.style.display = 'none';
+    clearInterval(_qxChart.rtTimer);
+}
+
+// ── Inicializa lightweight-charts ─────────────────────────────────────────────
+function _qxIniciarChart() {
+    if (_qxChart.chart) return; // já iniciado
+    const container = document.getElementById('qx-chart-container');
+    if (!container || typeof LightweightCharts === 'undefined') return;
+
+    _qxChart.chart = LightweightCharts.createChart(container, {
+        width:  container.clientWidth  || 800,
+        height: container.clientHeight || 500,
+        layout: {
+            background: { color: '#0d0e17' },
+            textColor:  '#787b86',
+        },
+        grid: {
+            vertLines: { color: 'rgba(42,46,57,0.8)' },
+            horzLines: { color: 'rgba(42,46,57,0.8)' },
+        },
+        crosshair: {
+            mode:     LightweightCharts.CrosshairMode.Normal,
+            vertLine: { color: 'rgba(255,255,255,0.25)', style: 1, labelBackgroundColor: '#1e293b' },
+            horzLine: { color: 'rgba(255,255,255,0.25)', style: 1, labelBackgroundColor: '#1e293b' },
+        },
+        rightPriceScale: {
+            borderColor: 'rgba(42,46,57,0.8)',
+            textColor:   '#787b86',
+            scaleMargins: { top: 0.1, bottom: 0.1 },
+        },
+        timeScale: {
+            borderColor:         'rgba(42,46,57,0.8)',
+            textColor:           '#787b86',
+            timeVisible:         true,
+            secondsVisible:      false,
+            fixLeftEdge:         false,
+            fixRightEdge:        false,
+            rightOffset:         5,      // espaço à direita para a vela em formação
+            barSpacing:          8,      // velas compactas e juntas como na Quotex
+            minBarSpacing:       2,
+        },
+        handleScale: { axisPressedMouseMove: { time: true, price: true } },
+    });
+
+    _qxChart.series = _qxChart.chart.addCandlestickSeries({
+        upColor:          '#26a69a',   // verde turquesa — identico à Quotex/TradingView
+        downColor:        '#ef5350',   // vermelho — identico à Quotex/TradingView
+        borderVisible:    false,       // sem borda para velas sólidas como a Quotex
+        wickUpColor:      '#26a69a',
+        wickDownColor:    '#ef5350',
+    });
+
+    // Redimensiona ao mudar tamanho da janela
+    window.addEventListener('resize', () => {
+        if (_qxChart.chart && document.getElementById('modal-qx-chart').style.display !== 'none') {
+            _qxChart.chart.applyOptions({
+                width:  container.clientWidth,
+                height: container.clientHeight,
+            });
+        }
+    });
+}
+
+// ── Carregar candles históricos ───────────────────────────────────────────────
+function qxChartCarregar() {
+    _qxChart.ativo   = document.getElementById('qx-ativo-sel').value;
+    _qxChart.periodo = parseInt(document.getElementById('qx-periodo-sel').value);
+    _qxChart.velaAtual  = null;
+    _qxChart.tsAbertura = 0;
+
+    // Só mostra loading se ainda não há dados carregados (evita flash ao trocar ativo)
+    const temDados = _qxChart.series && _qxChart.lastPreco > 0;
+    if (!temDados) {
+        document.getElementById('qx-chart-loading').style.display = 'flex';
+        document.getElementById('qx-chart-loading-msg').textContent = 'CARREGANDO CANDLES...';
+    }
+    document.getElementById('qx-chart-erro').style.display = 'none';
+
+    // Busca 100 velas históricas
+    fetch(`/quotex/candles?ativo=${encodeURIComponent(_qxChart.ativo)}&periodo=${_qxChart.periodo}&limite=100`)
+        .then(r => r.json())
+        .then(d => {
+            document.getElementById('qx-chart-loading').style.display = 'none';
+            if (!d.ok || !d.candles || d.candles.length === 0) {
+                // Só exibe erro se não há dados anteriores — senão mantém o que tem
+                if (!temDados) {
+                    document.getElementById('qx-chart-erro-msg').textContent =
+                        d.erro || 'Nenhum candle retornado para este ativo/período.';
+                    document.getElementById('qx-chart-erro').style.display = 'flex';
+                }
+                return;
+            }
+            // Filtra, deduplica por timestamp e ordena
+            const periodo = _qxChart.periodo || 60;
+            const seen = new Set();
+            const candles = d.candles
+                .filter(c => c.time > 0 && c.open > 0)
+                .sort((a, b) => a.time - b.time)
+                .filter(c => {
+                    if (seen.has(c.time)) return false;
+                    seen.add(c.time);
+                    return true;
+                });
+
+            if (candles.length === 0) return; // não substitui dados se resultado vazio
+
+            if (_qxChart.series) {
+                _qxChart.series.setData(candles);
+                const ts = _qxChart.chart.timeScale();
+                ts.applyOptions({ barSpacing: 8, rightOffset: 5 });
+                ts.scrollToRealTime();
+            }
+
+            // Marca timestamp da última vela fechada (abertura da próxima)
+            if (candles.length > 0) {
+                _qxChart.tsAbertura = candles[candles.length - 1].time + periodo;
+            }
+
+            _qxAtualizarPayout();
+        })
+        .catch(e => {
+            document.getElementById('qx-chart-loading').style.display = 'none';
+            // Só exibe erro se não havia dados anteriores
+            if (!temDados) {
+                document.getElementById('qx-chart-erro-msg').textContent  = '❌ ' + e.message;
+                document.getElementById('qx-chart-erro').style.display    = 'flex';
+            }
+        });
+}
+
+// ── Carregar lista de ativos — somente pares ABERTOS na corretora ─────────────
+async function _qxCarregarAtivos() {
+    try {
+        const d = await fetch('/quotex/ativos-payout').then(r => r.json());
+        if (!d.ok || !d.ativos) return;
+
+        // Guarda todos (para consultas de payout), mas exibe só os abertos
+        _qxChart.ativos = d.ativos;
+
+        // ── Filtra apenas pares com mercado aberto agora ──────────────────
+        const abertos = d.ativos.filter(a => a.id && a.aberto);
+
+        const sel = document.getElementById('qx-ativo-sel');
+        if (!sel) return;
+
+        // Lembra o ativo selecionado antes de recriar a lista
+        const atvAnterior = sel.value || _qxChart.ativo;
+
+        sel.innerHTML = '';
+        abertos.forEach(a => {
+            const opt = document.createElement('option');
+            opt.value        = a.id;
+            opt.dataset.nome = a.nome;
+            opt.textContent  = a.nome + (a.payout ? ' (' + a.payout + '%)' : '');
+            if (a.id === atvAnterior || a.nome === atvAnterior) opt.selected = true;
+            sel.appendChild(opt);
+        });
+
+        // Se o ativo selecionado anteriormente fechou, seleciona o primeiro disponível
+        if (abertos.length > 0 && !abertos.find(a => a.id === atvAnterior)) {
+            sel.value       = abertos[0].id;
+            _qxChart.ativo  = abertos[0].id;
+        }
+    } catch (e) {}
+}
+
+// ── Atualiza lista de ativos a cada 60s (reflete abertura/fechamento em RT) ───
+setInterval(() => {
+    if (_qx.status === 'conectado') _qxCarregarAtivos();
+}, 60000);
+
+// ── Recarrega velas a cada 2 min silenciosamente (mantém gráfico sincronizado) ─
+setInterval(() => {
+    const modal = document.getElementById('modal-qx-chart');
+    if (!modal || modal.style.display === 'none') return;
+    if (_qx.status !== 'conectado') return;
+    qxChartCarregar();
+}, 120000);
+
+// ── Atualiza badge de payout ──────────────────────────────────────────────────
+function _qxAtualizarPayout() {
+    const a = _qxChart.ativos.find(x => x.id === _qxChart.ativo || x.nome === _qxChart.ativo);
+    if (a && a.payout) {
+        _qxChart.payout = parseFloat(a.payout);
+        document.getElementById('qx-payout-badge').textContent = a.payout + '% payout';
+        _qxRecalcPagamento();
+    }
+}
+
+// ── Tick real-time: atualiza vela em formação + contador regressivo ───────────
+function _qxIniciarRT() {
+    clearInterval(_qxChart.rtTimer);
+    _qxChart.rtTimer = setInterval(() => {
+        const modal = document.getElementById('modal-qx-chart');
+        if (!modal || modal.style.display === 'none') return;
+        if (!_qxChart.series) return;
+
+        // ── Contador regressivo calculado localmente ──────────────────────────
+        const agora        = Math.floor(Date.now() / 1000);
+        const tsAbert      = _qxChart.tsAbertura || 0;
+        const periodo      = _qxChart.periodo    || 60;
+        const tsFechamento = tsAbert + periodo;
+        const restam       = Math.max(0, tsFechamento - agora);
+        const mm  = String(Math.floor(restam / 60)).padStart(2, '0');
+        const ss  = String(restam % 60).padStart(2, '0');
+
+        // Posiciona o timer na linha de preço atual usando priceToCoordinate
+        const timerEl = document.getElementById('qx-vela-timer');
+        if (timerEl) {
+            timerEl.textContent = mm + ':' + ss;
+            timerEl.style.color       = restam <= 10 ? '#ef5350' : '#c8d0e0';
+            timerEl.style.borderColor = restam <= 10
+                ? 'rgba(239,83,80,0.6)' : 'rgba(255,255,255,0.15)';
+
+            // Calcula posição Y = linha do preço atual no canvas
+            if (_qxChart.series && _qxChart.velaAtual) {
+                try {
+                    const chartH = document.getElementById('qx-chart-container')?.clientHeight || 500;
+                    const y = _qxChart.series.priceToCoordinate(_qxChart.velaAtual.close);
+                    if (y !== null && y > 10 && y < chartH - 30) {
+                        timerEl.style.top     = Math.round(y) + 'px';
+                        timerEl.style.display = 'block';
+                    }
+                } catch (_) {}
+            }
+        }
+
+        // ── Busca preço RT do servidor ────────────────────────────────────────
+        fetch(`/quotex/tick?ativo=${encodeURIComponent(_qxChart.ativo)}&periodo=${_qxChart.periodo}`)
+            .then(r => r.json())
+            .then(d => {
+                if (!d.ok || !d.preco) return;
+
+                const preco       = parseFloat(d.preco);
+                const tsAbertura  = d.ts_abertura;
+
+                // Atualiza display de preço no header
+                const dir = preco > _qxChart.lastPreco ? '▲' : preco < _qxChart.lastPreco ? '▼' : '●';
+                const cor = preco > _qxChart.lastPreco ? '#22c55e' : preco < _qxChart.lastPreco ? '#ef4444' : '#aaa';
+                const el  = document.getElementById('qx-preco-atual');
+                if (el) { el.textContent = preco.toFixed(5); el.style.color = cor; }
+                const eld = document.getElementById('qx-preco-dir');
+                if (eld) eld.textContent = dir;
+
+                // ── Atualiza vela em formação no gráfico ──────────────────────
+                if (_qxChart.velaAtual && tsAbertura === _qxChart.velaAtual.time) {
+                    // Mesma vela: atualiza high/low/close
+                    const v = _qxChart.velaAtual;
+                    v.high  = Math.max(v.high, preco);
+                    v.low   = Math.min(v.low,  preco);
+                    v.close = preco;
+                    _qxChart.series.update(v);
+                } else if (tsAbertura > (_qxChart.velaAtual?.time || 0)) {
+                    // Nova vela: fecha a anterior e abre nova
+                    _qxChart.velaAtual = {
+                        time:  tsAbertura,
+                        open:  preco,
+                        high:  preco,
+                        low:   preco,
+                        close: preco,
+                    };
+                    _qxChart.series.update(_qxChart.velaAtual);
+                    _qxChart.chart.timeScale().scrollToRealTime();
+                }
+
+                _qxChart.lastPreco  = preco;
+                _qxChart.tsAbertura = tsAbertura;
+            })
+            .catch(() => {});
+    }, 500);
+}
+
+// ── Controles de duração ──────────────────────────────────────────────────────
+function qxSetDuracao(seg) {
+    _qxChart.duracao = seg;
+    document.querySelectorAll('.qx-dur-btn').forEach(b => {
+        b.classList.toggle('qx-dur-ativo', parseInt(b.dataset.s) === seg);
+    });
+    _qxAtualizarDuracaoDisplay();
+    _qxRecalcPagamento();
+}
+
+function qxAjustarDuracao(delta) {
+    _qxChart.duracao = Math.max(5, _qxChart.duracao + delta);
+    _qxAtualizarDuracaoDisplay();
+    _qxRecalcPagamento();
+}
+
+function _qxAtualizarDuracaoDisplay() {
+    const s = _qxChart.duracao;
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const sec = s % 60;
+    document.getElementById('qx-dur-display').textContent =
+        String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0') + ':' + String(sec).padStart(2,'0');
+}
+
+// ── Controles de valor ────────────────────────────────────────────────────────
+function qxSetValor(v) {
+    _qxChart.valor = v;
+    document.getElementById('qx-valor-input').value = v;
+    _qxRecalcPagamento();
+}
+
+function qxAjustarValor(delta) {
+    const inp = document.getElementById('qx-valor-input');
+    const v   = Math.max(1, parseFloat(inp.value || 1) + delta);
+    inp.value = v;
+    _qxChart.valor = v;
+    _qxRecalcPagamento();
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    const inp = document.getElementById('qx-valor-input');
+    if (inp) inp.addEventListener('input', () => {
+        _qxChart.valor = parseFloat(inp.value || 1);
+        _qxRecalcPagamento();
+    });
+});
+
+function _qxRecalcPagamento() {
+    const valor  = parseFloat(document.getElementById('qx-valor-input')?.value || 1);
+    const payout = _qxChart.payout || 0;
+    const pag    = payout > 0 ? (valor * (1 + payout / 100)).toFixed(2) : '--';
+    const el     = document.getElementById('qx-pagamento-est');
+    if (el) el.textContent = pag !== '--' ? '$' + pag : '$--';
+}
+
+// ── Operar ────────────────────────────────────────────────────────────────────
+function qxOperar(direcao) {
+    const ativo   = _qxChart.ativo;
+    const valor   = parseFloat(document.getElementById('qx-valor-input')?.value || 1);
+    const duracao = _qxChart.duracao || 60;
+
+    const btnCall = document.getElementById('qx-btn-call');
+    const btnPut  = document.getElementById('qx-btn-put');
+
+    // ── Verifica conexão antes de operar ──────────────────────────────────────
+    if (_qx.status !== 'conectado') {
+        _qxOpStatusMsg('❌ Quotex não conectada. Conecte primeiro.', '#f44');
+        return;
+    }
+
+    if (!ativo) {
+        _qxOpStatusMsg('❌ Nenhum ativo selecionado.', '#f44');
+        return;
+    }
+
+    // Desabilita botões durante envio
+    if (btnCall) btnCall.disabled = true;
+    if (btnPut)  btnPut.disabled  = true;
+
+    _qxOpStatusMsg('⏳ Enviando operação...', '#ffbd2e');
+
+    fetch('/quotex/operar', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ ativo, direcao, valor, duracao })
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (btnCall) btnCall.disabled = false;
+        if (btnPut)  btnPut.disabled  = false;
+
+        if (d.ok) {
+            const emoji = direcao === 'call' ? '▲' : '▼';
+            const cor   = direcao === 'call' ? '#27c93f' : '#f44';
+            _qxOpStatusMsg(`${emoji} Operação enviada! ID: ${d.id || '--'}`, cor);
+
+            const tsAgora = Date.now();
+
+            // Adiciona ao histórico
+            _qxAdicionarHistorico({
+                id:      d.id || '',
+                direcao, valor, duracao, ativo,
+                ts:      tsAgora,
+                status:  'aguardando',
+            });
+
+            // ── Inicia visualização da operação no gráfico ──────────────────
+            _qxIniciarOpAtiva({
+                id:           d.id || '',
+                direcao,
+                valor,
+                duracao,
+                ts:           tsAgora,
+                precoEntrada: _qxChart.lastPreco || 0,
+            });
+
+            // Aguarda resultado em background
+            if (d.id) _qxAguardarResultado(d.id, duracao);
+
+        } else {
+            // Mostra o erro real retornado pelo servidor
+            const msg = d.erro || 'Erro ao enviar operação';
+            _qxOpStatusMsg('❌ ' + msg, '#f44');
+            // Se desconectou entre o check e o envio, atualiza status local
+            if (msg.toLowerCase().includes('não conectada') || msg.toLowerCase().includes('nao conectada')) {
+                _qx.status = 'desconectado';
+                _qxAtualizarBotao('desconectado');
+            }
+        }
+    })
+    .catch(e => {
+        if (btnCall) btnCall.disabled = false;
+        if (btnPut)  btnPut.disabled  = false;
+        _qxOpStatusMsg('❌ Erro de rede: ' + e.message, '#f44');
+    });
+}
+
+function _qxOpStatusMsg(msg, cor) {
+    const el = document.getElementById('qx-op-status');
+    if (!el) return;
+    el.style.display = 'block';
+    el.style.color   = cor || '#aaa';
+    el.style.borderColor = cor || '#333';
+    el.textContent   = msg;
+}
+
+// ── Operação ativa no gráfico: linha de entrada + timer + markers ─────────────
+function _qxIniciarOpAtiva(op) {
+    // Cancela operação anterior se houver (limpa tudo sem marker de saída)
+    _qxEncerrarOpAtiva(null);
+
+    if (!_qxChart.series) return;
+
+    const corDir = op.direcao === 'call' ? '#27c93f' : '#ef5350';
+
+    // ── Usa o timestamp da VELA ATUAL do gráfico (não Date.now) ──────────────
+    // _qxChart.tsAbertura é o timestamp (em segundos) da vela em formação.
+    // É o ponto correto no eixo X onde o marker deve aparecer.
+    const tsVelaAtual = _qxChart.tsAbertura
+        || (Math.floor(Date.now() / 1000 / 60) * 60);  // fallback: minuto atual
+
+    // 1. LIMPA todos os markers antigos e coloca só o de entrada
+    try {
+        _qxChart.series.setMarkers([{
+            time:     tsVelaAtual,
+            position: op.direcao === 'call' ? 'belowBar' : 'aboveBar',
+            color:    corDir,
+            shape:    op.direcao === 'call' ? 'arrowUp' : 'arrowDown',
+            text:     '$' + parseFloat(op.valor).toFixed(2),
+            size:     1.5,
+        }]);
+    } catch (_) {}
+
+    // 2. Linha horizontal dashed no preço de entrada
+    try {
+        if (_qxChart.priceLine) {
+            _qxChart.series.removePriceLine(_qxChart.priceLine);
+            _qxChart.priceLine = null;
+        }
+        if (op.precoEntrada > 0) {
+            _qxChart.priceLine = _qxChart.series.createPriceLine({
+                price:            op.precoEntrada,
+                color:            corDir,
+                lineWidth:        1,
+                lineStyle:        2,   // Dashed
+                axisLabelVisible: true,
+                title:            op.direcao === 'call' ? '▲ ENTRADA' : '▼ ENTRADA',
+            });
+        }
+    } catch (_) {}
+
+    // 3. Overlays CSS (linha e timer)
+    const linhaEl  = document.getElementById('qx-op-linha-entrada');
+    const timerEl  = document.getElementById('qx-op-timer-overlay');
+    const bubbleEl = document.getElementById('qx-op-timer-bubble');
+
+    if (linhaEl)  { linhaEl.style.borderColor  = corDir; linhaEl.style.display  = 'block'; }
+    if (timerEl)  { timerEl.style.display  = 'flex'; }
+    if (bubbleEl) { bubbleEl.style.borderColor = corDir; }
+
+    const _posicionarLinha = () => {
+        if (!_qxChart.series || !op.precoEntrada) return;
+        try {
+            const y = _qxChart.series.priceToCoordinate(op.precoEntrada);
+            if (y !== null && y > 10) {
+                if (linhaEl)  linhaEl.style.top  = Math.round(y) + 'px';
+                if (timerEl)  timerEl.style.top  = (Math.round(y) - 18) + 'px';
+            }
+        } catch (_) {}
+    };
+
+    // 4. Countdown da operação
+    _qxChart.opAtiva = { ...op, corDir, tsVelaAtual };
+
+    const tsFimMs = op.ts + op.duracao * 1000;
+
+    _qxChart.opAtiva.timerInterval = setInterval(() => {
+        const restamMs = Math.max(0, tsFimMs - Date.now());
+        const restamS  = Math.ceil(restamMs / 1000);
+        const mm = String(Math.floor(restamS / 60)).padStart(2, '0');
+        const ss = String(restamS % 60).padStart(2, '0');
+
+        if (bubbleEl) bubbleEl.textContent = '$' + parseFloat(op.valor).toFixed(2) + ' • ' + mm + ':' + ss;
+        _posicionarLinha();
+
+        if (restamMs <= 0) clearInterval(_qxChart.opAtiva?.timerInterval);
+    }, 500);
+
+    _posicionarLinha();
+}
+
+function _qxEncerrarOpAtiva(resultado) {
+    if (_qxChart.opAtiva?.timerInterval) {
+        clearInterval(_qxChart.opAtiva.timerInterval);
+    }
+
+    // Remove linha de entrada
+    if (_qxChart.priceLine && _qxChart.series) {
+        try { _qxChart.series.removePriceLine(_qxChart.priceLine); } catch (_) {}
+        _qxChart.priceLine = null;
+    }
+
+    // Esconde overlays
+    const linhaEl = document.getElementById('qx-op-linha-entrada');
+    const timerEl = document.getElementById('qx-op-timer-overlay');
+    if (linhaEl) linhaEl.style.display = 'none';
+    if (timerEl) timerEl.style.display = 'none';
+
+    // Marker de resultado (WIN/LOSS) na vela de fechamento
+    if (resultado && _qxChart.series && _qxChart.opAtiva) {
+        const win      = resultado === 'win';
+        const corRes   = win ? '#27c93f' : '#ef5350';
+        // Timestamp de saída = abertura da vela após a duração
+        const periodo  = _qxChart.periodo || 60;
+        const tsSaida  = (_qxChart.opAtiva.tsVelaAtual || 0) + periodo;
+
+        try {
+            // Mantém o marker de entrada e acrescenta o de saída
+            const mkEntrada = {
+                time:     _qxChart.opAtiva.tsVelaAtual || Math.floor(Date.now()/1000),
+                position: _qxChart.opAtiva.direcao === 'call' ? 'belowBar' : 'aboveBar',
+                color:    _qxChart.opAtiva.corDir,
+                shape:    _qxChart.opAtiva.direcao === 'call' ? 'arrowUp' : 'arrowDown',
+                text:     '$' + parseFloat(_qxChart.opAtiva.valor).toFixed(2),
+                size:     1.5,
+            };
+            const mkSaida = {
+                time:     tsSaida,
+                position: win ? 'aboveBar' : 'belowBar',
+                color:    corRes,
+                shape:    'circle',
+                text:     win ? '✓ WIN' : '✗ LOSS',
+                size:     1.2,
+            };
+            _qxChart.series.setMarkers([mkEntrada, mkSaida]);
+        } catch (_) {}
+    } else if (_qxChart.series) {
+        // Sem resultado: limpa todos os markers
+        try { _qxChart.series.setMarkers([]); } catch (_) {}
+    }
+
+    _qxChart.opAtiva = null;
+}
+
+// ── Aguarda resultado da operação ─────────────────────────────────────────────
+function _qxAguardarResultado(opId, duracao) {
+    setTimeout(() => {
+        fetch(`/quotex/resultado/${opId}`)
+            .then(r => r.json())
+            .then(d => {
+                if (!d.ok) {
+                    _qxModo.opBloqueada = false;   // libera mesmo em erro
+                    _qxEncerrarOpAtiva(null);
+                    return;
+                }
+                const win   = d.win;
+                const lucro = parseFloat(d.lucro || 0);
+                const res   = win ? 'win' : 'loss';
+
+                // ── Encerra visualização no gráfico ──────────────────────────
+                _qxEncerrarOpAtiva(res);
+                _qxAtualizarHistorico(opId, res, lucro);
+                _qxOpStatusMsg(
+                    win ? `✅ WIN! +$${lucro.toFixed(2)}` : `❌ LOSS -$${Math.abs(lucro).toFixed(2)}`,
+                    win ? '#27c93f' : '#f44'
+                );
+
+                // ── Atualiza lucro da sessão ──────────────────────────────────
+                if (_qxModo.rodando) {
+                    _qxModo.lucroSessao += win ? Math.abs(lucro) : -Math.abs(lucro);
+                }
+
+                // ── Req 2: Gerenciamento de recuperação ───────────────────────
+                if (_qxModo.rodando && _qxModo.gerenciamento !== 'fixo') {
+                    const base = _qxModo._valorBase || 1;
+                    _qxAplicarGerenciamento(win, lucro, base);
+                }
+
+                // ── Req 3: libera bloqueio APÓS gerenciamento ─────────────────
+                _qxModo.opBloqueada = false;
+
+                // Atualiza saldo em todos os elementos
+                _qxSincronizarSaldo();
+            }).catch(() => {
+                _qxEncerrarOpAtiva(null);
+                _qxModo.opBloqueada = false;   // libera mesmo em falha de rede
+            });
+    }, (duracao + 3) * 1000);
+}
+
+// ── Aplica gerenciamento de recuperação ───────────────────────────────────────
+function _qxAplicarGerenciamento(win, lucro, valorBase) {
+    const mgr = _qxModo.gerenciamento;
+
+    if (win) {
+        // WIN: todos os gerenciamentos voltam à base (ou avançam no Soros)
+        if (mgr === 'soros') {
+            // Soros: reinveste o lucro (win + entrada)
+            const reinveste = Math.abs(lucro) + _qxModo.valorAtual;
+            _qxModo.galeAtual++;
+            if (_qxModo.galeAtual >= 3) {
+                // Após 3 wins seguidos, volta à base
+                _qxModo.valorAtual = valorBase;
+                _qxModo.galeAtual  = 0;
+                _qxOpStatusMsg('✅ Soros: 3 wins — reiniciando', '#27c93f');
+            } else {
+                _qxModo.valorAtual = parseFloat(reinveste.toFixed(2));
+                _qxOpStatusMsg(`✅ Soros nível ${_qxModo.galeAtual}: $${_qxModo.valorAtual.toFixed(2)}`, '#27c93f');
+            }
+        } else {
+            // Martingale / Ciclo / Conservador: volta à base no win
+            _qxModo.valorAtual = valorBase;
+            _qxModo.galeAtual  = 0;
+        }
+    } else {
+        // LOSS: ajusta o valor conforme gerenciamento
+        if (mgr === 'martingale') {
+            _qxModo.valorAtual = parseFloat((_qxModo.valorAtual * 2).toFixed(2));
+            _qxModo.galeAtual++;
+            _qxOpStatusMsg(`❌ Martingale G${_qxModo.galeAtual}: $${_qxModo.valorAtual.toFixed(2)}`, '#f44');
+        } else if (mgr === 'conservador') {
+            // Dobra apenas 1x, depois para
+            if (_qxModo.galeAtual < 1) {
+                _qxModo.valorAtual = parseFloat((_qxModo.valorAtual * 2).toFixed(2));
+                _qxModo.galeAtual++;
+                _qxOpStatusMsg(`❌ Conservador G1: $${_qxModo.valorAtual.toFixed(2)}`, '#f44');
+            } else {
+                _qxModo.valorAtual = valorBase;
+                _qxModo.galeAtual  = 0;
+                _qxOpStatusMsg('❌ Conservador: limite 1 gale — voltando à base', '#f44');
+            }
+        } else if (mgr === 'soros') {
+            // Soros no loss: volta à base
+            _qxModo.valorAtual = valorBase;
+            _qxModo.galeAtual  = 0;
+        }
+        // 'fixo' e 'personalizado': não altera o valor
+    }
+
+    // Atualiza o campo de valor na tela
+    const inp = document.getElementById('qx-valor-input');
+    if (inp) inp.value = _qxModo.valorAtual.toFixed(2);
+    _qxAtualizarPagamento();
+
+    console.log(`[Quotex GER] ${mgr} | WIN=${win} | Gale=${_qxModo.galeAtual} | Próximo valor: $${_qxModo.valorAtual.toFixed(2)}`);
+}
+
+// ── Histórico de operações ────────────────────────────────────────────────────
+function _qxAdicionarHistorico(op) {
+    _qxChart.historico.unshift(op);
+    _qxRenderHistorico();
+}
+
+function _qxAtualizarHistorico(id, status, lucro) {
+    const op = _qxChart.historico.find(o => o.id === id);
+    if (op) { op.status = status; op.lucro = lucro; }
+    _qxRenderHistorico();
+}
+
+function _qxRenderHistorico() {
+    const lista = document.getElementById('qx-hist-lista');
+    const count = document.getElementById('qx-hist-count');
+    if (!lista) return;
+    if (count) count.textContent = _qxChart.historico.length;
+
+    lista.innerHTML = _qxChart.historico.slice(0, 20).map(op => {
+        const emoji  = op.direcao === 'call' ? '▲' : '▼';
+        const cor    = op.status === 'win' ? '#27c93f' : op.status === 'loss' ? '#f44' : '#ffbd2e';
+        const lucroStr = op.lucro != null
+            ? (op.lucro > 0 ? '+$' + op.lucro.toFixed(2) : '-$' + Math.abs(op.lucro).toFixed(2))
+            : '';
+        const horario = new Date(op.ts).toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+        return `<div style="display:flex; justify-content:space-between; align-items:center;
+                            padding:5px 6px; background:rgba(255,255,255,0.03);
+                            border-radius:3px; border-left:2px solid ${cor};">
+            <span style="color:${cor}; font-size:0.68rem;">${emoji} ${op.ativo}</span>
+            <span style="color:#888; font-size:0.62rem;">${horario}</span>
+            <span style="color:${cor}; font-size:0.7rem; font-weight:bold;">
+                ${op.status === 'aguardando' ? '⏳' : lucroStr}
+            </span>
+        </div>`;
+    }).join('') || '<div style="color:#333; font-size:0.65rem; text-align:center; margin-top:20px;">Nenhuma operação</div>';
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MODO DE OPERAÇÃO — Price Action PRO / Fluxo PRO / Automático
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const _qxModo = {
+    atual:          'manual',   // manual | price_action | fluxo | automatico
+    rodando:        false,
+    timer:          null,
+    payoutMin:      90,
+    estrategia:     'ambas',    // price_action | fluxo | ambas
+    gerenciamento:  'fixo',
+    stopWin:        0,
+    stopLoss:       0,
+    lucroSessao:    0,
+    confFechamento: true,
+    confPayout:     true,
+    confBloquearBaixa: true,
+    // ── Controle de operação ──────────────────────────────────────────────────
+    opBloqueada:    false,   // true enquanto operação ativa (aguarda resultado)
+    valorAtual:     1,       // valor atual ajustado pelo gerenciamento
+    galeAtual:      0,       // nível de gale atual (0 = entrada base)
+    _entradaTimer:  null,    // setTimeout para entrar 3s antes do fechamento
+};
+
+// ── Seleciona modo de operação ────────────────────────────────────────────────
+function qxSelecionarModo(modo) {
+    _qxModo.atual = modo;
+
+    // Atualiza visual dos cards
+    document.querySelectorAll('.qx-modo-item').forEach(el => {
+        el.classList.toggle('qx-modo-ativo', el.dataset.modo === modo);
+    });
+
+    const painelSinais   = document.getElementById('qx-painel-sinais');
+    const painelHistorico = document.getElementById('qx-painel-historico');
+    const btnsCall       = document.getElementById('qx-btn-call');
+    const btnsPut        = document.getElementById('qx-btn-put');
+
+    if (modo === 'manual') {
+        // Manual: esconde painel de sinais, mostra histórico e botões normais
+        if (painelSinais)    { painelSinais.style.display = 'none'; }
+        if (painelHistorico) { painelHistorico.style.display = 'block'; }
+        if (btnsCall) btnsCall.style.opacity = '1';
+        if (btnsPut)  btnsPut.style.opacity  = '1';
+        _qxPararAnalise();
+    } else {
+        // Análise: mostra painel de sinais, esconde histórico manual
+        if (painelSinais) {
+            painelSinais.style.display = 'flex';
+            // Atualiza título e badges
+            const titulos = { price_action: '🔵 PRICE ACTION PRO', fluxo: '🟣 FLUXO PRO', automatico: '🟢 AUTOMÁTICO' };
+            const tituloEl = document.getElementById('qx-sinais-titulo');
+            if (tituloEl) tituloEl.textContent = titulos[modo] || 'ANÁLISE';
+        }
+        if (painelHistorico) { painelHistorico.style.display = 'none'; }
+        // Abre modal de gerenciamento para configurar antes de iniciar
+        qxAbrirGerenciamento();
+    }
+}
+
+// ── Abre modal de gerenciamento ───────────────────────────────────────────────
+function qxAbrirGerenciamento() {
+    const m = document.getElementById('modal-qx-gerenciamento');
+    if (!m) return;
+
+    // Atualiza badge do modo
+    const nomes = { manual:'⚪ MANUAL', price_action:'🔵 PRICE ACTION PRO', fluxo:'🟣 FLUXO PRO', automatico:'🟢 AUTOMÁTICO' };
+    const badge = document.getElementById('qx-ger-modo-badge');
+    if (badge) badge.textContent = nomes[_qxModo.atual] || _qxModo.atual;
+
+    // Marca radio da estratégia atual
+    const radio = document.querySelector(`input[name="qx-estrategia"][value="${_qxModo.estrategia}"]`);
+    if (radio) radio.checked = true;
+
+    // Preenche campos
+    const payoutEl = document.getElementById('qx-ger-payout');
+    const swEl     = document.getElementById('qx-ger-stop-win');
+    const slEl     = document.getElementById('qx-ger-stop-loss');
+    if (payoutEl) payoutEl.value = _qxModo.payoutMin;
+    if (swEl)     swEl.value     = _qxModo.stopWin  || '';
+    if (slEl)     slEl.value     = _qxModo.stopLoss || '';
+
+    m.style.display = 'flex';
+}
+
+// ── Salva configurações e ativa ───────────────────────────────────────────────
+function qxSalvarGerenciamento() {
+    _qxModo.payoutMin    = parseInt(document.getElementById('qx-ger-payout')?.value  || 90);
+    _qxModo.stopWin      = parseFloat(document.getElementById('qx-ger-stop-win')?.value || 0);
+    _qxModo.stopLoss     = parseFloat(document.getElementById('qx-ger-stop-loss')?.value || 0);
+    _qxModo.gerenciamento = document.getElementById('qx-ger-gerenciamento')?.value || 'fixo';
+    _qxModo.estrategia   = document.querySelector('input[name="qx-estrategia"]:checked')?.value || 'ambas';
+    _qxModo.confFechamento    = document.getElementById('qx-conf-fechamento')?.checked ?? true;
+    _qxModo.confPayout        = document.getElementById('qx-conf-payout')?.checked ?? true;
+    _qxModo.confBloquearBaixa = document.getElementById('qx-conf-bloquear-baixa')?.checked ?? true;
+
+    // Atualiza badge de payout no painel
+    const pb = document.getElementById('qx-payout-min-badge');
+    if (pb) pb.textContent = _qxModo.payoutMin + '%';
+    const eb = document.getElementById('qx-estrategia-badge');
+    if (eb) {
+        const labels = { price_action:'Price Action Pro', fluxo:'Fluxo Pro', ambas:'Ambas' };
+        eb.textContent = labels[_qxModo.estrategia] || _qxModo.estrategia;
+    }
+
+    document.getElementById('modal-qx-gerenciamento').style.display = 'none';
+}
+
+// ── Toggle análise (iniciar / parar) ─────────────────────────────────────────
+function qxToggleAnalise() {
+    if (_qxModo.rodando) {
+        _qxPararAnalise();
+    } else {
+        _qxIniciarAnalise();
+    }
+}
+
+function _qxPararAnalise() {
+    _qxModo.rodando     = false;
+    _qxModo.opBloqueada = false;
+    clearInterval(_qxModo.timer);
+    clearTimeout(_qxModo._entradaTimer);
+    _qxModo.timer         = null;
+    _qxModo._entradaTimer = null;
+    const btn = document.getElementById('qx-sinais-toggle');
+    if (btn) { btn.textContent = '▶ INICIAR'; btn.style.borderColor = 'rgba(0,255,65,0.5)'; btn.style.color = '#00ff41'; }
+}
+
+function _qxIniciarAnalise() {
+    if (_qxModo.atual === 'manual') return;
+    _qxModo.rodando     = true;
+    _qxModo.opBloqueada = false;
+    _qxModo.lucroSessao = 0;
+    _qxModo.galeAtual   = 0;
+    // valorAtual e valorBase sincronizam com o campo de valor
+    const vBase = parseFloat(document.getElementById('qx-valor-input')?.value || 1);
+    _qxModo.valorAtual = vBase;
+    _qxModo._valorBase = vBase;
+
+    const btn = document.getElementById('qx-sinais-toggle');
+    if (btn) { btn.textContent = '⏹ PARAR'; btn.style.borderColor = 'rgba(244,68,68,0.6)'; btn.style.color = '#f44'; }
+
+    // Roda imediatamente e depois a cada 60s
+    _qxExecutarCicloAnalise();
+    _qxModo.timer = setInterval(_qxExecutarCicloAnalise, 60000);
+}
+
+// ── Ciclo de análise: varre ativos, gera sinais e opera automaticamente ───────
+async function _qxExecutarCicloAnalise() {
+    if (!_qxModo.rodando) return;
+    if (_qx.status !== 'conectado') return;
+
+    // Guarda o timestamp do ciclo para evitar dupla operação
+    const tsCiclo = Date.now();
+    _qxModo._tsCicloAtual = tsCiclo;
+
+    const lista = document.getElementById('qx-sinais-lista');
+    if (lista) lista.innerHTML = '<div style="color:#555; font-size:0.62rem; text-align:center; padding:12px;">🔍 Analisando ativos...</div>';
+
+    // 1. Pega ativos abertos com payout >= mínimo
+    let ativos = [];
+    try {
+        const d = await fetch('/quotex/ativos-payout').then(r => r.json());
+        if (d.ok && d.ativos) {
+            // Filtra apenas abertos; aplica filtro de payout SÓ se confPayout=true
+            ativos = d.ativos.filter(a => {
+                if (!a.aberto || !a.id) return false;
+                if (_qxModo.confPayout) {
+                    return parseInt(a.payout || 0) >= parseInt(_qxModo.payoutMin || 0);
+                }
+                return true; // sem filtro de payout
+            });
+        }
+    } catch (_) { return; }
+
+    if (ativos.length === 0) {
+        if (lista) lista.innerHTML = '<div style="color:#555; font-size:0.62rem; text-align:center; padding:12px;">Nenhum ativo'
+            + (_qxModo.confPayout ? ' com payout ≥ ' + _qxModo.payoutMin + '%' : ' aberto') + '</div>';
+        return;
+    }
+
+    // 2. Ordena por payout desc e analisa os 12 melhores
+    const ativosParaAnalisar = [...ativos]
+        .sort((a, b) => parseInt(b.payout || 0) - parseInt(a.payout || 0))
+        .slice(0, 12);
+
+    const resultados = [];
+    for (const ativo of ativosParaAnalisar) {
+        try {
+            const r = await _qxAnalisarAtivo(ativo);
+            if (r) resultados.push(r);
+        } catch (_) {}
+    }
+
+    // Segurança: se o ciclo foi cancelado enquanto analisava, para aqui
+    if (_qxModo._tsCicloAtual !== tsCiclo || !_qxModo.rodando) return;
+
+    // 3. Ordena: sinais confirmados primeiro, depois por confluência
+    resultados.sort((a, b) => {
+        if (a.sinal !== 'AGUARDANDO' && b.sinal === 'AGUARDANDO') return -1;
+        if (a.sinal === 'AGUARDANDO' && b.sinal !== 'AGUARDANDO') return 1;
+        return (b.confluencias || 0) - (a.confluencias || 0);
+    });
+
+    // 4. Renderiza na tela
+    _qxRenderizarSinais(resultados);
+
+    // 5. ── OPERA AUTOMATICAMENTE no melhor sinal ──────────────────────────────
+    const melhor = resultados.find(r => r.sinal === 'CALL' || r.sinal === 'PUT');
+    if (melhor) {
+        // Verifica Stop Win / Stop Loss antes de operar
+        if (_qxModo.stopWin  > 0 && _qxModo.lucroSessao >=  _qxModo.stopWin)  {
+            _qxPararAnalise();
+            _qxOpStatusMsg('🏆 Stop Win atingido: +$' + _qxModo.lucroSessao.toFixed(2), '#27c93f');
+            return;
+        }
+        if (_qxModo.stopLoss > 0 && _qxModo.lucroSessao <= -_qxModo.stopLoss) {
+            _qxPararAnalise();
+            _qxOpStatusMsg('🛑 Stop Loss atingido: -$' + Math.abs(_qxModo.lucroSessao).toFixed(2), '#ef5350');
+            return;
+        }
+
+        // ── Req 3: bloqueia se já existe operação ativa (aguarda resultado) ──
+        if (_qxModo.opBloqueada) {
+            _qxOpStatusMsg('⏳ Aguardando resultado da operação anterior...', '#ffbd2e');
+            return;
+        }
+
+        // Muda o ativo no gráfico
+        if (melhor.ativo !== _qxChart.ativo) {
+            _qxChart.ativo = melhor.ativo;
+            const sel = document.getElementById('qx-ativo-sel');
+            if (sel) {
+                const opt = Array.from(sel.options).find(o => o.value === melhor.ativo);
+                if (opt) sel.value = melhor.ativo;
+            }
+            qxChartCarregar();
+        }
+
+        // ── Req 1: agenda entrada 3s antes do fechamento da vela ─────────────
+        const direcao  = melhor.sinal === 'CALL' ? 'call' : 'put';
+        const agora    = Date.now();
+        const periodo  = (_qxChart.periodo || 60) * 1000;           // ms
+        const tsFechamento = (_qxChart.tsAbertura * 1000) + periodo; // ms epoch do fechamento
+        const msAteEntrada = tsFechamento - agora - 3000;            // 3s antes
+
+        clearTimeout(_qxModo._entradaTimer);
+
+        if (msAteEntrada > 0) {
+            // Ainda tem tempo: agenda para entrar exatamente 3s antes do fechamento
+            const countdown = Math.round(msAteEntrada / 1000);
+            _qxOpStatusMsg(`🤖 ${melhor.sinal} em ${melhor.nome || melhor.ativo} — entrando em ${countdown}s`, direcao === 'call' ? '#27c93f' : '#ef5350');
+            _qxModo._entradaTimer = setTimeout(() => {
+                if (!_qxModo.rodando || _qxModo.opBloqueada) return;
+                _qxOpStatusMsg('🤖 AUTO: ' + melhor.sinal + ' em ' + (melhor.nome || melhor.ativo), direcao === 'call' ? '#27c93f' : '#ef5350');
+                _qxOperarAuto(direcao);
+            }, msAteEntrada);
+        } else {
+            // Vela já está para fechar ou é uma nova vela — entra imediatamente
+            _qxOpStatusMsg('🤖 AUTO: ' + melhor.sinal + ' em ' + (melhor.nome || melhor.ativo), direcao === 'call' ? '#27c93f' : '#ef5350');
+            _qxOperarAuto(direcao);
+        }
+    }
+}
+
+// ── Opera com valor do gerenciamento e bloqueia nova entrada ──────────────────
+function _qxOperarAuto(direcao) {
+    if (!_qxModo.rodando || _qxModo.opBloqueada) return;
+    _qxModo.opBloqueada = true;
+
+    // Aplica o valor do gerenciamento atual
+    const inp = document.getElementById('qx-valor-input');
+    if (inp) inp.value = _qxModo.valorAtual.toFixed(2);
+
+    qxOperar(direcao);
+}
+
+// ── Analisador por ativo ──────────────────────────────────────────────────────
+async function _qxAnalisarAtivo(ativo) {
+    // Busca os últimos 30 candles de 1 minuto
+    let candles = [];
+    try {
+        const d = await fetch(`/quotex/candles?ativo=${encodeURIComponent(ativo.id)}&periodo=60&limite=30`).then(r => r.json());
+        if (!d.ok || !d.candles || d.candles.length < 5) return null;
+        candles = d.candles.filter(c => c.open > 0).sort((a, b) => a.time - b.time);
+    } catch (_) { return null; }
+
+    const modo = _qxModo.atual;
+    const estrategia = _qxModo.estrategia;
+
+    let paResult = null;
+    let fluxoResult = null;
+
+    // ── Price Action PRO ──────────────────────────────────────────────────────
+    if (modo === 'price_action' || estrategia === 'price_action' || estrategia === 'ambas' || modo === 'automatico') {
+        paResult = _qxAnalisePriceAction(candles);
+    }
+
+    // ── Fluxo PRO ─────────────────────────────────────────────────────────────
+    if (modo === 'fluxo' || estrategia === 'fluxo' || estrategia === 'ambas' || modo === 'automatico') {
+        fluxoResult = _qxAnaliseFluxo(candles);
+    }
+
+    // ── Combina resultados ────────────────────────────────────────────────────
+    let sinal = 'AGUARDANDO';
+    let confluencias = 0;
+    let detalhes = [];
+
+    if (paResult && fluxoResult && estrategia === 'ambas') {
+        // Ambas: prioriza concordância; se discordarem, usa o de maior score
+        if (paResult.sinal === fluxoResult.sinal && paResult.sinal !== 'NEUTRO') {
+            sinal = paResult.sinal;
+            confluencias = paResult.score + fluxoResult.score;
+            detalhes = [...paResult.detalhes, ...fluxoResult.detalhes];
+        } else if (paResult.sinal !== 'NEUTRO' || fluxoResult.sinal !== 'NEUTRO') {
+            // Usa o de maior score entre os dois, mesmo sem concordância
+            const melhorR = (paResult.score >= fluxoResult.score) ? paResult : fluxoResult;
+            if (melhorR.sinal !== 'NEUTRO') {
+                sinal = melhorR.sinal;
+                confluencias = melhorR.score;
+                detalhes = melhorR.detalhes;
+            }
+        }
+    } else if (paResult && (modo === 'price_action' || estrategia === 'price_action')) {
+        sinal = paResult.sinal !== 'NEUTRO' ? paResult.sinal : 'AGUARDANDO';
+        confluencias = paResult.score;
+        detalhes = paResult.detalhes;
+    } else if (fluxoResult && (modo === 'fluxo' || estrategia === 'fluxo')) {
+        sinal = fluxoResult.sinal !== 'NEUTRO' ? fluxoResult.sinal : 'AGUARDANDO';
+        confluencias = fluxoResult.score;
+        detalhes = fluxoResult.detalhes;
+    } else if (paResult || fluxoResult) {
+        const r = paResult || fluxoResult;
+        sinal = r.sinal !== 'NEUTRO' ? r.sinal : 'AGUARDANDO';
+        confluencias = r.score;
+        detalhes = r.detalhes;
+    }
+
+    // Bloqueia sinais de baixa qualidade — threshold reduzido para não ser restritivo demais
+    const threshold = estrategia === 'ambas' ? 3 : 2;
+    if (_qxModo.confBloquearBaixa && confluencias < threshold) sinal = 'AGUARDANDO';
+
+    return {
+        ativo:       ativo.id,
+        nome:        ativo.nome,
+        payout:      ativo.payout,
+        sinal,
+        confluencias,
+        detalhes,
+        pa:          paResult,
+        fluxo:       fluxoResult,
+        ts:          Date.now(),
+    };
+}
+
+// ── Motor Price Action PRO ────────────────────────────────────────────────────
+function _qxAnalisePriceAction(candles) {
+    if (candles.length < 5) return { sinal: 'NEUTRO', score: 0, detalhes: [] };
+
+    const n = candles.length;
+    const ultimas = candles.slice(-10);
+    const c = candles[n - 1];   // vela mais recente fechada
+    const prev = candles[n - 2];
+    const detalhes = [];
+    let scoreCall = 0, scorePut = 0;
+
+    // 1. ESTRUTURA: máximas e mínimas consecutivas
+    let maximas = 0, minimas = 0;
+    for (let i = 1; i < ultimas.length; i++) {
+        if (ultimas[i].high > ultimas[i-1].high) maximas++;
+        if (ultimas[i].low  < ultimas[i-1].low)  minimas++;
+    }
+    const estrutura = maximas > minimas ? 'ALTA' : minimas > maximas ? 'BAIXA' : 'LATERAL';
+    detalhes.push('Estrutura: ' + estrutura);
+    if (estrutura === 'ALTA')  { scoreCall += 1; }
+    if (estrutura === 'BAIXA') { scorePut  += 1; }
+
+    // 2. SUPORTE E RESISTÊNCIA
+    const highs = ultimas.map(x => x.high);
+    const lows  = ultimas.map(x => x.low);
+    const maxH  = Math.max(...highs);
+    const minL  = Math.min(...lows);
+    const range = maxH - minL;
+    const zona  = range > 0 && (c.close - minL) / range < 0.35 ? 'SUPORTE'
+                : range > 0 && (c.close - minL) / range > 0.65 ? 'RESISTÊNCIA' : 'MEIO';
+    detalhes.push('Zona: ' + zona);
+    if (zona === 'SUPORTE')     { scoreCall += 1; }
+    if (zona === 'RESISTÊNCIA') { scorePut  += 1; }
+
+    // 3. FORÇA DO CANDLE
+    const corpo    = Math.abs(c.close - c.open);
+    const sombra   = (c.high - c.low) || 0.0001;
+    const forca    = corpo / sombra;
+    const forcaStr = forca > 0.6 ? 'ALTA' : forca > 0.3 ? 'MÉDIA' : 'FRACA';
+    detalhes.push('Força: ' + forcaStr);
+
+    // 4. PADRÃO DE CANDLE
+    const engolfo = c.close > c.open && prev.close < prev.open && c.open <= prev.close && c.close >= prev.open;
+    const engolfoPut = c.close < c.open && prev.close > prev.open && c.open >= prev.close && c.close <= prev.open;
+    const rejeicaoBull = c.close > c.open && (c.open - c.low) / sombra > 0.4;
+    const rejeicaoBear = c.close < c.open && (c.high - c.open) / sombra > 0.4;
+
+    if (engolfo)     { scoreCall += 2; detalhes.push('Padrão: ENGOLFO ALTA'); }
+    if (engolfoPut)  { scorePut  += 2; detalhes.push('Padrão: ENGOLFO BAIXA'); }
+    if (rejeicaoBull){ scoreCall += 1; detalhes.push('Rejeição: BULL'); }
+    if (rejeicaoBear){ scorePut  += 1; detalhes.push('Rejeição: BEAR'); }
+
+    // 5. CONFIRMAÇÃO: candle fechou na direção
+    if (c.close > c.open) { scoreCall += 1; detalhes.push('Conf: ALTA ✓'); }
+    else                  { scorePut  += 1; detalhes.push('Conf: BAIXA ✓'); }
+
+    // Decisão
+    const score = Math.max(scoreCall, scorePut);
+    const sinal = scoreCall > scorePut && scoreCall >= 3 ? 'CALL'
+                : scorePut > scoreCall && scorePut >= 3  ? 'PUT'
+                : 'NEUTRO';
+
+    return { sinal, score, detalhes, estrutura, zona, forcaStr, scoreCall, scorePut };
+}
+
+// ── Motor Fluxo PRO ───────────────────────────────────────────────────────────
+function _qxAnaliseFluxo(candles) {
+    if (candles.length < 5) return { sinal: 'NEUTRO', score: 0, detalhes: [] };
+
+    const n = candles.length;
+    const detalhes = [];
+    let scoreCall = 0, scorePut = 0;
+
+    // 1. PRESSÃO COMPRADORA / VENDEDORA (últimas 5 velas)
+    const ult5 = candles.slice(-5);
+    const altas  = ult5.filter(c => c.close > c.open).length;
+    const baixas = ult5.filter(c => c.close < c.open).length;
+    if (altas  >= 3) { scoreCall += 1; detalhes.push('Pressão: COMPRADORA (' + altas + '/5)'); }
+    if (baixas >= 3) { scorePut  += 1; detalhes.push('Pressão: VENDEDORA ('  + baixas + '/5)'); }
+
+    // 2. ACELERAÇÃO: última vela maior que a anterior
+    const c    = candles[n-1];
+    const prev = candles[n-2];
+    const corpoAtual = Math.abs(c.close - c.open);
+    const corpoPrev  = Math.abs(prev.close - prev.open);
+    const aceleracao = corpoAtual > corpoPrev * 1.2;
+    if (aceleracao) {
+        detalhes.push('Aceleração: SIM');
+        if (c.close > c.open) scoreCall += 1;
+        else                  scorePut  += 1;
+    }
+
+    // 3. SEQUÊNCIA: 3 velas na mesma direção
+    const ult3 = candles.slice(-3);
+    const seq3Alta  = ult3.every(x => x.close > x.open);
+    const seq3Baixa = ult3.every(x => x.close < x.open);
+    if (seq3Alta)  { scoreCall += 1; detalhes.push('Sequência: 3 ALTAS'); }
+    if (seq3Baixa) { scorePut  += 1; detalhes.push('Sequência: 3 BAIXAS'); }
+
+    // 4. RETESTE: recuo seguido de continuidade
+    const ult4 = candles.slice(-4);
+    const retesteBull = ult4[0].close > ult4[0].open &&
+                        ult4[1].close < ult4[1].open &&  // correção
+                        ult4[2].close > ult4[2].open &&  // retomada
+                        ult4[3].close > ult4[3].open;
+    const retesteBear = ult4[0].close < ult4[0].open &&
+                        ult4[1].close > ult4[1].open &&
+                        ult4[2].close < ult4[2].open &&
+                        ult4[3].close < ult4[3].open;
+    if (retesteBull) { scoreCall += 2; detalhes.push('Reteste: BULL'); }
+    if (retesteBear) { scorePut  += 2; detalhes.push('Reteste: BEAR'); }
+
+    // 5. INDECISÃO: doji / spinning top — bloqueia
+    const sombra = (c.high - c.low) || 0.0001;
+    const corpo  = Math.abs(c.close - c.open);
+    if (corpo / sombra < 0.15) {
+        detalhes.push('Indecisão: BLOQUEADO');
+        return { sinal: 'NEUTRO', score: 0, detalhes };
+    }
+
+    const score = Math.max(scoreCall, scorePut);
+    const sinal = scoreCall > scorePut && scoreCall >= 3 ? 'CALL'
+                : scorePut > scoreCall && scorePut >= 3  ? 'PUT'
+                : 'NEUTRO';
+
+    return { sinal, score, detalhes, scoreCall, scorePut };
+}
+
+// ── Renderiza lista de sinais no painel ───────────────────────────────────────
+function _qxRenderizarSinais(resultados) {
+    const lista = document.getElementById('qx-sinais-lista');
+    if (!lista) return;
+
+    if (resultados.length === 0) {
+        lista.innerHTML = '<div style="color:#555; font-size:0.62rem; text-align:center; padding:12px;">Nenhum ativo qualificado</div>';
+        return;
+    }
+
+    lista.innerHTML = resultados.map(r => {
+        const temSinal = r.sinal === 'CALL' || r.sinal === 'PUT';
+        const cor    = r.sinal === 'CALL' ? '#27c93f' : r.sinal === 'PUT' ? '#ef5350' : '#4b5563';
+        const emoji  = r.sinal === 'CALL' ? '▲' : r.sinal === 'PUT' ? '▼' : '●';
+        const classe = r.sinal === 'CALL' ? 'sinal-call' : r.sinal === 'PUT' ? 'sinal-put' : 'sinal-aguardando';
+        const conf   = r.confluencias || 0;
+        const horario = new Date(r.ts).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
+
+        // Score bar (barrinhas de qualidade)
+        const maxScore = 10;
+        const pct = Math.min(100, Math.round((conf / maxScore) * 100));
+        const barCor = pct >= 60 ? '#27c93f' : pct >= 35 ? '#ffbd2e' : '#4b5563';
+
+        // PA e Fluxo resumo
+        const paStr    = r.pa    ? (r.pa.sinal !== undefined ? 'PA:' + (r.pa.sinal === 'NEUTRO' ? '—' : r.pa.sinal) + '(' + (r.pa.score||0) + ')' : '') : '';
+        const fluxoStr = r.fluxo ? (r.fluxo.sinal !== undefined ? 'FL:' + (r.fluxo.sinal === 'NEUTRO' ? '—' : r.fluxo.sinal) + '(' + (r.fluxo.score||0) + ')' : '') : '';
+        const scoreInfo = `Score: ${conf}`;
+
+        // Click em qualquer sinal (auto entra; manual mostra botões)
+        const clickAttr = `onclick="qxEntrarSinal(${JSON.stringify(r).replace(/"/g, '&quot;')})"`;
+
+        return `<div class="qx-sinal-card ${classe}" ${clickAttr} style="cursor:pointer;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:2px;">
+            <span style="color:${temSinal ? '#fff' : '#787b86'}; font-size:0.68rem; font-weight:bold;">${r.nome || r.ativo}</span>
+            <span style="color:#ffbd2e; font-size:0.58rem; font-weight:bold;">${r.payout}%</span>
+          </div>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:3px;">
+            <span style="color:${cor}; font-size:0.75rem; font-weight:bold; letter-spacing:1px;">${emoji} ${r.sinal}</span>
+            <span style="color:#555; font-size:0.58rem;">${horario}</span>
+          </div>
+          <!-- Barra de qualidade -->
+          <div style="height:2px; background:#1e2130; border-radius:1px; margin-bottom:3px;">
+            <div style="height:100%; width:${pct}%; background:${barCor}; border-radius:1px; transition:width 0.3s;"></div>
+          </div>
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <span style="color:#4b5563; font-size:0.55rem;">${paStr} ${fluxoStr}</span>
+            <span style="color:${barCor}; font-size:0.55rem; font-weight:bold;">${scoreInfo}</span>
+          </div>
+          ${temSinal ? `<div style="display:flex; gap:4px; margin-top:5px;">
+            <button onclick="event.stopPropagation(); qxOperar('call')" style="flex:1;padding:3px 0;background:rgba(39,201,63,0.1);border:1px solid #27c93f;color:#27c93f;font-family:'Share Tech Mono';font-size:0.58rem;cursor:pointer;border-radius:3px;">▲ CALL</button>
+            <button onclick="event.stopPropagation(); qxOperar('put')"  style="flex:1;padding:3px 0;background:rgba(239,83,80,0.1);border:1px solid #ef5350;color:#ef5350;font-family:'Share Tech Mono';font-size:0.58rem;cursor:pointer;border-radius:3px;">▼ PUT</button>
+          </div>` : ''}
+        </div>`;
+    }).join('');
+}
+
+// ── Entrar em um sinal do painel ──────────────────────────────────────────────
+function qxEntrarSinal(sinal) {
+    if (!sinal || sinal.sinal === 'AGUARDANDO' || sinal.sinal === 'NEUTRO') return;
+
+    // Muda o ativo no seletor
+    const sel = document.getElementById('qx-ativo-sel');
+    if (sel) {
+        const opt = Array.from(sel.options).find(o => o.value === sinal.ativo);
+        if (opt) {
+            sel.value      = sinal.ativo;
+            _qxChart.ativo = sinal.ativo;
+            qxChartCarregar();
+        }
+    }
+
+    // Executa a operação
+    const direcao = sinal.sinal === 'CALL' ? 'call' : 'put';
+    qxOperar(direcao);
 }
 </script>
 

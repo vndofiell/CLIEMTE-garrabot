@@ -1,4 +1,11 @@
 # import webbrowser
+import sys
+# Força stdout/stderr em UTF-8 para suportar emojis nos logs (Windows cp1252 não suporta)
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 import threading
 import time
 import json
@@ -1779,6 +1786,479 @@ def get_token():
         if "timed out" not in err and "ConnectionPool" not in err:
             print(f"[Erro] {err}")
         return jsonify({"wss_url": None, "erro": err})
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# QUOTEX — Integração com a corretora Quotex via pyquotex
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# ── SSID Hunter — captura automática via Chrome ───────────────────────────────
+try:
+    from quotex_ssid_hunter import (
+        ssid_hunter_iniciar,
+        ssid_hunter_parar,
+        ssid_hunter_status,
+    )
+    _SSID_HUNTER_OK = True
+    print("[Quotex] ✅ SSID Hunter carregado (captura automática ativa).")
+except ImportError as _sh_err:
+    _SSID_HUNTER_OK = False
+    print(f"[Quotex] ⚠️  SSID Hunter não disponível: {_sh_err}")
+    def ssid_hunter_iniciar():
+        return {"ok": False, "erro": "selenium não instalado."}
+    def ssid_hunter_parar():
+        pass
+    def ssid_hunter_status():
+        return {"status": "indisponivel", "ssid": "", "erro": "selenium não instalado."}
+
+
+@app.route('/quotex/ssid-hunter/iniciar', methods=['POST'])
+def rota_ssid_hunter_iniciar():
+    """Abre o Chrome e aguarda login na Quotex para capturar SSID automaticamente."""
+    return jsonify(ssid_hunter_iniciar())
+
+
+@app.route('/quotex/ssid-hunter/status', methods=['GET'])
+def rota_ssid_hunter_status():
+    """Retorna o estado atual do hunter (idle|abrindo|aguardando_login|capturado|erro)."""
+    return jsonify(ssid_hunter_status())
+
+
+@app.route('/quotex/ssid-hunter/parar', methods=['POST'])
+def rota_ssid_hunter_parar():
+    """Cancela a captura e fecha o Chrome."""
+    ssid_hunter_parar()
+    return jsonify({"ok": True, "status": "idle"})
+
+
+# ── Fila de OTP: frontend envia o código 2FA via /quotex/otp ──────────────────
+import queue as _queue
+_quotex_otp_queue: "_queue.Queue[str]" = _queue.Queue()
+
+def _otp_callback_flask(prompt: str) -> str:
+    """
+    Callback chamado pela pyquotex quando a Quotex exige código OTP (2FA).
+    Bloqueia até o frontend enviar o código via POST /quotex/otp.
+    """
+    print(f"[Quotex] ⚠️  OTP solicitado: {prompt}")
+    # Sinaliza o frontend para exibir o campo de OTP
+    with _QUOTEX_OTP_LOCK:
+        _QUOTEX_OTP_STATE["aguardando"] = True
+        _QUOTEX_OTP_STATE["prompt"]     = prompt
+    try:
+        codigo = _quotex_otp_queue.get(timeout=300)  # aguarda até 5 min
+    except _queue.Empty:
+        codigo = ""
+    with _QUOTEX_OTP_LOCK:
+        _QUOTEX_OTP_STATE["aguardando"] = False
+    return codigo
+
+_QUOTEX_OTP_STATE = {"aguardando": False, "prompt": ""}
+_QUOTEX_OTP_LOCK  = threading.Lock()
+
+try:
+    from quotex_connector import (
+        quotex_conectar,
+        quotex_desconectar,
+        quotex_status,
+        quotex_conectado,
+        quotex_get_saldo,
+        quotex_get_ativos,
+        quotex_operar,
+        quotex_resultado,
+        quotex_cfg_carregar,
+    )
+    _QUOTEX_DISPONIVEL = True
+    print("[Quotex] ✅ Módulo quotex_connector carregado com sucesso.")
+except ImportError as _qx_err:
+    _QUOTEX_DISPONIVEL = False
+    print(f"[Quotex] ⚠️  Módulo quotex_connector não disponível: {_qx_err}")
+    def quotex_conectar(*a, **kw):
+        return {"ok": False, "erro": "pyquotex não instalado. Execute: pip install git+https://github.com/cleitonleonel/pyquotex.git"}
+    def quotex_desconectar():
+        return {"ok": False, "erro": "pyquotex não instalado."}
+    def quotex_status():
+        return {"status": "indisponivel", "erro": "pyquotex não instalado."}
+    def quotex_conectado():
+        return False
+    def quotex_get_saldo():
+        return {"ok": False, "erro": "pyquotex não instalado."}
+    def quotex_get_ativos():
+        return {"ok": False, "erro": "pyquotex não instalado.", "ativos": []}
+    def quotex_operar(*a, **kw):
+        return {"ok": False, "erro": "pyquotex não instalado."}
+    def quotex_resultado(*a, **kw):
+        return {"ok": False, "erro": "pyquotex não instalado."}
+    def quotex_cfg_carregar():
+        return {"email": "", "senha": "", "tipo_conta": "DEMO"}
+
+
+# ── Rota: conectar ────────────────────────────────────────────────────────────
+@app.route('/quotex/conectar', methods=['POST'])
+def rota_quotex_conectar():
+    dados      = request.get_json(silent=True) or {}
+    cfg_salva  = quotex_cfg_carregar()
+    email      = (dados.get("email")      or cfg_salva.get("email")      or "").strip()
+    senha      = (dados.get("senha")      or cfg_salva.get("senha")      or "").strip()
+    tipo_conta = (dados.get("tipo_conta") or cfg_salva.get("tipo_conta") or "DEMO").upper()
+    ssid       = (dados.get("ssid")       or "").strip()
+
+    # Com SSID não precisa de senha — sem SSID exige email + senha
+    if not ssid and (not email or not senha):
+        return jsonify({"ok": False, "erro": "Informe email e senha, ou cole o SSID da Quotex."}), 400
+    if not email:
+        return jsonify({"ok": False, "erro": "Campo 'email' obrigatório (mesmo usando SSID)."}), 400
+
+    resultado = quotex_conectar(email=email, senha=senha, tipo_conta=tipo_conta,
+                                otp_callback=_otp_callback_flask, ssid=ssid)
+    return jsonify(resultado)
+
+
+# ── Cache de saldo para /quotex/status (evita chamar get_balance() em cada poll) ──
+# ── Rota: status ──────────────────────────────────────────────────────────────
+@app.route('/quotex/status', methods=['GET'])
+def rota_quotex_status():
+    from quotex_connector import _QUOTEX_STATE as _QS, _QUOTEX_LOCK as _QL
+    estado = quotex_status()
+    # Usa o saldo do _QUOTEX_STATE que é mantido em sincronia pela task de background
+    if estado.get("status") == "conectado":
+        with _QL:
+            estado["saldo"] = _QS.get("saldo", 0.0)
+    # Inclui info de OTP pendente
+    with _QUOTEX_OTP_LOCK:
+        estado["otp_aguardando"] = _QUOTEX_OTP_STATE["aguardando"]
+        estado["otp_prompt"]     = _QUOTEX_OTP_STATE["prompt"]
+    return jsonify(estado)
+
+
+# ── Rota: desconectar ─────────────────────────────────────────────────────────
+@app.route('/quotex/desconectar', methods=['POST'])
+def rota_quotex_desconectar():
+    return jsonify(quotex_desconectar())
+
+
+# ── Rota: OTP 2FA — frontend envia o código recebido por email ───────────────
+@app.route('/quotex/otp', methods=['POST'])
+def rota_quotex_otp():
+    dados  = request.get_json(silent=True) or {}
+    codigo = (dados.get("codigo") or "").strip()
+    if not codigo:
+        return jsonify({"ok": False, "erro": "Código OTP obrigatório."}), 400
+    _quotex_otp_queue.put(codigo)
+    return jsonify({"ok": True, "msg": "Código OTP enviado."})
+
+
+# ── Contador de versão de saldo (para poll de evento no frontend) ─────────────
+_quotex_saldo_versao = {"v": 0}
+
+# ── Fila de resultados pendentes (para o frontend aplicar o gerenciamento) ─────
+_quotex_resultados_fila = []
+_quotex_resultados_lock = threading.Lock()
+
+# ── Rota: saldo ───────────────────────────────────────────────────────────────
+@app.route('/quotex/saldo', methods=['GET'])
+def rota_quotex_saldo():
+    return jsonify(quotex_get_saldo())
+
+
+# ── Rota: poll de evento de saldo (detecção rápida de mudança no frontend) ─────
+@app.route('/quotex/saldo-evento', methods=['GET'])
+def rota_quotex_saldo_evento():
+    return jsonify({"v": _quotex_saldo_versao["v"]})
+
+
+# ── Rota: resultados pendentes para o frontend aplicar gerenciamento ───────────
+@app.route('/quotex/resultados-pendentes', methods=['GET'])
+def rota_quotex_resultados_pendentes():
+    with _quotex_resultados_lock:
+        pendentes = list(_quotex_resultados_fila)
+        _quotex_resultados_fila.clear()
+    return jsonify({"resultados": pendentes})
+
+
+# ── Rota: sincronizar saldo enviado pelo frontend ─────────────────────────────
+@app.route('/quotex/sincronizar-saldo', methods=['POST'])
+def rota_quotex_sincronizar_saldo():
+    dados = request.get_json(silent=True) or {}
+    novo_saldo = dados.get("saldo")
+    if novo_saldo is None:
+        return jsonify({"ok": False, "erro": "Campo 'saldo' obrigatório."}), 400
+    try:
+        novo_saldo = float(novo_saldo)
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "erro": "Campo 'saldo' deve ser numérico."}), 400
+    if novo_saldo < 0:
+        return jsonify({"ok": False, "erro": "Saldo não pode ser negativo."}), 400
+    if novo_saldo > 0:
+        try:
+            from quotex_connector import _QUOTEX_STATE as _QS2, _QUOTEX_LOCK as _QL2
+            with _QL2:
+                _QS2["saldo"] = novo_saldo
+        except Exception:
+            pass
+        _quotex_saldo_versao["v"] += 1
+    return jsonify({"ok": True, "saldo": novo_saldo})
+
+
+# ── Rota: ativos ──────────────────────────────────────────────────────────────
+@app.route('/quotex/ativos', methods=['GET'])
+def rota_quotex_ativos():
+    resultado      = quotex_get_ativos()
+    apenas_abertos = request.args.get("apenas_abertos", "0") == "1"
+    if apenas_abertos and resultado.get("ok") and resultado.get("ativos"):
+        resultado["ativos"] = [a for a in resultado["ativos"] if a.get("aberto")]
+        resultado["total"]  = len(resultado["ativos"])
+    return jsonify(resultado)
+
+
+# ── Calcula duração alinhada à virada da vela ────────────────────────────────
+def _quotex_duracao_alinhada(periodo_s: int = 60, antecipacao_s: int = 2) -> int:
+    """
+    Retorna quantos segundos faltam para a virada do próximo múltiplo de
+    `periodo_s`, subtraindo `antecipacao_s` para que a operação seja enviada
+    exatamente 2s antes do fechamento da vela atual.
+
+    Exemplos com periodo=60:
+      - Agora 19:43:10 → virada em 19:44:00 → restam 50s → duracao = 50 - 2 = 48s
+      - Agora 19:43:58 → restam 2s → menor que antecipacao → vai para próxima virada = 60 + 60 - 2 = 118s
+      - Agora 19:44:00 → restam 60s → duracao = 60 - 2 = 58s
+    """
+    import datetime as _dt
+    agora_s = _dt.datetime.utcnow().timestamp()
+    # Segundos já decorridos dentro do período atual
+    decorridos = agora_s % periodo_s
+    # Segundos até a próxima virada
+    ate_virada = periodo_s - decorridos
+    # Se restam menos de antecipacao_s pula para a virada seguinte
+    if ate_virada <= antecipacao_s:
+        ate_virada += periodo_s
+    duracao = max(5, int(ate_virada) - antecipacao_s)
+    return duracao
+
+
+# ── Rota: executar operação ───────────────────────────────────────────────────
+@app.route('/quotex/operar', methods=['POST'])
+def rota_quotex_operar():
+    dados          = request.get_json(silent=True) or {}
+    ativo          = (dados.get("ativo") or "").strip()
+    direcao        = (dados.get("direcao") or "").strip().lower()
+    valor          = dados.get("valor")
+    alinhar_minuto = dados.get("alinhar_minuto", True)   # padrão: sempre alinha
+    periodo_s      = int(dados.get("periodo") or 60)     # período da vela em segundos
+    antecipacao_s  = int(dados.get("antecipacao") or 2)  # segundos antes do fechamento
+
+    if not ativo:
+        return jsonify({"ok": False, "erro": "Campo 'ativo' obrigatório."}), 400
+    if direcao not in ("call", "put"):
+        return jsonify({"ok": False, "erro": "Campo 'direcao' deve ser 'call' ou 'put'."}), 400
+    if valor is None:
+        return jsonify({"ok": False, "erro": "Campo 'valor' obrigatório."}), 400
+    try:
+        valor = float(valor)
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "erro": "Campo 'valor' deve ser numérico."}), 400
+    if valor <= 0:
+        return jsonify({"ok": False, "erro": "Campo 'valor' deve ser maior que zero."}), 400
+
+    # Calcula duração alinhada à virada da vela (padrão) ou usa valor fixo
+    if alinhar_minuto:
+        duracao = _quotex_duracao_alinhada(periodo_s=periodo_s, antecipacao_s=antecipacao_s)
+        print(f"[Quotex] ⏱️  Duração alinhada: {duracao}s (período={periodo_s}s, antecipação={antecipacao_s}s)")
+    else:
+        duracao = int(dados.get("duracao") or periodo_s)
+
+    resultado = quotex_operar(ativo=ativo, direcao=direcao, valor=valor, duracao=duracao)
+    # Injeta duracao real na resposta para o frontend usar no timer
+    if isinstance(resultado, dict):
+        resultado["duracao"] = duracao
+    return jsonify(resultado)
+
+
+# ── Rota: resultado de operação ───────────────────────────────────────────────
+@app.route('/quotex/resultado/<op_id>', methods=['GET'])
+def rota_quotex_resultado(op_id: str):
+    return jsonify(quotex_resultado(op_id))
+
+
+# ── Rota: config (salvar/ler credenciais) ────────────────────────────────────
+@app.route('/quotex/config', methods=['GET', 'POST'])
+def rota_quotex_config():
+    if request.method == 'GET':
+        cfg = quotex_cfg_carregar()
+        return jsonify({"email": cfg.get("email",""), "tipo_conta": cfg.get("tipo_conta","DEMO"),
+                        "tem_senha": bool(cfg.get("senha",""))})
+    try:
+        from quotex_connector import quotex_cfg_salvar
+    except ImportError:
+        return jsonify({"ok": False, "erro": "pyquotex não instalado."}), 503
+    dados      = request.get_json(silent=True) or {}
+    email      = (dados.get("email") or "").strip()
+    senha      = (dados.get("senha") or "").strip()
+    tipo_conta = (dados.get("tipo_conta") or "DEMO").upper()
+    if not email or not senha:
+        return jsonify({"ok": False, "erro": "email e senha são obrigatórios."}), 400
+    quotex_cfg_salvar(email, senha, tipo_conta)
+    return jsonify({"ok": True, "msg": "Credenciais Quotex salvas."})
+
+
+# ── Rota: candles históricos ─────────────────────────────────────────────────
+@app.route('/quotex/candles', methods=['GET'])
+def rota_quotex_candles():
+    import asyncio as _asyncio
+    from quotex_connector import _QUOTEX_STATE, _QUOTEX_LOCK
+
+    ativo   = request.args.get("ativo", "EURUSD_otc")
+    periodo = int(request.args.get("periodo", 60))
+    limite  = int(request.args.get("limite", 100))
+
+    # Quantidade de segundos de histórico = limite × período
+    # Ex.: 100 velas de 60s = 6000s ≈ 100min
+    qtd_segundos = limite * periodo
+
+    with _QUOTEX_LOCK:
+        client = _QUOTEX_STATE.get("client")
+        loop   = _QUOTEX_STATE.get("loop")
+
+    if not client or not loop:
+        return jsonify({"ok": False, "erro": "Quotex não conectada.", "candles": []})
+
+    try:
+        # get_historical_candles retorna 100+ velas via abordagem paralela
+        fut     = _asyncio.run_coroutine_threadsafe(
+            client.get_historical_candles(ativo, qtd_segundos, periodo),
+            loop
+        )
+        candles = fut.result(timeout=45) or []
+
+        result = []
+        for c in candles[-limite:]:
+            if not isinstance(c, dict):
+                continue
+            ts = int(c.get("time") or 0)
+            o  = float(c.get("open")  or 0)
+            h  = float(c.get("high")  or c.get("max") or o)
+            l  = float(c.get("low")   or c.get("min") or o)
+            cl = float(c.get("close") or o)
+            if ts > 0 and o > 0:
+                result.append({"time": ts, "open": o, "high": h, "low": l, "close": cl})
+
+        result.sort(key=lambda x: x["time"])
+        return jsonify({"ok": True, "candles": result, "ativo": ativo, "periodo": periodo,
+                        "total": len(result)})
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return jsonify({"ok": False, "erro": str(e), "candles": []})
+
+
+# ── Rota: tick atual (vela em formação) ──────────────────────────────────────
+@app.route('/quotex/tick', methods=['GET'])
+def rota_quotex_tick():
+    """
+    Retorna o preço atual do ativo em tempo real para o frontend
+    atualizar a última vela do gráfico (vela em formação).
+    Resposta rápida (<200ms) — chamada a cada 1s pelo frontend.
+    """
+    import asyncio as _asyncio
+    import time as _time
+    from quotex_connector import _QUOTEX_STATE, _QUOTEX_LOCK
+
+    ativo   = request.args.get("ativo", "EURUSD_otc")
+    periodo = int(request.args.get("periodo", 60))
+
+    with _QUOTEX_LOCK:
+        client = _QUOTEX_STATE.get("client")
+        loop   = _QUOTEX_STATE.get("loop")
+
+    if not client or not loop:
+        return jsonify({"ok": False, "erro": "Quotex não conectada."})
+
+    try:
+        # Lê realtime_price já em memória (sem bloquear o loop)
+        fut   = _asyncio.run_coroutine_threadsafe(
+            client.get_realtime_price(ativo), loop)
+        ticks = fut.result(timeout=3) or []
+
+        if not ticks:
+            # Ainda não há stream: inicia e aguarda primeiro tick
+            fut2 = _asyncio.run_coroutine_threadsafe(
+                client.start_realtime_price(ativo, periodo, 6), loop)
+            fut2.result(timeout=8)
+            fut3  = _asyncio.run_coroutine_threadsafe(
+                client.get_realtime_price(ativo), loop)
+            ticks = fut3.result(timeout=3) or []
+
+        if not ticks:
+            return jsonify({"ok": False, "erro": "Sem dados RT ainda.", "preco": 0})
+
+        # Pega o tick mais recente
+        ultimo = ticks[-1] if isinstance(ticks, list) else ticks
+        ts    = float(ultimo.get("time") or ultimo.get("ts") or _time.time())
+        preco = float(ultimo.get("price") or ultimo.get("value") or ultimo.get("close") or 0)
+
+        # Calcula ts de abertura da vela atual (floor ao período)
+        ts_abertura = int(ts // periodo) * periodo
+
+        return jsonify({
+            "ok":          True,
+            "ativo":       ativo,
+            "preco":       preco,
+            "ts":          ts,
+            "ts_abertura": ts_abertura,
+            "periodo":     periodo,
+        })
+    except Exception as e:
+        return jsonify({"ok": False, "erro": str(e), "preco": 0})
+
+
+# ── Rota: ativos com payout ───────────────────────────────────────────────────
+@app.route('/quotex/ativos-payout', methods=['GET'])
+def rota_quotex_ativos_payout():
+    from quotex_connector import _QUOTEX_STATE, _QUOTEX_LOCK
+
+    with _QUOTEX_LOCK:
+        client = _QUOTEX_STATE.get("client")
+
+    if not client:
+        return jsonify({"ok": False, "erro": "Quotex não conectada.", "ativos": []})
+
+    try:
+        # get_payment() é síncrono: chave = nome amigável, valor = dict com info
+        dados  = client.get_payment()
+
+        # Monta mapa: nome_amigavel -> id_interno usando client.api.instruments
+        # instruments: lista de [id_num, id_interno, nome_amigavel, ...]
+        nome_para_id: dict = {}
+        instr = getattr(client.api, "instruments", None) or []
+        for item in instr:
+            if isinstance(item, (list, tuple)) and len(item) >= 3:
+                nome_para_id[str(item[2])] = str(item[1])
+
+        ativos = []
+        for nome, info in (dados or {}).items():
+            if isinstance(info, dict):
+                aberto = bool(info.get("open", False))
+                payout = int(info.get("payment") or info.get("turbo_payment") or 0)
+                id_interno = nome_para_id.get(nome, "")
+                ativos.append({"id": id_interno, "nome": nome, "payout": payout, "aberto": aberto})
+
+        ativos.sort(key=lambda x: (-int(x["aberto"]), -x["payout"], x["nome"]))
+        return jsonify({"ok": True, "ativos": ativos})
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return jsonify({"ok": False, "erro": str(e), "ativos": []})
+
+
+# ── Rota: preço real-time — alias legado, redireciona para /quotex/tick ───────
+@app.route('/quotex/preco-rt', methods=['GET'])
+def rota_quotex_preco_rt():
+    """Mantido por compatibilidade. Use /quotex/tick para novos clientes."""
+    ativo   = request.args.get("ativo", "EURUSD_otc")
+    periodo = int(request.args.get("periodo", 60))
+    # Reutiliza a lógica da rota /quotex/tick já corrigida
+    with app.test_request_context(f'/quotex/tick?ativo={ativo}&periodo={periodo}'):
+        from flask import request as _req2
+        _req2.environ['HTTP_HOST'] = 'localhost'
+    return jsonify({"ok": False, "erro": "Use /quotex/tick", "ticks": []})
+
 
 # ─────────────────────────────────────────────────────────
 # TELEGRAM — config (salva/lê telegram_config.json)
