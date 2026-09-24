@@ -130,142 +130,6 @@ def _auth_gerar_token() -> str:
 # Estado global do modo de operação
 _MODO_OPERACAO = {"modo": "NORMAL"}   # NORMAL ou ESPELHO
 
-# ── Estado da mensagem única do espelho no Telegram ──────────────────────────
-_TG_ESPELHO_STATE = {
-    "message_id": None,
-    "wins":       0,
-    "losses":     0,
-    "meta":       2,
-    "lock":       threading.Lock(),
-}
-_TG_ESPELHO_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tg_espelho_state.json")
-
-def _tg_espelho_salvar():
-    """Salva estado em disco para sobreviver a reinícios."""
-    try:
-        with open(_TG_ESPELHO_FILE, "w") as f:
-            json.dump({
-                "message_id":  _TG_ESPELHO_STATE["message_id"],
-                "wins":        _TG_ESPELHO_STATE["wins"],
-                "losses":      _TG_ESPELHO_STATE["losses"],
-                "meta":        _TG_ESPELHO_STATE["meta"],
-                "lucro_total": _TG_ESPELHO_STATE.get("lucro_total", 0.0),
-            }, f)
-    except Exception:
-        pass
-
-def _tg_espelho_carregar():
-    """Carrega estado do disco ao iniciar."""
-    try:
-        if os.path.exists(_TG_ESPELHO_FILE):
-            with open(_TG_ESPELHO_FILE) as f:
-                d = json.load(f)
-            _TG_ESPELHO_STATE["message_id"]  = d.get("message_id")
-            _TG_ESPELHO_STATE["wins"]        = d.get("wins", 0)
-            _TG_ESPELHO_STATE["losses"]      = d.get("losses", 0)
-            _TG_ESPELHO_STATE["meta"]        = d.get("meta", 2)
-            _TG_ESPELHO_STATE["lucro_total"] = d.get("lucro_total", 0.0)
-    except Exception:
-        pass
-
-# Carrega estado ao iniciar
-_tg_espelho_carregar()
-
-def _tg_espelho_resetar():
-    """Reseta contadores e apaga mensagem antiga — chamado ao trocar de modo."""
-    with _TG_ESPELHO_STATE["lock"]:
-        _TG_ESPELHO_STATE["message_id"] = None
-        _TG_ESPELHO_STATE["wins"]       = 0
-        _TG_ESPELHO_STATE["losses"]     = 0
-    _tg_espelho_salvar()
-
-def _tg_espelho_atualizar(token: str, chat_id: str, win: bool, meta: int = 2, lucro: float = 0.0):
-    """
-    Mantém UMA única mensagem no Telegram para a conta espelho.
-    Cria na primeira vez, edita nas seguintes. Persiste entre reinícios.
-    """
-    state = _TG_ESPELHO_STATE
-    with state["lock"]:
-        state["meta"] = meta
-        if win:
-            state["wins"]   += 1
-        else:
-            state["losses"] += 1
-
-        wins        = state["wins"]
-        losses      = state["losses"]
-        total       = wins + losses
-        # Sempre soma o valor real: positivo se WIN, negativo se LOSS
-        delta = abs(lucro) if win else -abs(lucro)
-        lucro_acum  = round(state.get("lucro_total", 0.0) + delta, 2)
-        state["lucro_total"] = lucro_acum
-
-        # Barra de progresso
-        barra_win = "🟢" * wins  + "⬜" * max(0, meta - wins)
-        barra_los = "🔴" * losses
-
-        # Conversão USD → BRL
-        cot = _buscar_cotacao()
-        lucro_brl = lucro_acum * cot
-        sinal     = "+" if lucro_acum >= 0 else "-"
-        lucro_str = f"{sinal}${abs(lucro_acum):.2f}  /  {sinal}R${abs(lucro_brl):.2f}"
-
-        if win:
-            icone   = "✅"
-            res_txt = f"WIN {wins}/{meta}"
-        else:
-            icone   = "❌"
-            res_txt = f"LOS {losses}/{meta}"
-
-        texto = (
-            f"🪞 *CONTA ESPELHO*\n"
-            f"{icone} *{res_txt}*\n\n"
-            f"Progresso: {barra_win}\n"
-            f"Losses:    {barra_los if losses else '—'}\n\n"
-            f"💰 Lucro: *{lucro_str}*\n"
-            f"W: {wins}  |  L: {losses}  |  Total: {total}\n"
-            f"🕐 {_hora_brt('%H:%M:%S')}"
-        )
-
-        # Salva estado imediatamente (wins/losses atualizados)
-        _tg_espelho_salvar()
-
-    def _editar_ou_criar():
-        import requests as _req
-        _mid = state["message_id"]
-        # Tenta editar mensagem existente
-        if _mid:
-            try:
-                r = _req.post(
-                    _tg_url(token, "editMessageText"),
-                    json={"chat_id": chat_id, "message_id": _mid,
-                          "text": texto, "parse_mode": "Markdown"},
-                    timeout=8
-                )
-                rj = r.json()
-                print(f"[TG-ESPELHO] edit ok={rj.get('ok')} err={rj.get('description','')}")
-                if rj.get("ok"):
-                    return  # editou com sucesso — não cria nova
-            except Exception as e:
-                print(f"[TG-ESPELHO] edit exception: {e}")
-        # Cria nova mensagem (primeira vez ou mensagem expirada)
-        try:
-            r = _req.post(
-                _tg_url(token, "sendMessage"),
-                json={"chat_id": chat_id, "text": texto, "parse_mode": "Markdown"},
-                timeout=8
-            )
-            rj = r.json()
-            print(f"[TG-ESPELHO] send ok={rj.get('ok')} err={rj.get('description','')}")
-            if rj.get("ok"):
-                with state["lock"]:
-                    state["message_id"] = rj["result"]["message_id"]
-                _tg_espelho_salvar()
-        except Exception as e:
-            print(f"[TG-ESPELHO] send exception: {e}")
-
-    threading.Thread(target=_editar_ou_criar, daemon=True).start()
-
 # ── Cache de cotação USD/BRL ──────────────────────────────────────────────────
 _COT_CACHE: dict = {"valor": 0.0, "ts": 0}
 _COT_LOCK = threading.Lock()
@@ -1158,8 +1022,6 @@ def set_modo():
     modo = dados.get("modo", "NORMAL").upper()
     _MODO_OPERACAO["modo"] = modo
     print(f"[*] Sistema configurado para modo: {modo}")
-    # Reseta estado da mensagem única do espelho ao trocar de modo
-    _tg_espelho_resetar()
     return jsonify({"ok": True})
 
 @app.route('/get-modo', methods=['GET'])
@@ -3043,21 +2905,13 @@ def tg_send():
     if not token or not chat_id:
         return jsonify({"ok": False, "erro": "token/chat_id ausentes"})
 
-    # ── Conta TESTE (espelho): mensagem única animada 🪞 ──────────────────────
-    conta = str(d.get("conta", "")).upper()
-    if conta == "TESTE":
-        # Só intercepta resultado WIN/LOSS (não stop_win, não virtual, não texto_direto)
-        if not d.get("stop_win") and not d.get("virtual") and not d.get("_texto_direto"):
-            win   = bool(d.get("win", False))
-            meta  = int(d.get("meta_espelho", 2))
-            lucro = float(d.get("lucro", 0.0))
-            print(f"[TG] TESTE → mensagem única espelho win={win} meta={meta} lucro={lucro}")
-            _tg_espelho_atualizar(token, chat_id, win, meta, lucro)
-            return jsonify({"ok": True, "espelho": True})
-    # ── Modo ESPELHO: bloqueia notificações que não sejam TESTE ou SECUNDARIA ──
-    if _MODO_OPERACAO.get("modo") == "ESPELHO" and conta not in ("TESTE", "SECUNDARIA", "PRINCIPAL"):
-        print("[TG] Modo ESPELHO: notificação bloqueada.")
-        return jsonify({"ok": True, "bloqueado": True, "motivo": "modo_espelho_bloqueado"})
+    # ── Modo ESPELHO: só envia notificações da conta SECUNDÁRIA ──
+    if _MODO_OPERACAO.get("modo") == "ESPELHO":
+        conta = str(d.get("conta", "")).upper()
+        print(f"[TG] modo=ESPELHO conta='{conta}' stop_win={d.get('stop_win')} keys={list(d.keys())}")
+        if conta != "SECUNDARIA":
+            print("[TG] Modo ESPELHO: notificação bloqueada (não é conta SECUNDÁRIA).")
+            return jsonify({"ok": True, "bloqueado": True, "motivo": "modo_espelho_conta_nao_secundaria"})
 
     # Cotação capturada aqui (fora da thread) para não atrasar o envio
     cotacao = _buscar_cotacao()
@@ -11333,8 +11187,8 @@ def garra_trend_avaliar():
     dados    = request.get_json(force=True, silent=True) or {}
     resultado = _garra_trend_engine.avaliar_mercado(dados)
 
-    # Se aprovado institucionalmente, dispara notificação opcional via Telegram — bloqueado no modo ESPELHO
-    if resultado["aprovado"] and _MODO_OPERACAO.get("modo") != "ESPELHO":
+    # Se aprovado institucionalmente, dispara notificação opcional via Telegram
+    if resultado["aprovado"]:
         cfg_tg = _tg_carregar()
         if cfg_tg.get("enabled"):
             msg = (
@@ -11637,8 +11491,8 @@ def garra_m1_avaliar():
     engine    = _get_m1_engine()
     resultado = engine.avaliar(dados)
 
-    # Notificação Telegram quando aprovado — bloqueado no modo ESPELHO
-    if resultado.get("operar") and _MODO_OPERACAO.get("modo") != "ESPELHO":
+    # Notificação Telegram quando aprovado
+    if resultado.get("operar"):
         try:
             cfg_tg = _tg_carregar()
             if cfg_tg.get("enabled"):
@@ -11714,8 +11568,8 @@ def quotex_garra_reversao_avaliar():
         "cfg_override":  cfg_ov,
     })
 
-    # Notificação Telegram — bloqueado no modo ESPELHO
-    if resultado.get("operar") and _MODO_OPERACAO.get("modo") != "ESPELHO":
+    # Notificação Telegram
+    if resultado.get("operar"):
         try:
             cfg_tg = _tg_carregar()
             if cfg_tg.get("enabled"):
@@ -11840,8 +11694,8 @@ def trading_pro_avaliar():
     resultado = orc.avaliar(velas_norm, broker=broker, ativo=ativo,
                             drawdown_pct=drawdown_pct)
 
-    # Notificação Telegram quando aprovado — bloqueado no modo ESPELHO
-    if resultado.get("operar") and _MODO_OPERACAO.get("modo") != "ESPELHO":
+    # Notificação Telegram quando aprovado
+    if resultado.get("operar"):
         try:
             cfg_tg = _tg_carregar()
             if cfg_tg.get("enabled"):
