@@ -2991,20 +2991,20 @@ def tg_send():
     if not token or not chat_id:
         return jsonify({"ok": False, "erro": "token/chat_id ausentes"})
 
-    # ── Modo ESPELHO: conta SECUNDÁRIA → mensagem única animada; resto bloqueado ──
-    if _MODO_OPERACAO.get("modo") == "ESPELHO":
-        conta = str(d.get("conta", "")).upper()
-        print(f"[TG] modo=ESPELHO conta='{conta}' stop_win={d.get('stop_win')} keys={list(d.keys())}")
-        if conta == "SECUNDARIA":
-            # Só intercepta resultado WIN/LOSS (não stop_win, não virtual, não texto_direto)
-            if not d.get("stop_win") and not d.get("virtual") and not d.get("_texto_direto"):
-                win  = bool(d.get("win", False))
-                meta = int(d.get("meta_espelho", 2))
-                _tg_espelho_atualizar(token, chat_id, win, meta)
-                return jsonify({"ok": True, "espelho": True})
-        else:
-            print("[TG] Modo ESPELHO: notificação bloqueada (não é conta SECUNDÁRIA).")
-            return jsonify({"ok": True, "bloqueado": True, "motivo": "modo_espelho_conta_nao_secundaria"})
+    # ── Conta SECUNDÁRIA: sempre usa mensagem única animada (modo ESPELHO ou duplo) ──
+    conta = str(d.get("conta", "")).upper()
+    if conta == "SECUNDARIA":
+        # Só intercepta resultado WIN/LOSS (não stop_win, não virtual, não texto_direto)
+        if not d.get("stop_win") and not d.get("virtual") and not d.get("_texto_direto"):
+            win  = bool(d.get("win", False))
+            meta = int(d.get("meta_espelho", 2))
+            print(f"[TG] SECUNDARIA → mensagem única espelho win={win} meta={meta}")
+            _tg_espelho_atualizar(token, chat_id, win, meta)
+            return jsonify({"ok": True, "espelho": True})
+    # ── Modo ESPELHO: bloqueia tudo que não seja SECUNDARIA ──
+    if _MODO_OPERACAO.get("modo") == "ESPELHO" and conta != "SECUNDARIA":
+        print("[TG] Modo ESPELHO: notificação bloqueada (não é conta SECUNDÁRIA).")
+        return jsonify({"ok": True, "bloqueado": True, "motivo": "modo_espelho_conta_nao_secundaria"})
 
     # Cotação capturada aqui (fora da thread) para não atrasar o envio
     cotacao = _buscar_cotacao()
