@@ -11043,6 +11043,19 @@ function initWebSocket(wssUrl) {
                         tgEnviarStopWin();
                         stopWinExibirModal(bot.profit, bot.wins, bot.losses, saldo, bot.estrategia, bot.gerenciamento);
                     }
+                    // ── Desconecta bot principal e espelho após Stop Win ──
+                    setTimeout(() => {
+                        if (bot.ws && bot.ws.readyState === WebSocket.OPEN) {
+                            bot._wssUrl = null; // impede reconexão automática
+                            bot.ws.close();
+                            print(`🔌 Bot desconectado após Stop Win.`, "log-info");
+                        }
+                        if (typeof _sec !== 'undefined' && _sec.ws && _sec.ws.readyState === WebSocket.OPEN) {
+                            _sec._destruido = true;
+                            _sec.ws.close();
+                            print(`🔌 Espelho desconectado após Stop Win.`, "log-info");
+                        }
+                    }, 2000);
                 }).catch(() => {
                     bot.running         = false;
                     bot._buying         = true;
@@ -11052,6 +11065,19 @@ function initWebSocket(wssUrl) {
                     print(`🔒 SISTEMA ENCERRADO — Stop Win atingido. Nenhuma operação será iniciada.`, "log-win");
                     tgEnviarStopWin();
                     stopWinExibirModal(bot.profit, bot.wins, bot.losses, saldo, bot.estrategia, bot.gerenciamento);
+                    // ── Desconecta bot principal e espelho após Stop Win ──
+                    setTimeout(() => {
+                        if (bot.ws && bot.ws.readyState === WebSocket.OPEN) {
+                            bot._wssUrl = null;
+                            bot.ws.close();
+                            print(`🔌 Bot desconectado após Stop Win.`, "log-info");
+                        }
+                        if (typeof _sec !== 'undefined' && _sec.ws && _sec.ws.readyState === WebSocket.OPEN) {
+                            _sec._destruido = true;
+                            _sec.ws.close();
+                            print(`🔌 Espelho desconectado após Stop Win.`, "log-info");
+                        }
+                    }, 2000);
                 });
                 return;
             }
