@@ -141,28 +141,30 @@ _TG_ESPELHO_STATE = {
 _TG_ESPELHO_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tg_espelho_state.json")
 
 def _tg_espelho_salvar():
-    """Salva message_id em disco para sobreviver a reinícios."""
+    """Salva estado em disco para sobreviver a reinícios."""
     try:
         with open(_TG_ESPELHO_FILE, "w") as f:
             json.dump({
-                "message_id": _TG_ESPELHO_STATE["message_id"],
-                "wins":       _TG_ESPELHO_STATE["wins"],
-                "losses":     _TG_ESPELHO_STATE["losses"],
-                "meta":       _TG_ESPELHO_STATE["meta"],
+                "message_id":  _TG_ESPELHO_STATE["message_id"],
+                "wins":        _TG_ESPELHO_STATE["wins"],
+                "losses":      _TG_ESPELHO_STATE["losses"],
+                "meta":        _TG_ESPELHO_STATE["meta"],
+                "lucro_total": _TG_ESPELHO_STATE.get("lucro_total", 0.0),
             }, f)
     except Exception:
         pass
 
 def _tg_espelho_carregar():
-    """Carrega message_id do disco ao iniciar."""
+    """Carrega estado do disco ao iniciar."""
     try:
         if os.path.exists(_TG_ESPELHO_FILE):
             with open(_TG_ESPELHO_FILE) as f:
                 d = json.load(f)
-            _TG_ESPELHO_STATE["message_id"] = d.get("message_id")
-            _TG_ESPELHO_STATE["wins"]       = d.get("wins", 0)
-            _TG_ESPELHO_STATE["losses"]     = d.get("losses", 0)
-            _TG_ESPELHO_STATE["meta"]       = d.get("meta", 2)
+            _TG_ESPELHO_STATE["message_id"]  = d.get("message_id")
+            _TG_ESPELHO_STATE["wins"]        = d.get("wins", 0)
+            _TG_ESPELHO_STATE["losses"]      = d.get("losses", 0)
+            _TG_ESPELHO_STATE["meta"]        = d.get("meta", 2)
+            _TG_ESPELHO_STATE["lucro_total"] = d.get("lucro_total", 0.0)
     except Exception:
         pass
 
@@ -177,7 +179,7 @@ def _tg_espelho_resetar():
         _TG_ESPELHO_STATE["losses"]     = 0
     _tg_espelho_salvar()
 
-def _tg_espelho_atualizar(token: str, chat_id: str, win: bool, meta: int = 2):
+def _tg_espelho_atualizar(token: str, chat_id: str, win: bool, meta: int = 2, lucro: float = 0.0):
     """
     Mantém UMA única mensagem no Telegram para a conta espelho.
     Cria na primeira vez, edita nas seguintes. Persiste entre reinícios.
@@ -190,14 +192,21 @@ def _tg_espelho_atualizar(token: str, chat_id: str, win: bool, meta: int = 2):
         else:
             state["losses"] += 1
 
-        wins   = state["wins"]
-        losses = state["losses"]
-        total  = wins + losses
-        mid    = state["message_id"]
+        wins        = state["wins"]
+        losses      = state["losses"]
+        total       = wins + losses
+        lucro_acum  = state.get("lucro_total", 0.0) + (abs(lucro) if win else -abs(lucro))
+        state["lucro_total"] = lucro_acum
 
         # Barra de progresso
         barra_win = "🟢" * wins  + "⬜" * max(0, meta - wins)
         barra_los = "🔴" * losses
+
+        # Conversão USD → BRL
+        cot = _buscar_cotacao()
+        lucro_brl = lucro_acum * cot
+        sinal     = "+" if lucro_acum >= 0 else "-"
+        lucro_str = f"{sinal}${abs(lucro_acum):.2f}  /  {sinal}R${abs(lucro_brl):.2f}"
 
         if win:
             icone   = "✅"
@@ -211,6 +220,7 @@ def _tg_espelho_atualizar(token: str, chat_id: str, win: bool, meta: int = 2):
             f"{icone} *{res_txt}*\n\n"
             f"Progresso: {barra_win}\n"
             f"Losses:    {barra_los if losses else '—'}\n\n"
+            f"💰 Lucro: *{lucro_str}*\n"
             f"W: {wins}  |  L: {losses}  |  Total: {total}\n"
             f"🕐 {_hora_brt('%H:%M:%S')}"
         )
@@ -3036,10 +3046,11 @@ def tg_send():
     if conta == "TESTE":
         # Só intercepta resultado WIN/LOSS (não stop_win, não virtual, não texto_direto)
         if not d.get("stop_win") and not d.get("virtual") and not d.get("_texto_direto"):
-            win  = bool(d.get("win", False))
-            meta = int(d.get("meta_espelho", 2))
-            print(f"[TG] TESTE → mensagem única espelho win={win} meta={meta} msg_id={_TG_ESPELHO_STATE['message_id']}")
-            _tg_espelho_atualizar(token, chat_id, win, meta)
+            win   = bool(d.get("win", False))
+            meta  = int(d.get("meta_espelho", 2))
+            lucro = float(d.get("lucro", 0.0))
+            print(f"[TG] TESTE → mensagem única espelho win={win} meta={meta} lucro={lucro}")
+            _tg_espelho_atualizar(token, chat_id, win, meta, lucro)
             return jsonify({"ok": True, "espelho": True})
     # ── Modo ESPELHO: bloqueia notificações que não sejam TESTE ou SECUNDARIA ──
     if _MODO_OPERACAO.get("modo") == "ESPELHO" and conta not in ("TESTE", "SECUNDARIA", "PRINCIPAL"):
