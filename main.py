@@ -132,18 +132,55 @@ _MODO_OPERACAO = {"modo": "NORMAL"}   # NORMAL ou ESPELHO
 
 # ── Estado da mensagem única do espelho no Telegram ──────────────────────────
 _TG_ESPELHO_STATE = {
-    "message_id": None,   # ID da mensagem a editar
+    "message_id": None,
     "wins":       0,
     "losses":     0,
-    "meta":       2,      # quantidade de resultados necessários para passar à conta principal
+    "meta":       2,
     "lock":       threading.Lock(),
 }
+_TG_ESPELHO_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tg_espelho_state.json")
+
+def _tg_espelho_salvar():
+    """Salva message_id em disco para sobreviver a reinícios."""
+    try:
+        with open(_TG_ESPELHO_FILE, "w") as f:
+            json.dump({
+                "message_id": _TG_ESPELHO_STATE["message_id"],
+                "wins":       _TG_ESPELHO_STATE["wins"],
+                "losses":     _TG_ESPELHO_STATE["losses"],
+                "meta":       _TG_ESPELHO_STATE["meta"],
+            }, f)
+    except Exception:
+        pass
+
+def _tg_espelho_carregar():
+    """Carrega message_id do disco ao iniciar."""
+    try:
+        if os.path.exists(_TG_ESPELHO_FILE):
+            with open(_TG_ESPELHO_FILE) as f:
+                d = json.load(f)
+            _TG_ESPELHO_STATE["message_id"] = d.get("message_id")
+            _TG_ESPELHO_STATE["wins"]       = d.get("wins", 0)
+            _TG_ESPELHO_STATE["losses"]     = d.get("losses", 0)
+            _TG_ESPELHO_STATE["meta"]       = d.get("meta", 2)
+    except Exception:
+        pass
+
+# Carrega estado ao iniciar
+_tg_espelho_carregar()
+
+def _tg_espelho_resetar():
+    """Reseta contadores e apaga mensagem antiga — chamado ao trocar de modo."""
+    with _TG_ESPELHO_STATE["lock"]:
+        _TG_ESPELHO_STATE["message_id"] = None
+        _TG_ESPELHO_STATE["wins"]       = 0
+        _TG_ESPELHO_STATE["losses"]     = 0
+    _tg_espelho_salvar()
 
 def _tg_espelho_atualizar(token: str, chat_id: str, win: bool, meta: int = 2):
     """
     Mantém UMA única mensagem no Telegram para a conta espelho.
-    Cria na primeira vez, edita nas seguintes.
-    Mostra barra animada de progresso: CONTA ESPELHO WIN 1/2 ✅
+    Cria na primeira vez, edita nas seguintes. Persiste entre reinícios.
     """
     state = _TG_ESPELHO_STATE
     with state["lock"]:
@@ -158,9 +195,9 @@ def _tg_espelho_atualizar(token: str, chat_id: str, win: bool, meta: int = 2):
         total  = wins + losses
         mid    = state["message_id"]
 
-        # Barra de progresso animada
-        barra_win  = "🟢" * wins  + "⬜" * max(0, meta - wins)
-        barra_los  = "🔴" * losses
+        # Barra de progresso
+        barra_win = "🟢" * wins  + "⬜" * max(0, meta - wins)
+        barra_los = "🔴" * losses
 
         if win:
             icone   = "✅"
@@ -178,40 +215,44 @@ def _tg_espelho_atualizar(token: str, chat_id: str, win: bool, meta: int = 2):
             f"🕐 {_hora_brt('%H:%M:%S')}"
         )
 
-        def _editar_ou_criar():
-            import requests as _req
-            _mid = state["message_id"]
-            # Tenta editar mensagem existente
-            if _mid:
-                try:
-                    r = _req.post(
-                        _tg_url(token, "editMessageText"),
-                        json={"chat_id": chat_id, "message_id": _mid,
-                              "text": texto, "parse_mode": "Markdown"},
-                        timeout=8
-                    )
-                    rj = r.json()
-                    print(f"[TG-ESPELHO] editMessage ok={rj.get('ok')} err={rj.get('description','')}")
-                    if r.ok and rj.get("ok"):
-                        return
-                except Exception as e:
-                    print(f"[TG-ESPELHO] editMessage exception: {e}")
-            # Cria nova mensagem
+        # Salva estado imediatamente (wins/losses atualizados)
+        _tg_espelho_salvar()
+
+    def _editar_ou_criar():
+        import requests as _req
+        _mid = state["message_id"]
+        # Tenta editar mensagem existente
+        if _mid:
             try:
                 r = _req.post(
-                    _tg_url(token, "sendMessage"),
-                    json={"chat_id": chat_id, "text": texto, "parse_mode": "Markdown"},
+                    _tg_url(token, "editMessageText"),
+                    json={"chat_id": chat_id, "message_id": _mid,
+                          "text": texto, "parse_mode": "Markdown"},
                     timeout=8
                 )
                 rj = r.json()
-                print(f"[TG-ESPELHO] sendMessage ok={rj.get('ok')} err={rj.get('description','')}")
-                if r.ok and rj.get("ok"):
-                    with state["lock"]:
-                        state["message_id"] = rj["result"]["message_id"]
+                print(f"[TG-ESPELHO] edit ok={rj.get('ok')} err={rj.get('description','')}")
+                if rj.get("ok"):
+                    return  # editou com sucesso — não cria nova
             except Exception as e:
-                print(f"[TG-ESPELHO] sendMessage exception: {e}")
+                print(f"[TG-ESPELHO] edit exception: {e}")
+        # Cria nova mensagem (primeira vez ou mensagem expirada)
+        try:
+            r = _req.post(
+                _tg_url(token, "sendMessage"),
+                json={"chat_id": chat_id, "text": texto, "parse_mode": "Markdown"},
+                timeout=8
+            )
+            rj = r.json()
+            print(f"[TG-ESPELHO] send ok={rj.get('ok')} err={rj.get('description','')}")
+            if rj.get("ok"):
+                with state["lock"]:
+                    state["message_id"] = rj["result"]["message_id"]
+                _tg_espelho_salvar()
+        except Exception as e:
+            print(f"[TG-ESPELHO] send exception: {e}")
 
-        threading.Thread(target=_editar_ou_criar, daemon=True).start()
+    threading.Thread(target=_editar_ou_criar, daemon=True).start()
 
 # ── Cache de cotação USD/BRL ──────────────────────────────────────────────────
 _COT_CACHE: dict = {"valor": 0.0, "ts": 0}
@@ -1106,10 +1147,7 @@ def set_modo():
     _MODO_OPERACAO["modo"] = modo
     print(f"[*] Sistema configurado para modo: {modo}")
     # Reseta estado da mensagem única do espelho ao trocar de modo
-    with _TG_ESPELHO_STATE["lock"]:
-        _TG_ESPELHO_STATE["message_id"] = None
-        _TG_ESPELHO_STATE["wins"]       = 0
-        _TG_ESPELHO_STATE["losses"]     = 0
+    _tg_espelho_resetar()
     return jsonify({"ok": True})
 
 @app.route('/get-modo', methods=['GET'])
