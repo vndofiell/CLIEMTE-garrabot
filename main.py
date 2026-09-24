@@ -195,7 +195,9 @@ def _tg_espelho_atualizar(token: str, chat_id: str, win: bool, meta: int = 2, lu
         wins        = state["wins"]
         losses      = state["losses"]
         total       = wins + losses
-        lucro_acum  = state.get("lucro_total", 0.0) + (abs(lucro) if win else -abs(lucro))
+        # Sempre soma o valor real: positivo se WIN, negativo se LOSS
+        delta = abs(lucro) if win else -abs(lucro)
+        lucro_acum  = round(state.get("lucro_total", 0.0) + delta, 2)
         state["lucro_total"] = lucro_acum
 
         # Barra de progresso
