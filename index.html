@@ -9157,24 +9157,39 @@ function _secVerificarPlanilhaJC() {
             // Atualiza cache local do estado JC
             window._jcSecAtivo = !!(m.ativo && m.meta_hoje && m.meta_hoje > 0);
 
-            // JC inativo → Stop Win pelo campo manual, depois verifica retorno à TESTE
+            // JC inativo → Stop Win pelo campo manual → encerra TUDO (bot + secundária)
             if (!m.ativo || !m.meta_hoje || m.meta_hoje <= 0) {
                 const swReal = parseFloat((_mcConfig.stopWin || 10).toFixed(2));
                 const lucroSecJC = _sec.profit;
                 if (lucroSecJC >= swReal) {
+                    // ── Encerra secundária ──
                     _sec.espelhandoAtivo    = false;
                     _sec._profitAoAtivar    = undefined;
                     _sec._buying            = false;
                     _sec._testeEstavRodando = false;
-                    bot.running      = true;
-                    bot._buying      = false;
-                    bot.stake        = bot.initialStake;
-                    bot.mgr          = new GerenciadorUnificado(bot.gerenciamento,
-                        Object.assign({ stake: bot.initialStake }, (bot._mgrCfgs && bot._mgrCfgs[bot.gerenciamento]) || {}));
-                    bot._seqLossAtual = 0;
+                    // ── Encerra bot principal ──
+                    bot.running        = false;
+                    bot._buying        = true;
+                    bot._metaEncerrada = true;
+                    if (typeof _timer !== 'undefined') _timer.pausar();
                     print(`🏁 STOP WIN SECUNDÁRIA | Lucro: +$${lucroSecJC.toFixed(2)} | Limite: +$${swReal.toFixed(2)}`, 'log-win');
-                    print(`▶ CONTA TESTE RETOMADA — stake reiniciada em $${bot.initialStake.toFixed(2)}.`, 'log-win');
+                    print(`🔒 SISTEMA ENCERRADO — Stop Win atingido. Nenhuma operação será iniciada.`, 'log-win');
                     _secAtualizarBadge();
+                    tgEnviarStopWin();
+                    const saldoSec = parseFloat(_sec.saldo) || 0;
+                    stopWinExibirModal(lucroSecJC, _sec.wins, _sec.losses, saldoSec, bot.estrategia, _mcConfig.gerenciamento || bot.gerenciamento);
+                    setTimeout(() => {
+                        if (_sec.ws && _sec.ws.readyState === WebSocket.OPEN) {
+                            _sec._destruido = true;
+                            _sec.ws.close();
+                            print(`🔌 Espelho desconectado após Stop Win.`, 'log-info');
+                        }
+                        if (bot.ws && bot.ws.readyState === WebSocket.OPEN) {
+                            bot._wssUrl = null;
+                            bot.ws.close();
+                            print(`🔌 Bot desconectado após Stop Win.`, 'log-info');
+                        }
+                    }, 2000);
                     return;
                 }
                 _secVerificarRetorno();  // sem JC ativo, decide retornar aqui
