@@ -130,6 +130,87 @@ def _auth_gerar_token() -> str:
 # Estado global do modo de operação
 _MODO_OPERACAO = {"modo": "NORMAL"}   # NORMAL ou ESPELHO
 
+# ── Estado da mensagem única do espelho no Telegram ──────────────────────────
+_TG_ESPELHO_STATE = {
+    "message_id": None,   # ID da mensagem a editar
+    "wins":       0,
+    "losses":     0,
+    "meta":       2,      # quantidade de resultados necessários para passar à conta principal
+    "lock":       threading.Lock(),
+}
+
+def _tg_espelho_atualizar(token: str, chat_id: str, win: bool, meta: int = 2):
+    """
+    Mantém UMA única mensagem no Telegram para a conta espelho.
+    Cria na primeira vez, edita nas seguintes.
+    Mostra barra animada de progresso: CONTA ESPELHO WIN 1/2 ✅
+    """
+    state = _TG_ESPELHO_STATE
+    with state["lock"]:
+        state["meta"] = meta
+        if win:
+            state["wins"]   += 1
+        else:
+            state["losses"] += 1
+
+        wins   = state["wins"]
+        losses = state["losses"]
+        total  = wins + losses
+        mid    = state["message_id"]
+
+        # Barra de progresso animada
+        barra_win  = "🟢" * wins  + "⬜" * max(0, meta - wins)
+        barra_los  = "🔴" * losses
+
+        if win:
+            icone   = "✅"
+            res_txt = f"WIN {wins}/{meta}"
+        else:
+            icone   = "❌"
+            res_txt = f"LOS {losses}/{meta}"
+
+        texto = (
+            f"🪞 *CONTA ESPELHO*\n"
+            f"{icone} *{res_txt}*\n\n"
+            f"Progresso: {barra_win}\n"
+            f"Losses:    {barra_los if losses else '—'}\n\n"
+            f"W: {wins}  |  L: {losses}  |  Total: {total}\n"
+            f"🕐 {_hora_brt('%H:%M:%S')}"
+        )
+
+        def _editar_ou_criar():
+            import requests as _req
+            _mid = state["message_id"]
+            # Tenta editar mensagem existente
+            if _mid:
+                try:
+                    r = _req.post(
+                        _tg_url(token, "editMessageText"),
+                        json={"chat_id": chat_id, "message_id": _mid,
+                              "text": texto, "parse_mode": "Markdown"},
+                        timeout=8
+                    )
+                    if r.ok and r.json().get("ok"):
+                        return
+                except Exception:
+                    pass
+            # Cria nova mensagem
+            try:
+                r = _req.post(
+                    _tg_url(token, "sendMessage"),
+                    json={"chat_id": chat_id, "text": texto, "parse_mode": "Markdown"},
+                    timeout=8
+                )
+                if r.ok:
+                    data = r.json()
+                    if data.get("ok"):
+                        with state["lock"]:
+                            state["message_id"] = data["result"]["message_id"]
+            except Exception:
+                pass
+
+        threading.Thread(target=_editar_ou_criar, daemon=True).start()
+
 # ── Cache de cotação USD/BRL ──────────────────────────────────────────────────
 _COT_CACHE: dict = {"valor": 0.0, "ts": 0}
 _COT_LOCK = threading.Lock()
@@ -1022,6 +1103,11 @@ def set_modo():
     modo = dados.get("modo", "NORMAL").upper()
     _MODO_OPERACAO["modo"] = modo
     print(f"[*] Sistema configurado para modo: {modo}")
+    # Reseta estado da mensagem única do espelho ao trocar de modo
+    with _TG_ESPELHO_STATE["lock"]:
+        _TG_ESPELHO_STATE["message_id"] = None
+        _TG_ESPELHO_STATE["wins"]       = 0
+        _TG_ESPELHO_STATE["losses"]     = 0
     return jsonify({"ok": True})
 
 @app.route('/get-modo', methods=['GET'])
@@ -2905,11 +2991,18 @@ def tg_send():
     if not token or not chat_id:
         return jsonify({"ok": False, "erro": "token/chat_id ausentes"})
 
-    # ── Modo ESPELHO: só envia notificações da conta SECUNDÁRIA ──
+    # ── Modo ESPELHO: conta SECUNDÁRIA → mensagem única animada; resto bloqueado ──
     if _MODO_OPERACAO.get("modo") == "ESPELHO":
         conta = str(d.get("conta", "")).upper()
         print(f"[TG] modo=ESPELHO conta='{conta}' stop_win={d.get('stop_win')} keys={list(d.keys())}")
-        if conta != "SECUNDARIA":
+        if conta == "SECUNDARIA":
+            # Só intercepta resultado WIN/LOSS (não stop_win, não virtual, não texto_direto)
+            if not d.get("stop_win") and not d.get("virtual") and not d.get("_texto_direto"):
+                win  = bool(d.get("win", False))
+                meta = int(d.get("meta_espelho", 2))
+                _tg_espelho_atualizar(token, chat_id, win, meta)
+                return jsonify({"ok": True, "espelho": True})
+        else:
             print("[TG] Modo ESPELHO: notificação bloqueada (não é conta SECUNDÁRIA).")
             return jsonify({"ok": True, "bloqueado": True, "motivo": "modo_espelho_conta_nao_secundaria"})
 
