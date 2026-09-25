@@ -77,6 +77,8 @@ _BASE_URL    = _get_base_url()
 SERVIDOR_URL = f"{_BASE_URL}/pegar-token-robo"
 RENDER_URL   = SERVIDOR_URL
 SITE_LOGIN   = f"{_BASE_URL}/login"
+# URL permanente do Render (fallback sempre disponível)
+RENDER_PERMANENTE = "https://bot-garra-uv2r.onrender.com"
 print(f"[CONFIG] URL base: {_BASE_URL}")
 API_BASE     = "https://api.derivws.com/trading/v1/options"
 
