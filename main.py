@@ -61,7 +61,9 @@ def _add_ngrok_header(resp):
 
 APP_ID       = "33qw17TW2WM9OqeTqtRaC"
 
-# ── URL dinâmica: usa ngrok se disponível, senão DuckDNS ──────────────────────
+# ── URL dinâmica: usa ngrok se disponível, senão a própria URL do Render ──────
+RENDER_PERMANENTE = "https://bot-garra-uv2r.onrender.com"
+
 def _get_base_url():
     try:
         import requests as _req
@@ -71,14 +73,12 @@ def _get_base_url():
                 return tun["public_url"].rstrip("/")
     except Exception:
         pass
-    return "https://garrabot2.duckdns.org"
+    return RENDER_PERMANENTE
 
 _BASE_URL    = _get_base_url()
 SERVIDOR_URL = f"{_BASE_URL}/pegar-token-robo"
 RENDER_URL   = SERVIDOR_URL
 SITE_LOGIN   = f"{_BASE_URL}/login"
-# URL permanente do Render (fallback sempre disponível)
-RENDER_PERMANENTE = "https://bot-garra-uv2r.onrender.com"
 print(f"[CONFIG] URL base: {_BASE_URL}")
 API_BASE     = "https://api.derivws.com/trading/v1/options"
 
