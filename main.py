@@ -2826,13 +2826,20 @@ def _assets_path(nome):
 # Usa domínio oficial — Oracle Cloud tem DNS pleno, IP fixo não é necessário
 _TG_BASE    = "https://api.telegram.org"
 _TG_HEADERS = {}
-_TG_TIMEOUT = (10, 25)
+_TG_TIMEOUT = (5, 8)   # connect=5s, read=8s — rápido para notificações em tempo real
 
 def _tg_url(token: str, method: str) -> str:
     return f"{_TG_BASE}/bot{token}/{method}"
 
+# Cache de imagens já comprimidas: { "caminho:max_width": bytes }
+# Zerado automaticamente na inicialização do servidor.
+_TG_IMG_CACHE: dict = {}
+
 def _preparar_foto(img_path: str, max_width: int = 280) -> tuple:
-    """Redimensiona com PIL. Retorna (bytes, filename, mime)."""
+    """Redimensiona com PIL e usa cache em memória para evitar reprocessamento."""
+    cache_key = f"{img_path}:{max_width}"
+    if cache_key in _TG_IMG_CACHE:
+        return _TG_IMG_CACHE[cache_key], "img.jpg", "image/jpeg"
     try:
         from PIL import Image
         img = Image.open(img_path).convert("RGB")
@@ -2841,13 +2848,19 @@ def _preparar_foto(img_path: str, max_width: int = 280) -> tuple:
         resample = getattr(Image, 'LANCZOS', getattr(Image, 'ANTIALIAS', 1))  # type: ignore[attr-defined]
         img = img.resize((max_width, nh), resample)
         buf = _io.BytesIO()
-        img.save(buf, format="JPEG", quality=88)
-        print(f"[TG] PIL OK — {buf.tell()} bytes")
-        return buf.getvalue(), "img.jpg", "image/jpeg"
+        img.save(buf, format="JPEG", quality=60)
+        data = buf.getvalue()
+        _TG_IMG_CACHE[cache_key] = data
+        print(f"[TG] PIL OK — {len(data)} bytes (cache atualizado)")
+        return data, "img.jpg", "image/jpeg"
     except Exception:
+        # Pillow não disponível — lê PNG bruto (pode ser grande, instale Pillow no servidor)
         with open(img_path, "rb") as f:
             raw = f.read()
         fname = os.path.basename(img_path)
+        # Não cacheia o PNG bruto para não mascarar a ausência do Pillow
+        print(f"[TG] AVISO: Pillow não instalado — enviando PNG bruto ({len(raw)//1024}KB). "
+              f"Execute: pip install Pillow")
         return raw, fname, "image/png" if fname.lower().endswith(".png") else "image/jpeg"
 
 def _tg_enviar_foto(token: str, chat_id: str, caption: str, img_path: str,
@@ -2913,18 +2926,25 @@ def tg_send():
             print("[TG] Modo ESPELHO: notificação bloqueada (não é conta SECUNDÁRIA).")
             return jsonify({"ok": True, "bloqueado": True, "motivo": "modo_espelho_conta_nao_secundaria"})
 
-    # Cotação capturada aqui (fora da thread) para não atrasar o envio
-    cotacao = _buscar_cotacao()
-
     # Snapshot dos dados — evita capturar variáveis mutáveis na closure
     payload = dict(d)
 
     def _enviar():
-        tok = str(token); cid = str(chat_id); cot = cotacao
+        tok = str(token); cid = str(chat_id)
+        # Cotação buscada dentro da thread (tem cache 60s — quase sempre instantâneo)
+        cot = _buscar_cotacao()
 
         # ── Texto direto (usado por testar/stopwin do JS) ──
         if payload.get("_texto_direto"):
             _tg_enviar_texto(tok, cid, str(payload["_texto_direto"]))
+            return
+
+        # ── Início de sessão — foto imicio.png (larga) + mensagem ──────
+        if payload.get("_inicio"):
+            msg_inicio = str(payload.get("texto", "▶️ BOT INICIADO"))
+            img = _assets_path("imicio.png")
+            if not _tg_enviar_foto(tok, cid, msg_inicio, img, max_width=800):
+                _tg_enviar_texto(tok, cid, msg_inicio)
             return
 
         # ── Modo Virtual (LV acumulando) — notificação simples ──
@@ -2932,7 +2952,7 @@ def tg_send():
             _tg_enviar_texto(tok, cid, str(payload.get("texto", "🤖 Robô Garra analisando...")))
             return
 
-        # ── Relatório de Stop Win ──────────────────────────
+        # ── Relatório de Stop Win / Meta Batida ───────────────
         if payload.get("stop_win"):
             lucro           = float(payload.get("lucro", 0))
             banca           = float(payload.get("banca", 0))
@@ -2947,24 +2967,26 @@ def tg_send():
             wr              = (wins / total * 100) if total > 0 else 0.0
             lucro_brl       = lucro * cot
             banca_brl       = banca * cot
+            max_stake_brl   = max_stake * cot
             msg = (
-                f"🏆 STOP WIN BATIDO\n\n"
-                f"💰 Banca: ${banca:.2f} (R$ {banca_brl:.2f})\n"
-                f"📈 Lucro: +${lucro:.2f} (R$ +{lucro_brl:.2f})\n\n"
-                f"📊 {wins}W • {losses}L • {wr:.0f}%\n\n"
-                f"🔥 Máx WIN: {max_win_consec}x\n"
-                f"💀 Máx LOSS: {max_loss_consec}x\n"
-                f"💵 Stake Máx: ${max_stake:.2f}\n\n"
-                f"🤖 {estrategia.upper()}\n"
-                f"⚙️ {modo.upper()}\n\n"
+                f"━━━━━━━━━━━━━━━\n"
+                f"🏆 <b>META BATIDA!</b>\n"
+                f"━━━━━━━━━━━━━━━\n"
+                f"🏦 Banca:  ${banca:.2f}  /  R${banca_brl:.2f}\n"
+                f"📈 Lucro:  +${lucro:.2f}  /  R$+{lucro_brl:.2f}\n"
+                f"📊 Sessão: {wins}W • {losses}L • {wr:.0f}%\n"
+                f"━━━━━━━━━━━━━━━\n"
+                f"🔥 {max_win_consec}x WIN  💀 {max_loss_consec}x LOSS  💵 Máx ${max_stake:.2f}\n"
+                f"━━━━━━━━━━━━━━━\n"
+                f"🤖 {estrategia}  •  ⚙️ {modo}\n"
                 f"🕐 {_hora_brt()}"
             )
             img = _assets_path("Meta Batida.png")
-            if not _tg_enviar_foto(tok, cid, msg, img, max_width=400):
+            if not _tg_enviar_foto(tok, cid, msg, img, max_width=200):
                 _tg_enviar_texto(tok, cid, msg)
             return
 
-        # ── Resultado WIN / LOSS ───────────────────────────
+        # ── Resultado WIN / LOSS ──────────────────────────────────────────────
         win             = bool(payload.get("win", False))
         lucro           = float(payload.get("lucro", 0))
         profit_tot      = float(payload.get("profit_total", 0))
@@ -2974,43 +2996,46 @@ def tg_send():
         prox_stake      = float(payload.get("prox_stake", 0))
         modo            = str(payload.get("modo", ""))
         estrategia      = str(payload.get("estrategia", ""))
+        max_win_consec  = int(payload.get("max_win_consec", 0))
+        max_loss_consec = int(payload.get("max_loss_consec", 0))
+        max_stake       = float(payload.get("max_stake", 0))
         total           = wins + losses
         lucro_brl       = abs(lucro) * cot
         profit_brl      = profit_tot * cot
         banca_brl       = banca * cot
 
         if win:
-            img_nome     = "WIM GARRA.png"
-            res_linha    = "✅  RESULTADO: WIN"
-            lucro_linha  = f"💵  Lucro: +${lucro:.2f}"
+            img_nome  = "WIM GARRA.jpg"
+            res_linha = "✅ <b>WIN</b>"
+            sinal_lc  = "+"
         else:
-            img_nome     = "LOSS GARRA.png"
-            res_linha    = "❌  RESULTADO: LOSS"
-            lucro_linha  = f"💵  Lucro: -${abs(lucro):.2f}"
+            img_nome  = "LOSS GARRA.jpg"
+            res_linha = "❌ <b>LOSS</b>"
+            sinal_lc  = "-"
 
         entrada        = float(payload.get("entrada", payload.get("prox_stake", 0)))
         sinal_tot      = "+" if profit_tot >= 0 else "-"
         profit_brl_str = f"{sinal_tot}R${abs(profit_brl):.2f}"
         profit_usd_str = f"{sinal_tot}${abs(profit_tot):.2f}"
-        banca_brl_str  = f"{banca_brl:.2f}".replace(".", ",")
         lucro_op_brl   = abs(lucro) * cot
         lucro_op_str   = f"+R${lucro_op_brl:.2f}" if win else f"-R${lucro_op_brl:.2f}"
+        max_stake_brl  = max_stake * cot
+        wr             = round(wins / total * 100) if total > 0 else 0
 
         msg = (
-            f"🟢  OPERAÇÃO FINALIZADA\n\n"
-            f"{res_linha}\n\n"
-            f"💰  Entrada: ${entrada:.2f}\n"
-            f"{lucro_linha}  ({lucro_op_str})\n\n"
-            f"➡️  Próxima Entrada: ${prox_stake:.2f}\n"
-            f"⚙️  Gestão: {modo}\n\n"
-            f"📊  Mercado: {estrategia.split()[0] if estrategia else '--'}\n"
-            f"🎯  Estratégia: {estrategia}\n\n"
-            f"🏦  Banca: ${banca:.2f}  /  R${banca_brl_str}\n"
-            f"📈  Lucro Total: {profit_usd_str}  /  {profit_brl_str}\n\n"
-            f"🕐  {_hora_brt()}"
+            f"─────────────────\n"
+            f"{res_linha}  {sinal_lc}${abs(lucro):.2f}  ({lucro_op_str})\n"
+            f"─────────────────\n"
+            f"💰 ${entrada:.2f}  ➡️ ${prox_stake:.2f}  |  🏦 ${banca:.2f}\n"
+            f"📈 Total: {profit_usd_str} / {profit_brl_str}  |  {wins}W•{losses}L•{wr}%\n"
+            f"─────────────────\n"
+            f"🔥 WIN:{max_win_consec}x  💀 LOSS:{max_loss_consec}x  💵 Máx:${max_stake:.2f}\n"
+            f"🎯 {estrategia}  •  ⚙️ {modo}\n"
+            f"🕐 {_hora_brt()}"
         )
         img = _assets_path(img_nome)
-        if not _tg_enviar_foto(tok, cid, msg, img, max_width=320):
+        # Envia foto com a legenda; se falhar (imagem corrompida/ausente), envia só texto
+        if not _tg_enviar_foto(tok, cid, msg, img, max_width=200):
             _tg_enviar_texto(tok, cid, msg)
 
     _tg_dispatch(_enviar)
@@ -4941,16 +4966,17 @@ def ai_gerar_cognitivo():
 
     # ── Passo 5: Notificação TG + WA ─────────────────────
     texto_notif = formatar_veredito_cognitivo(resultado_final)
-    cfg_tg = _tg_carregar()
-    if cfg_tg.get("enabled"):
-        _tg_dispatch(lambda: _tg_enviar_texto(
-            cfg_tg["token"], cfg_tg["chat_id"], texto_notif
-        ))
-    cfg_wa = _wa_cfg_ler()
-    if cfg_wa.get("enabled"):
-        threading.Thread(
-            target=lambda: enviar_notificacao_wa(texto_notif), daemon=True
-        ).start()
+    if _MODO_OPERACAO.get("modo") != "ESPELHO":
+        cfg_tg = _tg_carregar()
+        if cfg_tg.get("enabled"):
+            _tg_dispatch(lambda: _tg_enviar_texto(
+                cfg_tg["token"], cfg_tg["chat_id"], texto_notif
+            ))
+        cfg_wa = _wa_cfg_ler()
+        if cfg_wa.get("enabled"):
+            threading.Thread(
+                target=lambda: enviar_notificacao_wa(texto_notif), daemon=True
+            ).start()
 
     return jsonify(resultado_final)
 
@@ -5206,14 +5232,15 @@ def ai_post_mortem():
 
     texto_pm = "\n".join(linhas_pm)
 
-    cfg_tg = _tg_carregar()
-    if cfg_tg.get("enabled"):
-        _tg_dispatch(lambda: _tg_enviar_texto(cfg_tg["token"], cfg_tg["chat_id"], texto_pm))
-    cfg_wa = _wa_cfg_ler()
-    if cfg_wa.get("enabled"):
-        threading.Thread(
-            target=lambda: enviar_notificacao_wa(texto_pm), daemon=True
-        ).start()
+    if _MODO_OPERACAO.get("modo") != "ESPELHO":
+        cfg_tg = _tg_carregar()
+        if cfg_tg.get("enabled"):
+            _tg_dispatch(lambda: _tg_enviar_texto(cfg_tg["token"], cfg_tg["chat_id"], texto_pm))
+        cfg_wa = _wa_cfg_ler()
+        if cfg_wa.get("enabled"):
+            threading.Thread(
+                target=lambda: enviar_notificacao_wa(texto_pm), daemon=True
+            ).start()
 
     return jsonify({
         "relatorio":            relatorio_json,
@@ -7146,22 +7173,23 @@ def ect_degradacao():
             _ect_state_salvar(state)
             resultado["auto_suspensa"] = True
 
-            # Notifica via Telegram se configurado
-            cfg_tg = _tg_carregar()
-            if cfg_tg.get("enabled"):
-                msg_alert = (
-                    f"🚨 <b>ECT — ESTRATÉGIA SUSPENSA</b>\n"
-                    f"━━━━━━━━━━━━━━━━\n"
-                    f"📛 <b>{estrategia}</b>\n"
-                    f"📊 WR Recente: {resultado['wr_recente']*100:.1f}% "
-                    f"(−{resultado['desvio_sigmas']:.1f}σ da média)\n"
-                    f"⚡ Status: DEGRADADA → Suspensa para reanálise\n"
-                    f"━━━━━━━━━━━━━━━━\n"
-                    f"Execute /ai/post-mortem para análise causal."
-                )
-                _tg_dispatch(lambda: _tg_enviar_texto(
-                    cfg_tg["token"], cfg_tg["chat_id"], msg_alert
-                ))
+            # Notifica via Telegram se configurado (bloqueado no modo ESPELHO)
+            if _MODO_OPERACAO.get("modo") != "ESPELHO":
+                cfg_tg = _tg_carregar()
+                if cfg_tg.get("enabled"):
+                    msg_alert = (
+                        f"🚨 <b>ECT — ESTRATÉGIA SUSPENSA</b>\n"
+                        f"━━━━━━━━━━━━━━━━\n"
+                        f"📛 <b>{estrategia}</b>\n"
+                        f"📊 WR Recente: {resultado['wr_recente']*100:.1f}% "
+                        f"(−{resultado['desvio_sigmas']:.1f}σ da média)\n"
+                        f"⚡ Status: DEGRADADA → Suspensa para reanálise\n"
+                        f"━━━━━━━━━━━━━━━━\n"
+                        f"Execute /ai/post-mortem para análise causal."
+                    )
+                    _tg_dispatch(lambda: _tg_enviar_texto(
+                        cfg_tg["token"], cfg_tg["chat_id"], msg_alert
+                    ))
         else:
             resultado["auto_suspensa"] = False  # já estava suspensa
     else:
@@ -7695,7 +7723,7 @@ def _monitor_executar_scan():
     )
 
     cfg_tg = _tg_carregar()
-    if cfg_tg.get("enabled"):
+    if cfg_tg.get("enabled") and _MODO_OPERACAO.get("modo") != "ESPELHO":
         msg_tg_html = (
             f"🤖 <b>ECT MONITOR — Nova Estratégia AUTO-ATIVADA</b>\n"
             f"─────────────\n"
@@ -7711,8 +7739,9 @@ def _monitor_executar_scan():
         _tg_dispatch(lambda: _tg_enviar_texto(cfg_tg["token"], cfg_tg["chat_id"], msg_tg_html))
         _monitor_log("📱 Notificação Telegram enviada.")
 
-    threading.Thread(target=lambda: enviar_notificacao_wa(msg_notif), daemon=True).start()
-    _monitor_log("📱 Notificação WhatsApp enviada.")
+    if _MODO_OPERACAO.get("modo") != "ESPELHO":
+        threading.Thread(target=lambda: enviar_notificacao_wa(msg_notif), daemon=True).start()
+        _monitor_log("📱 Notificação WhatsApp enviada.")
 
 
 def _monitor_loop():
@@ -9045,7 +9074,7 @@ def _supremo_loop():
                             _SUPREMO_STATE["ultimo_ciclo"] = time.time()
 
                         cfg_tg = _tg_carregar()
-                        if cfg_tg.get("enabled"):
+                        if cfg_tg.get("enabled") and _MODO_OPERACAO.get("modo") != "ESPELHO":
                             msg = (
                                 f"🏆 <b>SUPREMO — Nova Decisão Autônoma</b>\n"
                                 f"━━━━━━━━━━━━━━━━\n"
@@ -10184,9 +10213,10 @@ def contas_promover():
     for est in estrategias_aprovadas[:5]:
         msg += f"  • {est['nome']}: PF {est['pf']} | WR {est['win_rate']}%\n"
 
-    cfg_tg = _tg_carregar()
-    if cfg_tg.get("enabled"):
-        _tg_dispatch(lambda: _tg_enviar_texto(cfg_tg["token"], cfg_tg["chat_id"], msg))
+    if _MODO_OPERACAO.get("modo") != "ESPELHO":
+        cfg_tg = _tg_carregar()
+        if cfg_tg.get("enabled"):
+            _tg_dispatch(lambda: _tg_enviar_texto(cfg_tg["token"], cfg_tg["chat_id"], msg))
 
     return jsonify({
         "ok":                   True,
@@ -11187,8 +11217,8 @@ def garra_trend_avaliar():
     dados    = request.get_json(force=True, silent=True) or {}
     resultado = _garra_trend_engine.avaliar_mercado(dados)
 
-    # Se aprovado institucionalmente, dispara notificação opcional via Telegram
-    if resultado["aprovado"]:
+    # Se aprovado institucionalmente, dispara notificação opcional via Telegram (bloqueado no modo ESPELHO)
+    if resultado["aprovado"] and _MODO_OPERACAO.get("modo") != "ESPELHO":
         cfg_tg = _tg_carregar()
         if cfg_tg.get("enabled"):
             msg = (
@@ -11491,8 +11521,8 @@ def garra_m1_avaliar():
     engine    = _get_m1_engine()
     resultado = engine.avaliar(dados)
 
-    # Notificação Telegram quando aprovado
-    if resultado.get("operar"):
+    # Notificação Telegram quando aprovado (bloqueado no modo ESPELHO — sinais não enviados)
+    if resultado.get("operar") and _MODO_OPERACAO.get("modo") != "ESPELHO":
         try:
             cfg_tg = _tg_carregar()
             if cfg_tg.get("enabled"):
@@ -11568,8 +11598,8 @@ def quotex_garra_reversao_avaliar():
         "cfg_override":  cfg_ov,
     })
 
-    # Notificação Telegram
-    if resultado.get("operar"):
+    # Notificação Telegram (bloqueado no modo ESPELHO — sinais não enviados)
+    if resultado.get("operar") and _MODO_OPERACAO.get("modo") != "ESPELHO":
         try:
             cfg_tg = _tg_carregar()
             if cfg_tg.get("enabled"):
@@ -11694,8 +11724,8 @@ def trading_pro_avaliar():
     resultado = orc.avaliar(velas_norm, broker=broker, ativo=ativo,
                             drawdown_pct=drawdown_pct)
 
-    # Notificação Telegram quando aprovado
-    if resultado.get("operar"):
+    # Notificação Telegram quando aprovado (bloqueado no modo ESPELHO — sinais não enviados)
+    if resultado.get("operar") and _MODO_OPERACAO.get("modo") != "ESPELHO":
         try:
             cfg_tg = _tg_carregar()
             if cfg_tg.get("enabled"):
@@ -11765,12 +11795,27 @@ def trading_pro_config():
     return jsonify({"ok": True, "config": orc.cfg})
 
 
+@app.route('/ping')
+def _ping():
+    return jsonify({"ok": True, "status": "online"})
+
+
 def start_server():
-    # Oracle Cloud — porta configurável via variável de ambiente, padrão 5000
+    # Oracle Cloud / Render — porta configurável via variável de ambiente, padrão 5000
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
 
+
+# ── Inicialização ao importar (gunicorn / Render) ─────────────────────────────
+def _init_background_threads():
+    try:
+        threading.Thread(target=_wa_keepalive_loop, daemon=True).start()
+    except Exception:
+        pass
+
+
+_init_background_threads()
+
 if __name__ == "__main__":
     print("🚀 Iniciando Interface Cyber Cloud...")
-    threading.Thread(target=_wa_keepalive_loop, daemon=True).start()
     start_server()

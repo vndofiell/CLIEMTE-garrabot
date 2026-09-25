@@ -2466,6 +2466,8 @@
                 <option value="📊 Masaniello">📊 Masaniello</option>
                 <option value="🏦 RAL">🏦 RAL</option>
                 <option value="🔒 CCR">🔒 CCR</option>
+                <option value="🧠 RIA">🧠 RIA</option>
+
 
               </select>
             </div>
@@ -2820,6 +2822,8 @@
                 <option value="📊 Masaniello">📊 Masaniello</option>
                 <option value="🏦 RAL">🏦 RAL</option>
                 <option value="🔒 CCR">🔒 CCR</option>
+                <option value="🧠 RIA">🧠 RIA</option>
+
 
               </select>
             </div>
@@ -3121,6 +3125,8 @@
               <option value="🤖 Recovery Adaptativo">🤖 Recovery Adaptativo</option>
               <option value="🏦 RAL">🏦 RAL</option>
               <option value="🔒 CCR">🔒 CCR</option>
+              <option value="🧠 RIA">🧠 RIA</option>
+
 
 
             </select>
@@ -3435,6 +3441,8 @@
               <option value="🤖 Recovery Adaptativo">🤖 Recovery Adaptativo</option>
               <option value="🏦 RAL">🏦 RAL</option>
               <option value="🔒 CCR">🔒 CCR</option>
+              <option value="🧠 RIA">🧠 RIA</option>
+
 
 
             </select>
@@ -3685,7 +3693,7 @@
                   <option value="📊 Masaniello">📊 Masaniello</option>
                   <option value="🏦 RAL">🏦 RAL</option>
                   <option value="🔒 CCR">🔒 CCR</option>
-
+                  <option value="🧠 RIA">🧠 RIA</option>
                 </select>
               </div>
               <!-- IDs ocultos para manter compatibilidade com dbsMgrAtualizarStats() -->
@@ -4625,6 +4633,7 @@ const GERENCIAMENTOS = {
     "💹 Juros Compostos":        { desc: "Stake = % da banca. Meta e Stop próprios da planilha." },
     "🏦 RAL":                    { desc: "Recupera só com lucro realizado — capital inicial intocável" },
     "🔒 CCR":                    { desc: "Caixas isoladas: banca nunca opera, cofre nunca volta ao risco" },
+    "🧠 RIA":                    { desc: "Recovery Inteligente Adaptativo — sem Martingale, baseado em risco/payout/drawdown" },
 };
 
 // ═══════════════════════════════════════════════════════
@@ -4701,6 +4710,20 @@ class GerenciadorUnificado {
         this._ralEmRecuperacao  = false;   // true quando operando com stake aumentada
         this._ralBancoBloqueado = 0;       // valor reservado para tentativa atual
         this._ralPayout         = parseFloat(cfg.ral_payout || 0.85);
+        // ── RIA — Recovery Inteligente Adaptativo ────────────────────────────────
+        this._riaDivida         = 0.0;   // perda acumulada no ciclo atual
+        this._riaLossesSeguidos = 0;     // sequência atual de losses
+        this._riaWinsSeguidos   = 0;     // sequência atual de wins
+        this._riaHistorico      = [];    // últimas 20 operações para win rate recente
+        this._riaPicoBanca      = parseFloat(cfg._ria_pico_banca_inicial || 0);   // pico de banca para calcular drawdown
+        this._riaOperacoes      = 0;     // contador total de operações
+        this._riaPausado        = false; // bloqueado por excesso de losses
+        this._riaPayout         = parseFloat(cfg.ria_payout      || 0.85);
+        this._riaRiscoPct       = parseFloat(cfg.ria_risco_pct   || 3.0)  / 100; // % banca por op
+        this._riaRecPct         = parseFloat(cfg.ria_rec_pct     || 25.0) / 100; // % da perda para recuperar por op
+        this._riaMaxLosses      = parseInt (cfg.ria_max_losses   || 4);          // losses para pausar
+        this._riaMultMax        = parseFloat(cfg.ria_mult_max    || 2.5);        // teto: N× stake base
+        this._riaDrawdownBlq    = parseFloat(cfg.ria_dd_bloqueio || 10.0) / 100; // % drawdown para bloquear
     }
 
     getStake() { return Math.max(0.35, parseFloat(this.currentStake.toFixed(2))); }
@@ -4852,6 +4875,24 @@ class GerenciadorUnificado {
                 this._recalcJC();
                 break; }
 
+            case "🧠 RIA": {
+                // WIN: abate dívida pelo lucro real (SEC-RIA)
+                const _riaLucroW = this.currentStake * this._riaPayout;
+                const _riaRecup  = Math.min(_riaLucroW, this._riaDivida);
+                this._riaDivida  = Math.max(0, parseFloat((this._riaDivida - _riaRecup).toFixed(2)));
+                if (this._riaDivida < 0.02) this._riaDivida = 0;
+                this._riaLossesSeguidos = 0;
+                this._riaWinsSeguidos++;
+                this._riaPausado  = false;    // desbloqueia após WIN
+                this._riaCongelado = false;
+                this._riaOperacoes++;
+                if (this._riaHistorico.length >= 50) this._riaHistorico.shift();
+                this._riaHistorico.push(true);
+                const _riaBancaW = parseFloat(document.getElementById('hd-balance')?.textContent?.replace('$','')) || 0;
+                if (_riaBancaW > this._riaPicoBanca) this._riaPicoBanca = _riaBancaW;
+                this.currentStake = this._calcRIA(_riaBancaW);
+                break; }
+
             default:
                 this.currentStake = this.initialStake;
         }
@@ -4958,6 +4999,36 @@ class GerenciadorUnificado {
                 }
                 // Próxima stake: sem banco → volta à base
                 this.currentStake = this._calcRAL();
+                break; }
+
+            case "🧠 RIA": {
+                // LOSS: acumula dívida (SEC-RIA)
+                this._riaDivida = parseFloat((this._riaDivida + stake).toFixed(2));
+                this._riaLossesSeguidos++;
+                this._riaWinsSeguidos = 0;
+                this._riaOperacoes++;
+                if (this._riaHistorico.length >= 50) this._riaHistorico.shift();
+                this._riaHistorico.push(false);
+                const _riaBancaL = parseFloat(document.getElementById('hd-balance')?.textContent?.replace('$','')) || 0;
+                if (_riaBancaL > 0 && _riaBancaL > this._riaPicoBanca) this._riaPicoBanca = _riaBancaL;
+                // Pausa por losses seguidos
+                if (this._riaLossesSeguidos >= this._riaMaxLosses) {
+                    this._riaPausado   = true;
+                    this._riaCongelado = true;
+                    this.currentStake  = this.initialStake;
+                } else {
+                    // Defesa por drawdown ≥ 4%
+                    const _riaDD = this._riaPicoBanca > 0
+                        ? (this._riaPicoBanca - _riaBancaL) / this._riaPicoBanca
+                        : 0;
+                    this._riaCongelado = false;
+                    if (_riaDD >= 0.04) {
+                        // Modo defensivo: stake base × 0.70
+                        this.currentStake = Math.max(0.35, parseFloat((this.initialStake * 0.70).toFixed(2)));
+                    } else {
+                        this.currentStake = this._calcRIA(_riaBancaL);
+                    }
+                }
                 break; }
 
             default:
@@ -5167,6 +5238,84 @@ class GerenciadorUnificado {
         return Math.min(Math.max(base, stake), maxima);
     }
 
+    // ── RIA — Recovery Inteligente Adaptativo ────────────────────────────────────
+    _calcRIA(banca) {
+        const base   = this.initialStake;
+        const payout = this._riaPayout;
+
+        // Bloqueado por sequência ou drawdown
+        if (this._riaPausado) return base;
+
+        // Sem dívida → stake base
+        if (this._riaDivida <= 0) return base;
+
+        // ── Drawdown ──────────────────────────────────────────────
+        const dd = (this._riaPicoBanca > 0 && banca > 0)
+            ? Math.max(0, (this._riaPicoBanca - banca) / this._riaPicoBanca)
+            : 0;
+
+        // Bloqueio por drawdown > limite configurado (padrão 8%)
+        if (dd >= this._riaDrawdownBlq) {
+            this._riaPausado = true;
+            return base;
+        }
+
+        // ── Limites de risco por banca ─────────────────────────────
+        const limitePorBanca     = banca > 0 ? banca * this._riaRiscoPct : base;   // 2,5% banca
+        const limiteExposicao    = banca > 0 ? banca * 0.06 : base * 3;            // 6% banca
+        const limiteStake        = Math.min(this.cfg?.stake_max || 10, limitePorBanca, limiteExposicao);
+
+        if (limiteStake <= 0) return base;
+
+        // ── Win rate recente (3 janelas) ───────────────────────────
+        const hist   = this._riaHistorico;
+        const n      = hist.length;
+        const wrLong = n > 0 ? hist.filter(x => x).length / n             : 0.50;
+        const wrMed  = n > 0 ? hist.slice(-20).filter(x => x).length / Math.min(n, 20) : 0.50;
+        const wrCurt = n > 0 ? hist.slice(-10).filter(x => x).length / Math.min(n, 10) : 0.50;
+
+        // ── Score de qualidade: 0–100 (igual à SEC-RIA Python) ─────
+        // confiança sem sinal externo → usa win rate como proxy (× 100)
+        const conf  = wrLong * 100;
+        let score = conf * 0.40 + wrCurt * 100 * 0.30 + wrMed * 100 * 0.20 + wrLong * 100 * 0.10;
+        score -= this._riaLossesSeguidos * 7;
+        score += Math.min(8, this._riaWinsSeguidos * 2);
+        score -= dd * 100 * 0.5;
+        score = Math.max(0, Math.min(100, score));
+
+        // ── Percentual de recuperação adaptativo ───────────────────
+        // Base: 30% da dívida. Reduz por losses seguidos, drawdown e volatilidade.
+        let recPct = this._riaRecPct;  // padrão 0.30
+        if      (this._riaLossesSeguidos === 1) recPct *= 0.90;
+        else if (this._riaLossesSeguidos === 2) recPct *= 0.75;
+        else if (this._riaLossesSeguidos >= 3)  recPct *= 0.55;
+        if (dd >= 0.04) recPct *= 0.60;  // drawdown defensivo (4%)
+        recPct = Math.max(0.05, Math.min(0.45, recPct));
+
+        const meta        = this._riaDivida * recPct;
+        let   stakeTeor   = payout > 0 ? meta / payout : base;
+
+        // ── Fator de qualidade ─────────────────────────────────────
+        let fq = score >= 80 ? 1.00
+               : score >= 70 ? 0.90
+               : score >= 60 ? 0.78
+               : score >= 55 ? 0.65
+               :               0.50;
+        if (dd >= 0.04) fq *= 0.70;
+        let stake = stakeTeor * fq;
+
+        // ── Teto: máximo 2× stake base (não vira Martingale) ───────
+        const teto = Math.min(limiteStake, base * 2.0);
+        stake = Math.min(stake, teto);
+
+        // Se qualidade baixa, limita ainda mais
+        if (score < 55) stake = Math.min(stake, base * 0.70);
+
+        // Mínimo 0.35
+        stake = Math.max(0.35, parseFloat(stake.toFixed(2)));
+        return stake;
+    }
+
     status() {
         if (this.modo === "💹 Juros Compostos") {
             const lucro = this._jcBanca - this._jcBancaInicial;
@@ -5183,6 +5332,14 @@ class GerenciadorUnificado {
             const st      = this._ccrPausado ? ' ⛔PAUSADO' : '';
             const cofre   = this._ccrVault > 0 ? ` | Cofre: $${this._ccrVault.toFixed(2)}` : '';
             return `🔒 CCR | Caixa: ${pct}%(↓${ddPct}%) T${this._ccrBoxTrades}/${this._ccrMaxTrades}${cofre} | ${this._ccrBoxSucc}✓/${this._ccrBoxTotal}${st}`;
+        }
+        if (this.modo === "🧠 RIA") {
+            const _riaWr  = this._riaHistorico.length > 0
+                ? Math.round(this._riaHistorico.filter(x => x).length / this._riaHistorico.length * 100)
+                : 50;
+            const _riaPause = this._riaPausado   ? ' ⛔PAUSADO'   : '';
+            const _riaCong  = this._riaCongelado ? ' 🧊CONGELADO' : '';
+            return `🧠 RIA | Dívida: $${this._riaDivida.toFixed(2)} | Loss:${this._riaLossesSeguidos} | WR:${_riaWr}% | Stake: $${this.getStake().toFixed(2)}${_riaPause}${_riaCong}`;
         }
         return `${this.modo} | Stake: $${this.getStake().toFixed(2)} | Dívida: $${this._dividaLR.toFixed(2)} | Nível: ${this._nivelGale}`;
     }
@@ -7245,6 +7402,11 @@ function resetarPlacar() {
         _sec.losses          = 0;
         _sec.profit          = 0.0;
         _sec._profitAoAtivar = undefined;
+        _sec._seqWinAtual    = 0;
+        _sec._seqLossAtual   = 0;
+        _sec._maxWinConsec   = 0;
+        _sec._maxLossConsec  = 0;
+        _sec._maxStakeUsada  = 0;
     }
     window._jcSecAtivo = false;
     bot._seqWinAtual   = 0;
@@ -8003,6 +8165,15 @@ function abrirCfgGerenciamento(nome) {
             _campoMgmt('Cofre ≥ N× entrada → sinalizar saque (ex: 2)', 'mgmt-ccr-vault-withdraw',  'number', cfg.ccr_vault_withdraw ?? 2.0,  0.5, 50,  0.5);
             _campoMgmt('Payout da estratégia (ex: 0.85 = 85%)',        'mgmt-ccr-payout',          'number', cfg.ccr_payout         ?? 0.85, 0.01, 0.99, 0.01);
             break;
+
+        case '🧠 RIA':
+            _campoMgmt('Payout da estratégia (ex: 0.85 = 85%)',         'mgmt-ria-payout',      'number', cfg.ria_payout       ?? 0.85, 0.01, 0.99, 0.01);
+            _campoMgmt('Risco máx por op (% da banca, ex: 3 = 3%)',     'mgmt-ria-risco-pct',   'number', cfg.ria_risco_pct    ?? 3.0,  0.5,  20,   0.5);
+            _campoMgmt('% da dívida a recuperar por op (ex: 25)',       'mgmt-ria-rec-pct',     'number', cfg.ria_rec_pct      ?? 25.0, 5,    50,   1);
+            _campoMgmt('Teto stake (× entrada base, ex: 2.5)',          'mgmt-ria-mult-max',    'number', cfg.ria_mult_max     ?? 2.5,  1.1,  10,   0.1);
+            _campoMgmt('Losses seguidos para pausar',                    'mgmt-ria-max-losses',  'number', cfg.ria_max_losses   ?? 4,    1,    10,   1);
+            _campoMgmt('Drawdown máx para bloquear (%, ex: 10)',        'mgmt-ria-dd-bloqueio', 'number', cfg.ria_dd_bloqueio  ?? 10.0, 3,    50,   1);
+            break;
     }
 
     fecharModal('modal-gerenciamento');
@@ -8054,6 +8225,11 @@ function confirmarGerenciamento() {
         // ccr_box_suc_rate vem como 0-100 do modal, precisa de fração
         if (normalized.ccr_box_suc_rate !== undefined)
             normalized.ccr_box_suc_rate = parseFloat((normalized.ccr_box_suc_rate / 100).toFixed(4));
+    }
+    // RIA: inicializa banca pico com saldo real para drawdown correto
+    if (nome === "🧠 RIA") {
+        const _riaSaldo = parseFloat(document.getElementById('hd-balance')?.textContent?.replace('$','')) || 0;
+        normalized._ria_pico_banca_inicial = _riaSaldo;
     }
 
     bot.initialStake  = normalized.stake;
@@ -8180,17 +8356,41 @@ async function testarTelegram() {
     if (!token || !chat) { print('🔁Preencha Token e Chat ID antes de testar.', 'log-loss'); return; }
     print('📤 Enviando mensagem de teste ao Telegram...', 'log-info');
     try {
-        const msg  = _tgMontarMsg(true, 0.35, 0.35, 100, 1, 0, bot.initialStake,
-                                   bot.gerenciamento, bot.estrategia, _cotacaoBRL || 5, true);
-        const data = await _tgSendMessage(token, chat, msg);
-        if (data.ok) print('✅ Mensagem de teste enviada!', 'log-win');
-        else         print('🔁Falha: ' + (data.description || JSON.stringify(data)), 'log-loss');
+        const stakeBase = (bot.mgr ? bot.mgr.initialStake : null) || bot.initialStake || 0.35;
+        const proxTeste = parseFloat((stakeBase * 2).toFixed(2));
+        const bancaTeste = parseFloat(document.getElementById('hd-balance')?.textContent?.replace('$','')) || 100;
+        const payload = {
+            token:           token,
+            chat_id:         chat,
+            win:             true,
+            lucro:           stakeBase * 0.95,
+            profit_total:    stakeBase * 0.95,
+            banca:           bancaTeste,
+            wins:            1,
+            losses:          0,
+            entrada:         stakeBase,
+            prox_stake:      proxTeste,
+            modo:            bot.gerenciamento || 'Martingale',
+            estrategia:      bot.estrategia    || 'GARRA SNIPER',
+            max_win_consec:  1,
+            max_loss_consec: 0,
+            max_stake:       stakeBase,
+            _teste:          true,
+        };
+        const res = await fetch('/tg-send', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify(payload),
+        });
+        const data = await res.json();
+        if (data.ok) print('✅ Mensagem de teste enviada com imagem!', 'log-win');
+        else         print('🔁Falha: ' + JSON.stringify(data), 'log-loss');
     } catch (e) {
         print('🔁Erro ao testar Telegram: ' + e.message, 'log-loss');
     }
 }
 
-function tgEnviarResultado(win, lucro, prox_stake, _origemSec, _overrides) {
+function tgEnviarResultado(win, lucro, prox_stake, _origemSec, _overrides, _entradaUsada) {
     const _modoEspelhoAtivo = (typeof _sec !== 'undefined' && _sec.pronto && _sec.espelhandoAtivo);
     const _lvVirtual        = bot.lv && bot.lv.ativo && !bot.lv.emRecuperacao;
 
@@ -8236,14 +8436,15 @@ function tgEnviarResultado(win, lucro, prox_stake, _origemSec, _overrides) {
             banca:           saldoSec,
             wins:            _sec.wins,
             losses:          _sec.losses,
+            entrada:         _entradaUsada != null ? _entradaUsada : prox_stake,
             prox_stake:      prox_stake,
             modo:            _mcConfig.gerenciamento || bot.gerenciamento,
             estrategia:      bot.estrategia,
-            seq_win:         bot._seqWinAtual,
-            seq_loss:        bot._seqLossAtual,
-            max_win_consec:  bot._maxWinConsec,
-            max_loss_consec: bot._maxLossConsec,
-            max_stake:       bot._maxStakeUsada,
+            seq_win:         _sec._seqWinAtual,
+            seq_loss:        _sec._seqLossAtual,
+            max_win_consec:  _sec._maxWinConsec,
+            max_loss_consec: _sec._maxLossConsec,
+            max_stake:       _sec._maxStakeUsada,
             conta:           'SECUNDARIA',
         };
     } else {
@@ -8255,6 +8456,7 @@ function tgEnviarResultado(win, lucro, prox_stake, _origemSec, _overrides) {
             banca:           saldo,
             wins:            bot.wins,
             losses:          bot.losses,
+            entrada:         _entradaUsada != null ? _entradaUsada : prox_stake,
             prox_stake:      prox_stake,
             modo:            (_overrides && _overrides.modo)       || bot.gerenciamento,
             estrategia:      (_overrides && _overrides.estrategia) || bot.estrategia,
@@ -8293,24 +8495,90 @@ function tgEnviarResultado(win, lucro, prox_stake, _origemSec, _overrides) {
     }
 }
 
+// ── Notificação de início de sessão ──────────────────────────────────────────
+function tgEnviarInicio() {
+    if (!_tgCfg.enabled || !_tgCfg.token || !_tgCfg.chat_id) return;
+
+    const frases = [
+        "💪 Foco total — que os lucros venham!",
+        "🎯 Sistema ativo — disciplina acima de tudo!",
+        "🚀 Vamos com tudo — boa caçada!",
+        "🧠 Estratégia carregada — que a sorte esteja com você!",
+        "⚡ Bot no ar — que os greens apareçam!",
+        "🦅 GARRA ativada — bora lucrar!",
+        "🔥 Sessão iniciada — confiança e gestão!",
+    ];
+    const frase = frases[Math.floor(Math.random() * frases.length)];
+
+    // Quando conta secundária está ativa, usa configs dela; senão usa a principal
+    const _secAtiva = (typeof _sec !== 'undefined' && _sec.pronto);
+    const _mc       = (typeof _mcConfig !== 'undefined') ? _mcConfig : {};
+
+    const cot      = _cotacaoBRL || 0;
+    const entrada  = _secAtiva ? parseFloat(_mc.stake      || bot.initialStake) : bot.initialStake;
+    const gestao   = _secAtiva ? (_mc.gerenciamento        || bot.gerenciamento) : bot.gerenciamento;
+    const swVal    = _secAtiva ? parseFloat(_mc.stopWin    || 9999) : bot.stopWin;
+    const slVal    = _secAtiva ? parseFloat(_mc.stopLoss   || 9999) : bot.stopLoss;
+
+    const sw     = swVal < 9999 ? `$${swVal.toFixed(2)}` : '—';
+    const sl     = slVal < 9999 ? `$${slVal.toFixed(2)}` : '—';
+    const swBrl  = swVal < 9999 && cot > 0 ? `  /  R$${(swVal * cot).toFixed(2)}` : '';
+    const slBrl  = slVal < 9999 && cot > 0 ? `  /  R$${(slVal * cot).toFixed(2)}` : '';
+    const entBrl = cot > 0 ? `  /  R$${(entrada * cot).toFixed(2)}` : '';
+    const cotStr = cot > 0 ? `R$${cot.toFixed(2)}` : '—';
+
+    const agora    = new Date();
+    const dataHora = agora.toLocaleDateString('pt-BR') + '  ' +
+                     agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
+    const msg = (
+        "─────────────────\n" +
+        "▶️ <b>BOT INICIADO</b>\n" +
+        "─────────────────\n" +
+        `📅 ${dataHora}\n` +
+        `🎯 Estratégia: ${bot.estrategia}\n` +
+        `⚙️ Gestão: ${gestao}\n` +
+        "─────────────────\n" +
+        `💰 Entrada: $${entrada.toFixed(2)}${entBrl}\n` +
+        `🏆 Stop Win: ${sw}${swBrl}\n` +
+        `🛑 Stop Loss: ${sl}${slBrl}\n` +
+        "─────────────────\n" +
+        `💱 1 USD = ${cotStr}\n` +
+        `\n${frase}`
+    );
+
+    fetch('/tg-send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            token:   _tgCfg.token,
+            chat_id: _tgCfg.chat_id,
+            _inicio: true,
+            texto:   msg,
+            conta:   (typeof _sec !== 'undefined' && _sec.pronto) ? 'SECUNDARIA' : '',
+        }),
+    }).catch(() => {});
+}
+
 function tgEnviarStopWin() {
     // Aguarda 1200ms para garantir que a notificação do último resultado (WIN/LOSS)
     // já foi entregue no Telegram e WhatsApp antes da mensagem de Stop Win chegar.
     setTimeout(() => {
-        // Usa dados da conta SECUNDÁRIA se estiver em modo espelho, senão usa a principal
-        const _modoEspelhoAtivo = (typeof _sec !== 'undefined' && _sec.pronto && _sec.espelhandoAtivo);
+        // Usa _sec.pronto (não espelhandoAtivo) pois quando o stop win é acionado
+        // pela secundária, espelhandoAtivo já foi zerado antes desta chamada.
+        const _secConectada = (typeof _sec !== 'undefined' && _sec.pronto);
         let lucro, saldo, wins, losses, modo, seqWin, seqLoss, maxWin, maxLoss, maxStake;
-        if (_modoEspelhoAtivo) {
+        if (_secConectada) {
             lucro    = _sec.profit;
             saldo    = parseFloat(_sec.saldo) || 0;
             wins     = _sec.wins;
             losses   = _sec.losses;
-            modo     = _mcConfig.gerenciamento || bot.gerenciamento;
-            seqWin   = bot._seqWinAtual;
-            seqLoss  = bot._seqLossAtual;
-            maxWin   = bot._maxWinConsec;
-            maxLoss  = bot._maxLossConsec;
-            maxStake = bot._maxStakeUsada;
+            modo     = (typeof _mcConfig !== 'undefined' && _mcConfig.gerenciamento) || bot.gerenciamento;
+            seqWin   = _sec._seqWinAtual;
+            seqLoss  = _sec._seqLossAtual;
+            maxWin   = _sec._maxWinConsec;
+            maxLoss  = _sec._maxLossConsec;
+            maxStake = _sec._maxStakeUsada;
         } else {
             lucro    = bot.profit;
             saldo    = parseFloat(document.getElementById('hd-balance').textContent.replace('$','').replace(',','')) || 0;
@@ -8337,8 +8605,8 @@ function tgEnviarStopWin() {
             max_win_consec:  maxWin,
             max_loss_consec: maxLoss,
             max_stake:       maxStake,
-            // Marca SECUNDARIA para que o servidor monte a mensagem correta
-            conta:           _modoEspelhoAtivo ? 'SECUNDARIA' : '',
+            // Marca SECUNDARIA quando a conta secundária está conectada
+            conta:           _secConectada ? 'SECUNDARIA' : '',
         };
 
         // ── Telegram ──────────────────────────────────────────
@@ -8409,6 +8677,7 @@ function processCommand(cmd) {
                 }
             }
             print(`▶ ROBÔ ATIVO | Estratégia: <b>${bot.estrategia}</b> | Gerenciamento: <b>${bot.gerenciamento}</b> | Entrada: <b>$${bot.stake.toFixed(2)}</b> | SW: <b>$${bot.stopWin < 999 ? bot.stopWin : '—'}</b>`, "log-win");
+            tgEnviarInicio();
             _timer.iniciar();
         });
 
@@ -8530,6 +8799,12 @@ const _sec = {
     wins:            0,
     losses:          0,
     profit:          0,
+    // Estatísticas de sequência e stake (espelham bot.* mas só da secundária)
+    _seqWinAtual:    0,
+    _seqLossAtual:   0,
+    _maxWinConsec:   0,
+    _maxLossConsec:  0,
+    _maxStakeUsada:  0,
     _pendingReqs:    new Set(), // req_ids enviados para a secundária
     _reconTimer:     null,   // timer de reconexão automática
     _keepaliveTimer: null,   // timer de ping keepalive (25s)
@@ -8990,6 +9265,9 @@ async function _secConectar() {
             const rid = d.echo_req && d.echo_req.req_id;
             if (rid && _sec._pendingReqs.has(rid)) {
                 _sec._pendingReqs.delete(rid);
+                // Registra a stake real usada nesta operação antes de comprar
+                const _stakeReal = parseFloat(d.echo_req.amount || 0);
+                if (_stakeReal > _sec._maxStakeUsada) _sec._maxStakeUsada = _stakeReal;
                 _sec.ws.send(JSON.stringify({ buy: d.proposal.id, price: d.echo_req.amount }));
             }
         }
@@ -9017,11 +9295,22 @@ async function _secConectar() {
             if (won) _sec.wins++; else _sec.losses++;
             _sec.profit = parseFloat((_sec.profit + p).toFixed(2));
 
+            // Atualiza sequências e máximos da secundária
+            if (won) {
+                _sec._seqWinAtual++;  _sec._seqLossAtual = 0;
+                if (_sec._seqWinAtual  > _sec._maxWinConsec)  _sec._maxWinConsec  = _sec._seqWinAtual;
+            } else {
+                _sec._seqLossAtual++; _sec._seqWinAtual  = 0;
+                if (_sec._seqLossAtual > _sec._maxLossConsec) _sec._maxLossConsec = _sec._seqLossAtual;
+            }
+
             // Atualiza o gerenciador da secundária (Martingale, Soros, etc.)
+            // (stake máxima já foi registrada no momento da proposta — d.echo_req.amount)
+            const _secStakeAntes = _sec.mgr ? _sec.mgr.currentStake : (_mcConfig.stake || 0);
             if (_sec.mgr) _sec.mgr.updateResult(won, p);
 
             // ── Notificação Telegram/WhatsApp com dados da conta SECUNDÁRIA ──
-            tgEnviarResultado(won, p, (_sec.mgr ? _sec.mgr.getStake() : _mcConfig.stake || 0), true);
+            tgEnviarResultado(won, p, (_sec.mgr ? _sec.mgr.getStake() : _mcConfig.stake || 0), true, null, _secStakeAntes);
 
             // Libera flag de anti-duplicata (modo autônomo)
             _sec._buying = false;
@@ -10864,7 +11153,8 @@ function initWebSocket(wssUrl) {
                 // Passa o lucro lquido real ao gerenciador — sempre usa updateResultDupla
                 // para que qualquer modo (Dupla Recovery, Martingale, etc.) saiba
                 // exatamente quanto foi perdido/ganho no total das duas operações
-                const stakePorLado = bot.stake;
+                const stakePorLado   = bot.stake;
+                const _stakeAntDupla = bot.stake; // captura stake usada ANTES do updateResultDupla
                 bot.mgr.updateResultDupla(totalProfit, stakePorLado);
                 const _stakeDepoisDupla = bot.mgr.getStake();
                 bot.stake = wonReal ? _stakeDepoisDupla : _stakeDepoisDupla;
@@ -10921,7 +11211,7 @@ function initWebSocket(wssUrl) {
                 // updateHeader(bot._lastBalance);
                 bot.ws.send(json({ balance: 1 }));  // confirma saldo real com a Deriv
                 // Enquanto secundária estiver conectada (standby ou espelhando), bloqueia notif da principal
-                if (!(_sec && _sec.pronto)) tgEnviarResultado(wonReal, totalProfit, bot.stake);
+                if (!(_sec && _sec.pronto)) tgEnviarResultado(wonReal, totalProfit, bot.stake, false, null, _stakeAntDupla);
                 // ── Planilha JC: registra histórico ──────────────────────
                 if (bot.mgr && bot.mgr.modo === "💹 Juros Compostos") {
                     jcRegistrarResultado(wonReal ? 'WIN' : 'LOSS', stakePorLado, totalProfit, bot.mgr._jcBanca);
@@ -10937,6 +11227,7 @@ function initWebSocket(wssUrl) {
                 // ── Resultado normal (contrato único) ─────────────────────
                 bot._buying = false;
                 bot.profit  += profit;
+                const _stakeAntes = bot.stake; // captura stake usada ANTES do updateResult
                 bot.mgr.updateResult(won, profit);
                 const _stakeDepois = bot.mgr.getStake();
                 bot.stake = won ? _stakeDepois : _stakeDepois;
@@ -10994,10 +11285,10 @@ function initWebSocket(wssUrl) {
                         tgEnviarResultado(won, profit, bot.stake, false, {
                             estrategia: `🏛️ TREND PRO — ${_estAtual.ativo || ''} | score ${bot._tpScore}/100`,
                             modo:       bot.gerenciamento,
-                        });
+                        }, _stakeAntes);
                         bot._tpScore = null;   // limpa após usar
                     } else {
-                        tgEnviarResultado(won, profit, bot.stake);
+                        tgEnviarResultado(won, profit, bot.stake, false, null, _stakeAntes);
                     }
                 }
                 // ── Planilha JC: registra histórico ──────────────────────
@@ -15270,6 +15561,7 @@ function _ectIniciarBot(est, origemLabel) {
         bot.mgr = new GerenciadorUnificado(bot.gerenciamento,
             Object.assign({ stake: bot.initialStake }, (bot._mgrCfgs && bot._mgrCfgs[bot.gerenciamento]) || {}));
         _timer.iniciar();
+        tgEnviarInicio();
         print(
             `▶ <b>ECT INICIOU O BOT</b> · ${origemLabel} ` +
             `| ${bot.estrategia} | ${bot.gerenciamento} | $${bot.stake.toFixed(2)} | SW: $${bot.stopWin < 999 ? bot.stopWin : '—'}`,
@@ -19194,7 +19486,7 @@ function _csAtualizarStats(proxStake) {
 }
 
 // ── Notificações TG + WA — somente conta SECUNDÁRIA ────────────────────────
-function _csNotificar(won, profit, ct, barr, ativo, proxStake) {
+function _csNotificar(won, profit, ct, barr, ativo, proxStake, stakeUsada) {
     // Monta payload estruturado igual ao da conta principal
     // para que o servidor gere a mensagem com imagem (WIN.png / LOSS.png)
     const bancaSec  = (typeof _sec !== 'undefined' && _sec.saldo !== undefined)
@@ -19210,6 +19502,7 @@ function _csNotificar(won, profit, ct, barr, ativo, proxStake) {
         banca:        bancaSec,
         wins:         _csEspWins,
         losses:       _csEspLosses,
+        entrada:      stakeUsada != null ? stakeUsada : (proxStake || 0),
         prox_stake:   proxStake || 0,
         modo:         modo,
         estrategia:   estrategia,
@@ -19786,6 +20079,7 @@ function csOperar() {
             const won    = profit > 0;
 
             // Atualiza gerenciamento — conta certa conforme onde está operando
+            const _csStakeAntes = (_csUsandoSec && _csSecMgr) ? _csSecMgr.currentStake : (_csMgr ? _csMgr.currentStake : baseStake);
             if (_csUsandoSec && _csSecMgr) {
                 _csSecMgr.updateResult(won, profit);
             } else if (_csMgr) {
@@ -19888,7 +20182,7 @@ function csOperar() {
             // Notifica TG + WA — somente quando operando na conta SECUNDÁRIA
             // usa _eraSecAntes pois _csUsandoSec pode já ter sido resetado acima (WIN da SEC)
             if (_eraSecAntes && espAtivo && secPronto) {
-                _csNotificar(won, profit, ct, barr, ativo, proxStake);
+                _csNotificar(won, profit, ct, barr, ativo, proxStake, _csStakeAntes);
             }
 
             wsUsar.onmessage = _origMsg;
@@ -20842,6 +21136,7 @@ function ltsOperar() {
             const profit = parseFloat(poc.profit);
             const won    = profit > 0;
 
+            const _ltsStakeAntes = (_ltsUsandoSec && _ltsSecMgr) ? _ltsSecMgr.currentStake : (_ltsMgr ? _ltsMgr.currentStake : baseStake);
             if (_ltsUsandoSec && _ltsSecMgr) { _ltsSecMgr.updateResult(won, profit); }
             else if (_ltsMgr)                { _ltsMgr.updateResult(won, profit); }
             const proxStake = (_ltsUsandoSec && _ltsSecMgr) ? _ltsSecMgr.getStake()
@@ -20928,6 +21223,7 @@ function ltsOperar() {
                 const notifPayload = {
                     win: won, lucro: profit, profit_total: _ltsEspLucro,
                     banca: bancaSec, wins: _ltsEspWins, losses: _ltsEspLosses,
+                    entrada: _ltsStakeAntes != null ? _ltsStakeAntes : (proxStake || 0),
                     prox_stake: proxStake || 0, modo,
                     estrategia: `${ct} BARR=${barr} | ${ativo} [LIVE TICK SORT]`,
                     conta: 'SECUNDARIA',
