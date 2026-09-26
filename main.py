@@ -2801,6 +2801,17 @@ def _tg_carregar():
                 padrao.update(dados)
     except Exception:
         pass
+    # Fallback: usa variáveis de ambiente do Render se o arquivo JSON estiver vazio
+    # Configure TG_TOKEN e TG_CHAT_ID no painel do Render → Environment
+    if not padrao.get("token"):
+        env_token   = os.environ.get("TG_TOKEN", "")
+        env_chat_id = os.environ.get("TG_CHAT_ID", "")
+        if env_token and env_chat_id:
+            padrao["token"]    = env_token
+            padrao["chat_id"]  = env_chat_id
+            padrao["enabled"]  = True
+            padrao["resultados"] = True
+            padrao["stopwin"]  = True
     return padrao
 
 @app.route('/tg-config', methods=['GET'])
