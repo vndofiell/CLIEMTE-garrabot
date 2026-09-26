@@ -2931,13 +2931,14 @@ def tg_send():
     if not token or not chat_id:
         return jsonify({"ok": False, "erro": "token/chat_id ausentes"})
 
-    # ── Modo ESPELHO: só envia notificações da conta SECUNDÁRIA ──
-    if _MODO_OPERACAO.get("modo") == "ESPELHO":
-        conta = str(d.get("conta", "")).upper()
-        print(f"[TG] modo=ESPELHO conta='{conta}' stop_win={d.get('stop_win')} keys={list(d.keys())}")
-        if conta != "SECUNDARIA":
-            print("[TG] Modo ESPELHO: notificação bloqueada (não é conta SECUNDÁRIA).")
-            return jsonify({"ok": True, "bloqueado": True, "motivo": "modo_espelho_conta_nao_secundaria"})
+    # ── Sempre envia apenas notificações da conta SECUNDÁRIA ──
+    conta = str(d.get("conta", "")).upper()
+    # Permite: SECUNDARIA, _texto_direto (teste manual), stop_win da sec, _inicio da sec
+    _eh_teste   = bool(d.get("_texto_direto") or d.get("_teste"))
+    _eh_sec     = (conta == "SECUNDARIA")
+    if not _eh_teste and not _eh_sec:
+        print(f"[TG] Notificação bloqueada — apenas conta SECUNDÁRIA permitida (conta='{conta}').")
+        return jsonify({"ok": True, "bloqueado": True, "motivo": "apenas_secundaria"})
 
     # Snapshot dos dados — evita capturar variáveis mutáveis na closure
     payload = dict(d)
