@@ -1,168 +1,265 @@
-# =============================================================================
-# ADAPTIVE RISK ENGINE — Motor de Risco Adaptativo para o BOT GARRA
-# =============================================================================
-# Versão : 1.0.0
-# Autor  : BOT GARRA ELITE
-# Data   : 2025
-#
-# Descrição:
-#   Motor de gestão de risco inteligente que opera em quatro modos:
-#     DESLIGADO  — passa stake sem alterar (comportamento original)
-#     MODERADO   — ajustes suaves de ±5-20% com base em drawdown e sequências
-#     INTELIGENTE— ajustes dinâmicos baseados em score multicamada
-#     DEFENSIVO  — proteção agressiva, pode bloquear entradas
-#
-# Integração:
-#   from adaptive_risk import AdaptiveRiskEngine, AdaptiveConfig, adaptive_stake
-# =============================================================================
+# -*- coding: utf-8 -*-
+"""
+ADAPTIVE RISK ENGINE — SEC-RIA
+
+Substituição compatível com o main.py atual do BOT GARRA.
+
+Este arquivo mantém a API esperada pelo main.py:
+    AdaptiveConfig
+    AdaptiveRiskEngine
+    set_mode()
+    iniciar()
+    resetar()
+    calcular_stake()
+    registrar_resultado()
+    status()
+
+SEC-RIA não é Martingale: uma perda não causa duplicação automática.
+A próxima stake depende de perda acumulada, payout, expectativa,
+qualidade do sinal, drawdown, sequência e limites da banca.
+
+IMPORTANTE:
+- Nenhum gerenciamento garante recuperação ou lucro.
+- Use primeiro em DEMO/backtest.
+"""
 
 from __future__ import annotations
 
-import time
-from collections import deque
 from dataclasses import dataclass, field
-from typing import Deque, List, Optional
+from collections import deque
+from typing import Any, Dict, Optional
+import math
+import threading
+import time
 
 
-# =============================================================================
+# ============================================================
 # CONFIGURAÇÃO
-# =============================================================================
+# ============================================================
 
 @dataclass
 class AdaptiveConfig:
-    """
-    Parâmetros de configuração do motor adaptativo.
-    Todos os valores possuem defaults conservadores prontos para uso.
-    """
+    modo: str = "DESLIGADO"
 
-    # ── Modo operacional ──────────────────────────────────────────────────────
-    modo: str = "DESLIGADO"           # DESLIGADO | MODERADO | INTELIGENTE | DEFENSIVO
+    stake_min: float = 0.35
+    stake_max: float = 10.00
 
-    # ── Limites de stake ──────────────────────────────────────────────────────
-    stake_min: float = 0.35           # Stake mínima permitida (USD)
-    stake_max: float = 10.00          # Stake máxima permitida (USD)
+    # Risco máximo por entrada.
+    risco_max_pct: float = 0.03
 
-    # ── Risco de banca ────────────────────────────────────────────────────────
-    risco_max_pct: float = 0.03       # Exposição máxima por operação (3% da banca)
+    # Sequência defensiva/bloqueio.
+    max_losses_seguidos: int = 3
+    bloquear_apos_losses: int = 5
 
-    # ── Sequências de loss ───────────────────────────────────────────────────
-    max_losses_seguidos: int = 3      # Losses consecutivos antes de reduzir stake
-    bloquear_apos_losses: int = 5     # Losses consecutivos para bloquear entradas
+    # Drawdown relativo ao pico da banca.
+    drawdown_defensivo: float = 0.05
+    drawdown_bloqueio: float = 0.10
 
-    # ── Drawdown ──────────────────────────────────────────────────────────────
-    drawdown_defensivo: float = 0.05  # DD a partir do qual entra em modo defensivo (5%)
-    drawdown_bloqueio: float = 0.10   # DD que bloqueia entradas completamente (10%)
+    # Histórico recente.
+    janela_resultados: int = 20
 
-    # ── Janela de análise ─────────────────────────────────────────────────────
-    janela_resultados: int = 20       # Últimas N operações para calcular métricas
+    # Fatores usados pela lógica adaptativa.
+    reducao_loss: float = 0.80
+    reducao_drawdown: float = 0.70
+    aumento_win: float = 1.05
+    recovery_max_pct: float = 0.30
 
-    # ── Fatores de ajuste ─────────────────────────────────────────────────────
-    reducao_loss: float = 0.80        # Fator de redução após loss seguido (80%)
-    reducao_drawdown: float = 0.70    # Fator de redução quando DD alto (70%)
-    aumento_win: float = 1.05         # Fator de aumento após sequência boa (5%)
+    # Scores mantidos para compatibilidade com a interface atual.
+    score_min_operar: float = 40.0
+    score_defensivo: float = 60.0
 
-    # ── Loss Recovery ─────────────────────────────────────────────────────────
-    recovery_max_pct: float = 0.30    # Exposição máxima no recovery (30% da banca)
+    # Cooldown em segundos depois de bloqueio/pausa.
+    cooldown_segundos: int = 60
 
-    # ── Score de qualidade de sinal ───────────────────────────────────────────
-    score_min_operar: float = 40.0    # Score abaixo desse valor bloqueia entrada
-    score_defensivo: float = 60.0     # Score abaixo aplica redução de stake
-
-    # ── Cooldown após bloqueio ────────────────────────────────────────────────
-    cooldown_segundos: int = 60       # Segundos de cooldown após bloqueio por losses
-
-
-# =============================================================================
-# ESTADO INTERNO
-# =============================================================================
 
 @dataclass
-class _AdaptiveState:
-    """Estado interno mutável do motor. Não deve ser manipulado externamente."""
-
+class AdaptiveState:
     saldo_inicial: float = 0.0
     saldo_atual: float = 0.0
-    saldo_pico: float = 0.0           # Pico histórico de banca (para drawdown)
+    pico_saldo: float = 0.0
+
+    perda_acumulada: float = 0.0
+    lucro_ciclo: float = 0.0
 
     wins: int = 0
     losses: int = 0
+    operacoes: int = 0
+
     wins_seguidos: int = 0
     losses_seguidos: int = 0
 
-    operacoes: int = 0
-    gale_atual: int = 0
+    stake_anterior: float = 0.0
+    ultima_decisao: str = "INICIALIZANDO"
+    ultimo_motivo: str = ""
 
-    bloqueado_ate: float = 0.0        # Timestamp Unix até quando está em cooldown
-    bloqueado_motivo: str = ""
+    recuperacoes: int = 0
+    recuperacoes_concluidas: int = 0
+    recuperacoes_abandonadas: int = 0
 
-    resultados: Deque[dict] = field(
-        default_factory=lambda: deque(maxlen=200)
-    )                                 # Histórico de resultados para análise
+    bloqueado_ate: float = 0.0
 
-
-# =============================================================================
-# MOTOR PRINCIPAL
-# =============================================================================
 
 class AdaptiveRiskEngine:
-    """
-    Motor de risco adaptativo.
+    """Motor SEC-RIA compatível com as rotas existentes do main.py."""
 
-    Uso básico:
-        engine = AdaptiveRiskEngine(AdaptiveConfig(modo="INTELIGENTE"))
-        engine.iniciar(saldo=100.0)
-
-        resultado = engine.calcular_stake(
-            stake_base=0.35,
-            gerenciamento="martingale",
-            gale=1,
-            qualidade_sinal=80.0,
-            payout=0.85,
-            volatilidade=40.0,
-            regime="LATERAL",
-        )
-
-        # Após a operação terminar:
-        engine.registrar_resultado("WIN", lucro=0.297, saldo=100.297, gale=1)
-    """
-
-    # Modos válidos (case-insensitive no set_mode)
-    _MODOS_VALIDOS = {"DESLIGADO", "MODERADO", "INTELIGENTE", "DEFENSIVO"}
+    MODOS_VALIDOS = {
+        "DESLIGADO",
+        "NORMAL",
+        "MODERADO",
+        "INTELIGENTE",
+        "DEFENSIVO",
+        "SEC-RIA",
+        "RIA",
+    }
 
     def __init__(self, config: Optional[AdaptiveConfig] = None):
         self.config = config or AdaptiveConfig()
-        self.state  = _AdaptiveState()
+        self.state = AdaptiveState()
+        self.historico = deque(maxlen=max(20, int(self.config.janela_resultados)))
+        self._lock = threading.RLock()
 
-    # ==========================================================================
-    # INICIALIZAÇÃO
-    # ==========================================================================
+    # ========================================================
+    # UTILITÁRIOS
+    # ========================================================
 
-    def iniciar(self, saldo: float) -> None:
-        """
-        Inicializa (ou reinicia) o motor com o saldo atual da conta.
-        Deve ser chamado assim que o saldo for conhecido (após login na Deriv).
-        """
-        s = max(float(saldo), 0.01)
-        self.state = _AdaptiveState(
-            saldo_inicial=s,
-            saldo_atual=s,
-            saldo_pico=s,
+    @staticmethod
+    def _num(v: Any, default: float = 0.0) -> float:
+        try:
+            x = float(v)
+            if math.isfinite(x):
+                return x
+        except Exception:
+            pass
+        return default
+
+    @staticmethod
+    def _clamp(v: float, lo: float, hi: float) -> float:
+        return max(lo, min(hi, v))
+
+    @staticmethod
+    def _stake(v: float) -> float:
+        return round(max(0.0, v) + 1e-10, 2)
+
+    def _normalizar_modo(self, modo: Any) -> str:
+        s = str(modo or "DESLIGADO").strip().upper()
+        aliases = {
+            "RECOVERY INTELIGENTE ADAPTATIVO": "SEC-RIA",
+            "RECOVERY_INTELIGENTE_ADAPTATIVO": "SEC-RIA",
+            "RECOVERY INTELIGENTE": "SEC-RIA",
+            "RECOVERY_ADAPTATIVO": "SEC-RIA",
+            "ADAPTATIVO": "INTELIGENTE",
+        }
+        return aliases.get(s, s)
+
+    # ========================================================
+    # MODO / CICLO
+    # ========================================================
+
+    def set_mode(self, modo: str):
+        with self._lock:
+            modo_n = self._normalizar_modo(modo)
+            if modo_n not in self.MODOS_VALIDOS:
+                modo_n = "INTELIGENTE"
+            self.config.modo = modo_n
+
+    def iniciar(self, saldo: float):
+        with self._lock:
+            saldo = max(0.0, self._num(saldo))
+            self.state = AdaptiveState(
+                saldo_inicial=saldo,
+                saldo_atual=saldo,
+                pico_saldo=saldo,
+            )
+            self.historico.clear()
+
+    def resetar(self, saldo: Optional[float] = None):
+        with self._lock:
+            if saldo is None:
+                saldo = self.state.saldo_inicial
+            self.iniciar(float(saldo))
+
+    # ========================================================
+    # MÉTRICAS
+    # ========================================================
+
+    def _janela(self):
+        return list(self.historico)
+
+    def winrate_recente(self) -> float:
+        dados = self._janela()
+        if not dados:
+            return 0.50
+        return sum(1 for x in dados if x.get("resultado") == "WIN") / len(dados)
+
+    def _winrate_curto(self, n: int = 10) -> float:
+        dados = self._janela()[-n:]
+        if not dados:
+            return 0.50
+        return sum(1 for x in dados if x.get("resultado") == "WIN") / len(dados)
+
+    def _drawdown(self, saldo: Optional[float] = None) -> float:
+        saldo = self.state.saldo_atual if saldo is None else self._num(saldo)
+        pico = self.state.pico_saldo
+        if pico <= 0:
+            return 0.0
+        return self._clamp((pico - saldo) / pico, 0.0, 1.0)
+
+    def _payout_liquido(self, payout: float) -> float:
+        """Normaliza payout para lucro líquido por $1 apostado."""
+        p = max(0.0, self._num(payout, 0.80))
+        # O main.py documenta payout como 0.80/0.85.
+        # Também aceitamos 80/85 para evitar erro de integração.
+        if p > 3.0:
+            p /= 100.0
+        return p
+
+    def _edge(self, payout: float, winrate: float) -> Dict[str, float]:
+        p = self._payout_liquido(payout)
+        wr = self._clamp(winrate, 0.0, 1.0)
+        br = 1.0 / (1.0 + p) if p > 0 else 1.0
+        expectativa = wr * p - (1.0 - wr)
+        margem = wr - br
+        return {
+            "payout": p,
+            "winrate": wr,
+            "breakeven": br,
+            "expectativa": expectativa,
+            "margem": margem,
+        }
+
+    def _qualidade(self, qualidade_sinal: float, volatilidade: float, regime: str) -> float:
+        sinal = self._clamp(self._num(qualidade_sinal, 50.0), 0.0, 100.0)
+        vol = self._num(volatilidade, 50.0)
+        # A rota atual documenta volatilidade como 0-100.
+        if vol <= 1.0:
+            vol *= 100.0
+        vol = self._clamp(vol, 0.0, 100.0)
+
+        wr_curto = self._winrate_curto(10) * 100.0
+        wr_longo = self.winrate_recente() * 100.0
+
+        score = (
+            sinal * 0.50
+            + wr_curto * 0.30
+            + wr_longo * 0.20
         )
 
-    def set_mode(self, modo: str) -> None:
-        """
-        Define o modo de operação.
-        Aceita: DESLIGADO, MODERADO, INTELIGENTE, DEFENSIVO (case-insensitive).
-        """
-        m = modo.strip().upper()
-        if m in self._MODOS_VALIDOS:
-            self.config.modo = m
-        else:
-            print(f"[AdaptiveRisk] ⚠️  Modo inválido: '{modo}'. Mantendo '{self.config.modo}'.")
+        score -= min(25.0, self.state.losses_seguidos * 7.0)
+        score += min(8.0, self.state.wins_seguidos * 2.0)
+        score -= max(0.0, vol - 55.0) * 0.25
 
-    # ==========================================================================
-    # CÁLCULO DE STAKE
-    # ==========================================================================
+        reg = str(regime or "").upper()
+        if reg in {"ALTA_VOLATILIDADE", "ALTA_VOL", "INSTAVEL", "RUIM"}:
+            score -= 10.0
+        elif reg in {"LATERAL", "TENDENCIA", "NORMAL"}:
+            score += 2.0
+
+        score -= self._drawdown() * 35.0
+        return self._clamp(score, 0.0, 100.0)
+
+    # ========================================================
+    # CÁLCULO DA STAKE
+    # ========================================================
 
     def calcular_stake(
         self,
@@ -173,512 +270,280 @@ class AdaptiveRiskEngine:
         payout: float = 0.80,
         volatilidade: float = 50.0,
         regime: str = "",
-    ) -> dict:
+        **kwargs,
+    ) -> Dict[str, Any]:
         """
-        Calcula a stake adaptada com base no modo e nas métricas de risco.
+        Calcula a stake real do SEC-RIA.
 
-        Parâmetros
-        ----------
-        stake_base        : Stake calculada pelo gerenciamento nativo (Martingale, Soros, etc.)
-        gerenciamento     : Nome do gerenciamento usado ('martingale', 'soros', 'fixa', ...)
-        gale              : Nível de Gale atual (0 = entrada nova)
-        qualidade_sinal   : Score de qualidade do sinal (0–100)
-        payout            : Payout esperado pelo contrato (ex.: 0.85 = 85%)
-        volatilidade      : Volatilidade do mercado (0–100)
-        regime            : Regime detectado ('LATERAL', 'TENDENCIA', 'INDEFINIDO', ...)
-
-        Retorna
-        -------
-        dict com:
-          permitir       (bool)  — se a entrada está autorizada
-          stake          (float) — stake final após ajuste adaptativo
-          score          (float) — score calculado (0–100)
-          modo           (str)   — modo ativo
-          fator          (float) — fator aplicado sobre a stake_base
-          motivo         (str)   — motivo do bloqueio (se houver)
-          drawdown       (float) — drawdown atual em %
-          losses_seguidos(int)   — losses consecutivos
+        Compatível com a chamada atual do main.py.
         """
-        cfg   = self.config
-        state = self.state
-        modo  = cfg.modo
+        with self._lock:
+            base = max(0.0, self._num(stake_base))
+            gale = max(0, int(gale))
+            saldo = self.state.saldo_atual
 
-        # Garante tipos corretos
-        stake_base      = max(float(stake_base), cfg.stake_min)
-        gale            = int(gale)
-        qualidade_sinal = float(qualidade_sinal)
-        payout          = float(payout)
-        volatilidade    = float(volatilidade)
-
-        estado_base = {
-            "modo":            modo,
-            "score":           qualidade_sinal,
-            "fator":           1.0,
-            "drawdown":        round(self.drawdown() * 100, 2),
-            "losses_seguidos": state.losses_seguidos,
-            "wins_seguidos":   state.wins_seguidos,
-        }
-
-        # ── MODO DESLIGADO: transparência total ──────────────────────────────
-        if modo == "DESLIGADO":
-            stake_final = round(
-                max(cfg.stake_min, min(stake_base, cfg.stake_max)), 2
-            )
-            return {
-                **estado_base,
-                "permitir": True,
-                "stake":    stake_final,
-                "motivo":   "",
-            }
-
-        # ── Verifica bloqueio por cooldown ────────────────────────────────────
-        if self.esta_bloqueado():
-            restante = max(0, int(state.bloqueado_ate - time.time()))
-            return {
-                **estado_base,
-                "permitir": False,
-                "stake":    cfg.stake_min,
-                "motivo":   f"Cooldown ativo — aguarde {restante}s ({state.bloqueado_motivo})",
-            }
-
-        # ── Calcula score multicamada ─────────────────────────────────────────
-        score = self._calcular_score(
-            qualidade_sinal=qualidade_sinal,
-            payout=payout,
-            volatilidade=volatilidade,
-            regime=regime,
-            gerenciamento=gerenciamento,
-            gale=gale,
-        )
-
-        # ── Decide se permite entrada ─────────────────────────────────────────
-        permitido, motivo_bloqueio = self._verificar_permissao(score, modo)
-        if not permitido:
-            return {
-                **estado_base,
-                "score":    round(score, 1),
-                "permitir": False,
-                "stake":    cfg.stake_min,
-                "motivo":   motivo_bloqueio,
-            }
-
-        # ── Calcula fator de ajuste de stake ──────────────────────────────────
-        fator = self._calcular_fator(score, modo)
-
-        # ── Aplica fator e limites ────────────────────────────────────────────
-        stake_ajustada = stake_base * fator
-
-        # Limita pelo risco máximo percentual da banca
-        if state.saldo_atual > 0:
-            limite_banca = state.saldo_atual * cfg.risco_max_pct
-            # Apenas aplica limite de banca para modos não-DESLIGADO
-            if modo in ("INTELIGENTE", "DEFENSIVO"):
-                stake_ajustada = min(stake_ajustada, limite_banca)
-            elif modo == "MODERADO":
-                # Moderado: aplica o dobro do limite (menos restritivo)
-                stake_ajustada = min(stake_ajustada, limite_banca * 2)
-
-        # Limita ao recovery_max em gerenciamentos de recuperação
-        if gerenciamento in ("loss_recovery", "recovery_adaptativo"):
-            if state.saldo_atual > 0:
-                limite_recovery = state.saldo_atual * cfg.recovery_max_pct
-                stake_ajustada = min(stake_ajustada, limite_recovery)
-
-        # Clipa dentro de [stake_min, stake_max]
-        stake_final = round(
-            max(cfg.stake_min, min(stake_ajustada, cfg.stake_max)), 2
-        )
-
-        return {
-            **estado_base,
-            "score":    round(score, 1),
-            "fator":    round(fator, 3),
-            "permitir": True,
-            "stake":    stake_final,
-            "motivo":   "",
-        }
-
-    # ==========================================================================
-    # SCORE MULTICAMADA
-    # ==========================================================================
-
-    def _calcular_score(
-        self,
-        qualidade_sinal: float,
-        payout: float,
-        volatilidade: float,
-        regime: str,
-        gerenciamento: str,
-        gale: int,
-    ) -> float:
-        """
-        Calcula um score de 0–100 que representa a qualidade da entrada
-        levando em conta múltiplos fatores de risco.
-        """
-        score = qualidade_sinal  # Base: qualidade do sinal (0–100)
-
-        # ── Ajuste por payout ─────────────────────────────────────────────────
-        # Payout ideal ≥ 0.80. Abaixo disso penaliza progressivamente.
-        if payout < 0.80:
-            score -= (0.80 - payout) * 50          # -50 pts se payout = 0.30
-        elif payout >= 0.90:
-            score += 5                              # +5 pts para payouts excelentes
-
-        # ── Ajuste por volatilidade ───────────────────────────────────────────
-        # Volatilidade moderada (30–60) é ideal. Alta ou muito baixa penaliza.
-        if volatilidade > 70:
-            score -= (volatilidade - 70) * 0.5     # -5 a -15 pts
-        elif volatilidade < 20:
-            score -= (20 - volatilidade) * 0.3     # Mercado parado tb é ruim
-
-        # ── Ajuste por regime ─────────────────────────────────────────────────
-        r = regime.upper() if regime else ""
-        if r == "LATERAL":
-            score += 5                              # Regime lateral favorece dígitos
-        elif r == "TENDENCIA":
-            score -= 5                              # Tendência forte aumenta risco
-
-        # ── Ajuste por sequência de losses ───────────────────────────────────
-        ls = self.state.losses_seguidos
-        if ls >= 4:
-            score -= 30
-        elif ls >= 3:
-            score -= 20
-        elif ls >= 2:
-            score -= 10
-        elif ls >= 1:
-            score -= 5
-
-        # ── Ajuste por drawdown ────────────────────────────────────────────────
-        dd = self.drawdown()
-        if dd >= 0.08:
-            score -= 25
-        elif dd >= 0.05:
-            score -= 15
-        elif dd >= 0.03:
-            score -= 8
-
-        # ── Ajuste por nível de Gale ──────────────────────────────────────────
-        # Gales altos aumentam o risco exponencialmente
-        penalidade_gale = {0: 0, 1: 5, 2: 15, 3: 25, 4: 40}
-        score -= penalidade_gale.get(gale, 55)
-
-        # ── Ajuste por gerenciamento ──────────────────────────────────────────
-        if gerenciamento in ("loss_recovery", "recovery_adaptativo"):
-            score -= 5   # Recovery já carrega risco embutido
-        elif gerenciamento in ("soros",):
-            score += 3   # Soros é conservador por natureza
-
-        # ── Ajuste por winrate recente ────────────────────────────────────────
-        wr_recente = self.winrate_recente()
-        if wr_recente < 40.0:
-            score -= 15
-        elif wr_recente < 50.0:
-            score -= 8
-        elif wr_recente > 65.0:
-            score += 5
-
-        return max(0.0, min(100.0, score))
-
-    # ==========================================================================
-    # PERMISSÃO DE ENTRADA
-    # ==========================================================================
-
-    def _verificar_permissao(
-        self, score: float, modo: str
-    ) -> tuple[bool, str]:
-        """
-        Verifica se a entrada está autorizada com base no score e nas métricas.
-        Retorna (permitido: bool, motivo: str).
-        """
-        cfg   = self.config
-        state = self.state
-
-        # ── Bloqueio por losses consecutivos ──────────────────────────────────
-        if state.losses_seguidos >= cfg.bloquear_apos_losses:
-            self._ativar_cooldown(
-                f"{state.losses_seguidos} losses consecutivos"
-            )
-            return False, (
-                f"🚫 {state.losses_seguidos} losses consecutivos — "
-                f"cooldown de {cfg.cooldown_segundos}s ativado"
-            )
-
-        # ── Bloqueio por drawdown ──────────────────────────────────────────────
-        dd = self.drawdown()
-        if dd >= cfg.drawdown_bloqueio:
-            return False, (
-                f"🚫 Drawdown {dd*100:.1f}% ≥ limite de {cfg.drawdown_bloqueio*100:.0f}%"
-            )
-
-        # ── Bloqueio por score mínimo (INTELIGENTE e DEFENSIVO) ───────────────
-        if modo in ("INTELIGENTE", "DEFENSIVO"):
-            if score < cfg.score_min_operar:
-                return False, (
-                    f"🚫 Score {score:.1f} abaixo do mínimo ({cfg.score_min_operar:.0f})"
-                )
-
-        # ── DEFENSIVO: bloqueia com losses_seguidos ≥ max_losses_seguidos ─────
-        if modo == "DEFENSIVO":
-            if state.losses_seguidos >= cfg.max_losses_seguidos:
-                return False, (
-                    f"🛡️  Modo DEFENSIVO — {state.losses_seguidos} losses consecutivos"
-                )
-
-        return True, ""
-
-    # ==========================================================================
-    # CÁLCULO DE FATOR
-    # ==========================================================================
-
-    def _calcular_fator(self, score: float, modo: str) -> float:
-        """
-        Calcula o fator multiplicador da stake com base no score e no modo.
-        Retorna um float entre 0.5 e 1.10 (sem explodir a stake).
-        """
-        cfg   = self.config
-        state = self.state
-        dd    = self.drawdown()
-
-        fator = 1.0
-
-        if modo == "MODERADO":
-            # Ajustes suaves: no máximo ±20%
-            if dd >= cfg.drawdown_defensivo:
-                fator *= cfg.reducao_drawdown   # reduz 30%
-            elif state.losses_seguidos >= cfg.max_losses_seguidos:
-                fator *= cfg.reducao_loss        # reduz 20%
-            elif state.wins_seguidos >= 3:
-                fator *= cfg.aumento_win         # aumenta 5%
-
-        elif modo == "INTELIGENTE":
-            # Ajustes baseados no score
-            if score >= 80:
-                fator *= cfg.aumento_win         # sinal forte → +5%
-            elif score >= cfg.score_defensivo:
-                fator *= 1.0                     # sinal normal → sem ajuste
+            if saldo <= 0:
+                # O motor ainda pode operar com stake_base, mas não cria
+                # uma falsa recuperação sem conhecer a banca.
+                limite_banca = self.config.stake_max
             else:
-                fator *= cfg.reducao_loss        # sinal fraco → -20%
+                limite_banca = saldo * self.config.risco_max_pct
 
-            # Penalidade extra por drawdown
-            if dd >= cfg.drawdown_defensivo:
-                fator *= cfg.reducao_drawdown
+            limite = min(self.config.stake_max, limite_banca)
 
-            # Penalidade por losses seguidos
-            if state.losses_seguidos >= 2:
-                fator *= (cfg.reducao_loss ** (state.losses_seguidos - 1))
+            if limite <= 0:
+                return self._decisao(False, 0.0, "Limite de risco da banca é zero.")
 
-        elif modo == "DEFENSIVO":
-            # Sempre reduz quando há qualquer sinal de perigo
-            base_defensivo = 0.70
-            if score >= 75:
-                base_defensivo = 0.85
-            elif score >= 60:
-                base_defensivo = 0.75
+            # DESLIGADO: preserva comportamento de stake base.
+            if self.config.modo == "DESLIGADO":
+                stake = min(base, limite)
+                return self._decisao(True, self._stake(stake), "Motor adaptativo desligado.")
 
-            fator = base_defensivo
+            # Cooldown após bloqueio.
+            if time.time() < self.state.bloqueado_ate:
+                return self._decisao(False, 0.0, "Cooldown de proteção ativo.")
 
-            # Redução adicional por drawdown
-            if dd >= cfg.drawdown_defensivo:
-                fator *= cfg.reducao_drawdown
+            drawdown = self._drawdown()
+            wr = self.winrate_recente()
+            edge = self._edge(payout, wr)
+            qualidade = self._qualidade(qualidade_sinal, volatilidade, regime)
 
-        # Garante que o fator não extrapole os limites razoáveis
-        return round(max(0.50, min(fator, 1.10)), 3)
+            # ------------------------------------------------------------
+            # BLOQUEIOS DUROS
+            # ------------------------------------------------------------
+            if drawdown >= self.config.drawdown_bloqueio:
+                self.state.bloqueado_ate = time.time() + self.config.cooldown_segundos
+                self.state.recuperacoes_abandonadas += 1
+                return self._decisao(False, 0.0, "Drawdown de bloqueio atingido.")
 
-    # ==========================================================================
-    # REGISTRO DE RESULTADOS
-    # ==========================================================================
+            if self.state.losses_seguidos >= self.config.bloquear_apos_losses:
+                self.state.bloqueado_ate = time.time() + self.config.cooldown_segundos
+                self.state.recuperacoes_abandonadas += 1
+                return self._decisao(False, 0.0, "Sequência máxima de losses atingida.")
+
+            # ------------------------------------------------------------
+            # OPERAÇÃO NORMAL — SEM DÍVIDA
+            # ------------------------------------------------------------
+            if self.state.perda_acumulada <= 0.000001:
+                if drawdown >= self.config.drawdown_defensivo:
+                    stake = min(base * self.config.reducao_drawdown, limite)
+                    stake = self._stake(stake)
+                    return self._decisao(True, stake, "Modo DEFENSIVO por drawdown.")
+
+                # Qualidade muito baixa: não aumenta exposição.
+                if qualidade < self.config.score_min_operar:
+                    stake = min(base * 0.75, limite)
+                    return self._decisao(True, self._stake(stake), "Sinal abaixo do score ideal; stake reduzida.")
+
+                stake = min(base, limite)
+                return self._decisao(True, self._stake(stake), "Operação normal.")
+
+            # ------------------------------------------------------------
+            # RECUPERAÇÃO
+            # ------------------------------------------------------------
+            # Nunca tenta recuperar tudo automaticamente.
+            perda = self.state.perda_acumulada
+
+            # Se expectativa não é positiva, não faz sentido aumentar risco.
+            if edge["expectativa"] <= 0 or edge["margem"] < 0.01:
+                stake = min(base * 0.70, limite)
+                self.state.recuperacoes_abandonadas += 1
+                return self._decisao(
+                    True,
+                    self._stake(stake),
+                    "Recuperação bloqueada: expectativa/margem insuficiente."
+                )
+
+            # Meta adaptativa: começa em 30% da perda e diminui com risco.
+            pct = self.config.recovery_max_pct
+            pct = self._clamp(pct, 0.05, 0.40)
+
+            if self.state.losses_seguidos >= 1:
+                pct *= 0.90
+            if self.state.losses_seguidos >= 2:
+                pct *= 0.80
+            if self.state.losses_seguidos >= 3:
+                pct *= 0.65
+
+            vol = self._num(volatilidade, 50.0)
+            if vol <= 1.0:
+                vol *= 100.0
+            if vol >= 75:
+                pct *= 0.55
+            elif vol >= 60:
+                pct *= 0.75
+
+            if drawdown >= self.config.drawdown_defensivo:
+                pct *= self.config.reducao_drawdown
+
+            if qualidade >= 80:
+                fator_qualidade = 1.00
+            elif qualidade >= 70:
+                fator_qualidade = 0.90
+            elif qualidade >= 60:
+                fator_qualidade = 0.78
+            elif qualidade >= 50:
+                fator_qualidade = 0.65
+            else:
+                fator_qualidade = 0.50
+
+            # Recupera apenas uma fração da perda nesta entrada.
+            meta = perda * pct
+            stake_teorica = meta / edge["payout"] if edge["payout"] > 0 else float("inf")
+            stake = stake_teorica * fator_qualidade
+
+            # Proteção anti-Martingale: nunca passa de 2x a base.
+            # Também respeita 3% da banca e stake_max.
+            teto_progressao = base * 2.0
+            stake = min(stake, teto_progressao, limite)
+
+            # Em drawdown defensivo, reduz ainda mais.
+            if drawdown >= self.config.drawdown_defensivo:
+                stake = min(stake, base * 0.70)
+
+            # Se a stake calculada ficou abaixo da mínima, só sobe para a mínima
+            # se isso continuar dentro do limite de risco.
+            if stake > 0 and stake < self.config.stake_min:
+                if self.config.stake_min <= limite:
+                    stake = self.config.stake_min
+                else:
+                    return self._decisao(False, 0.0, "Stake mínima ultrapassa o risco permitido.")
+
+            stake = self._stake(stake)
+
+            if stake <= 0:
+                return self._decisao(False, 0.0, "Não existe stake segura para recuperação.")
+
+            self.state.recuperacoes += 1
+            return self._decisao(
+                True,
+                stake,
+                "RECUPERAÇÃO ADAPTATIVA calculada por perda + payout + expectativa + risco."
+            )
+
+    # ========================================================
+    # REGISTRO DO RESULTADO
+    # ========================================================
 
     def registrar_resultado(
         self,
         resultado: str,
-        lucro: float = 0.0,
-        saldo: float = 0.0,
+        lucro: float,
+        saldo: float,
         gale: int = 0,
-    ) -> None:
-        """
-        Registra o resultado de uma operação finalizada.
+        **kwargs,
+    ):
+        with self._lock:
+            res = str(resultado or "").upper().strip()
+            if res not in {"WIN", "LOSS"}:
+                return
 
-        Parâmetros
-        ----------
-        resultado : 'WIN' | 'LOSS'
-        lucro     : Valor do lucro (positivo em WIN, negativo em LOSS)
-        saldo     : Saldo atual da conta após o resultado
-        gale      : Nível de Gale da operação registrada
-        """
-        r = resultado.strip().upper()
-        if r not in ("WIN", "LOSS"):
-            return
+            lucro = self._num(lucro)
+            saldo = max(0.0, self._num(saldo))
 
-        state = self.state
-        state.operacoes += 1
-        state.gale_atual = int(gale)
+            # Primeira atualização de saldo pode inicializar o motor.
+            if self.state.saldo_inicial <= 0 and saldo > 0:
+                self.state.saldo_inicial = saldo
+                self.state.pico_saldo = saldo
 
-        # Atualiza saldo
-        if saldo > 0:
-            state.saldo_atual = float(saldo)
-            if state.saldo_atual > state.saldo_pico:
-                state.saldo_pico = state.saldo_atual
-        elif lucro != 0:
-            state.saldo_atual = max(0.01, state.saldo_atual + float(lucro))
-            if state.saldo_atual > state.saldo_pico:
-                state.saldo_pico = state.saldo_atual
+            self.state.saldo_atual = saldo
+            self.state.pico_saldo = max(self.state.pico_saldo, saldo)
+            self.state.operacoes += 1
+            self.state.lucro_ciclo += lucro
 
-        # Inicializa pico se ainda não foi feito
-        if state.saldo_pico <= 0:
-            state.saldo_pico = state.saldo_atual
+            if res == "WIN":
+                self.state.wins += 1
+                self.state.wins_seguidos += 1
+                self.state.losses_seguidos = 0
 
-        # Contadores
-        if r == "WIN":
-            state.wins += 1
-            state.wins_seguidos  += 1
-            state.losses_seguidos = 0
-            # Reseta cooldown em sequência de wins
-            if state.wins_seguidos >= 3 and state.bloqueado_ate > 0:
-                state.bloqueado_ate    = 0.0
-                state.bloqueado_motivo = ""
+                # O lucro real primeiro paga a dívida de recuperação.
+                if lucro > 0:
+                    antes = self.state.perda_acumulada
+                    self.state.perda_acumulada = max(0.0, antes - lucro)
+
+                    if antes > 0 and self.state.perda_acumulada <= 0.000001:
+                        self.state.recuperacoes_concluidas += 1
+
+            else:
+                self.state.losses += 1
+                self.state.losses_seguidos += 1
+                self.state.wins_seguidos = 0
+
+                # LOSS aumenta a dívida real pelo prejuízo da operação.
+                self.state.perda_acumulada += abs(lucro)
+
+            self.historico.append({
+                "resultado": res,
+                "lucro": lucro,
+                "saldo": saldo,
+                "gale": int(gale),
+                "timestamp": time.time(),
+            })
+
+            self.state.stake_anterior = self.state.stake_anterior or self.config.stake_min
+
+            # Proteção adicional após drawdown crítico.
+            if self._drawdown() >= self.config.drawdown_bloqueio:
+                self.state.bloqueado_ate = time.time() + self.config.cooldown_segundos
+
+    # ========================================================
+    # DECISÃO / STATUS
+    # ========================================================
+
+    def _decisao(self, permitir: bool, stake: float, motivo: str) -> Dict[str, Any]:
+        modo = self.config.modo
+        if stake > 0:
+            self.state.stake_anterior = stake
+
+        if not permitir:
+            self.state.ultima_decisao = "PAUSAR"
+        elif "RECUPERAÇÃO" in motivo or "RECUPERACAO" in motivo:
+            self.state.ultima_decisao = "RECUPERAR"
+        elif "DEFENSIVO" in motivo:
+            self.state.ultima_decisao = "DEFESA"
         else:
-            state.losses += 1
-            state.losses_seguidos += 1
-            state.wins_seguidos    = 0
+            self.state.ultima_decisao = "OPERAR"
 
-        # Histórico circular
-        state.resultados.append({
-            "resultado": r,
-            "lucro":     float(lucro),
-            "saldo":     state.saldo_atual,
-            "gale":      gale,
-            "ts":        time.time(),
-        })
+        self.state.ultimo_motivo = motivo
 
-    # ==========================================================================
-    # COOLDOWN
-    # ==========================================================================
-
-    def _ativar_cooldown(self, motivo: str) -> None:
-        """Ativa o cooldown de proteção."""
-        cfg   = self.config
-        state = self.state
-        if not self.esta_bloqueado():
-            state.bloqueado_ate    = time.time() + cfg.cooldown_segundos
-            state.bloqueado_motivo = motivo
-            print(
-                f"[AdaptiveRisk] 🔒 Cooldown ativado ({cfg.cooldown_segundos}s) | "
-                f"Motivo: {motivo}"
-            )
-
-    def esta_bloqueado(self) -> bool:
-        """Retorna True se o motor está em cooldown e a entrada deve ser bloqueada."""
-        state = self.state
-        if state.bloqueado_ate > 0 and time.time() < state.bloqueado_ate:
-            return True
-        # Limpa cooldown expirado
-        if state.bloqueado_ate > 0 and time.time() >= state.bloqueado_ate:
-            state.bloqueado_ate    = 0.0
-            state.bloqueado_motivo = ""
-        return False
-
-    # ==========================================================================
-    # MÉTRICAS
-    # ==========================================================================
-
-    def drawdown(self) -> float:
-        """Drawdown atual em decimal (ex.: 0.05 = 5%)."""
-        state = self.state
-        if state.saldo_pico <= 0:
-            return 0.0
-        dd = (state.saldo_pico - state.saldo_atual) / state.saldo_pico
-        return max(0.0, dd)
-
-    def winrate(self) -> float:
-        """Winrate global em % (0–100)."""
-        total = self.state.wins + self.state.losses
-        if total == 0:
-            return 50.0
-        return (self.state.wins / total) * 100.0
-
-    def winrate_recente(self) -> float:
-        """Winrate das últimas N operações da janela de análise."""
-        cfg = self.config
-        resultados = list(self.state.resultados)
-        recentes   = resultados[-cfg.janela_resultados:]
-        if not recentes:
-            return 50.0
-        wins = sum(1 for r in recentes if r.get("resultado") == "WIN")
-        return (wins / len(recentes)) * 100.0
-
-    # ==========================================================================
-    # STATUS / DIAGNÓSTICO
-    # ==========================================================================
-
-    def status(self) -> dict:
-        """
-        Retorna um snapshot completo do estado do motor para diagnóstico
-        e exibição no painel administrativo.
-        """
-        state = self.state
         return {
-            "modo":              self.config.modo,
-            "inicializado":      state.saldo_inicial > 0,
-            "saldo_inicial":     round(state.saldo_inicial, 2),
-            "saldo_atual":       round(state.saldo_atual, 2),
-            "saldo_pico":        round(state.saldo_pico, 2),
-            "drawdown_pct":      round(self.drawdown() * 100, 2),
-            "wins":              state.wins,
-            "losses":            state.losses,
-            "wins_seguidos":     state.wins_seguidos,
-            "losses_seguidos":   state.losses_seguidos,
-            "winrate":           round(self.winrate(), 2),
-            "winrate_recente":   round(self.winrate_recente(), 2),
-            "operacoes":         state.operacoes,
-            "gale_atual":        state.gale_atual,
-            "bloqueado":         self.esta_bloqueado(),
-            "bloqueado_motivo":  state.bloqueado_motivo if self.esta_bloqueado() else "",
-            "cooldown_restante": max(0, int(state.bloqueado_ate - time.time())) if self.esta_bloqueado() else 0,
+            "ok": True,
+            "permitir": bool(permitir),
+            "stake": self._stake(stake),
+            "score": 0.0,
+            "modo": modo,
+            "fator": 1.0,
+            "motivo": motivo,
+            "drawdown": self._drawdown() * 100.0,
+            "losses_seguidos": self.state.losses_seguidos,
+            "perda_acumulada": round(self.state.perda_acumulada, 2),
+            "lucro_ciclo": round(self.state.lucro_ciclo, 2),
+            "decisao": self.state.ultima_decisao,
         }
 
-    # ==========================================================================
-    # RESET
-    # ==========================================================================
-
-    def resetar(self, saldo: Optional[float] = None) -> None:
-        """
-        Reseta o estado do motor.
-        Se saldo for None, reutiliza o saldo_inicial registrado na última chamada a iniciar().
-        """
-        if saldo is None:
-            saldo = self.state.saldo_inicial
-        self.iniciar(float(saldo))
-
-
-# =============================================================================
-# FUNÇÃO SIMPLIFICADA (atalho de integração)
-# =============================================================================
-
-def adaptive_stake(
-    engine: AdaptiveRiskEngine,
-    stake_base: float,
-    gerenciamento: str,
-    gale: int = 0,
-    qualidade_sinal: float = 50.0,
-    payout: float = 0.80,
-    volatilidade: float = 50.0,
-    regime: str = "",
-) -> dict:
-    """
-    Atalho para engine.calcular_stake().
-    Conveniente para uso em uma única linha de importação.
-
-    Exemplo:
-        from adaptive_risk import adaptive_stake, ADAPTIVE_ENGINE
-        resultado = adaptive_stake(ADAPTIVE_ENGINE, stake_base=0.35, gerenciamento="fixa")
-    """
-    return engine.calcular_stake(
-        stake_base=stake_base,
-        gerenciamento=gerenciamento,
-        gale=gale,
-        qualidade_sinal=qualidade_sinal,
-        payout=payout,
-        volatilidade=volatilidade,
-        regime=regime,
-    )
+    def status(self) -> Dict[str, Any]:
+        with self._lock:
+            dd = self._drawdown() * 100.0
+            wr = self.winrate_recente() * 100.0
+            return {
+                "modo": self.config.modo,
+                "saldo_inicial": round(self.state.saldo_inicial, 2),
+                "saldo_atual": round(self.state.saldo_atual, 2),
+                "pico_saldo": round(self.state.pico_saldo, 2),
+                "perda_acumulada": round(self.state.perda_acumulada, 2),
+                "lucro_ciclo": round(self.state.lucro_ciclo, 2),
+                "wins": self.state.wins,
+                "losses": self.state.losses,
+                "operacoes": self.state.operacoes,
+                "winrate_recente": wr,
+                "losses_seguidos": self.state.losses_seguidos,
+                "wins_seguidos": self.state.wins_seguidos,
+                "drawdown_pct": dd,
+                "stake_anterior": round(self.state.stake_anterior, 2),
+                "recuperacoes": self.state.recuperacoes,
+                "recuperacoes_concluidas": self.state.recuperacoes_concluidas,
+                "recuperacoes_abandonadas": self.state.recuperacoes_abandonadas,
+                "bloqueado": time.time() < self.state.bloqueado_ate,
+                "ultima_decisao": self.state.ultima_decisao,
+                "ultimo_motivo": self.state.ultimo_motivo,
+            }
