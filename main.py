@@ -11881,13 +11881,15 @@ def garra_hma_avaliar_multi():
     Avalia múltiplos ativos em paralelo e retorna o de maior confiança aprovado.
 
     Body JSON:
-        ativos:           list[str]  — lista de ativos a varrer (ex: ["R_10","R_25","R_50"])
-        contrato:         str        — "AUTO" | "CALL" | "PUT" | etc.
-        janelas:          list[int]  — janelas MTF ou null
-        confianca_minima: float      — threshold mínimo (padrão 68)
-        banca:            float
-        stake:            float
-        payout:           float
+        ativos:             list[str]   — lista de ativos a varrer
+        ticks_atual:        list[float] — ticks já acumulados do ativo atual (opcional)
+        ativo_atual:        str         — nome do ativo cujos ticks foram enviados (opcional)
+        contrato:           str         — "AUTO" | "CALL" | "PUT" | etc.
+        janelas:            list[int]   — janelas MTF ou null
+        confianca_minima:   float       — threshold mínimo (padrão 68)
+        banca:              float
+        stake:              float
+        payout:             float
     """
     dados = request.get_json(force=True, silent=True) or {}
     ativos = dados.get("ativos") or []
@@ -11901,13 +11903,25 @@ def garra_hma_avaliar_multi():
     stake            = float(dados.get("stake", 1.0))
     payout           = float(dados.get("payout", 0.85))
 
+    # Ticks do ativo atual já acumulados no front — evita fetch externo para ele
+    ticks_atual  = dados.get("ticks_atual") or []
+    ativo_atual  = str(dados.get("ativo_atual", "")).upper()
+    if isinstance(ticks_atual, list) and len(ticks_atual) >= 10:
+        ticks_atual = [float(t) for t in ticks_atual]
+    else:
+        ticks_atual = []
+
     resultados = []
     lock = threading.Lock()
 
-    def _avaliar_ativo(ativo):
+    def _avaliar_ativo(ativo, ticks_prontos=None):
         try:
-            ticks = _buscar_ticks_ws_sync(ativo, count=100)
+            if ticks_prontos and len(ticks_prontos) >= 10:
+                ticks = ticks_prontos
+            else:
+                ticks = _buscar_ticks_ws_sync(ativo, count=100)
             if not ticks or len(ticks) < 10:
+                print(f"[HMA-MULTI] {ativo} — ticks insuficientes ({len(ticks) if ticks else 0})")
                 return
             res = hma_avaliar(
                 ticks            = ticks,
@@ -11926,7 +11940,12 @@ def garra_hma_avaliar_multi():
         except Exception as exc:
             print(f"[HMA-MULTI] {ativo} erro: {exc}")
 
-    threads = [threading.Thread(target=_avaliar_ativo, args=(a,), daemon=True) for a in ativos]
+    threads = []
+    for a in ativos:
+        # Usa ticks locais já acumulados para o ativo atual (instantâneo, sem fetch)
+        ticks_pre = ticks_atual if (a.upper() == ativo_atual and ticks_atual) else None
+        threads.append(threading.Thread(target=_avaliar_ativo, args=(a, ticks_pre), daemon=True))
+
     for t in threads:
         t.start()
     for t in threads:
@@ -11934,7 +11953,6 @@ def garra_hma_avaliar_multi():
 
     aprovados = [r for r in resultados if r.get("aprovado")]
     if not aprovados:
-        # Retorna o de maior confiança entre todos (para debug no front)
         melhor_rep = max(resultados, key=lambda r: r.get("confianca", 0)) if resultados else None
         return jsonify({
             "aprovado": False,

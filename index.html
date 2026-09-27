@@ -11345,6 +11345,8 @@ function initWebSocket(wssUrl) {
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                             ativos:           _mkLista,
+                            ticks_atual:      bot._precos.slice(),   // ticks já acumulados — ativo atual é instantâneo
+                            ativo_atual:      _hmaAtivo,             // servidor usa esses ticks direto, sem fetch
                             contrato:         _hmaContrato,
                             janelas:          _hmaJanelas,
                             confianca_minima: _hmaConfiMin,
