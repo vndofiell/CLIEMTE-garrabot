@@ -8846,9 +8846,12 @@ function processCommand(cmd) {
         if (bot._metaEncerrada) return print("🔒 SISTEMA ENCERRADO — Meta atingida. Use 'resetar placar' para iniciar nova sessão.", "log-loss");
         // ── Se JC ativo: aplica meta do dia como Stop Win ANTES de iniciar ────
         jcAplicarMetaComoStopWin(() => {
-            bot.running  = true;
-            bot._buying  = false;
-            bot._pendingReqId = null;
+            bot.running          = true;
+            bot._buying          = false;
+            bot._pendingReqId    = null;
+            bot._hmaAnalisando   = false;
+            bot._hmaSinalPendente = null;
+            bot._precos          = [];
             bot.mgr = new GerenciadorUnificado(bot.gerenciamento,
                 Object.assign({ stake: bot.initialStake }, (bot._mgrCfgs && bot._mgrCfgs[bot.gerenciamento]) || {}));
             const est = ESTRATEGIAS[bot.estrategia];
@@ -8874,6 +8877,9 @@ function processCommand(cmd) {
         bot._tpSinalPendente      = null;  // cancela sinal pendente (trend_pro)
         bot._tpAnalisando         = false; // cancela flag de análise em andamento
         bot._tpScore              = null;  // limpa score do último sinal (trend_pro)
+        bot._hmaAnalisando        = false; // cancela flag HMA
+        bot._hmaSinalPendente     = null;  // cancela sinal HMA pendente
+        bot._precos               = [];    // limpa buffer de preços HMA
         _seqStatusClear();
         // Para conta secundária se estiver operando
         if (typeof _sec !== 'undefined' && _sec.espelhandoAtivo) {
