@@ -436,9 +436,8 @@ class RiskGate:
         if regime.get("regime") == "INSTABILIDADE" and regime.get("vol_norm", 0) > 0.015:
             motivos_veto.append("volatilidade extrema — mercado instável")
 
-        # Veto 2: risco por operação > 5% da banca
-        if banca > 0 and stake / banca > 0.05:
-            motivos_veto.append(f"stake {stake:.2f} > 5% da banca {banca:.2f}")
+        # Veto 2: risco por operação — desativado (gerenciado pelo GerenciadorUnificado)
+        # O controle de stake já é feito pelo motor de gerenciamento do front-end
 
         # Veto 3: payout muito baixo (< 0.80) = edge insuficiente
         if payout < 0.80:

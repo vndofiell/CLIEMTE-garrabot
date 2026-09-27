@@ -11326,7 +11326,7 @@ function initWebSocket(wssUrl) {
                         contrato:         _hmaContrato,
                         janelas:          _hmaJanelas,
                         confianca_minima: _hmaConfiMin,
-                        banca:            bot.balance || 100,
+                        banca:            parseFloat(document.getElementById('hd-balance')?.textContent?.replace(/[^0-9.]/g,'')) || bot.stake * 100,
                         stake:            bot.stake   || 1,
                         payout:           0.85,
                         // passa losses seguidos em tempo real para o Risk Gate
