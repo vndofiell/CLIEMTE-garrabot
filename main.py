@@ -3,6 +3,7 @@ from digit_sniper_pro import register_digit_sniper
 from digit_matrix_sniper import register_digit_matrix
 from memory_time_engine import get_mte, mte_pode_operar, mte_registrar, mte_status
 from masaniello import Masaniello
+from garra_hma_core import hma_avaliar, _hma_hist_salvar, _hma_hist_ler
 import threading
 import time
 import json
@@ -11812,6 +11813,159 @@ def trading_pro_config():
 @app.route('/ping')
 def _ping():
     return jsonify({"ok": True, "status": "online"})
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# GARRA AI CORE — HMA (Hybrid Market Analyzer)
+# Motor híbrido de decisão multi-timeframe
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@app.route('/garra-hma/avaliar', methods=['POST'])
+def garra_hma_avaliar():
+    """
+    Avalia os ticks com o motor HMA completo:
+    Tick Analyzer → Multi-Timeframe → Regime → Decision Engine → Risk Gate
+
+    Body JSON:
+        ticks:             list[float]   — histórico de preços (mín. 10, ideal 500+)
+        contrato:          str           — "OVER"|"UNDER"|"EVEN"|"ODD"|"CALL"|"PUT"|"AUTO"
+        janelas:           list[int]|null — [10,25,50,100,250,500] ou null (automático)
+        confianca_minima:  float         — threshold mínimo (padrão 65)
+        banca:             float         — banca atual do usuário
+        stake:             float         — valor da entrada
+        payout:            float         — payout estimado (ex: 0.85)
+    """
+    dados = request.get_json(force=True, silent=True) or {}
+
+    ticks = dados.get("ticks", [])
+    if not isinstance(ticks, list) or len(ticks) < 10:
+        return jsonify({
+            "aprovado": False,
+            "decisao": "NO_TRADE",
+            "confianca": 0,
+            "motivo": "Mínimo de 10 ticks necessário.",
+        }), 400
+
+    resultado = hma_avaliar(
+        ticks             = [float(t) for t in ticks],
+        contrato          = str(dados.get("contrato", "AUTO")).upper(),
+        janelas           = dados.get("janelas", None),
+        confianca_minima  = float(dados.get("confianca_minima", 65.0)),
+        banca             = float(dados.get("banca", 100.0)),
+        stake             = float(dados.get("stake", 1.0)),
+        payout            = float(dados.get("payout", 0.85)),
+    )
+
+    # Log local
+    print(
+        f"[HMA] decisao={resultado['decisao']} conf={resultado['confianca']}% "
+        f"regime={resultado['regime']} aprovado={resultado['aprovado']}"
+    )
+
+    return jsonify(resultado)
+
+
+@app.route('/garra-hma/historico', methods=['POST'])
+def garra_hma_historico():
+    """
+    Registra o resultado real de uma operação HMA para aprendizado estatístico.
+
+    Body JSON:
+        timestamp:    str
+        ativo:        str
+        contrato:     str
+        barreira:     int|null
+        janela_win:   int|null
+        regime:       str
+        volatilidade: str
+        confianca:    float
+        payout:       float
+        stake:        float
+        decisao:      str
+        resultado:    "WIN" | "LOSS"
+    """
+    dados = request.get_json(force=True, silent=True) or {}
+    resultado = str(dados.get("resultado", "")).upper()
+    if resultado not in ("WIN", "LOSS"):
+        return jsonify({"ok": False, "erro": "Campo 'resultado' deve ser WIN ou LOSS."}), 400
+
+    entrada = {
+        "timestamp":    dados.get("timestamp", time.strftime("%Y-%m-%d %H:%M:%S")),
+        "ativo":        dados.get("ativo", ""),
+        "contrato":     dados.get("contrato", ""),
+        "barreira":     dados.get("barreira"),
+        "janela_win":   dados.get("janela_win"),
+        "regime":       dados.get("regime", ""),
+        "volatilidade": dados.get("volatilidade", ""),
+        "confianca":    float(dados.get("confianca", 0)),
+        "payout":       float(dados.get("payout", 0)),
+        "stake":        float(dados.get("stake", 0)),
+        "decisao":      dados.get("decisao", ""),
+        "resultado":    resultado,
+    }
+
+    _hma_hist_salvar(entrada)
+
+    print(f"[HMA-HIST] {resultado} | {entrada['ativo']} | {entrada['contrato']} | conf={entrada['confianca']}%")
+    return jsonify({"ok": True, "msg": "Resultado registrado no histórico HMA."})
+
+
+@app.route('/garra-hma/historico/listar', methods=['GET'])
+def garra_hma_historico_listar():
+    """Retorna as últimas 200 entradas do histórico HMA."""
+    hist = _hma_hist_ler()
+    return jsonify({"ok": True, "total": len(hist), "historico": hist[-200:]})
+
+
+@app.route('/garra-hma/historico/stats', methods=['GET'])
+def garra_hma_historico_stats():
+    """Estatísticas agregadas do histórico HMA para descobrir padrões."""
+    hist = _hma_hist_ler()
+    if not hist:
+        return jsonify({"ok": True, "total": 0, "stats": {}})
+
+    total  = len(hist)
+    wins   = sum(1 for h in hist if h.get("resultado") == "WIN")
+    losses = total - wins
+    wr     = round(wins / total * 100, 1) if total > 0 else 0
+
+    # Por regime
+    por_regime = {}
+    for h in hist:
+        r = h.get("regime", "?")
+        if r not in por_regime:
+            por_regime[r] = {"total": 0, "wins": 0}
+        por_regime[r]["total"] += 1
+        if h.get("resultado") == "WIN":
+            por_regime[r]["wins"] += 1
+    for r in por_regime:
+        t = por_regime[r]["total"]
+        w = por_regime[r]["wins"]
+        por_regime[r]["wr"] = round(w / t * 100, 1) if t > 0 else 0
+
+    # Por confiança (faixas)
+    faixas = {"50-60": {"t": 0, "w": 0}, "60-70": {"t": 0, "w": 0},
+              "70-80": {"t": 0, "w": 0}, "80-90": {"t": 0, "w": 0}, "90+": {"t": 0, "w": 0}}
+    for h in hist:
+        c = h.get("confianca", 0)
+        key = "90+" if c >= 90 else ("80-90" if c >= 80 else ("70-80" if c >= 70 else ("60-70" if c >= 60 else "50-60")))
+        faixas[key]["t"] += 1
+        if h.get("resultado") == "WIN":
+            faixas[key]["w"] += 1
+    for k in faixas:
+        t = faixas[k]["t"]
+        w = faixas[k]["w"]
+        faixas[k]["wr"] = round(w / t * 100, 1) if t > 0 else 0
+
+    return jsonify({
+        "ok":        True,
+        "total":     total,
+        "wins":      wins,
+        "losses":    losses,
+        "wr_geral":  wr,
+        "por_regime": por_regime,
+        "por_confianca": faixas,
+    })
 
 
 def start_server():

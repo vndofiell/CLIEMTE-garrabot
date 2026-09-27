@@ -4615,6 +4615,27 @@ const ESTRATEGIAS = {
         score_min:     35,
         desc: "5 IAs em consenso | Tendência + Price Action + Estatística + Regime + Supervisor",
     },
+    // ── GARRA AI CORE — HMA ───────────────────────────────────────────────────
+    "🧠 GARRA AI CORE — HMA": {
+        tipo:             "hma_core",
+        ativo:            "R_100",
+        duracao:          1,
+        duracao_unit:     "t",
+        // Contrato alvo: AUTO = motor escolhe; ou OVER / UNDER / EVEN / ODD / CALL / PUT
+        hma_contrato:     "AUTO",
+        // Janelas de análise (null = seleção automática)
+        hma_janelas:      null,
+        // Confiança mínima para entrar (%)
+        hma_confianca:    68,
+        // Modo de análise: "manual" | "multi_tick" | "hibrido" | "automatico"
+        hma_modo:         "hibrido",
+        // Seleção automática de ativo
+        hma_auto_ativo:   false,
+        hma_mercados:     ["R_10","R_25","R_50","R_75","R_100"],
+        // Aprendizado: registra resultado em /garra-hma/historico
+        hma_aprendizado:  true,
+        desc: "Motor Híbrido HMA | Multi-Timeframe · Regime · Consenso · Risk Gate · NO TRADE inteligente",
+    },
 };
 
 // ═══════════════════════════════════════════════════════
@@ -6541,6 +6562,7 @@ function _cfgAplicar(cfg) {
             else if (est.tipo === 'gatilho_duplo') lblEst = `Barr.${est.gatilho}${est.rep_gatilho} → UNDER+OVER`;
             else if (est.tipo === 'garra_dupla')   lblEst = `${est.contract || 'DIGITUNDER'} barr.5 | gatilho=${est.qtd_gatilho}x`;
             else if (est.tipo === 'trading_pro')   lblEst = `score≥${est.score_min || 35} | ${est.duracao || 1}${est.duracao_unit || 't'} | ${est.ativo || 'R_100'}`;
+            else if (est.tipo === 'hma_core')      lblEst = `conf≥${est.hma_confianca || 68}% | ${est.hma_contrato || 'AUTO'} | ${est.ativo || 'R_100'}`;
             document.getElementById('btn-estrategia').innerHTML =
                 `${cfg.estrategia}<span class="cmd-label">${lblEst}</span>`;
         }
@@ -7874,6 +7896,127 @@ function selecionarEstrategia(nome) {
               undefined, undefined, undefined, _todosAtivos);
     }
 
+    } else if (est.tipo === 'hma_core') {
+        // ── GARRA AI CORE — HMA ──────────────────────────────────────────────────
+        const hmaDiv = document.createElement('div');
+        hmaDiv.style.cssText = 'background:rgba(0,180,255,0.06);border:1px solid rgba(0,180,255,0.35);border-radius:4px;padding:10px 12px;font-size:0.70rem;color:#00cfff;font-family:"Share Tech Mono";margin-bottom:10px;line-height:1.8;';
+        hmaDiv.innerHTML =
+            '🧠 <b>GARRA AI CORE — HMA</b><br>' +
+            '<span style="color:#8899aa">Tick Analyzer → Multi-Timeframe → Regime → Decision Engine → Risk Gate</span><br>' +
+            '<span style="color:#556677">Motor rejeita automaticamente entradas conflitantes (NO TRADE inteligente)</span>';
+        campos.appendChild(hmaDiv);
+
+        campo('Contrato alvo', 'cfg-hma-contrato', 'select', est.hma_contrato || 'AUTO',
+              undefined, undefined, undefined,
+              ['AUTO','DIGITOVER','DIGITUNDER','DIGITEVEN','DIGITODD']);
+
+        campo('Modo de análise', 'cfg-hma-modo', 'select', est.hma_modo || 'hibrido',
+              undefined, undefined, undefined,
+              ['manual','multi_tick','hibrido','automatico']);
+
+        campo('Confiança mínima para entrar (%)', 'cfg-hma-confianca', 'number',
+              est.hma_confianca || 68, 50, 95, 1);
+
+        // ── Janelas de análise (checkboxes) ──────────────────────────────────
+        const janLbl = document.createElement('div');
+        janLbl.style.cssText = 'font-size:0.65rem;color:#57606a;margin-top:10px;margin-bottom:4px;letter-spacing:1px;font-family:"Share Tech Mono";';
+        janLbl.textContent = 'JANELAS DE TICKS (null = automático)';
+        campos.appendChild(janLbl);
+
+        const janAutoRow = document.createElement('div');
+        janAutoRow.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:6px;';
+        const janAutoChk = document.createElement('input');
+        janAutoChk.type = 'checkbox'; janAutoChk.id = 'cfg-hma-jan-auto';
+        janAutoChk.checked = (est.hma_janelas === null);
+        janAutoChk.style.cssText = 'accent-color:#00cfff;width:14px;height:14px;';
+        const janAutoLbl = document.createElement('label');
+        janAutoLbl.htmlFor = 'cfg-hma-jan-auto';
+        janAutoLbl.style.cssText = 'font-size:0.72rem;color:#00cfff;font-family:"Share Tech Mono";cursor:pointer;';
+        janAutoLbl.textContent = '🔁 Seleção automática de janelas';
+        janAutoRow.appendChild(janAutoChk); janAutoRow.appendChild(janAutoLbl);
+        campos.appendChild(janAutoRow);
+
+        const _todasJanelas = [10, 25, 50, 100, 250, 500];
+        const _janSel = est.hma_janelas || _todasJanelas;
+        const janGrid = document.createElement('div');
+        janGrid.style.cssText = 'display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:8px;';
+        _todasJanelas.forEach(j => {
+            const row2 = document.createElement('div');
+            row2.style.cssText = 'display:flex;align-items:center;gap:5px;';
+            const chkJ = document.createElement('input');
+            chkJ.type = 'checkbox'; chkJ.id = 'cfg-hma-jan-' + j;
+            chkJ.checked = _janSel.includes(j);
+            chkJ.style.cssText = 'accent-color:#0ff;width:13px;height:13px;';
+            const lblJ = document.createElement('label');
+            lblJ.htmlFor = 'cfg-hma-jan-' + j;
+            lblJ.style.cssText = 'font-size:0.68rem;color:#c9d1d9;font-family:"Share Tech Mono";cursor:pointer;';
+            lblJ.textContent = j + ' ticks';
+            row2.appendChild(chkJ); row2.appendChild(lblJ);
+            janGrid.appendChild(row2);
+        });
+        campos.appendChild(janGrid);
+
+        // ── Seleção automática de ativo ───────────────────────────────────────
+        const autoAtvRow = document.createElement('div');
+        autoAtvRow.style.cssText = 'display:flex;align-items:center;gap:8px;margin-top:6px;margin-bottom:6px;';
+        const autoAtvChk = document.createElement('input');
+        autoAtvChk.type = 'checkbox'; autoAtvChk.id = 'cfg-hma-auto-ativo';
+        autoAtvChk.checked = est.hma_auto_ativo === true;
+        autoAtvChk.style.cssText = 'accent-color:#00ff41;width:14px;height:14px;';
+        const autoAtvLbl = document.createElement('label');
+        autoAtvLbl.htmlFor = 'cfg-hma-auto-ativo';
+        autoAtvLbl.style.cssText = 'font-size:0.72rem;color:#00ff41;font-family:"Share Tech Mono";cursor:pointer;';
+        autoAtvLbl.textContent = '🔎 Selecionar ativo automaticamente (melhor score)';
+        autoAtvRow.appendChild(autoAtvChk); autoAtvRow.appendChild(autoAtvLbl);
+        campos.appendChild(autoAtvRow);
+
+        // Mercados para auto-seleção
+        const mkLbl2 = document.createElement('div');
+        mkLbl2.style.cssText = 'font-size:0.65rem;color:#57606a;margin-bottom:4px;letter-spacing:1px;font-family:"Share Tech Mono";';
+        mkLbl2.textContent = 'MERCADOS PARA ANÁLISE HMA';
+        campos.appendChild(mkLbl2);
+        const _todosAtivosHma = ['R_10','R_25','R_50','R_75','R_100','1HZ10V','1HZ25V','1HZ50V','1HZ75V','1HZ100V'];
+        const _mSelHma = est.hma_mercados || ['R_10','R_25','R_50','R_75','R_100'];
+        const mkGrid2 = document.createElement('div');
+        mkGrid2.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:8px;';
+        _todosAtivosHma.forEach(a => {
+            const row3 = document.createElement('div');
+            row3.style.cssText = 'display:flex;align-items:center;gap:6px;';
+            const chkA = document.createElement('input');
+            chkA.type = 'checkbox'; chkA.id = 'cfg-hma-mk-' + a;
+            chkA.checked = _mSelHma.includes(a);
+            chkA.style.cssText = 'accent-color:#0ff;width:13px;height:13px;';
+            const lblA = document.createElement('label');
+            lblA.htmlFor = 'cfg-hma-mk-' + a;
+            lblA.style.cssText = 'font-size:0.68rem;color:#c9d1d9;font-family:"Share Tech Mono";cursor:pointer;';
+            lblA.textContent = a;
+            row3.appendChild(chkA); row3.appendChild(lblA);
+            mkGrid2.appendChild(row3);
+        });
+        campos.appendChild(mkGrid2);
+
+        // Aprendizado
+        const aprRow = document.createElement('div');
+        aprRow.style.cssText = 'display:flex;align-items:center;gap:8px;margin-top:4px;';
+        const aprChk = document.createElement('input');
+        aprChk.type = 'checkbox'; aprChk.id = 'cfg-hma-aprendizado';
+        aprChk.checked = est.hma_aprendizado !== false;
+        aprChk.style.cssText = 'accent-color:#ffbd2e;width:14px;height:14px;';
+        const aprLbl = document.createElement('label');
+        aprLbl.htmlFor = 'cfg-hma-aprendizado';
+        aprLbl.style.cssText = 'font-size:0.72rem;color:#ffbd2e;font-family:"Share Tech Mono";cursor:pointer;';
+        aprLbl.textContent = '📊 Registrar resultados para aprendizado estatístico';
+        aprRow.appendChild(aprChk); aprRow.appendChild(aprLbl);
+        campos.appendChild(aprRow);
+
+        campo('Unidade do contrato (t=ticks / m=minutos)', 'cfg-duracao-unit', 'select', est.duracao_unit || 't',
+              undefined, undefined, undefined, ['t','m']);
+        campo('Duração do contrato', 'cfg-duracao', 'select', est.duracao || 1,
+              undefined, undefined, undefined, [1,2,3,5,10]);
+        campo('Ativo único (quando seleção automática desligada)', 'cfg-ativo', 'select', est.ativo || 'R_100',
+              undefined, undefined, undefined, _todosAtivosHma);
+    }
+
     fecharModal('modal-estrategia');
     document.getElementById('modal-cfg-estrategia').style.display = 'flex';
 }
@@ -7954,6 +8097,39 @@ function confirmarEstrategia() {
         });
         if (est.mercados_auto.length === 0) est.mercados_auto = ['R_100'];
     }
+    // ── Campos hma_core ───────────────────────────────────────────────────────
+    if (est.tipo === 'hma_core') {
+        const _hmaContr = document.getElementById('cfg-hma-contrato');
+        if (_hmaContr) est.hma_contrato = _hmaContr.value || 'AUTO';
+        const _hmaModo  = document.getElementById('cfg-hma-modo');
+        if (_hmaModo) est.hma_modo = _hmaModo.value || 'hibrido';
+        const _hmaConf  = document.getElementById('cfg-hma-confianca');
+        if (_hmaConf) est.hma_confianca = Math.max(50, Math.min(95, parseInt(_hmaConf.value) || 68));
+        // Janelas
+        const _janAutoEl = document.getElementById('cfg-hma-jan-auto');
+        if (_janAutoEl && _janAutoEl.checked) {
+            est.hma_janelas = null; // automático
+        } else {
+            const _jans = [10, 25, 50, 100, 250, 500].filter(j => {
+                const el = document.getElementById('cfg-hma-jan-' + j);
+                return el && el.checked;
+            });
+            est.hma_janelas = _jans.length > 0 ? _jans : null;
+        }
+        // Auto ativo
+        const _autoAtvEl = document.getElementById('cfg-hma-auto-ativo');
+        if (_autoAtvEl) est.hma_auto_ativo = _autoAtvEl.checked;
+        // Mercados
+        const _todosAtvsHma2 = ['R_10','R_25','R_50','R_75','R_100','1HZ10V','1HZ25V','1HZ50V','1HZ75V','1HZ100V'];
+        est.hma_mercados = _todosAtvsHma2.filter(a => {
+            const el = document.getElementById('cfg-hma-mk-' + a);
+            return el && el.checked;
+        });
+        if (est.hma_mercados.length === 0) est.hma_mercados = ['R_100'];
+        // Aprendizado
+        const _aprEl = document.getElementById('cfg-hma-aprendizado');
+        if (_aprEl) est.hma_aprendizado = _aprEl.checked;
+    }
     // Reseta contador de sequência ao confirmar
     bot._seqContador = 0;
     _seqStatusClear();
@@ -7967,6 +8143,9 @@ function confirmarEstrategia() {
     bot._tpScore             = null;  // limpa score do último sinal (trend_pro)
     bot._tpAiSinalPendente   = null;  // cancela sinal pendente (trading_pro)
     bot._tpAiAnalisando      = false; // cancela flag análise (trading_pro)
+    // hma_core
+    bot._hmaAnalisando       = false;
+    bot._hmaSinalPendente    = null;
     // Re-subscreve ticks se o ativo mudou e jhconexo WS ativa
     const novoAtivo = _resolverAtivo(est.ativo);
     if (bot.ws && bot.ws.readyState === WebSocket.OPEN && novoAtivo !== bot._tickAtivo) {
@@ -7978,7 +8157,9 @@ function confirmarEstrategia() {
 
     // Atualiza boto do painel
     let resumo = nome;
-    if (est.tipo === 'trading_pro') {
+    if (est.tipo === 'hma_core') {
+        resumo = `conf≥${est.hma_confianca || 68}% | ${est.hma_contrato || 'AUTO'} | ${est.duracao || 1}${est.duracao_unit || 't'} | ${est.ativo || 'R_100'}`;
+    } else if (est.tipo === 'trading_pro') {
         resumo = `score≥${est.score_min || 35} | ${est.duracao || 1}${est.duracao_unit || 't'} | ${est.ativo || 'R_100'}`;
     } else if (est.tipo === 'garra_dupla') {
         resumo = `${est.contract || 'DIGITUNDER'} barr.5 | gatilho=${est.qtd_gatilho}x | gale×${est.fator_gale}`;
@@ -7999,7 +8180,11 @@ function confirmarEstrategia() {
         `${nome}<span class="cmd-label">${resumo.replace(nome,'').substring(0,36) || est.desc.substring(0,28)}</span>`;
 
     fecharModal('modal-cfg-estrategia');
-    if (est.tipo === 'trading_pro') {
+    if (est.tipo === 'hma_core') {
+        const _jStr = est.hma_janelas ? est.hma_janelas.join(',') + ' ticks' : 'automático';
+        print(`🧠 <b>GARRA AI CORE — HMA</b> ativado | contrato=<b>${est.hma_contrato || 'AUTO'}</b> | conf≥<b>${est.hma_confianca || 68}%</b> | modo=<b>${est.hma_modo || 'hibrido'}</b> | janelas=<b>${_jStr}</b> | ativo=<b>${est.ativo || 'R_100'}</b>`, "log-win");
+        print(`🧠 HMA: Tick Analyzer · Multi-Timeframe · Regime · Decision Engine · Risk Gate · NO TRADE inteligente`, "log-info");
+    } else if (est.tipo === 'trading_pro') {
         print(`🤖 TRADING PRO AI ativado | score≥<b>${est.score_min || 35}</b> | ${est.duracao || 1}${est.duracao_unit || 't'} | ativo: <b>${est.ativo || 'R_100'}</b>`, "log-win");
     } else if (est.tipo === 'gatilho_duplo') {
         print(`🎯 GATILHO DUPLO: barreira=<b>${est.gatilho}</b> | repetições=<b>${est.rep_gatilho}</b>`
@@ -10059,6 +10244,12 @@ function initWebSocket(wssUrl) {
                     const _maxBuf = _tamCdl * 150;
                     if (bot._candleBuffer.length > _maxBuf) bot._candleBuffer.shift();
                 }
+                // ── HMA: acumula _precos em todo tick (inclusive durante operação) ──
+                if (_estCdl && _estCdl.tipo === 'hma_core') {
+                    if (!bot._precos) bot._precos = [];
+                    bot._precos.push(parseFloat(_dQuote));
+                    if (bot._precos.length > 600) bot._precos.shift();
+                }
 
                 // ── Fluxo direcional contínuo — atualiza bot._fluxoDir em todo tick ──
                 // Calcula slope dos últimos 20 preços para todos os tipos de estratégia
@@ -11034,6 +11225,126 @@ function initWebSocket(wssUrl) {
                         console.warn('[TRADING PRO]', _err);
                     });
                 }
+            } else if (est.tipo === 'hma_core') {
+                // ══════════════════════════════════════════════════════════════
+                // 🧠 GARRA AI CORE — HMA (Hybrid Market Analyzer)
+                //
+                // Fluxo:
+                //   FASE 1 — Acumula mínimo de ticks (10 para análise imediata)
+                //   ANÁLISE — POST /garra-hma/avaliar com o buffer de preços
+                //   FASE 2 — Sinal pendente → entra no próximo tick se aprovado
+                //   VETO    — Risk Gate pode recusar mesmo com confiança alta
+                //   NO TRADE — Motor não entra em conflito ou instabilidade
+                // ══════════════════════════════════════════════════════════════
+                if (bot._hmaAnalisando   === undefined) bot._hmaAnalisando   = false;
+                if (bot._hmaSinalPendente === undefined) bot._hmaSinalPendente = null;
+
+                // _precos é acumulado globalmente acima (antes do guard bot._buying)
+
+                // ── FASE 2: sinal pendente → entra agora ──────────────────────
+                if (bot._hmaSinalPendente) {
+                    if (bot._buying) {
+                        bot._hmaSinalPendente = null;
+                        _seqStatusUpdate(`🧠 HMA — operação em andamento, aguardando resultado...`);
+                        return;
+                    }
+                    const _hmaS = bot._hmaSinalPendente;
+                    bot._hmaSinalPendente = null;
+                    bot._hmaSinalUltimo   = _hmaS;   // guarda para aprendizado após resultado
+                    _seqStatusClear();
+                    if (!lvVerificar(digit)) return;
+                    // Mapeia decisão HMA → contrato Deriv
+                    const _hmaContrMap = {
+                        'OVER':  'DIGITOVER',  'UNDER': 'DIGITUNDER',
+                        'EVEN':  'DIGITEVEN',  'ODD':   'DIGITODD',
+                        'CALL':  'CALL',       'PUT':   'PUT',
+                    };
+                    const _hmaCt = _hmaContrMap[_hmaS.decisao] || est.hma_contrato || 'DIGITUNDER';
+                    // Injeta contrato e barreira temporariamente em est para reutilizar buy()
+                    const _hmaEstOrig = { contract: est.contract, barrier: est.barrier };
+                    est.contract = _hmaCt;
+                    est.barrier  = ['DIGITOVER','DIGITUNDER'].includes(_hmaCt) ? 5 : null;
+                    bot._buying  = true;
+                    print(
+                        `🧠 HMA ENTRADA | ${_hmaS.decisao} | conf <b>${_hmaS.confianca}%</b>` +
+                        ` | regime: <b>${_hmaS.regime}</b>` +
+                        ` | janelas: <b>${(_hmaS.janelas_usadas || []).join(',')}</b> ✅`,
+                        'log-win'
+                    );
+                    _edcEntrar(() => {
+                        buy();
+                        // Restaura contrato original após compra
+                        est.contract = _hmaEstOrig.contract;
+                        est.barrier  = _hmaEstOrig.barrier;
+                    });
+                    return;
+                }
+
+                // ── FASE 1: aguarda mínimo de 10 preços ──────────────────────
+                const _hmaMin = 10;
+                if (bot._precos.length < _hmaMin) {
+                    _seqStatusUpdate(`🧠 HMA [${bot._precos.length}/${_hmaMin} ticks] coletando...`);
+                    return;
+                }
+
+                // Evita chamadas simultâneas
+                if (bot._hmaAnalisando) return;
+                bot._hmaAnalisando = true;
+
+                const _hmaConfiMin = est.hma_confianca || 68;
+                const _hmaContrato = est.hma_contrato  || 'AUTO';
+                const _hmaJanelas  = est.hma_janelas   || null;
+                const _hmaAtivo    = est.ativo          || 'R_100';
+
+                fetch('/garra-hma/avaliar', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        ticks:            bot._precos.slice(),
+                        contrato:         _hmaContrato,
+                        janelas:          _hmaJanelas,
+                        confianca_minima: _hmaConfiMin,
+                        banca:            bot.balance || 100,
+                        stake:            bot.stake   || 1,
+                        payout:           0.85,
+                    }),
+                })
+                .then(r => r.json())
+                .then(_hmaRes => {
+                    bot._hmaAnalisando = false;
+
+                    if (!_hmaRes.aprovado) {
+                        // NO TRADE
+                        const _motHma = _hmaRes.motivo || 'Condições insuficientes';
+                        const _riskVeto = _hmaRes.risk_gate && !_hmaRes.risk_gate.aprovado
+                            ? ` | 🛡️ RISK GATE: ${(_hmaRes.risk_gate.motivos_veto || []).join('; ')}`
+                            : '';
+                        _seqStatusUpdate(
+                            `🧠 HMA 🚫 NO TRADE | ${_motHma}${_riskVeto}` +
+                            ` | regime: ${_hmaRes.regime || '?'}` +
+                            ` | conf: ${_hmaRes.confianca || 0}%`
+                        );
+                        return;
+                    }
+
+                    // APROVADO — guarda sinal para entrar no próximo tick
+                    bot._hmaSinalPendente = {
+                        decisao:       _hmaRes.decisao,
+                        confianca:     _hmaRes.confianca,
+                        regime:        _hmaRes.regime,
+                        janelas_usadas: _hmaRes.janelas_usadas || [],
+                        ativo:         _hmaAtivo,
+                    };
+                    _seqStatusUpdate(
+                        `🧠 HMA ${_hmaRes.decisao} | conf <b>${_hmaRes.confianca}%</b>` +
+                        ` | regime: ${_hmaRes.regime}` +
+                        ` | ⏳ aguardando próximo tick...`
+                    );
+                })
+                .catch(_err => {
+                    bot._hmaAnalisando = false;
+                    console.warn('[HMA]', _err);
+                });
             }
         }
 
@@ -11316,6 +11627,33 @@ function initWebSocket(wssUrl) {
                         ? `🤖 TRADING PRO WIN | +$${profit.toFixed(2)} | score ${bot._tpScore || 0}`
                         : `🤖 TRADING PRO LOSS | -$${Math.abs(profit).toFixed(2)} | score ${bot._tpScore || 0}`;
                     _seqStatusUpdate(_tpAiMsg);
+                }
+                // ── HMA: registra resultado para aprendizado estatístico ────────
+                if (ESTRATEGIAS[bot.estrategia] && ESTRATEGIAS[bot.estrategia].tipo === 'hma_core') {
+                    const _hmaEst = ESTRATEGIAS[bot.estrategia];
+                    if (_hmaEst.hma_aprendizado !== false && bot._hmaSinalUltimo) {
+                        fetch('/garra-hma/historico', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                timestamp:    new Date().toISOString().replace('T',' ').slice(0,19),
+                                ativo:        _hmaEst.ativo || 'R_100',
+                                contrato:     bot._hmaSinalUltimo.decisao || '',
+                                regime:       bot._hmaSinalUltimo.regime  || '',
+                                volatilidade: '',
+                                confianca:    bot._hmaSinalUltimo.confianca || 0,
+                                payout:       0.85,
+                                stake:        _stakeAntes,
+                                decisao:      bot._hmaSinalUltimo.decisao  || '',
+                                resultado:    won ? 'WIN' : 'LOSS',
+                            })
+                        }).catch(() => {});
+                    }
+                    const _hmaMsgR = won
+                        ? `🧠 HMA WIN | +$${profit.toFixed(2)} | conf ${bot._hmaSinalUltimo?.confianca || 0}%`
+                        : `🧠 HMA LOSS | -$${Math.abs(profit).toFixed(2)} | conf ${bot._hmaSinalUltimo?.confianca || 0}%`;
+                    _seqStatusUpdate(_hmaMsgR);
+                    bot._hmaSinalUltimo = null;
                 }
                 // ── Secundária: verifica se deve ativar/desativar espelhamento ──
                 _secVerificarEspelhamento(bot.profit);
