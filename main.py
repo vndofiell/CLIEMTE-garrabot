@@ -11846,6 +11846,13 @@ def garra_hma_avaliar():
             "motivo": "Mínimo de 10 ticks necessário.",
         }), 400
 
+    # historico_recente: int (losses seguidos) vindo do front-end
+    _hist = dados.get("historico_recente", 0)
+    try:
+        _hist = int(_hist)
+    except (TypeError, ValueError):
+        _hist = 0
+
     resultado = hma_avaliar(
         ticks             = [float(t) for t in ticks],
         contrato          = str(dados.get("contrato", "AUTO")).upper(),
@@ -11854,6 +11861,7 @@ def garra_hma_avaliar():
         banca             = float(dados.get("banca", 100.0)),
         stake             = float(dados.get("stake", 1.0)),
         payout            = float(dados.get("payout", 0.85)),
+        historico_recente = _hist,
     )
 
     # Log local

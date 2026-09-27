@@ -444,12 +444,11 @@ class RiskGate:
         if payout < 0.80:
             motivos_veto.append(f"payout {payout:.2f} < 0.80 — edge insuficiente")
 
-        # Veto 4: sequência recente de losses (últimas 5 op = 4+ losses)
-        if len(historico_recente) >= 5:
-            ultimas5 = historico_recente[-5:]
-            losses = sum(1 for r in ultimas5 if r.get("resultado") == "LOSS")
-            if losses >= 4:
-                motivos_veto.append(f"{losses}/5 últimas operações foram loss — aguardar")
+        # Veto 4: sequência recente de losses — verificado pelo front-end em tempo real
+        # (o front-end passa losses_seguidos via payload; 0 = sem controle)
+        losses_seguidos = historico_recente[0] if isinstance(historico_recente, int) else 0
+        if losses_seguidos >= 5:
+            motivos_veto.append(f"{losses_seguidos} losses seguidos — aguardar recuperação")
 
         aprovado = len(motivos_veto) == 0
 
@@ -473,7 +472,7 @@ def hma_avaliar(
     banca: float = 100.0,
     stake: float = 1.0,
     payout: float = 0.85,
-    historico_recente: Optional[list] = None,
+    historico_recente = None,   # int (losses seguidos) ou list (histórico antigo)
 ) -> dict:
     """
     Avalia os ticks e retorna a decisão completa do GARRA AI CORE HMA.
@@ -485,8 +484,11 @@ def hma_avaliar(
         regime:     string — regime detectado
         detalhes:   list — votos por janela
     """
+    # Aceita int (losses seguidos vindos do JS) ou None (sem controle)
     if historico_recente is None:
-        historico_recente = _hma_hist_ler()[-20:]
+        historico_recente = 0
+    elif isinstance(historico_recente, list):
+        historico_recente = 0   # formato antigo ignorado — não usa mais arquivo
 
     # Módulo 1 — Tick Analyzer
     tick_info = TickAnalyzer().analisar(ticks)

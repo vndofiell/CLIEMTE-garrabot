@@ -11306,6 +11306,8 @@ function initWebSocket(wssUrl) {
                         banca:            bot.balance || 100,
                         stake:            bot.stake   || 1,
                         payout:           0.85,
+                        // passa losses seguidos em tempo real para o Risk Gate
+                        historico_recente: bot._seqLossAtual || 0,
                     }),
                 })
                 .then(r => r.json())
