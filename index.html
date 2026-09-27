@@ -8166,6 +8166,7 @@ function confirmarEstrategia() {
     // hma_core
     bot._hmaAnalisando       = false;
     bot._hmaSinalPendente    = null;
+    bot._hmaSecSinal         = null;   // cancela sinal pendente para conta secundária
     // Re-subscreve ticks se o ativo mudou e jhconexo WS ativa
     const novoAtivo = _resolverAtivo(est.ativo);
     if (bot.ws && bot.ws.readyState === WebSocket.OPEN && novoAtivo !== bot._tickAtivo) {
@@ -9464,6 +9465,13 @@ async function _secConectar() {
                         duration_unit:  _unitSec,
                     });
                     bot._canaleDir = null;  // consome o sinal — evita entrar múltiplas vezes
+                    return;
+                } else if (est.tipo === 'hma_core') {
+                    // Espelha o sinal HMA — usa bot._hmaSecSinal setado pelo bot principal
+                    const _hmaS = bot._hmaSecSinal;
+                    if (!_hmaS) return;  // ainda sem sinal novo
+                    bot._hmaSecSinal = null;  // consome — evita entrar múltiplas vezes
+                    _secEntrarAutonoma(_hmaS);
                     return;
                 } else {
                     // Tipo não suportado — ignora
@@ -11305,6 +11313,13 @@ function initWebSocket(wssUrl) {
                         'CALL':  'CALL',       'PUT':   'PUT',
                     };
                     const _hmaCt = _hmaContrMap[_hmaS.decisao] || est.hma_contrato || 'DIGITUNDER';
+                    // Sinaliza para a conta secundária espelhar esta entrada
+                    bot._hmaSecSinal = {
+                        contract_type: _hmaCt,
+                        barrier:       ['DIGITOVER','DIGITUNDER'].includes(_hmaCt) ? '5' : undefined,
+                        duration:      parseInt(est.duracao) || 1,
+                        duration_unit: est.duracao_unit || 't',
+                    };
                     // Injeta contrato e barreira temporariamente em est para reutilizar buy()
                     const _hmaEstOrig = { contract: est.contract, barrier: est.barrier };
                     est.contract = _hmaCt;
