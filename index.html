@@ -6699,9 +6699,11 @@ setInterval(() => {
     if (bot._buying) {
         if (_buyingTs === 0) { _buyingTs = Date.now(); return; }
         if (Date.now() - _buyingTs > 12000) {
-            bot._buying       = false;
-            bot._pendingReqId = null;
-            _buyingTs         = 0;
+            bot._buying          = false;
+            bot._pendingReqId    = null;
+            bot._hmaAnalisando   = false;
+            bot._hmaAnalisandoTs = null;
+            _buyingTs            = 0;
             if (bot.running) print('⚠️ Watchdog: _buying travado liberado — continuando...', 'log-info');
         }
     } else {

@@ -169,10 +169,10 @@ class MultiTimeframeAnalyzer:
             confianca = 50 + excesso * 100
             direcao = "ODD" if pct_pares >= 0.50 else "EVEN"
         elif contrato_u in ("CALL/PUT AUTO", "CALL_PUT_AUTO", "DIRECIONAL"):
-            # Motor escolhe sozinho CALL ou PUT pela tendência de preço
-            # Slope + momentum + aceleração combinados
+            # Motor escolhe CALL ou PUT pela tendência de preço
+            # Confiança base 72% — sobe/desce conforme força do slope
             slope_score = abs(media_seg - media_prim) / max(abs(media_prim), 0.0001)
-            confianca_base = min(95, 50 + slope_score * 5000)
+            confianca_base = min(95, 72 + slope_score * 8000)
             direcao = "CALL" if tendencia_alta else "PUT"
             confianca = confianca_base
         elif contrato_u == "CALL":
