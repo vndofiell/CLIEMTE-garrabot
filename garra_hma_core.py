@@ -444,9 +444,8 @@ class RiskGate:
         if payout < 0.80:
             motivos_veto.append(f"payout {payout:.2f} < 0.80 — edge insuficiente")
 
-        # Veto 4: sequência recente de losses — verificado pelo front-end em tempo real
-        # (o front-end passa losses_seguidos via payload; 0 = sem controle)
-        losses_seguidos = historico_recente[0] if isinstance(historico_recente, int) else 0
+        # Veto 4: sequência recente de losses — int vindo do front-end em tempo real
+        losses_seguidos = int(historico_recente) if isinstance(historico_recente, (int, float)) else 0
         if losses_seguidos >= 5:
             motivos_veto.append(f"{losses_seguidos} losses seguidos — aguardar recuperação")
 
