@@ -11336,60 +11336,7 @@ function initWebSocket(wssUrl) {
                 const _hmaAtivo    = est.ativo          || 'R_100';
                 const _hmaBanca    = parseFloat(document.getElementById('hd-balance')?.textContent?.replace(/[^0-9.]/g,'')) || bot.stake * 100;
 
-                // ── MODO AUTO-ATIVO: varre todos os mercados marcados ─────────
-                if (est.hma_auto_ativo && Array.isArray(est.hma_mercados) && est.hma_mercados.length > 0) {
-                    const _mkLista = est.hma_mercados;
-                    _seqStatusUpdate(`🧠 HMA AUTO | varrendo ${_mkLista.length} mercados...`);
-                    fetch('/garra-hma/avaliar-multi', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            ativos:           _mkLista,
-                            ticks_atual:      bot._precos.slice(),   // ticks já acumulados — ativo atual é instantâneo
-                            ativo_atual:      _hmaAtivo,             // servidor usa esses ticks direto, sem fetch
-                            contrato:         _hmaContrato,
-                            janelas:          _hmaJanelas,
-                            confianca_minima: _hmaConfiMin,
-                            banca:            _hmaBanca,
-                            stake:            bot.stake || 1,
-                            payout:           0.85,
-                        }),
-                    })
-                    .then(r => r.json())
-                    .then(_multiRes => {
-                        bot._hmaAnalisando   = false;
-                        bot._hmaAnalisandoTs = null;
-                        if (!_multiRes.aprovado || !_multiRes.melhor) {
-                            const _melhorRep = _multiRes.melhor;
-                            _seqStatusUpdate(
-                                `🧠 HMA AUTO 🚫 NO TRADE | nenhum mercado aprovado` +
-                                (_melhorRep ? ` | melhor: ${_melhorRep.ativo} conf ${_melhorRep.confianca || 0}%` : '')
-                            );
-                            return;
-                        }
-                        const _m = _multiRes.melhor;
-                        bot._hmaSinalPendente = {
-                            decisao:        _m.decisao,
-                            confianca:      _m.confianca,
-                            regime:         _m.regime,
-                            janelas_usadas: _m.janelas_usadas || [],
-                            ativo:          _m.ativo,
-                        };
-                        _seqStatusUpdate(
-                            `🧠 HMA AUTO ${_m.decisao} | <b>${_m.ativo}</b> | conf <b>${_m.confianca}%</b>` +
-                            ` | regime: ${_m.regime}` +
-                            ` | ⏳ aguardando próximo tick...`
-                        );
-                    })
-                    .catch(_err => {
-                        bot._hmaAnalisando   = false;
-                        bot._hmaAnalisandoTs = null;
-                        console.warn('[HMA-AUTO]', _err);
-                    });
-                    return;
-                }
-
-                // ── MODO SIMPLES: ativo único (comportamento original) ────────
+                // ── AVALIA ATIVO ATUAL PRIMEIRO (ticks locais — sempre rápido) ─
                 fetch('/garra-hma/avaliar', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -11409,32 +11356,83 @@ function initWebSocket(wssUrl) {
                     bot._hmaAnalisando   = false;
                     bot._hmaAnalisandoTs = null;
 
-                    if (!_hmaRes.aprovado) {
-                        // NO TRADE
-                        const _motHma = _hmaRes.motivo || 'Condições insuficientes';
-                        const _riskVeto = _hmaRes.risk_gate && !_hmaRes.risk_gate.aprovado
-                            ? ` | 🛡️ RISK GATE: ${(_hmaRes.risk_gate.motivos_veto || []).join('; ')}`
-                            : '';
+                    if (_hmaRes.aprovado) {
+                        // ── APROVADO no ativo atual — entra direto ────────────
+                        bot._hmaSinalPendente = {
+                            decisao:        _hmaRes.decisao,
+                            confianca:      _hmaRes.confianca,
+                            regime:         _hmaRes.regime,
+                            janelas_usadas: _hmaRes.janelas_usadas || [],
+                            ativo:          _hmaAtivo,
+                        };
                         _seqStatusUpdate(
-                            `🧠 HMA 🚫 NO TRADE | ${_motHma}${_riskVeto}` +
-                            ` | regime: ${_hmaRes.regime || '?'}` +
-                            ` | conf: ${_hmaRes.confianca || 0}%`
+                            `🧠 HMA ${_hmaRes.decisao} | conf <b>${_hmaRes.confianca}%</b>` +
+                            ` | regime: ${_hmaRes.regime}` +
+                            ` | ⏳ aguardando próximo tick...`
                         );
                         return;
                     }
 
-                    // APROVADO — guarda sinal para entrar no próximo tick
-                    bot._hmaSinalPendente = {
-                        decisao:       _hmaRes.decisao,
-                        confianca:     _hmaRes.confianca,
-                        regime:        _hmaRes.regime,
-                        janelas_usadas: _hmaRes.janelas_usadas || [],
-                        ativo:         _hmaAtivo,
-                    };
+                    // ── NO TRADE no ativo atual ───────────────────────────────
+                    const _motHma   = _hmaRes.motivo || 'Condições insuficientes';
+                    const _riskVeto = _hmaRes.risk_gate && !_hmaRes.risk_gate.aprovado
+                        ? ` | 🛡️ RISK GATE: ${(_hmaRes.risk_gate.motivos_veto || []).join('; ')}`
+                        : '';
+
+                    // ── AUTO: tenta outros mercados se NO TRADE no ativo atual ─
+                    if (est.hma_auto_ativo && Array.isArray(est.hma_mercados) && est.hma_mercados.length > 0) {
+                        const _outrosMk = est.hma_mercados.filter(m => m !== _hmaAtivo);
+                        if (_outrosMk.length > 0) {
+                            _seqStatusUpdate(`🧠 HMA AUTO | ${_hmaAtivo} NO TRADE (${_hmaRes.confianca || 0}%) — varrendo outros ${_outrosMk.length} mercados...`);
+                            fetch('/garra-hma/avaliar-multi', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    ativos:           _outrosMk,
+                                    contrato:         _hmaContrato,
+                                    janelas:          _hmaJanelas,
+                                    confianca_minima: _hmaConfiMin,
+                                    banca:            _hmaBanca,
+                                    stake:            bot.stake || 1,
+                                    payout:           0.85,
+                                }),
+                            })
+                            .then(r => r.json())
+                            .then(_multiRes => {
+                                if (_multiRes.aprovado && _multiRes.melhor) {
+                                    const _m = _multiRes.melhor;
+                                    bot._hmaSinalPendente = {
+                                        decisao:        _m.decisao,
+                                        confianca:      _m.confianca,
+                                        regime:         _m.regime,
+                                        janelas_usadas: _m.janelas_usadas || [],
+                                        ativo:          _m.ativo,
+                                    };
+                                    _seqStatusUpdate(
+                                        `🧠 HMA AUTO ✅ | <b>${_m.ativo}</b> | ${_m.decisao} | conf <b>${_m.confianca}%</b>` +
+                                        ` | regime: ${_m.regime} | ⏳ aguardando próximo tick...`
+                                    );
+                                } else {
+                                    const _mr = _multiRes.melhor;
+                                    _seqStatusUpdate(
+                                        `🧠 HMA 🚫 NO TRADE | ${_motHma}${_riskVeto}` +
+                                        ` | conf: ${_hmaRes.confianca || 0}%` +
+                                        (_mr ? ` | melhor externo: ${_mr.ativo} ${_mr.confianca || 0}%` : '')
+                                    );
+                                }
+                            })
+                            .catch(() => {
+                                _seqStatusUpdate(`🧠 HMA 🚫 NO TRADE | ${_motHma} | conf: ${_hmaRes.confianca || 0}%`);
+                            });
+                            return;
+                        }
+                    }
+
+                    // NO TRADE simples (sem auto ou sem outros mercados)
                     _seqStatusUpdate(
-                        `🧠 HMA ${_hmaRes.decisao} | conf <b>${_hmaRes.confianca}%</b>` +
-                        ` | regime: ${_hmaRes.regime}` +
-                        ` | ⏳ aguardando próximo tick...`
+                        `🧠 HMA 🚫 NO TRADE | ${_motHma}${_riskVeto}` +
+                        ` | regime: ${_hmaRes.regime || '?'}` +
+                        ` | conf: ${_hmaRes.confianca || 0}%`
                     );
                 })
                 .catch(_err => {
