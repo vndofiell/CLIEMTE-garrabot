@@ -10251,11 +10251,14 @@ function initWebSocket(wssUrl) {
                     const _maxBuf = _tamCdl * 150;
                     if (bot._candleBuffer.length > _maxBuf) bot._candleBuffer.shift();
                 }
-                // ── HMA: acumula _precos em todo tick (inclusive durante operação) ──
-                if (_estCdl && _estCdl.tipo === 'hma_core') {
-                    if (!bot._precos) bot._precos = [];
-                    bot._precos.push(parseFloat(_dQuote));
-                    if (bot._precos.length > 600) bot._precos.shift();
+                // ── HMA: acumula _precos em todo tick — independe de bot.running ou _buying ──
+                {
+                    const _hmaEstCheck = ESTRATEGIAS[bot.estrategia];
+                    if (_hmaEstCheck && _hmaEstCheck.tipo === 'hma_core') {
+                        if (!bot._precos) bot._precos = [];
+                        bot._precos.push(parseFloat(_dQuote));
+                        if (bot._precos.length > 600) bot._precos.shift();
+                    }
                 }
 
                 // ── Fluxo direcional contínuo — atualiza bot._fluxoDir em todo tick ──
