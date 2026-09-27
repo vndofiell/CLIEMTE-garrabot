@@ -4632,6 +4632,7 @@ const ESTRATEGIAS = {
         // Seleção automática de ativo
         hma_auto_ativo:   false,
         hma_mercados:     ["R_10","R_25","R_50","R_75","R_100"],
+        hma_losses_troca: 3,   // trocar mercado após N losses seguidos (0 = desligado)
         // Aprendizado: registra resultado em /garra-hma/historico
         hma_aprendizado:  true,
         desc: "Motor Híbrido HMA | Multi-Timeframe · Regime · Consenso · Risk Gate · NO TRADE inteligente",
@@ -7996,6 +7997,21 @@ function selecionarEstrategia(nome) {
         });
         campos.appendChild(mkGrid2);
 
+        // Trocar mercado após N losses
+        const lossesRow = document.createElement('div');
+        lossesRow.style.cssText = 'display:flex;align-items:center;gap:8px;margin-top:6px;margin-bottom:2px;';
+        const lossesLbl = document.createElement('label');
+        lossesLbl.htmlFor = 'cfg-hma-losses-troca';
+        lossesLbl.style.cssText = 'font-size:0.72rem;color:#ff9f43;font-family:"Share Tech Mono";white-space:nowrap;';
+        lossesLbl.textContent = '🔁 Trocar mercado após N losses (0=off):';
+        const lossesInp = document.createElement('input');
+        lossesInp.type = 'number'; lossesInp.id = 'cfg-hma-losses-troca';
+        lossesInp.min = 0; lossesInp.max = 10; lossesInp.step = 1;
+        lossesInp.value = est.hma_losses_troca ?? 3;
+        lossesInp.style.cssText = 'width:50px;background:#0d1117;color:#ff9f43;border:1px solid #30363d;border-radius:4px;padding:2px 4px;font-size:0.72rem;font-family:"Share Tech Mono";text-align:center;';
+        lossesRow.appendChild(lossesLbl); lossesRow.appendChild(lossesInp);
+        campos.appendChild(lossesRow);
+
         // Aprendizado
         const aprRow = document.createElement('div');
         aprRow.style.cssText = 'display:flex;align-items:center;gap:8px;margin-top:4px;';
@@ -8120,6 +8136,9 @@ function confirmarEstrategia() {
         // Auto ativo
         const _autoAtvEl = document.getElementById('cfg-hma-auto-ativo');
         if (_autoAtvEl) est.hma_auto_ativo = _autoAtvEl.checked;
+        // Losses para troca de mercado
+        const _lossesEl = document.getElementById('cfg-hma-losses-troca');
+        if (_lossesEl) est.hma_losses_troca = Math.max(0, Math.min(10, parseInt(_lossesEl.value) || 0));
         // Mercados
         const _todosAtvsHma2 = ['R_10','R_25','R_50','R_75','R_100','1HZ10V','1HZ25V','1HZ50V','1HZ75V','1HZ100V'];
         est.hma_mercados = _todosAtvsHma2.filter(a => {
@@ -11330,11 +11349,72 @@ function initWebSocket(wssUrl) {
                 bot._hmaAnalisando   = true;
                 bot._hmaAnalisandoTs = Date.now();
 
-                const _hmaConfiMin = est.hma_confianca || 68;
-                const _hmaContrato = est.hma_contrato  || 'AUTO';
-                const _hmaJanelas  = est.hma_janelas   || null;
-                const _hmaAtivo    = est.ativo          || 'R_100';
-                const _hmaBanca    = parseFloat(document.getElementById('hd-balance')?.textContent?.replace(/[^0-9.]/g,'')) || bot.stake * 100;
+                const _hmaConfiMin    = est.hma_confianca  || 68;
+                const _hmaContrato    = est.hma_contrato   || 'AUTO';
+                const _hmaJanelas     = est.hma_janelas    || null;
+                const _hmaAtivo       = est.ativo           || 'R_100';
+                const _hmaBanca       = parseFloat(document.getElementById('hd-balance')?.textContent?.replace(/[^0-9.]/g,'')) || bot.stake * 100;
+                const _hmaLossesTroca = typeof est.hma_losses_troca === 'number' ? est.hma_losses_troca : 3;
+
+                // ── TROCA POR LOSSES: N losses seguidos → varre outros mercados ─
+                const _hmaAutoMkDisp = est.hma_auto_ativo && Array.isArray(est.hma_mercados) && est.hma_mercados.length > 1;
+                const _hmaDeveRotar  = _hmaAutoMkDisp && _hmaLossesTroca > 0 && bot._seqLossAtual >= _hmaLossesTroca;
+
+                if (_hmaDeveRotar) {
+                    const _outrosMk = est.hma_mercados.filter(m => m !== _hmaAtivo);
+                    if (_outrosMk.length > 0) {
+                        _seqStatusUpdate(`🔁 HMA AUTO | ${bot._seqLossAtual} losses em ${_hmaAtivo} — varrendo ${_outrosMk.length} outros mercados...`);
+                        fetch('/garra-hma/avaliar-multi', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                ativos:           _outrosMk,
+                                contrato:         _hmaContrato,
+                                janelas:          _hmaJanelas,
+                                confianca_minima: _hmaConfiMin,
+                                banca:            _hmaBanca,
+                                stake:            bot.stake || 1,
+                                payout:           0.85,
+                            }),
+                        })
+                        .then(r => r.json())
+                        .then(_rot => {
+                            bot._hmaAnalisando   = false;
+                            bot._hmaAnalisandoTs = null;
+                            if (_rot.aprovado && _rot.melhor) {
+                                const _m = _rot.melhor;
+                                // Troca o ativo permanentemente até próxima sequência de losses
+                                est.ativo = _m.ativo;
+                                // Re-subscribe ticks no novo ativo
+                                const _atR = _resolverAtivo(_m.ativo);
+                                if (bot.ws && bot.ws.readyState === WebSocket.OPEN && _atR !== bot._tickAtivo) {
+                                    bot.ws.send(json({ forget_all: 'ticks' }));
+                                    bot._tickAtivo = _atR;
+                                    bot._precos    = [];
+                                    bot.ws.send(json({ ticks: _atR, subscribe: 1 }));
+                                }
+                                bot._hmaSinalPendente = {
+                                    decisao:        _m.decisao,
+                                    confianca:      _m.confianca,
+                                    regime:         _m.regime,
+                                    janelas_usadas: _m.janelas_usadas || [],
+                                    ativo:          _m.ativo,
+                                };
+                                print(`🔁 HMA AUTO | trocou para <b>${_m.ativo}</b> após ${bot._seqLossAtual} losses | ${_m.decisao} conf <b>${_m.confianca}%</b>`, 'log-info');
+                                _seqStatusUpdate(`🔁 HMA AUTO ✅ | <b>${_m.ativo}</b> | ${_m.decisao} | conf <b>${_m.confianca}%</b> | ⏳ aguardando próximo tick...`);
+                            } else {
+                                // Nenhum melhor — continua no atual
+                                const _mr = _rot.melhor;
+                                _seqStatusUpdate(`🔁 HMA AUTO | nenhum mercado melhor encontrado | continua em ${_hmaAtivo}` + (_mr ? ` | melhor: ${_mr.ativo} ${_mr.confianca || 0}%` : ''));
+                            }
+                        })
+                        .catch(() => {
+                            bot._hmaAnalisando   = false;
+                            bot._hmaAnalisandoTs = null;
+                        });
+                        return;
+                    }
+                }
 
                 // ── AVALIA ATIVO ATUAL PRIMEIRO (ticks locais — sempre rápido) ─
                 fetch('/garra-hma/avaliar', {
