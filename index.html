@@ -12166,6 +12166,23 @@ function buy() {
         payload.duration_unit = dUnit;
         payload.duration      = Math.min(dMax, Math.max(1, parseInt(est.duracao) || 1));
         delete payload.barrier;
+
+    } else if (est.tipo === 'hma_core') {
+        // Contrato injetado temporariamente em est.contract pelo bloco de execução HMA
+        let _hmaCt = (est.contract || 'DIGITUNDER').toUpperCase();
+        if (_hmaCt === 'DIGITDIFFERS') _hmaCt = 'DIGITDIFF';
+        payload.contract_type = _hmaCt;
+        const _hmaDUnit = est.duracao_unit || 't';
+        const _hmaDMax  = _hmaDUnit === 't' ? 10 : 5;
+        payload.duration_unit = _hmaDUnit;
+        payload.duration      = Math.min(_hmaDMax, Math.max(1, parseInt(est.duracao) || 1));
+        // Barreira: OVER/UNDER usam barreira numérica; EVEN/ODD não aceitam barrier
+        const _hmaSemBarrier = (_hmaCt === 'DIGITEVEN' || _hmaCt === 'DIGITODD' || _hmaCt === 'CALL' || _hmaCt === 'PUT');
+        if (!_hmaSemBarrier && est.barrier !== null && est.barrier !== undefined) {
+            payload.barrier = String(est.barrier);
+        } else {
+            delete payload.barrier;
+        }
     }
 
     // Espelha o mesmo trade na conta secundária (se conectada)
