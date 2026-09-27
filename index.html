@@ -11268,6 +11268,17 @@ function initWebSocket(wssUrl) {
                     bot._hmaSinalUltimo   = _hmaS;   // guarda para aprendizado após resultado
                     _seqStatusClear();
                     if (!lvVerificar(digit)) return;
+                    // Auto-ativo: troca para o mercado escolhido se for diferente do atual
+                    if (_hmaS.ativo && _hmaS.ativo !== est.ativo) {
+                        const _atResolv = _resolverAtivo(_hmaS.ativo);
+                        if (bot.ws && bot.ws.readyState === WebSocket.OPEN && _atResolv !== bot._tickAtivo) {
+                            bot.ws.send(json({ forget_all: 'ticks' }));
+                            bot._tickAtivo = _atResolv;
+                            bot._precos    = [];
+                            bot.ws.send(json({ ticks: _atResolv, subscribe: 1 }));
+                        }
+                        est.ativo = _hmaS.ativo;
+                    }
                     // Mapeia decisão HMA → contrato Deriv
                     const _hmaContrMap = {
                         'OVER':  'DIGITOVER',  'UNDER': 'DIGITUNDER',
@@ -11283,6 +11294,7 @@ function initWebSocket(wssUrl) {
                     print(
                         `🧠 HMA ENTRADA | ${_hmaS.decisao} | conf <b>${_hmaS.confianca}%</b>` +
                         ` | regime: <b>${_hmaS.regime}</b>` +
+                        ` | ativo: <b>${_hmaS.ativo || est.ativo}</b>` +
                         ` | janelas: <b>${(_hmaS.janelas_usadas || []).join(',')}</b> ✅`,
                         'log-win'
                     );
@@ -11322,7 +11334,60 @@ function initWebSocket(wssUrl) {
                 const _hmaContrato = est.hma_contrato  || 'AUTO';
                 const _hmaJanelas  = est.hma_janelas   || null;
                 const _hmaAtivo    = est.ativo          || 'R_100';
+                const _hmaBanca    = parseFloat(document.getElementById('hd-balance')?.textContent?.replace(/[^0-9.]/g,'')) || bot.stake * 100;
 
+                // ── MODO AUTO-ATIVO: varre todos os mercados marcados ─────────
+                if (est.hma_auto_ativo && Array.isArray(est.hma_mercados) && est.hma_mercados.length > 0) {
+                    const _mkLista = est.hma_mercados;
+                    _seqStatusUpdate(`🧠 HMA AUTO | varrendo ${_mkLista.length} mercados...`);
+                    fetch('/garra-hma/avaliar-multi', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            ativos:           _mkLista,
+                            contrato:         _hmaContrato,
+                            janelas:          _hmaJanelas,
+                            confianca_minima: _hmaConfiMin,
+                            banca:            _hmaBanca,
+                            stake:            bot.stake || 1,
+                            payout:           0.85,
+                        }),
+                    })
+                    .then(r => r.json())
+                    .then(_multiRes => {
+                        bot._hmaAnalisando   = false;
+                        bot._hmaAnalisandoTs = null;
+                        if (!_multiRes.aprovado || !_multiRes.melhor) {
+                            const _melhorRep = _multiRes.melhor;
+                            _seqStatusUpdate(
+                                `🧠 HMA AUTO 🚫 NO TRADE | nenhum mercado aprovado` +
+                                (_melhorRep ? ` | melhor: ${_melhorRep.ativo} conf ${_melhorRep.confianca || 0}%` : '')
+                            );
+                            return;
+                        }
+                        const _m = _multiRes.melhor;
+                        bot._hmaSinalPendente = {
+                            decisao:        _m.decisao,
+                            confianca:      _m.confianca,
+                            regime:         _m.regime,
+                            janelas_usadas: _m.janelas_usadas || [],
+                            ativo:          _m.ativo,
+                        };
+                        _seqStatusUpdate(
+                            `🧠 HMA AUTO ${_m.decisao} | <b>${_m.ativo}</b> | conf <b>${_m.confianca}%</b>` +
+                            ` | regime: ${_m.regime}` +
+                            ` | ⏳ aguardando próximo tick...`
+                        );
+                    })
+                    .catch(_err => {
+                        bot._hmaAnalisando   = false;
+                        bot._hmaAnalisandoTs = null;
+                        console.warn('[HMA-AUTO]', _err);
+                    });
+                    return;
+                }
+
+                // ── MODO SIMPLES: ativo único (comportamento original) ────────
                 fetch('/garra-hma/avaliar', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -11331,10 +11396,9 @@ function initWebSocket(wssUrl) {
                         contrato:         _hmaContrato,
                         janelas:          _hmaJanelas,
                         confianca_minima: _hmaConfiMin,
-                        banca:            parseFloat(document.getElementById('hd-balance')?.textContent?.replace(/[^0-9.]/g,'')) || bot.stake * 100,
+                        banca:            _hmaBanca,
                         stake:            bot.stake   || 1,
                         payout:           0.85,
-                        // passa losses seguidos em tempo real para o Risk Gate
                         historico_recente: bot._seqLossAtual || 0,
                     }),
                 })

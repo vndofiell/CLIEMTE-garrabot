@@ -11875,6 +11875,81 @@ def garra_hma_avaliar():
     return jsonify(resultado)
 
 
+@app.route('/garra-hma/avaliar-multi', methods=['POST'])
+def garra_hma_avaliar_multi():
+    """
+    Avalia múltiplos ativos em paralelo e retorna o de maior confiança aprovado.
+
+    Body JSON:
+        ativos:           list[str]  — lista de ativos a varrer (ex: ["R_10","R_25","R_50"])
+        contrato:         str        — "AUTO" | "CALL" | "PUT" | etc.
+        janelas:          list[int]  — janelas MTF ou null
+        confianca_minima: float      — threshold mínimo (padrão 68)
+        banca:            float
+        stake:            float
+        payout:           float
+    """
+    dados = request.get_json(force=True, silent=True) or {}
+    ativos = dados.get("ativos") or []
+    if not isinstance(ativos, list) or len(ativos) == 0:
+        return jsonify({"ok": False, "erro": "Campo 'ativos' deve ser lista não vazia"}), 400
+
+    contrato         = str(dados.get("contrato", "AUTO")).upper()
+    janelas          = dados.get("janelas", None)
+    confianca_minima = float(dados.get("confianca_minima", 68.0))
+    banca            = float(dados.get("banca", 100.0))
+    stake            = float(dados.get("stake", 1.0))
+    payout           = float(dados.get("payout", 0.85))
+
+    resultados = []
+    lock = threading.Lock()
+
+    def _avaliar_ativo(ativo):
+        try:
+            ticks = _buscar_ticks_ws_sync(ativo, count=100)
+            if not ticks or len(ticks) < 10:
+                return
+            res = hma_avaliar(
+                ticks            = ticks,
+                contrato         = contrato,
+                janelas          = janelas,
+                confianca_minima = confianca_minima,
+                banca            = banca,
+                stake            = stake,
+                payout           = payout,
+                historico_recente = 0,
+            )
+            res["ativo"] = ativo
+            print(f"[HMA-MULTI] {ativo} → decisao={res['decisao']} conf={res['confianca']}% aprovado={res['aprovado']}")
+            with lock:
+                resultados.append(res)
+        except Exception as exc:
+            print(f"[HMA-MULTI] {ativo} erro: {exc}")
+
+    threads = [threading.Thread(target=_avaliar_ativo, args=(a,), daemon=True) for a in ativos]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=25)
+
+    aprovados = [r for r in resultados if r.get("aprovado")]
+    if not aprovados:
+        # Retorna o de maior confiança entre todos (para debug no front)
+        melhor_rep = max(resultados, key=lambda r: r.get("confianca", 0)) if resultados else None
+        return jsonify({
+            "aprovado": False,
+            "melhor":   melhor_rep,
+            "todos":    resultados,
+        })
+
+    melhor = max(aprovados, key=lambda r: r.get("confianca", 0))
+    return jsonify({
+        "aprovado": True,
+        "melhor":   melhor,
+        "todos":    resultados,
+    })
+
+
 @app.route('/garra-hma/historico', methods=['POST'])
 def garra_hma_historico():
     """
