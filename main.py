@@ -2932,14 +2932,16 @@ def tg_send():
     if not token or not chat_id:
         return jsonify({"ok": False, "erro": "token/chat_id ausentes"})
 
-    # ── Sempre envia apenas notificações da conta SECUNDÁRIA ──
+    # ── Filtragem de conta: evita duplicatas quando secundária está ativa ──
     conta = str(d.get("conta", "")).upper()
-    # Permite: SECUNDARIA, _texto_direto (teste manual), stop_win da sec, _inicio da sec
-    _eh_teste   = bool(d.get("_texto_direto") or d.get("_teste"))
-    _eh_sec     = (conta == "SECUNDARIA")
-    if not _eh_teste and not _eh_sec:
-        print(f"[TG] Notificação bloqueada — apenas conta SECUNDÁRIA permitida (conta='{conta}').")
-        return jsonify({"ok": True, "bloqueado": True, "motivo": "apenas_secundaria"})
+    _eh_teste     = bool(d.get("_texto_direto") or d.get("_teste"))
+    _eh_sec       = (conta == "SECUNDARIA")
+    _eh_principal = (conta == "PRINCIPAL" or conta == "")
+    # Bloqueia somente se vier explicitamente marcado como bloqueado
+    _bloqueado    = (conta == "BLOQUEADA")
+    if _bloqueado:
+        print(f"[TG] Notificação bloqueada explicitamente (conta='{conta}').")
+        return jsonify({"ok": True, "bloqueado": True, "motivo": "bloqueada"})
 
     # Snapshot dos dados — evita capturar variáveis mutáveis na closure
     payload = dict(d)

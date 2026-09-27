@@ -8635,6 +8635,8 @@ function tgEnviarResultado(win, lucro, prox_stake, _origemSec, _overrides, _entr
         };
     } else {
         const saldo = parseFloat(document.getElementById('hd-balance').textContent.replace('$','')) || 0;
+        // Bloqueia apenas quando secundária está espelhando ativamente (evita duplicata)
+        const _secEspelhando = (typeof _sec !== 'undefined' && _sec.pronto && _sec.espelhandoAtivo);
         payload = {
             win:             win,
             lucro:           lucro,
@@ -8651,6 +8653,8 @@ function tgEnviarResultado(win, lucro, prox_stake, _origemSec, _overrides, _entr
             max_win_consec:  bot._maxWinConsec,
             max_loss_consec: bot._maxLossConsec,
             max_stake:       bot._maxStakeUsada,
+            // PRINCIPAL = envia; BLOQUEADA = secundária espelhando ativamente, evita duplicata
+            conta:           _secEspelhando ? 'BLOQUEADA' : 'PRINCIPAL',
         };
     }
 
@@ -8741,7 +8745,7 @@ function tgEnviarInicio() {
             chat_id: _tgCfg.chat_id,
             _inicio: true,
             texto:   msg,
-            conta:   (typeof _sec !== 'undefined' && _sec.pronto) ? 'SECUNDARIA' : '',
+            conta:   (typeof _sec !== 'undefined' && _sec.pronto) ? 'SECUNDARIA' : 'PRINCIPAL',
         }),
     }).catch(() => {});
 }
@@ -8791,8 +8795,7 @@ function tgEnviarStopWin() {
             max_win_consec:  maxWin,
             max_loss_consec: maxLoss,
             max_stake:       maxStake,
-            // Marca SECUNDARIA quando a conta secundária está conectada
-            conta:           _secConectada ? 'SECUNDARIA' : '',
+            conta:           _secConectada ? 'SECUNDARIA' : 'PRINCIPAL',
         };
 
         // ── Telegram ──────────────────────────────────────────
@@ -11438,7 +11441,7 @@ function initWebSocket(wssUrl) {
                 const _mobNext = document.getElementById('mob-nextstake');
                 if (_mobNext) _mobNext.textContent = '$' + _dbsNextStake.toFixed(2);
                 // Envia resultado para o Telegram com dados corretos do DBS
-                if (!(_sec && _sec.pronto)) {
+                if (!(_sec && _sec.pronto && _sec.espelhandoAtivo)) {
                     const _tgP = bot._dbsUltimoPayloadTg || {};
                     const _tgMgrNome = document.getElementById('dbs-mgr')?.value || 'QSR';
                     // Monta nome: "DIGIT BARRIER 356 — DIGITOVER B:3 R_50"
@@ -11549,8 +11552,8 @@ function initWebSocket(wssUrl) {
                 // if (bot._lastBalance !== undefined) bot._lastBalance += totalProfit;
                 // updateHeader(bot._lastBalance);
                 bot.ws.send(json({ balance: 1 }));  // confirma saldo real com a Deriv
-                // Enquanto secundária estiver conectada (standby ou espelhando), bloqueia notif da principal
-                if (!(_sec && _sec.pronto)) tgEnviarResultado(wonReal, totalProfit, bot.stake, false, null, _stakeAntDupla);
+                // Bloqueia notif da principal APENAS quando secundária está espelhando ativamente
+                if (!(_sec && _sec.pronto && _sec.espelhandoAtivo)) tgEnviarResultado(wonReal, totalProfit, bot.stake, false, null, _stakeAntDupla);
                 // ── Planilha JC: registra histórico ──────────────────────
                 if (bot.mgr && bot.mgr.modo === "💹 Juros Compostos") {
                     jcRegistrarResultado(wonReal ? 'WIN' : 'LOSS', stakePorLado, totalProfit, bot.mgr._jcBanca);
@@ -11616,8 +11619,8 @@ function initWebSocket(wssUrl) {
                 // if (bot._lastBalance !== undefined) bot._lastBalance += profit;
                 // updateHeader(bot._lastBalance);
                 bot.ws.send(json({ balance: 1 }));  // confirma saldo real com a Deriv
-                // Enquanto secundária estiver conectada (standby ou espelhando), bloqueia notif da principal
-                if (!(_sec && _sec.pronto)) {
+                // Bloqueia notif da principal APENAS quando secundária está espelhando ativamente
+                if (!(_sec && _sec.pronto && _sec.espelhandoAtivo)) {
                     const _estAtual = ESTRATEGIAS[bot.estrategia];
                     if (_estAtual && _estAtual.tipo === 'trend_pro' && bot._tpScore) {
                         // ── Trend Pro: enriquece com score ────────────────────
