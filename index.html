@@ -11618,14 +11618,21 @@ function initWebSocket(wssUrl) {
                 bot.ws.send(json({ balance: 1 }));  // confirma saldo real com a Deriv
                 // Enquanto secundária estiver conectada (standby ou espelhando), bloqueia notif da principal
                 if (!(_sec && _sec.pronto)) {
-                    // ── Trend Pro: enriquece nome da estratégia com score ──────
                     const _estAtual = ESTRATEGIAS[bot.estrategia];
                     if (_estAtual && _estAtual.tipo === 'trend_pro' && bot._tpScore) {
+                        // ── Trend Pro: enriquece com score ────────────────────
                         tgEnviarResultado(won, profit, bot.stake, false, {
                             estrategia: `🏛️ TREND PRO — ${_estAtual.ativo || ''} | score ${bot._tpScore}/100`,
                             modo:       bot.gerenciamento,
                         }, _stakeAntes);
-                        bot._tpScore = null;   // limpa após usar
+                        bot._tpScore = null;
+                    } else if (_estAtual && _estAtual.tipo === 'hma_core' && bot._hmaSinalUltimo) {
+                        // ── HMA: enriquece com decisão, confiança e regime ────
+                        const _hmaU = bot._hmaSinalUltimo;
+                        tgEnviarResultado(won, profit, bot.stake, false, {
+                            estrategia: `🧠 GARRA AI CORE HMA — ${_hmaU.decisao || ''} | conf ${_hmaU.confianca || 0}% | ${_hmaU.regime || ''} | ${_estAtual.ativo || 'R_100'}`,
+                            modo:       bot.gerenciamento,
+                        }, _stakeAntes);
                     } else {
                         tgEnviarResultado(won, profit, bot.stake, false, null, _stakeAntes);
                     }
