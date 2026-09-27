@@ -7907,7 +7907,7 @@ function selecionarEstrategia(nome) {
 
         campo('Contrato alvo', 'cfg-hma-contrato', 'select', est.hma_contrato || 'AUTO',
               undefined, undefined, undefined,
-              ['AUTO','DIGITOVER','DIGITUNDER','DIGITEVEN','DIGITODD']);
+              ['AUTO','DIGITOVER','DIGITUNDER','DIGITEVEN','DIGITODD','CALL','PUT']);
 
         campo('Modo de análise', 'cfg-hma-modo', 'select', est.hma_modo || 'hibrido',
               undefined, undefined, undefined,
@@ -12172,15 +12172,31 @@ function buy() {
         let _hmaCt = (est.contract || 'DIGITUNDER').toUpperCase();
         if (_hmaCt === 'DIGITDIFFERS') _hmaCt = 'DIGITDIFF';
         payload.contract_type = _hmaCt;
-        const _hmaDUnit = est.duracao_unit || 't';
-        const _hmaDMax  = _hmaDUnit === 't' ? 10 : 5;
-        payload.duration_unit = _hmaDUnit;
-        payload.duration      = Math.min(_hmaDMax, Math.max(1, parseInt(est.duracao) || 1));
-        // Barreira: OVER/UNDER usam barreira numérica; EVEN/ODD não aceitam barrier
-        const _hmaSemBarrier = (_hmaCt === 'DIGITEVEN' || _hmaCt === 'DIGITODD' || _hmaCt === 'CALL' || _hmaCt === 'PUT');
-        if (!_hmaSemBarrier && est.barrier !== null && est.barrier !== undefined) {
-            payload.barrier = String(est.barrier);
+
+        const _hmaEhDigit = _hmaCt.startsWith('DIGIT');
+        const _hmaEhDir   = (_hmaCt === 'CALL' || _hmaCt === 'PUT');
+
+        if (_hmaEhDigit) {
+            // Contratos DIGIT: sempre ticks, sem barrier para EVEN/ODD
+            payload.duration_unit = 't';
+            payload.duration      = Math.min(10, Math.max(1, parseInt(est.duracao) || 1));
+            const _hmaSemBarrier  = (_hmaCt === 'DIGITEVEN' || _hmaCt === 'DIGITODD');
+            if (!_hmaSemBarrier && est.barrier !== null && est.barrier !== undefined) {
+                payload.barrier = String(est.barrier);
+            } else {
+                delete payload.barrier;
+            }
+        } else if (_hmaEhDir) {
+            // CALL / PUT: usa unidade configurada (default minutos)
+            const _hmaDUnit = est.duracao_unit || 'm';
+            const _hmaDMax  = _hmaDUnit === 't' ? 10 : 5;
+            payload.duration_unit = _hmaDUnit;
+            payload.duration      = Math.min(_hmaDMax, Math.max(1, parseInt(est.duracao) || 1));
+            delete payload.barrier;
         } else {
+            // Fallback seguro
+            payload.duration_unit = 't';
+            payload.duration      = 1;
             delete payload.barrier;
         }
     }

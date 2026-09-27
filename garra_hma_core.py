@@ -175,12 +175,18 @@ class MultiTimeframeAnalyzer:
             confianca = 60 + 30 * (1 if not tendencia_alta else -1)
             direcao = "PUT" if not tendencia_alta else "CALL"
         else:
-            # Automático: avalia qual lado tem maior vantagem
+            # Automático: avalia OVER/UNDER/EVEN/ODD + CALL/PUT
+            # Score de CALL/PUT baseado na tendência de preço
+            score_call = 0.50 + min(0.45, abs(media_seg - media_prim) / max(abs(media_prim), 0.0001) * 5) \
+                         if tendencia_alta else 0.50 - min(0.45, abs(media_seg - media_prim) / max(abs(media_prim), 0.0001) * 5)
+            score_put  = 1.0 - score_call
             opcoes = {
                 "OVER":  pct_over5,
                 "UNDER": pct_under5,
                 "EVEN":  pct_impares,
                 "ODD":   pct_pares,
+                "CALL":  score_call,
+                "PUT":   score_put,
             }
             melhor = max(opcoes, key=opcoes.get)
             confianca = opcoes[melhor] * 100
