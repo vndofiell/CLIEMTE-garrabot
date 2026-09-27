@@ -8849,9 +8849,10 @@ function processCommand(cmd) {
             bot.running          = true;
             bot._buying          = false;
             bot._pendingReqId    = null;
-            bot._hmaAnalisando   = false;
+            bot._hmaAnalisando    = false;
+            bot._hmaAnalisandoTs  = null;
             bot._hmaSinalPendente = null;
-            bot._precos          = [];
+            bot._precos           = [];
             bot.mgr = new GerenciadorUnificado(bot.gerenciamento,
                 Object.assign({ stake: bot.initialStake }, (bot._mgrCfgs && bot._mgrCfgs[bot.gerenciamento]) || {}));
             const est = ESTRATEGIAS[bot.estrategia];
@@ -8878,6 +8879,7 @@ function processCommand(cmd) {
         bot._tpAnalisando         = false; // cancela flag de análise em andamento
         bot._tpScore              = null;  // limpa score do último sinal (trend_pro)
         bot._hmaAnalisando        = false; // cancela flag HMA
+        bot._hmaAnalisandoTs      = null;  // cancela timestamp do lock HMA
         bot._hmaSinalPendente     = null;  // cancela sinal HMA pendente
         bot._precos               = [];    // limpa buffer de preços HMA
         _seqStatusClear();
@@ -11293,8 +11295,20 @@ function initWebSocket(wssUrl) {
                 }
 
                 // Evita chamadas simultâneas
-                if (bot._hmaAnalisando) return;
-                bot._hmaAnalisando = true;
+                // Timeout de segurança: se ficou travado > 5s, reseta automaticamente
+                if (bot._hmaAnalisando) {
+                    const _hmaNow = Date.now();
+                    if (!bot._hmaAnalisandoTs) bot._hmaAnalisandoTs = _hmaNow;
+                    if (_hmaNow - bot._hmaAnalisandoTs > 5000) {
+                        bot._hmaAnalisando    = false;
+                        bot._hmaAnalisandoTs  = null;
+                        _seqStatusUpdate(`🧠 HMA timeout — reiniciando análise...`);
+                    } else {
+                        return;
+                    }
+                }
+                bot._hmaAnalisando   = true;
+                bot._hmaAnalisandoTs = Date.now();
 
                 const _hmaConfiMin = est.hma_confianca || 68;
                 const _hmaContrato = est.hma_contrato  || 'AUTO';
@@ -11318,7 +11332,8 @@ function initWebSocket(wssUrl) {
                 })
                 .then(r => r.json())
                 .then(_hmaRes => {
-                    bot._hmaAnalisando = false;
+                    bot._hmaAnalisando   = false;
+                    bot._hmaAnalisandoTs = null;
 
                     if (!_hmaRes.aprovado) {
                         // NO TRADE
@@ -11349,7 +11364,8 @@ function initWebSocket(wssUrl) {
                     );
                 })
                 .catch(_err => {
-                    bot._hmaAnalisando = false;
+                    bot._hmaAnalisando   = false;
+                    bot._hmaAnalisandoTs = null;
                     console.warn('[HMA]', _err);
                 });
             }
