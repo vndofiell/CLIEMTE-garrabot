@@ -8600,6 +8600,13 @@ function tgEnviarResultado(win, lucro, prox_stake, _origemSec, _overrides, _entr
     const _modoEspelhoAtivo = (typeof _sec !== 'undefined' && _sec.pronto && _sec.espelhandoAtivo);
     const _lvVirtual        = bot.lv && bot.lv.ativo && !bot.lv.emRecuperacao;
 
+    // ── Modo Espelho ativo: SOMENTE a conta secundária envia Telegram ──
+    // Se vier da conta principal (_origemSec=false) enquanto espelhando → bloqueia
+    if (_modoEspelhoAtivo && !_origemSec) {
+        console.warn('[TG] BLOQUEADO: modo espelho ativo — só secundária envia resultados');
+        return;
+    }
+
     // ── Diagnóstico: recarrega config TG se token estiver vazio ──────────
     if (!_tgCfg.token || !_tgCfg.chat_id) {
         fetch('/tg-config').then(r => r.json()).then(d => {
