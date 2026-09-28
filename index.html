@@ -11625,8 +11625,10 @@ function initWebSocket(wssUrl) {
             const profit = parseFloat(data.proposal_open_contract.profit);
             const won    = profit > 0;
             const cid    = data.proposal_open_contract.contract_id;
-            // Estado do espelho NO MOMENTO da compra (evita race condition)
-            const _eraEspelhando = !!(bot._cidEspelho && bot._cidEspelho[cid]);
+            // Bloqueia TG da TESTE se secundária está conectada (standby ou espelhando)
+            // A secundária envia os resultados via _origemSec=true (linha do handler dela)
+            const _eraEspelhando = !!(bot._cidEspelho && bot._cidEspelho[cid])
+                || !!(typeof _sec !== 'undefined' && _sec.pronto);
             if (bot._cidEspelho) delete bot._cidEspelho[cid];
 
             // ── Modo Dupla: aguarda os dois contratos fecharem ────────────
