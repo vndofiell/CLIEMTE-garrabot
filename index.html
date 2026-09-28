@@ -8646,8 +8646,9 @@ function tgEnviarResultado(win, lucro, prox_stake, _origemSec, _overrides, _entr
     }
 
     // ── Modo Espelho: usa dados da conta SECUNDÁRIA, ignora a principal ───
+    // _origemSec=true = chamado pelo resultado da secundária → sempre usa dados da _sec
     let payload;
-    if (_modoEspelhoAtivo) {
+    if (_modoEspelhoAtivo || _origemSec) {
         const saldoSec = parseFloat(_sec.saldo) || 0;
         payload = {
             win:             win,
@@ -11618,7 +11619,7 @@ function initWebSocket(wssUrl) {
                 const _mobNext = document.getElementById('mob-nextstake');
                 if (_mobNext) _mobNext.textContent = '$' + _dbsNextStake.toFixed(2);
                 // Envia resultado para o Telegram com dados corretos do DBS
-                if (!(_sec && _sec.pronto && _sec.espelhandoAtivo)) {
+                if (!(_sec && _sec.pronto)) {
                     const _tgP = bot._dbsUltimoPayloadTg || {};
                     const _tgMgrNome = document.getElementById('dbs-mgr')?.value || 'QSR';
                     // Monta nome: "DIGIT BARRIER 356 — DIGITOVER B:3 R_50"
@@ -11729,8 +11730,8 @@ function initWebSocket(wssUrl) {
                 // if (bot._lastBalance !== undefined) bot._lastBalance += totalProfit;
                 // updateHeader(bot._lastBalance);
                 bot.ws.send(json({ balance: 1 }));  // confirma saldo real com a Deriv
-                // Bloqueia notif da principal APENAS quando secundária está espelhando ativamente
-                if (!(_sec && _sec.pronto && _sec.espelhandoAtivo)) tgEnviarResultado(wonReal, totalProfit, bot.stake, false, null, _stakeAntDupla);
+                // Enquanto secundária conectada, ela envia — TESTE não envia
+                if (!(_sec && _sec.pronto)) tgEnviarResultado(wonReal, totalProfit, bot.stake, false, null, _stakeAntDupla);
                 // ── Planilha JC: registra histórico ──────────────────────
                 if (bot.mgr && bot.mgr.modo === "💹 Juros Compostos") {
                     jcRegistrarResultado(wonReal ? 'WIN' : 'LOSS', stakePorLado, totalProfit, bot.mgr._jcBanca);
@@ -11796,8 +11797,9 @@ function initWebSocket(wssUrl) {
                 // if (bot._lastBalance !== undefined) bot._lastBalance += profit;
                 // updateHeader(bot._lastBalance);
                 bot.ws.send(json({ balance: 1 }));  // confirma saldo real com a Deriv
-                // Bloqueia notif da principal APENAS quando secundária está espelhando ativamente
-                if (!(_sec && _sec.pronto && _sec.espelhandoAtivo)) {
+                // Enquanto secundária conectada (_sec.pronto), ela envia via _origemSec=true
+                // A TESTE só envia quando opera sem secundária
+                if (!(_sec && _sec.pronto)) {
                     const _estAtual = ESTRATEGIAS[bot.estrategia];
                     if (_estAtual && _estAtual.tipo === 'trend_pro' && bot._tpScore) {
                         // ── Trend Pro: enriquece com score ────────────────────
