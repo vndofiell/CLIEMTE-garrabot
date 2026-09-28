@@ -8600,20 +8600,6 @@ function tgEnviarResultado(win, lucro, prox_stake, _origemSec, _overrides, _entr
     const _modoEspelhoAtivo = (typeof _sec !== 'undefined' && _sec.pronto && _sec.espelhandoAtivo);
     const _lvVirtual        = bot.lv && bot.lv.ativo && !bot.lv.emRecuperacao;
 
-    // ── Modo Espelho ativo: SOMENTE a conta secundária envia Telegram ──
-    // Bloqueia qualquer chamada da conta TESTE (_origemSec=false) enquanto
-    // _sec.espelhandoAtivo=true OU nos 3s após o espelho terminar (contratos
-    // ainda em fechamento podem disparar o handler da TESTE)
-    if (_modoEspelhoAtivo && !_origemSec) {
-        console.warn('[TG] BLOQUEADO: modo espelho ativo — só secundária envia resultados');
-        return;
-    }
-    if (!_origemSec && typeof _sec !== 'undefined' && _sec.pronto && _sec._tsEspelhoFim
-        && (Date.now() - _sec._tsEspelhoFim) < 3000) {
-        console.warn('[TG] BLOQUEADO: espelho encerrado há menos de 3s — aguardando fechar contratos da TESTE');
-        return;
-    }
-
     // ── Diagnóstico: recarrega config TG se token estiver vazio ──────────
     if (!_tgCfg.token || !_tgCfg.chat_id) {
         fetch('/tg-config').then(r => r.json()).then(d => {
@@ -8645,8 +8631,7 @@ function tgEnviarResultado(win, lucro, prox_stake, _origemSec, _overrides, _entr
         return;
     }
 
-    // ── Modo Espelho: usa dados da conta SECUNDÁRIA, ignora a principal ───
-    // _origemSec=true = chamado pelo resultado da secundária → sempre usa dados da _sec
+    // ── Modo Espelho / Secundária: usa dados da _sec ──────────────────────
     let payload;
     if (_modoEspelhoAtivo || _origemSec) {
         const saldoSec = parseFloat(_sec.saldo) || 0;
@@ -11570,6 +11555,9 @@ function initWebSocket(wssUrl) {
             const cid   = data.buy && data.buy.contract_id;
             const reqId = data.echo_req && data.echo_req.req_id;
             if (cid) {
+                // Guarda estado do espelho NO MOMENTO da compra — evita race condition no fechamento
+                if (!bot._cidEspelho) bot._cidEspelho = {};
+                bot._cidEspelho[cid] = !!(typeof _sec !== 'undefined' && _sec.espelhandoAtivo);
                 bot.ws.send(json({ proposal_open_contract: 1, contract_id: cid, subscribe: 1 }));
                 // Modo Dupla: rastreia IDs pendentes e mapeia cid → lado (OVER/UNDER)
                 if (bot._duplaAtiva) {
@@ -11619,7 +11607,7 @@ function initWebSocket(wssUrl) {
                 const _mobNext = document.getElementById('mob-nextstake');
                 if (_mobNext) _mobNext.textContent = '$' + _dbsNextStake.toFixed(2);
                 // Envia resultado para o Telegram com dados corretos do DBS
-                if (!(_sec && _sec.pronto)) {
+                if (!_eraEspelhando) {
                     const _tgP = bot._dbsUltimoPayloadTg || {};
                     const _tgMgrNome = document.getElementById('dbs-mgr')?.value || 'QSR';
                     // Monta nome: "DIGIT BARRIER 356 — DIGITOVER B:3 R_50"
@@ -11637,6 +11625,9 @@ function initWebSocket(wssUrl) {
             const profit = parseFloat(data.proposal_open_contract.profit);
             const won    = profit > 0;
             const cid    = data.proposal_open_contract.contract_id;
+            // Estado do espelho NO MOMENTO da compra (evita race condition)
+            const _eraEspelhando = !!(bot._cidEspelho && bot._cidEspelho[cid]);
+            if (bot._cidEspelho) delete bot._cidEspelho[cid];
 
             // ── Modo Dupla: aguarda os dois contratos fecharem ────────────
             if (bot._duplaAtiva && bot._duplaPendentes && bot._duplaPendentes.has(cid)) {
@@ -11730,8 +11721,8 @@ function initWebSocket(wssUrl) {
                 // if (bot._lastBalance !== undefined) bot._lastBalance += totalProfit;
                 // updateHeader(bot._lastBalance);
                 bot.ws.send(json({ balance: 1 }));  // confirma saldo real com a Deriv
-                // Enquanto secundária conectada, ela envia — TESTE não envia
-                if (!(_sec && _sec.pronto)) tgEnviarResultado(wonReal, totalProfit, bot.stake, false, null, _stakeAntDupla);
+                // Usa estado do espelho capturado na compra (sem race condition)
+                if (!_eraEspelhando) tgEnviarResultado(wonReal, totalProfit, bot.stake, false, null, _stakeAntDupla);
                 // ── Planilha JC: registra histórico ──────────────────────
                 if (bot.mgr && bot.mgr.modo === "💹 Juros Compostos") {
                     jcRegistrarResultado(wonReal ? 'WIN' : 'LOSS', stakePorLado, totalProfit, bot.mgr._jcBanca);
@@ -11797,9 +11788,8 @@ function initWebSocket(wssUrl) {
                 // if (bot._lastBalance !== undefined) bot._lastBalance += profit;
                 // updateHeader(bot._lastBalance);
                 bot.ws.send(json({ balance: 1 }));  // confirma saldo real com a Deriv
-                // Enquanto secundária conectada (_sec.pronto), ela envia via _origemSec=true
-                // A TESTE só envia quando opera sem secundária
-                if (!(_sec && _sec.pronto)) {
+                // Usa estado do espelho capturado na compra (sem race condition)
+                if (!_eraEspelhando) {
                     const _estAtual = ESTRATEGIAS[bot.estrategia];
                     if (_estAtual && _estAtual.tipo === 'trend_pro' && bot._tpScore) {
                         // ── Trend Pro: enriquece com score ────────────────────
