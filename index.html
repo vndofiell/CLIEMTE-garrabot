@@ -8601,9 +8601,16 @@ function tgEnviarResultado(win, lucro, prox_stake, _origemSec, _overrides, _entr
     const _lvVirtual        = bot.lv && bot.lv.ativo && !bot.lv.emRecuperacao;
 
     // ── Modo Espelho ativo: SOMENTE a conta secundária envia Telegram ──
-    // Se vier da conta principal (_origemSec=false) enquanto espelhando → bloqueia
+    // Bloqueia qualquer chamada da conta TESTE (_origemSec=false) enquanto
+    // _sec.espelhandoAtivo=true OU nos 3s após o espelho terminar (contratos
+    // ainda em fechamento podem disparar o handler da TESTE)
     if (_modoEspelhoAtivo && !_origemSec) {
         console.warn('[TG] BLOQUEADO: modo espelho ativo — só secundária envia resultados');
+        return;
+    }
+    if (!_origemSec && typeof _sec !== 'undefined' && _sec.pronto && _sec._tsEspelhoFim
+        && (Date.now() - _sec._tsEspelhoFim) < 3000) {
+        console.warn('[TG] BLOQUEADO: espelho encerrado há menos de 3s — aguardando fechar contratos da TESTE');
         return;
     }
 
@@ -9622,6 +9629,7 @@ function _secVerificarRetorno() {
         const lucroRecuperado = (_sec.profit - base).toFixed(2);
 
         _sec.espelhandoAtivo    = false;
+        _sec._tsEspelhoFim      = Date.now();   // timestamp para bloquear TG da TESTE por 3s
         _sec._profitAoAtivar    = undefined;
         _sec._testeEstavRodando = false;
 
@@ -9684,6 +9692,7 @@ function _secVerificarPlanilhaJC() {
                 if (lucroSecJC >= swReal) {
                     // ── Encerra secundária ──
                     _sec.espelhandoAtivo    = false;
+                    _sec._tsEspelhoFim      = Date.now();
                     _sec._profitAoAtivar    = undefined;
                     _sec._buying            = false;
                     _sec._testeEstavRodando = false;
@@ -9724,6 +9733,7 @@ function _secVerificarPlanilhaJC() {
             // ── META JC ATINGIDA (Stop Win do dia) ───────────────────────
             if (lucroSec >= meta) {
                 _sec.espelhandoAtivo    = false;
+                _sec._tsEspelhoFim      = Date.now();
                 _sec._testeEstavRodando = false;
                 _sec._profitAoAtivar    = undefined;
                 _sec._buying            = false;
@@ -9755,6 +9765,7 @@ function _secVerificarPlanilhaJC() {
             if (lucroSec > base) {
                 const lucroRecuperado = (lucroSec - base).toFixed(2);
                 _sec.espelhandoAtivo    = false;
+                _sec._tsEspelhoFim      = Date.now();
                 _sec._profitAoAtivar    = undefined;
                 _sec._buying            = false;
                 _sec._testeEstavRodando = false;
