@@ -9544,14 +9544,6 @@ async function _secConectar() {
 
             // Libera flag de anti-duplicata (modo autônomo)
             _sec._buying = false;
-            // Libera bot._buying da TESTE e reseta buffer de ticks para forçar nova análise
-            if (typeof bot !== 'undefined') {
-                bot._buying           = false;
-                bot._hmaSecSinal      = null;   // limpa sinal consumido
-                bot._hmaSinalPendente = null;   // descarta sinal anterior — exige nova análise HMA
-                bot._hmaAnalisando    = false;  // garante que análise pode rodar
-                bot._precos           = [];     // reseta buffer — HMA reacumula ticks antes de entrar
-            }
 
             // Pede saldo REAL à Deriv — nunca calcular manualmente (_sec.saldo += p)
             _sec.ws.send(JSON.stringify({ balance: 1 }));
@@ -11308,24 +11300,6 @@ function initWebSocket(wssUrl) {
                         _seqStatusUpdate(`🧠 HMA — operação em andamento, aguardando resultado...`);
                         return;
                     }
-                    // Espelhando: buy() da TESTE é bloqueado — setar _hmaSecSinal e aguardar
-                    // sem executar buy() para evitar loop de análise infinito
-                    if (typeof _sec !== 'undefined' && _sec.espelhandoAtivo) {
-                        const _hmaS = bot._hmaSinalPendente;
-                        bot._hmaSinalPendente = null;
-                        bot._hmaSinalUltimo   = _hmaS;
-                        const _hmaContrMap = { 'OVER':'DIGITOVER','UNDER':'DIGITUNDER','EVEN':'DIGITEVEN','ODD':'DIGITODD','CALL':'CALL','PUT':'PUT' };
-                        const _hmaCt = _hmaContrMap[_hmaS.decisao] || est.hma_contrato || 'DIGITUNDER';
-                        bot._hmaSecSinal = {
-                            contract_type: _hmaCt,
-                            barrier:       ['DIGITOVER','DIGITUNDER'].includes(_hmaCt) ? '5' : undefined,
-                            duration:      parseInt(est.duracao) || 1,
-                            duration_unit: est.duracao_unit || 't',
-                        };
-                        bot._buying = true;   // bloqueia nova análise até a secundária confirmar
-                        _seqStatusUpdate(`🧠 HMA ${_hmaS.decisao} | conf <b>${_hmaS.confianca}%</b> | ⏳ secundária entrando...`);
-                        return;
-                    }
                     const _hmaS = bot._hmaSinalPendente;
                     bot._hmaSinalPendente = null;
                     bot._hmaSinalUltimo   = _hmaS;   // guarda para aprendizado após resultado
@@ -11400,19 +11374,11 @@ function initWebSocket(wssUrl) {
                 bot._hmaAnalisando   = true;
                 bot._hmaAnalisandoTs = Date.now();
 
-                // Quando espelhando, informa que nova análise foi iniciada (evita confusão no log)
-                if (typeof _sec !== 'undefined' && _sec.espelhandoAtivo) {
-                    _seqStatusUpdate(`🧠 HMA 🔍 analisando mercado antes de entrar na secundária...`);
-                }
-
                 const _hmaConfiMin    = est.hma_confianca  || 68;
                 const _hmaContrato    = est.hma_contrato   || 'AUTO';
                 const _hmaJanelas     = est.hma_janelas    || null;
                 const _hmaAtivo       = est.ativo           || 'R_100';
-                // Quando espelhando, usa saldo da secundária; senão usa saldo da conta principal
-                const _hmaBanca       = (typeof _sec !== 'undefined' && _sec.espelhandoAtivo && _sec.saldo)
-                    ? parseFloat(_sec.saldo)
-                    : (parseFloat(document.getElementById('hd-balance')?.textContent?.replace(/[^0-9.]/g,'')) || bot.stake * 100);
+                const _hmaBanca       = parseFloat(document.getElementById('hd-balance')?.textContent?.replace(/[^0-9.]/g,'')) || bot.stake * 100;
                 const _hmaLossesTroca = typeof est.hma_losses_troca === 'number' ? est.hma_losses_troca : 3;
 
                 // ── TROCA POR LOSSES: N losses seguidos → varre outros mercados ─

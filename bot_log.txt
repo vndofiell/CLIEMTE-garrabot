@@ -1,0 +1,28 @@
+[CONFIG] URL base: https://250e-2804-c4c-2000-364a-8829-2696-17fd-433.ngrok-free.app
+[Quotex] ✅ SSID Hunter carregado (captura automática ativa).
+[Quotex] ✅ Módulo quotex_connector carregado com sucesso.
+[IA Avançada] Módulos não carregados: No module named 'ia_laboratorio'
+✅ DIGIT MATRIX SNIPER PRO registrado.
+🌐 Interface: /digit-matrix
+📡 API ticks: /api/digit-matrix/ticks
+🎯 API sinal: /api/digit-matrix/sinal
+🚀 Iniciando Interface Cyber Cloud...
+ * Serving Flask app 'main'
+ * Debug mode: off
+[KeepAlive] WA ping falhou: HTTPConnectionPool(host='localhost', port=3000): Max retries exceeded with url: /ping (Caused by NewConnectionError("HTTPConnection(host='localhost', port=3000): Failed to establish a new connection: [WinError 10061] Nenhuma conexão pôde ser feita porque a máquina de destino as recusou ativamente"))
+[KeepAlive] Self ping OK (https://250e-2804-c4c-2000-364a-8829-2696-17fd-433.ngrok-free.app).
+[Adaptive] ✅ Config atualizada | Modo=DESLIGADO | StakeMin=0.35 | StakeMax=10.0
+[*] Sistema configurado para modo: NORMAL
+[Token] Token limpo pelo front-end (nova conexão iniciada).
+[KeepAlive] WA ping falhou: HTTPConnectionPool(host='localhost', port=3000): Max retries exceeded with url: /ping (Caused by NewConnectionError("HTTPConnection(host='localhost', port=3000): Failed to establish a new connection: [WinError 10061] Nenhuma conexão pôde ser feita porque a máquina de destino as recusou ativamente"))
+[KeepAlive] Self ping OK (https://250e-2804-c4c-2000-364a-8829-2696-17fd-433.ngrok-free.app).
+[KeepAlive] WA ping falhou: HTTPConnectionPool(host='localhost', port=3000): Max retries exceeded with url: /ping (Caused by NewConnectionError("HTTPConnection(host='localhost', port=3000): Failed to establish a new connection: [WinError 10061] Nenhuma conexão pôde ser feita porque a máquina de destino as recusou ativamente"))
+[KeepAlive] Self ping OK (https://250e-2804-c4c-2000-364a-8829-2696-17fd-433.ngrok-free.app).
+[KeepAlive] WA ping falhou: HTTPConnectionPool(host='localhost', port=3000): Max retries exceeded with url: /ping (Caused by NewConnectionError("HTTPConnection(host='localhost', port=3000): Failed to establish a new connection: [WinError 10061] Nenhuma conexão pôde ser feita porque a máquina de destino as recusou ativamente"))
+[KeepAlive] Self ping OK (https://250e-2804-c4c-2000-364a-8829-2696-17fd-433.ngrok-free.app).
+[KeepAlive] WA ping falhou: HTTPConnectionPool(host='localhost', port=3000): Max retries exceeded with url: /ping (Caused by NewConnectionError("HTTPConnection(host='localhost', port=3000): Failed to establish a new connection: [WinError 10061] Nenhuma conexão pôde ser feita porque a máquina de destino as recusou ativamente"))
+[KeepAlive] Self ping OK (https://250e-2804-c4c-2000-364a-8829-2696-17fd-433.ngrok-free.app).
+[KeepAlive] WA ping falhou: HTTPConnectionPool(host='localhost', port=3000): Max retries exceeded with url: /ping (Caused by NewConnectionError("HTTPConnection(host='localhost', port=3000): Failed to establish a new connection: [WinError 10061] Nenhuma conexão pôde ser feita porque a máquina de destino as recusou ativamente"))
+[KeepAlive] Self ping OK (https://250e-2804-c4c-2000-364a-8829-2696-17fd-433.ngrok-free.app).
+[KeepAlive] WA ping falhou: HTTPConnectionPool(host='localhost', port=3000): Max retries exceeded with url: /ping (Caused by NewConnectionError("HTTPConnection(host='localhost', port=3000): Failed to establish a new connection: [WinError 10061] Nenhuma conexão pôde ser feita porque a máquina de destino as recusou ativamente"))
+[KeepAlive] Self ping OK (https://250e-2804-c4c-2000-364a-8829-2696-17fd-433.ngrok-free.app).
