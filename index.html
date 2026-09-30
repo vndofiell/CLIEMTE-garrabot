@@ -9544,8 +9544,13 @@ async function _secConectar() {
 
             // Libera flag de anti-duplicata (modo autônomo)
             _sec._buying = false;
-            // Libera bot._buying da TESTE (bloqueado durante espelho HMA para evitar loop)
-            if (typeof bot !== 'undefined') bot._buying = false;
+            // Libera bot._buying da TESTE e reseta buffer de ticks para forçar nova análise
+            if (typeof bot !== 'undefined') {
+                bot._buying        = false;
+                bot._hmaSecSinal   = null;   // limpa sinal consumido
+                bot._hmaAnalisando = false;  // garante que análise pode rodar
+                bot._precos        = [];     // reseta buffer — HMA reacumula ticks antes de entrar
+            }
 
             // Pede saldo REAL à Deriv — nunca calcular manualmente (_sec.saldo += p)
             _sec.ws.send(JSON.stringify({ balance: 1 }));
