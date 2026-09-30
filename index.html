@@ -9546,10 +9546,11 @@ async function _secConectar() {
             _sec._buying = false;
             // Libera bot._buying da TESTE e reseta buffer de ticks para forçar nova análise
             if (typeof bot !== 'undefined') {
-                bot._buying        = false;
-                bot._hmaSecSinal   = null;   // limpa sinal consumido
-                bot._hmaAnalisando = false;  // garante que análise pode rodar
-                bot._precos        = [];     // reseta buffer — HMA reacumula ticks antes de entrar
+                bot._buying           = false;
+                bot._hmaSecSinal      = null;   // limpa sinal consumido
+                bot._hmaSinalPendente = null;   // descarta sinal anterior — exige nova análise HMA
+                bot._hmaAnalisando    = false;  // garante que análise pode rodar
+                bot._precos           = [];     // reseta buffer — HMA reacumula ticks antes de entrar
             }
 
             // Pede saldo REAL à Deriv — nunca calcular manualmente (_sec.saldo += p)
@@ -11399,11 +11400,19 @@ function initWebSocket(wssUrl) {
                 bot._hmaAnalisando   = true;
                 bot._hmaAnalisandoTs = Date.now();
 
+                // Quando espelhando, informa que nova análise foi iniciada (evita confusão no log)
+                if (typeof _sec !== 'undefined' && _sec.espelhandoAtivo) {
+                    _seqStatusUpdate(`🧠 HMA 🔍 analisando mercado antes de entrar na secundária...`);
+                }
+
                 const _hmaConfiMin    = est.hma_confianca  || 68;
                 const _hmaContrato    = est.hma_contrato   || 'AUTO';
                 const _hmaJanelas     = est.hma_janelas    || null;
                 const _hmaAtivo       = est.ativo           || 'R_100';
-                const _hmaBanca       = parseFloat(document.getElementById('hd-balance')?.textContent?.replace(/[^0-9.]/g,'')) || bot.stake * 100;
+                // Quando espelhando, usa saldo da secundária; senão usa saldo da conta principal
+                const _hmaBanca       = (typeof _sec !== 'undefined' && _sec.espelhandoAtivo && _sec.saldo)
+                    ? parseFloat(_sec.saldo)
+                    : (parseFloat(document.getElementById('hd-balance')?.textContent?.replace(/[^0-9.]/g,'')) || bot.stake * 100);
                 const _hmaLossesTroca = typeof est.hma_losses_troca === 'number' ? est.hma_losses_troca : 3;
 
                 // ── TROCA POR LOSSES: N losses seguidos → varre outros mercados ─
