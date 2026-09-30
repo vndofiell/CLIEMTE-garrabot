@@ -9511,9 +9511,6 @@ async function _secConectar() {
             const p   = parseFloat(d.proposal_open_contract.profit);
             const won = p > 0;
             const sinal = won ? `+$${p.toFixed(2)}` : `-$${Math.abs(p).toFixed(2)}`;
-            // Nota: d.proposal_open_contract.account_id é o ID numérico interno da Deriv,
-            // diferente do loginid textual (ex: DOT92505816) — não comparar diretamente.
-            print(`💳 SECUNDÁRIA ${won ? '✅ WIN' : '🔁 LOSS'} | ${sinal}`, won ? 'log-win' : 'log-loss');
 
             // Atualiza placar próprio da secundária
             if (won) _sec.wins++; else _sec.losses++;
@@ -9532,6 +9529,15 @@ async function _secConectar() {
             // (stake máxima já foi registrada no momento da proposta — d.echo_req.amount)
             const _secStakeAntes = _sec.mgr ? _sec.mgr.currentStake : (_mcConfig.stake || 0);
             if (_sec.mgr) _sec.mgr.updateResult(won, p);
+
+            // Log com próxima entrada — igual ao padrão da conta TESTE
+            const _secProxStake  = _sec.mgr ? _sec.mgr.getStake() : (_mcConfig.stake || 0.35);
+            const _secMgrStatus  = _sec.mgr ? _sec.mgr.status() : (_mcConfig.gerenciamento || 'Flat');
+            if (won) {
+                print(`💳 SECUNDÁRIA ✅ WIN | ${sinal} | Próxima entrada: $${_secProxStake.toFixed(2)} | ${_secMgrStatus}`, 'log-win');
+            } else {
+                print(`💳 SECUNDÁRIA 🔁 LOSS | ${sinal} | Próxima entrada: $${_secProxStake.toFixed(2)} | ${_secMgrStatus}`, 'log-loss');
+            }
 
             // ── Notificação Telegram/WhatsApp com dados da conta SECUNDÁRIA ──
             tgEnviarResultado(won, p, (_sec.mgr ? _sec.mgr.getStake() : _mcConfig.stake || 0), true, null, _secStakeAntes);
