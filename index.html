@@ -11506,6 +11506,18 @@ function initWebSocket(wssUrl) {
                             .then(_multiRes => {
                                 if (_multiRes.aprovado && _multiRes.melhor) {
                                     const _m = _multiRes.melhor;
+                                    // Troca o ativo permanentemente para o mercado aprovado
+                                    if (_m.ativo && _m.ativo !== est.ativo) {
+                                        est.ativo = _m.ativo;
+                                        const _atR = _resolverAtivo(_m.ativo);
+                                        if (bot.ws && bot.ws.readyState === WebSocket.OPEN && _atR !== bot._tickAtivo) {
+                                            bot.ws.send(json({ forget_all: 'ticks' }));
+                                            bot._tickAtivo = _atR;
+                                            bot._precos    = [];
+                                            bot.ws.send(json({ ticks: _atR, subscribe: 1 }));
+                                        }
+                                        print(`🔁 HMA AUTO | trocou para <b>${_m.ativo}</b> (NO TRADE em ${_hmaAtivo}) | ${_m.decisao} conf <b>${_m.confianca}%</b>`, 'log-info');
+                                    }
                                     bot._hmaSinalPendente = {
                                         decisao:        _m.decisao,
                                         confianca:      _m.confianca,
