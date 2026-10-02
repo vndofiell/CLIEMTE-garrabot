@@ -11288,8 +11288,10 @@ function initWebSocket(wssUrl) {
                 //   VETO    — Risk Gate pode recusar mesmo com confiança alta
                 //   NO TRADE — Motor não entra em conflito ou instabilidade
                 // ══════════════════════════════════════════════════════════════
-                if (bot._hmaAnalisando   === undefined) bot._hmaAnalisando   = false;
+                if (bot._hmaAnalisando    === undefined) bot._hmaAnalisando    = false;
                 if (bot._hmaSinalPendente === undefined) bot._hmaSinalPendente = null;
+                if (bot._hmaOpCiclo       === undefined) bot._hmaOpCiclo       = 0; // contador de operações no ativo atual
+                if (bot._hmaUltimoScan    === undefined) bot._hmaUltimoScan    = 0; // timestamp do último scan multi
 
                 // _precos é acumulado globalmente acima (antes do guard bot._buying)
 
@@ -11315,6 +11317,7 @@ function initWebSocket(wssUrl) {
                             bot.ws.send(json({ ticks: _atResolv, subscribe: 1 }));
                         }
                         est.ativo = _hmaS.ativo;
+                        bot._hmaOpCiclo = 0; // reinicia contador ao trocar de ativo
                     }
                     // Mapeia decisão HMA → contrato Deriv
                     const _hmaContrMap = {
@@ -11335,6 +11338,8 @@ function initWebSocket(wssUrl) {
                     est.contract = _hmaCt;
                     est.barrier  = ['DIGITOVER','DIGITUNDER'].includes(_hmaCt) ? 5 : null;
                     bot._buying  = true;
+                    // Incrementa contador de operações no ativo atual (usado pelo scan periódico)
+                    bot._hmaOpCiclo = (bot._hmaOpCiclo || 0) + 1;
                     print(
                         `🧠 HMA ENTRADA | ${_hmaS.decisao} | conf <b>${_hmaS.confianca}%</b>` +
                         ` | regime: <b>${_hmaS.regime}</b>` +
@@ -11381,9 +11386,79 @@ function initWebSocket(wssUrl) {
                 const _hmaBanca       = parseFloat(document.getElementById('hd-balance')?.textContent?.replace(/[^0-9.]/g,'')) || bot.stake * 100;
                 const _hmaLossesTroca = typeof est.hma_losses_troca === 'number' ? est.hma_losses_troca : 3;
 
-                // ── TROCA POR LOSSES: N losses seguidos → varre outros mercados ─
+                // ── SCAN PERIÓDICO: a cada 10 operações no mesmo ativo, varre todos os mercados ─
+                // Isso garante a troca mesmo quando o ativo atual sempre aprova (nunca cai em NO TRADE)
                 const _hmaAutoMkDisp = est.hma_auto_ativo && Array.isArray(est.hma_mercados) && est.hma_mercados.length > 1;
                 const _hmaDeveRotar  = _hmaAutoMkDisp && _hmaLossesTroca > 0 && bot._seqLossAtual >= _hmaLossesTroca;
+                const _HMA_CICLOS_SCAN = 10; // varre outros mercados a cada 10 operações no mesmo ativo
+                const _hmaDeveScanCiclo = (
+                    _hmaAutoMkDisp &&
+                    bot._hmaOpCiclo > 0 &&
+                    bot._hmaOpCiclo % _HMA_CICLOS_SCAN === 0 &&
+                    (Date.now() - (bot._hmaUltimoScan || 0)) > 30000 // mínimo 30s entre scans
+                );
+
+                if (_hmaDeveScanCiclo && !_hmaDeveRotar) {
+                    const _outrosMkC = est.hma_mercados.filter(m => m !== _hmaAtivo);
+                    if (_outrosMkC.length > 0) {
+                        bot._hmaUltimoScan = Date.now();
+                        _seqStatusUpdate(`🔎 HMA SCAN CICLO #${bot._hmaOpCiclo} | comparando ${_outrosMkC.length} outros mercados vs ${_hmaAtivo}...`);
+                        fetch('/garra-hma/avaliar-multi', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                ativos:           _outrosMkC,
+                                contrato:         _hmaContrato,
+                                janelas:          _hmaJanelas,
+                                confianca_minima: _hmaConfiMin,
+                                banca:            _hmaBanca,
+                                stake:            bot.stake || 1,
+                                payout:           0.85,
+                            }),
+                        })
+                        .then(r => r.json())
+                        .then(_scanRes => {
+                            bot._hmaAnalisando   = false;
+                            bot._hmaAnalisandoTs = null;
+                            if (_scanRes.aprovado && _scanRes.melhor) {
+                                const _ms = _scanRes.melhor;
+                                // Só troca se o outro mercado tem confiança maior que o atual
+                                if (_ms.confianca > (_hmaConfiMin + 5)) {
+                                    if (_ms.ativo && _ms.ativo !== est.ativo) {
+                                        est.ativo = _ms.ativo;
+                                        bot._hmaOpCiclo = 0; // reinicia contador no novo ativo
+                                        const _atR2 = _resolverAtivo(_ms.ativo);
+                                        if (bot.ws && bot.ws.readyState === WebSocket.OPEN && _atR2 !== bot._tickAtivo) {
+                                            bot.ws.send(json({ forget_all: 'ticks' }));
+                                            bot._tickAtivo = _atR2;
+                                            bot._precos    = [];
+                                            bot.ws.send(json({ ticks: _atR2, subscribe: 1 }));
+                                        }
+                                        print(`🔎 HMA SCAN | mercado melhor encontrado: <b>${_ms.ativo}</b> (conf ${_ms.confianca}% > ${_hmaAtivo}) | trocando...`, 'log-info');
+                                    }
+                                    bot._hmaSinalPendente = {
+                                        decisao:        _ms.decisao,
+                                        confianca:      _ms.confianca,
+                                        regime:         _ms.regime,
+                                        janelas_usadas: _ms.janelas_usadas || [],
+                                        ativo:          _ms.ativo,
+                                    };
+                                } else {
+                                    _seqStatusUpdate(`🔎 HMA SCAN | ${_hmaAtivo} continua sendo o melhor mercado (conf externo: ${_ms.confianca}%)`);
+                                }
+                            } else {
+                                _seqStatusUpdate(`🔎 HMA SCAN | nenhum mercado externo aprovado — continua em ${_hmaAtivo}`);
+                            }
+                        })
+                        .catch(() => {
+                            bot._hmaAnalisando   = false;
+                            bot._hmaAnalisandoTs = null;
+                        });
+                        return;
+                    }
+                }
+
+                // ── TROCA POR LOSSES: N losses seguidos → varre outros mercados ─
 
                 if (_hmaDeveRotar) {
                     const _outrosMk = est.hma_mercados.filter(m => m !== _hmaAtivo);
