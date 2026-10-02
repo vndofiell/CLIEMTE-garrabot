@@ -4835,9 +4835,17 @@ class GerenciadorUnificado {
                 this._nivelGale = 0;
                 this._calcLR(); break;
 
-            case "🛡️ Recovery Conservador":
-                this._dividaLR = Math.max(0, this._dividaLR - this.currentStake * 0.95);
-                this.currentStake = base; break;
+            case "🛡️ Recovery Conservador": {
+                this._dividaLR = Math.max(0, parseFloat((this._dividaLR - this.currentStake * 0.95).toFixed(2)));
+                if (this._dividaLR < 0.05) this._dividaLR = 0;
+                // Se ainda há dívida, mantém stake de recuperação; se zerou, volta à base
+                if (this._dividaLR > 0) {
+                    const pct = parseFloat((this.cfg || {}).rec_cons_pct || 30) / 100;
+                    this.currentStake = Math.max(base, parseFloat((base + this._dividaLR * pct).toFixed(2)));
+                } else {
+                    this.currentStake = base;
+                }
+                break; }
 
             case "📐 QSR":
                 this._dividaLR = Math.max(0, this._dividaLR - this.currentStake * 0.95);
