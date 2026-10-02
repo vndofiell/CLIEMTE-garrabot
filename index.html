@@ -11402,6 +11402,8 @@ function initWebSocket(wssUrl) {
                     const _outrosMkC = est.hma_mercados.filter(m => m !== _hmaAtivo);
                     if (_outrosMkC.length > 0) {
                         bot._hmaUltimoScan = Date.now();
+                        // Avança o contador AGORA para não travar em loop caso o scan demore
+                        bot._hmaOpCiclo = (bot._hmaOpCiclo || 0) + 1;
                         _seqStatusUpdate(`🔎 HMA SCAN CICLO #${bot._hmaOpCiclo} | comparando ${_outrosMkC.length} outros mercados vs ${_hmaAtivo}...`);
                         fetch('/garra-hma/avaliar-multi', {
                             method: 'POST',
@@ -11418,11 +11420,12 @@ function initWebSocket(wssUrl) {
                         })
                         .then(r => r.json())
                         .then(_scanRes => {
+                            // Libera o motor SEMPRE — independente do resultado
                             bot._hmaAnalisando   = false;
                             bot._hmaAnalisandoTs = null;
                             if (_scanRes.aprovado && _scanRes.melhor) {
                                 const _ms = _scanRes.melhor;
-                                // Só troca se o outro mercado tem confiança maior que o atual
+                                // Só troca se o outro mercado tem confiança significativamente maior
                                 if (_ms.confianca > (_hmaConfiMin + 5)) {
                                     if (_ms.ativo && _ms.ativo !== est.ativo) {
                                         est.ativo = _ms.ativo;
@@ -11434,7 +11437,7 @@ function initWebSocket(wssUrl) {
                                             bot._precos    = [];
                                             bot.ws.send(json({ ticks: _atR2, subscribe: 1 }));
                                         }
-                                        print(`🔎 HMA SCAN | mercado melhor encontrado: <b>${_ms.ativo}</b> (conf ${_ms.confianca}% > ${_hmaAtivo}) | trocando...`, 'log-info');
+                                        print(`🔎 HMA SCAN | trocou para <b>${_ms.ativo}</b> (conf ${_ms.confianca}%) | ${_ms.decisao}`, 'log-info');
                                     }
                                     bot._hmaSinalPendente = {
                                         decisao:        _ms.decisao,
@@ -11444,17 +11447,19 @@ function initWebSocket(wssUrl) {
                                         ativo:          _ms.ativo,
                                     };
                                 } else {
-                                    _seqStatusUpdate(`🔎 HMA SCAN | ${_hmaAtivo} continua sendo o melhor mercado (conf externo: ${_ms.confianca}%)`);
+                                    _seqStatusUpdate(`🔎 HMA SCAN | ${_hmaAtivo} continua melhor — retomando operação normal`);
                                 }
                             } else {
-                                _seqStatusUpdate(`🔎 HMA SCAN | nenhum mercado externo aprovado — continua em ${_hmaAtivo}`);
+                                _seqStatusUpdate(`🔎 HMA SCAN | sem mercado externo aprovado — continua em ${_hmaAtivo}`);
                             }
                         })
                         .catch(() => {
+                            // Libera o motor mesmo em erro para não travar o bot
                             bot._hmaAnalisando   = false;
                             bot._hmaAnalisandoTs = null;
                         });
-                        return;
+                        // NÃO faz return — deixa o bot continuar avaliando o ativo atual normalmente
+                        // O scan é paralelo: resultado chega no .then() e define sinal pendente se melhor
                     }
                 }
 
