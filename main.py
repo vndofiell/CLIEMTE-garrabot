@@ -2658,6 +2658,13 @@ def rota_quotex_notificar_resultado():
     profit_total = dados.get("profit_total", 0.0)
     prox_stake   = dados.get("prox_stake")
 
+    # 0. Encerra o trade ativo (resultado chegou — limpa o estado do cronômetro)
+    try:
+        with _TRADE_LOCK:
+            _TRADE_ATIVO["ativo"] = False
+    except Exception:
+        pass
+
     # 1. Atualiza saldo interno
     if saldo is not None and _QUOTEX_DISPONIVEL:
         try:
@@ -2723,6 +2730,136 @@ def rota_quotex_notificar_resultado():
         print(f"[Quotex→TG] erro ao enviar Telegram: {e}")
 
     return jsonify({"ok": True})
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TRADE STATUS EM TEMPO REAL — Cronômetro + Status (Ganhando/Perdendo)
+# ═══════════════════════════════════════════════════════════════════════════════
+_TRADE_ATIVO: dict = {
+    "ativo":        False,
+    "ts_inicio":    0,      # timestamp Unix em segundos (float)
+    "duracao":      0,      # duração total em segundos
+    "direcao":      "",     # "CALL" | "PUT"
+    "ativo_nome":   "",     # ex: "EURUSD_otc"
+    "valor":        0.0,    # stake
+    "preco_entrada": 0.0,   # preço no momento da entrada
+    "preco_atual":  0.0,    # último preço observado (atualizado pelo Tampermonkey)
+    "status_lucro": "neutro",  # "ganhando" | "perdendo" | "neutro"
+    "estrategia":   "",
+}
+_TRADE_LOCK = threading.Lock()
+
+
+@app.route('/quotex/notificar-entrada', methods=['POST'])
+def rota_quotex_notificar_entrada():
+    """
+    Chamado pelo Tampermonkey quando uma nova operação é aberta na Quotex.
+
+    Payload JSON esperado:
+      {
+        "ativo":         "EURUSD_otc",
+        "direcao":       "call" | "put",
+        "valor":         1.00,
+        "duracao":       60,          # duração em segundos
+        "preco_entrada": 1.23456,     # preço no momento da entrada (opcional)
+        "estrategia":    "Garra M1"   # opcional
+      }
+    """
+    dados = request.get_json(silent=True) or {}
+    ativo_nome    = dados.get("ativo", "")
+    direcao       = (dados.get("direcao") or "").upper()
+    valor         = float(dados.get("valor") or 0)
+    duracao       = int(dados.get("duracao") or 60)
+    preco_entrada = float(dados.get("preco_entrada") or 0)
+    estrategia    = dados.get("estrategia", "")
+
+    with _TRADE_LOCK:
+        _TRADE_ATIVO["ativo"]         = True
+        _TRADE_ATIVO["ts_inicio"]     = time.time()
+        _TRADE_ATIVO["duracao"]       = duracao
+        _TRADE_ATIVO["direcao"]       = direcao
+        _TRADE_ATIVO["ativo_nome"]    = ativo_nome
+        _TRADE_ATIVO["valor"]         = valor
+        _TRADE_ATIVO["preco_entrada"] = preco_entrada
+        _TRADE_ATIVO["preco_atual"]   = preco_entrada
+        _TRADE_ATIVO["status_lucro"]  = "neutro"
+        _TRADE_ATIVO["estrategia"]    = estrategia
+
+    print(f"[Trade] 🟡 Entrada aberta | {direcao} {ativo_nome} ${valor:.2f} duração={duracao}s")
+    return jsonify({"ok": True})
+
+
+@app.route('/quotex/atualizar-preco', methods=['POST'])
+def rota_quotex_atualizar_preco():
+    """
+    Atualiza o preço atual de um trade em andamento.
+    Chamado pelo Tampermonkey a cada tick para manter o status_lucro atualizado.
+
+    Payload JSON:
+      { "preco": 1.23456 }
+    """
+    dados = request.get_json(silent=True) or {}
+    preco = float(dados.get("preco") or 0)
+    if preco <= 0:
+        return jsonify({"ok": False, "erro": "preco inválido"}), 400
+
+    with _TRADE_LOCK:
+        if not _TRADE_ATIVO["ativo"]:
+            return jsonify({"ok": False, "erro": "sem trade ativo"})
+        _TRADE_ATIVO["preco_atual"] = preco
+        pe = _TRADE_ATIVO["preco_entrada"]
+        direcao = _TRADE_ATIVO["direcao"]
+        if pe > 0:
+            if direcao == "CALL":
+                _TRADE_ATIVO["status_lucro"] = "ganhando" if preco > pe else ("perdendo" if preco < pe else "neutro")
+            elif direcao == "PUT":
+                _TRADE_ATIVO["status_lucro"] = "ganhando" if preco < pe else ("perdendo" if preco > pe else "neutro")
+
+    return jsonify({"ok": True})
+
+
+@app.route('/quotex/trade-status', methods=['GET'])
+def rota_quotex_trade_status():
+    """
+    Retorna o estado atual do trade em curso para o frontend atualizar o cronômetro
+    e o ícone de status em tempo real.
+
+    Resposta:
+      {
+        "ativo":         true | false,
+        "segundos_rest": 47,           # segundos restantes (0 se encerrado)
+        "duracao":       60,
+        "direcao":       "CALL",
+        "ativo_nome":    "EURUSD_otc",
+        "valor":         1.00,
+        "status_lucro":  "ganhando" | "perdendo" | "neutro",
+        "estrategia":    "Garra M1"
+      }
+    """
+    with _TRADE_LOCK:
+        estado = dict(_TRADE_ATIVO)
+
+    if not estado["ativo"]:
+        return jsonify({"ativo": False, "segundos_rest": 0})
+
+    decorridos = time.time() - estado["ts_inicio"]
+    restam     = max(0, estado["duracao"] - decorridos)
+
+    # Encerra automaticamente se o tempo esgotou
+    if restam == 0:
+        with _TRADE_LOCK:
+            _TRADE_ATIVO["ativo"] = False
+
+    return jsonify({
+        "ativo":         estado["ativo"] and restam > 0,
+        "segundos_rest": int(restam),
+        "duracao":       estado["duracao"],
+        "direcao":       estado["direcao"],
+        "ativo_nome":    estado["ativo_nome"],
+        "valor":         estado["valor"],
+        "status_lucro":  estado["status_lucro"],
+        "estrategia":    estado["estrategia"],
+    })
 
 
 # ── Rota: servir o script de sincronização para o Tampermonkey ───────────────

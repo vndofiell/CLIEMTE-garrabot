@@ -343,6 +343,67 @@
     let _modo         = 'demo';        // 'demo' | 'real'; detectado automaticamente
 
     // ════════════════════════════════════════════
+    // ESTADO INTERNO — TRADE EM CURSO
+    // ════════════════════════════════════════════
+    let _tradeAtivo       = false;     // true enquanto há uma operação em andamento
+    let _tradeTs          = 0;         // timestamp de abertura (ms)
+    let _tradeDuracao     = 0;         // duração em segundos
+    let _tradeDirecao     = '';        // 'call' | 'put'
+    let _tradeAtivo_nome  = '';        // ativo (ex: EURUSD_otc)
+    let _tradeValor       = 0;         // stake usada
+    let _tradePrecoInicio = 0;         // preço no momento da entrada
+    let _tickPollId       = null;      // intervalo para enviar preço a cada tick
+
+    // Seletores do DOM para detectar operação em curso na Quotex
+    const SELETORES_TRADE_ATIVO = [
+        // Container do temporizador que aparece enquanto a op está aberta
+        '.deals-timer',
+        '.deal-timer',
+        '.trade-timer',
+        '.trading-timer',
+        '[class*="deal-timer"]',
+        '[class*="deals-timer"]',
+        '[class*="trade-timer"]',
+        '[class*="trading-timer"]',
+        // Barra de progresso do trade
+        '.deal-progress',
+        '[class*="deal-progress"]',
+        '[class*="dealProgress"]',
+        // Painel lateral de "trade aberto"
+        '.open-deal',
+        '.open-trade',
+        '[class*="open-deal"]',
+        '[class*="open-trade"]',
+        '[class*="openDeal"]',
+        '[class*="openTrade"]',
+        // Botão de fechar trade antecipadamente (indica que um trade está aberto)
+        '[class*="close-deal"]',
+        '[class*="deal-close"]',
+        '[class*="closeDeal"]',
+        '.deal-close-btn',
+    ];
+
+    // Seletores para detectar o preço atual no DOM da Quotex
+    const SELETORES_PRECO_ATUAL = [
+        // Preço de cotação ao vivo
+        '.chart-price',
+        '.current-price',
+        '.price-value',
+        '[class*="current-price"]',
+        '[class*="chart-price"]',
+        '[class*="price-value"]',
+        '[class*="asset-price"]',
+        '[class*="quote-value"]',
+        '.quote-value',
+        // Preço no topo do gráfico
+        '.header-price',
+        '[class*="header-price"]',
+        // Valor no candlestick
+        '.candle-close',
+        '[class*="candle-price"]',
+    ];
+
+    // ════════════════════════════════════════════
     // UTILITÁRIOS DE PARSING
     // ════════════════════════════════════════════
 
@@ -681,6 +742,11 @@
 
         console.log(`[GarraBot] 📊 Resultado detectado: ${win ? '✅ WIN' : '❌ LOSS'} | Lucro: ${lucro >= 0 ? '+' : ''}$${lucro.toFixed(2)} | Saldo: $${saldoAtual !== null ? saldoAtual.toFixed(2) : '?'}`);
 
+        // Encerra o estado de trade ativo assim que o resultado aparece no DOM
+        _tradeAtivo    = false;
+        _ultimoTradeEl = null;
+        _pararTickPoll();
+
         _enviarResultado(payload);
     }
 
@@ -697,6 +763,114 @@
                 console.warn('[GarraBot] ⚠️ Servidor rejeitou resultado:', resp);
             }
         });
+    }
+
+    // ════════════════════════════════════════════
+    // NOTIFICAÇÃO DE ENTRADA + ATUALIZAÇÃO DE PREÇO
+    // ════════════════════════════════════════════
+
+    /** Lê o preço atual do DOM da Quotex */
+    function _lerPrecoAtual() {
+        for (const sel of SELETORES_PRECO_ATUAL) {
+            try {
+                const el = document.querySelector(sel);
+                if (el) {
+                    const val = _parseValorMonetario(el.textContent.trim());
+                    if (val && val > 0) return val;
+                }
+            } catch (_) {}
+        }
+        return 0;
+    }
+
+    /** Inicia o envio periódico do preço (a cada 1s) enquanto o trade está aberto */
+    function _iniciarTickPoll() {
+        if (_tickPollId) return;
+        _tickPollId = setInterval(() => {
+            if (!_tradeAtivo) { _pararTickPoll(); return; }
+            const preco = _lerPrecoAtual();
+            if (preco > 0) {
+                _postComFallback('/quotex/atualizar-preco', JSON.stringify({ preco }));
+            }
+        }, 1000);
+    }
+
+    function _pararTickPoll() {
+        if (_tickPollId) { clearInterval(_tickPollId); _tickPollId = null; }
+    }
+
+    /** Notifica o servidor que uma operação foi aberta */
+    function _notificarEntrada(direcao, valor, duracao, precoEntrada, ativoNome) {
+        _tradeAtivo      = true;
+        _tradeTs         = Date.now();
+        _tradeDuracao    = duracao || 60;
+        _tradeDirecao    = direcao || 'call';
+        _tradeAtivo_nome = ativoNome || '';
+        _tradeValor      = valor    || _ultimaStake;
+        _tradePrecoInicio = precoEntrada || _lerPrecoAtual();
+
+        const payload = JSON.stringify({
+            ativo:         _tradeAtivo_nome,
+            direcao:       _tradeDirecao,
+            valor:         _tradeValor,
+            duracao:       _tradeDuracao,
+            preco_entrada: _tradePrecoInicio,
+            estrategia:    _estrategia,
+        });
+
+        console.log(`[GarraBot] 🟡 Entrada detectada: ${_tradeDirecao.toUpperCase()} ${_tradeAtivo_nome} $${_tradeValor} ${_tradeDuracao}s`);
+        _postComFallback('/quotex/notificar-entrada', payload);
+        _iniciarTickPoll();
+
+        // Para o tick poll quando a duração expirar (segurança extra)
+        setTimeout(() => {
+            _tradeAtivo = false;
+            _pararTickPoll();
+        }, (_tradeDuracao + 5) * 1000);
+    }
+
+    /**
+     * Detecta automaticamente quando um trade é aberto observando mudanças no DOM.
+     * Funciona com entradas manuais E automáticas (bot + Tampermonkey).
+     */
+    let _ultimoTradeEl  = null;
+    let _tradeDebounce  = null;
+
+    function _verificarTradeAberto() {
+        // Se já registramos como ativo aguardamos o resultado
+        if (_tradeAtivo) return;
+
+        for (const sel of SELETORES_TRADE_ATIVO) {
+            try {
+                const el = document.querySelector(sel);
+                if (el && el !== _ultimoTradeEl && el.offsetParent !== null) {
+                    _ultimoTradeEl = el;
+                    // Extrai duração do texto do timer se disponível (ex: "00:45")
+                    const txt = el.textContent.trim();
+                    let duracao = 60;
+                    const m = txt.match(/(\d{1,2}):(\d{2})/);
+                    if (m) duracao = parseInt(m[1]) * 60 + parseInt(m[2]);
+
+                    // Detecta direção pelo contexto do container
+                    let direcao = 'call';
+                    try {
+                        const ctx = el.closest('[class]') || document.body;
+                        const ctxTxt = ctx.className.toLowerCase() + ' ' + (ctx.textContent || '').toLowerCase().substring(0, 200);
+                        if (ctxTxt.includes('put') || ctxTxt.includes('baixo') || ctxTxt.includes('down') || ctxTxt.includes('lower')) {
+                            direcao = 'put';
+                        }
+                    } catch (_) {}
+
+                    _notificarEntrada(direcao, _ultimaStake, duracao, _lerPrecoAtual(), '');
+                    return;
+                }
+            } catch (_) {}
+        }
+    }
+
+    function _verificarTradeAbertoComDebounce() {
+        clearTimeout(_tradeDebounce);
+        _tradeDebounce = setTimeout(_verificarTradeAberto, 300);
     }
 
     // ════════════════════════════════════════════
@@ -729,14 +903,19 @@
 
     function _iniciarObservadorResultado() {
         if (_observadorResultado) return;
-        _observadorResultado = new MutationObserver(_verificarResultadoComDebounce);
+        // Observa resultado E abertura de trade na mesma MutationObserver callback
+        _observadorResultado = new MutationObserver((mutations) => {
+            _verificarResultadoComDebounce();
+            // Também verifica se um novo trade foi aberto
+            _verificarTradeAbertoComDebounce();
+        });
         _observadorResultado.observe(document.body, {
             childList:     true,
             subtree:       true,
             attributes:    true,
             attributeFilter: ['class', 'style'],
         });
-        if (DEBUG) console.log('[GarraBot] 👁️  MutationObserver de resultado ativo.');
+        if (DEBUG) console.log('[GarraBot] 👁️  MutationObserver de resultado + trade ativo.');
     }
 
     // ════════════════════════════════════════════
@@ -801,6 +980,15 @@
          * Ex: window.garrabot.setStake(10);
          */
         setStake(valor) { _ultimaStake = parseFloat(valor) || 5.0; },
+
+        /**
+         * Notifica manualmente que uma entrada foi aberta (para integração com scripts externos).
+         * Ex: window.garrabot.notificarEntrada('call', 5.0, 60, 1.23456, 'EURUSD_otc');
+         */
+        notificarEntrada: _notificarEntrada,
+
+        /** true se há um trade em andamento */
+        get tradeAtivo() { return _tradeAtivo; },
 
         /**
          * Força o processamento manual de um resultado (para testes).
