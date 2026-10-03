@@ -11819,15 +11819,48 @@ function initWebSocket(wssUrl) {
             }
         }
 
+        // ── Atualiza ícone ganhando/perdendo durante o trade (updates intermediários) ──
+        if (data.msg_type === 'proposal_open_contract' && data.proposal_open_contract && !data.proposal_open_contract.is_sold) {
+            if (typeof _tsLocal !== 'undefined' && _tsLocal.ativo) {
+                const poc      = data.proposal_open_contract;
+                const lucroInt = parseFloat(poc.profit || 0);
+                // A Deriv envia profit intermediário (negativo = perdendo, positivo = ganhando)
+                if (lucroInt > 0) {
+                    _tsLocal.status = 'ganhando';
+                } else if (lucroInt < 0) {
+                    _tsLocal.status = 'perdendo';
+                } else {
+                    // profit=0: tenta pelo current_spot vs entry_spot
+                    const cur   = parseFloat(poc.current_spot || poc.spot || 0);
+                    const entry = parseFloat(poc.entry_spot  || poc.buy_price || 0);
+                    const ctype = (poc.contract_type || '').toUpperCase();
+                    if (cur > 0 && entry > 0) {
+                        if (ctype === 'CALL') {
+                            _tsLocal.status = cur > entry ? 'ganhando' : (cur < entry ? 'perdendo' : 'neutro');
+                        } else if (ctype === 'PUT') {
+                            _tsLocal.status = cur < entry ? 'ganhando' : (cur > entry ? 'perdendo' : 'neutro');
+                        } else {
+                            // Contratos DIGIT: bid_price vs buy_price
+                            const bid  = parseFloat(poc.bid_price  || 0);
+                            const buy  = parseFloat(poc.buy_price  || 0);
+                            if (bid > 0 && buy > 0) {
+                                _tsLocal.status = bid >= buy ? 'ganhando' : 'perdendo';
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // Resultado da operação
         if (data.msg_type === 'proposal_open_contract' && data.proposal_open_contract.is_sold) {
             // ── Resultado de operação DBS: conta wins/losses, atualiza lucro e envia Telegram ──
             if (bot._skipResultadoPrincipal) {
                 bot._skipResultadoPrincipal = false;
-                // ── Encerra o widget de cronômetro (DBS) ──
-                if (typeof _tradeEncerrarLocal === 'function') _tradeEncerrarLocal();
                 const _dbsProfit = parseFloat(data.proposal_open_contract.profit);
                 const _dbsWon    = _dbsProfit > 0;
+                // ── Encerra o widget de cronômetro (DBS) com status final ──
+                if (typeof _tradeEncerrarLocal === 'function') _tradeEncerrarLocal(_dbsWon ? 'ganhando' : 'perdendo');
                 // Atualiza lucro, placar e sequências máximas do header
                 bot.profit += _dbsProfit;
                 if (_dbsWon) {
@@ -11910,8 +11943,8 @@ function initWebSocket(wssUrl) {
                 bot._duplaResultados_debug = null;
                 bot._duplaLadoMap          = null;
                 bot._buying                = false;
-                // ── Encerra o widget de cronômetro (Dupla) ──
-                if (typeof _tradeEncerrarLocal === 'function') _tradeEncerrarLocal();
+                // ── Encerra o widget de cronômetro (Dupla) com status final ──
+                if (typeof _tradeEncerrarLocal === 'function') _tradeEncerrarLocal(wonReal ? 'ganhando' : 'perdendo');
 
                 bot.profit += totalProfit;
 
@@ -11991,8 +12024,8 @@ function initWebSocket(wssUrl) {
             } else {
                 // ── Resultado normal (contrato único) ─────────────────────
                 bot._buying = false;
-                // ── Encerra o widget de cronômetro ──
-                if (typeof _tradeEncerrarLocal === 'function') _tradeEncerrarLocal();
+                // ── Encerra o widget de cronômetro com status final ──
+                if (typeof _tradeEncerrarLocal === 'function') _tradeEncerrarLocal(won ? 'ganhando' : 'perdendo');
                 bot.profit  += profit;
                 const _stakeAntes = bot.stake; // captura stake usada ANTES do updateResult
                 bot.mgr.updateResult(won, profit);
@@ -26548,19 +26581,22 @@ setInterval(() => {
 
 // Estado local do trade em curso (independente do servidor)
 const _tsLocal = {
-    ativo:      false,    // true enquanto o trade está aberto
-    tsInicio:   0,        // timestamp ms da confirmação da compra
-    duracao:    0,        // duração em segundos
-    direcao:    '',       // 'CALL' | 'PUT'
-    ativoNome:  '',       // ex: R_100
-    valor:      0,        // stake
-    status:     'neutro', // 'ganhando' | 'perdendo' | 'neutro'
-    _timer:     null,     // setInterval do cronômetro local
-    _fonte:     '',       // 'deriv' | 'quotex'
+    ativo:           false,    // true enquanto o trade está aberto
+    tsInicio:        0,        // timestamp ms da confirmação da compra
+    duracao:         0,        // duração em segundos
+    direcao:         '',       // 'CALL' | 'PUT'
+    ativoNome:       '',       // ex: R_100
+    valor:           0,        // stake
+    status:          'neutro', // 'ganhando' | 'perdendo' | 'neutro'
+    _timer:          null,     // setInterval do cronômetro local
+    _timerEncerrando: null,    // setTimeout para sumir após resultado
+    _fonte:          '',       // 'deriv' | 'quotex'
 };
 
 // Ativa o widget com os dados do trade recém-aberto
 function _tradeAtivarLocal(direcao, durSecs, ativoNome, valor, fonte) {
+    // Cancela qualquer encerramento agendado
+    if (_tsLocal._timerEncerrando) { clearTimeout(_tsLocal._timerEncerrando); _tsLocal._timerEncerrando = null; }
     // Limpa timer anterior se houver
     if (_tsLocal._timer) { clearInterval(_tsLocal._timer); _tsLocal._timer = null; }
     _tsLocal.ativo     = true;
@@ -26576,11 +26612,22 @@ function _tradeAtivarLocal(direcao, durSecs, ativoNome, valor, fonte) {
     _tsLocal._timer = setInterval(_tradeMostrarWidget, 500);
 }
 
-// Encerra o widget quando o resultado chegar
-function _tradeEncerrarLocal() {
-    _tsLocal.ativo = false;
+// Encerra o widget: mostra o resultado final (verde/vermelho) por 2s antes de esconder
+function _tradeEncerrarLocal(statusFinal) {
+    // Para o cronômetro imediatamente
     if (_tsLocal._timer) { clearInterval(_tsLocal._timer); _tsLocal._timer = null; }
+    // Aplica o status final se fornecido (ganhando/perdendo vindo do resultado real)
+    if (statusFinal) _tsLocal.status = statusFinal;
+    // Mostra o resultado final com ícone correto (cronômetro = 0)
+    _tsLocal.duracao = Math.round((Date.now() - _tsLocal.tsInicio) / 1000);
     _tradeMostrarWidget();
+    // Aguarda 2s exibindo o resultado antes de sumir
+    if (_tsLocal._timerEncerrando) clearTimeout(_tsLocal._timerEncerrando);
+    _tsLocal._timerEncerrando = setTimeout(() => {
+        _tsLocal.ativo = false;
+        _tsLocal._timerEncerrando = null;
+        _tradeMostrarWidget();
+    }, 2000);
 }
 
 // Renderiza o widget com o estado atual (chamado pelo timer e pelo poll)
