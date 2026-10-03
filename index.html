@@ -9003,6 +9003,8 @@ function processCommand(cmd) {
     } else if (command === 'parar') {
         bot.running        = false;
         bot._buying               = false;
+        // ── Encerra o widget de cronômetro ao parar o bot ──
+        if (typeof _tradeEncerrarLocal === 'function') _tradeEncerrarLocal();
         bot._metaEncerrada        = false;
         bot._candleBuffer         = []; // reseta buffer da Lógica do preço
         bot._candleSinalPendente  = null;  // cancela sinal pendente (candle)
@@ -11805,14 +11807,25 @@ function initWebSocket(wssUrl) {
                     if (reqId === bot._duplaReqOver)  bot._duplaLadoMap[cid] = 'OVER';
                     if (reqId === bot._duplaReqUnder) bot._duplaLadoMap[cid] = 'UNDER';
                 }
+                // ── Ativa o widget de cronômetro assim que a compra é confirmada ──
+                if (typeof _tradeAtivarLocal === 'function') {
+                    const _est = ESTRATEGIAS[bot.estrategia] || {};
+                    const _dur = bot._lastDuracao || (_est.duracao_unit === 'm' ? (_est.duracao || 1) * 60 : (_est.duracao || 1));
+                    const _dir = _est.tipo === 'fluxo' || _est.tipo === 'candle' || _est.tipo === 'trend_pro' || _est.tipo === 'hma_core' || _est.tipo === 'trading_pro'
+                        ? (bot._canaleDir || bot._fluxoDir || 'CALL')
+                        : (_est.contract || '');
+                    _tradeAtivarLocal(_dir, _dur, _est.ativo || 'R_100', bot.stake, 'deriv');
+                }
             }
         }
 
-        // Resultado da operaçõeso
+        // Resultado da operação
         if (data.msg_type === 'proposal_open_contract' && data.proposal_open_contract.is_sold) {
             // ── Resultado de operação DBS: conta wins/losses, atualiza lucro e envia Telegram ──
             if (bot._skipResultadoPrincipal) {
                 bot._skipResultadoPrincipal = false;
+                // ── Encerra o widget de cronômetro (DBS) ──
+                if (typeof _tradeEncerrarLocal === 'function') _tradeEncerrarLocal();
                 const _dbsProfit = parseFloat(data.proposal_open_contract.profit);
                 const _dbsWon    = _dbsProfit > 0;
                 // Atualiza lucro, placar e sequências máximas do header
@@ -11897,6 +11910,8 @@ function initWebSocket(wssUrl) {
                 bot._duplaResultados_debug = null;
                 bot._duplaLadoMap          = null;
                 bot._buying                = false;
+                // ── Encerra o widget de cronômetro (Dupla) ──
+                if (typeof _tradeEncerrarLocal === 'function') _tradeEncerrarLocal();
 
                 bot.profit += totalProfit;
 
@@ -11976,6 +11991,8 @@ function initWebSocket(wssUrl) {
             } else {
                 // ── Resultado normal (contrato único) ─────────────────────
                 bot._buying = false;
+                // ── Encerra o widget de cronômetro ──
+                if (typeof _tradeEncerrarLocal === 'function') _tradeEncerrarLocal();
                 bot.profit  += profit;
                 const _stakeAntes = bot.stake; // captura stake usada ANTES do updateResult
                 bot.mgr.updateResult(won, profit);
@@ -26525,11 +26542,49 @@ setInterval(() => {
 
 // ════════════════════════════════════════════════════════════════════════════
 // TRADE STATUS EM TEMPO REAL — Cronômetro regressivo + ícone Ganhando/Perdendo
-// Sincronizado com a corretora via poll /quotex/trade-status a cada 1s
+// ─ Estado local: ativa quando buy confirmado, desativa quando resultado chega
+// ─ Poll do servidor apenas para trades via Tampermonkey (Quotex)
 // ════════════════════════════════════════════════════════════════════════════
-let _tradeStatusUltimaResposta = null;  // cache para comparar mudanças
 
-function _tradeStatusAtualizar(d) {
+// Estado local do trade em curso (independente do servidor)
+const _tsLocal = {
+    ativo:      false,    // true enquanto o trade está aberto
+    tsInicio:   0,        // timestamp ms da confirmação da compra
+    duracao:    0,        // duração em segundos
+    direcao:    '',       // 'CALL' | 'PUT'
+    ativoNome:  '',       // ex: R_100
+    valor:      0,        // stake
+    status:     'neutro', // 'ganhando' | 'perdendo' | 'neutro'
+    _timer:     null,     // setInterval do cronômetro local
+    _fonte:     '',       // 'deriv' | 'quotex'
+};
+
+// Ativa o widget com os dados do trade recém-aberto
+function _tradeAtivarLocal(direcao, durSecs, ativoNome, valor, fonte) {
+    // Limpa timer anterior se houver
+    if (_tsLocal._timer) { clearInterval(_tsLocal._timer); _tsLocal._timer = null; }
+    _tsLocal.ativo     = true;
+    _tsLocal.tsInicio  = Date.now();
+    _tsLocal.duracao   = durSecs || 60;
+    _tsLocal.direcao   = (direcao || '').toUpperCase();
+    _tsLocal.ativoNome = ativoNome || '';
+    _tsLocal.valor     = parseFloat(valor) || 0;
+    _tsLocal.status    = 'neutro';
+    _tsLocal._fonte    = fonte || 'deriv';
+    _tradeMostrarWidget();
+    // Atualiza o cronômetro a cada 500ms localmente (suave e sem flickering)
+    _tsLocal._timer = setInterval(_tradeMostrarWidget, 500);
+}
+
+// Encerra o widget quando o resultado chegar
+function _tradeEncerrarLocal() {
+    _tsLocal.ativo = false;
+    if (_tsLocal._timer) { clearInterval(_tsLocal._timer); _tsLocal._timer = null; }
+    _tradeMostrarWidget();
+}
+
+// Renderiza o widget com o estado atual (chamado pelo timer e pelo poll)
+function _tradeMostrarWidget(dadosServidor) {
     const bar      = document.getElementById('trade-ativo-bar');
     const icone    = document.getElementById('trade-status-icone');
     const countEl  = document.getElementById('trade-countdown');
@@ -26539,35 +26594,42 @@ function _tradeStatusAtualizar(d) {
     const dirIco   = document.getElementById('trade-direcao-icone');
     if (!bar) return;
 
-    if (!d || !d.ativo) {
-        // Nenhum trade em curso — esconde o widget
+    // Decide qual fonte usar: servidor (Quotex) ou local (Deriv)
+    const usarServidor = dadosServidor && dadosServidor.ativo;
+    const ativo        = usarServidor ? true : _tsLocal.ativo;
+
+    if (!ativo) {
         bar.style.display = 'none';
         return;
     }
 
-    // Mostra o widget
-    bar.style.display = 'flex';
+    // Dados: prioridade servidor > local
+    const secs    = usarServidor
+        ? Math.max(0, dadosServidor.segundos_rest || 0)
+        : Math.max(0, _tsLocal.duracao - Math.round((Date.now() - _tsLocal.tsInicio) / 1000));
+    const total   = usarServidor ? (dadosServidor.duracao   || 60)     : (_tsLocal.duracao   || 60);
+    const status  = usarServidor ? (dadosServidor.status_lucro || 'neutro') : _tsLocal.status;
+    const direcao = usarServidor ? (dadosServidor.direcao    || '').toUpperCase() : _tsLocal.direcao;
+    const nomAtv  = usarServidor ? (dadosServidor.ativo_nome || '')     : _tsLocal.ativoNome;
+    const val     = usarServidor ? (dadosServidor.valor      || 0)      : _tsLocal.valor;
+    const pct     = total > 0 ? Math.min(100, ((total - secs) / total) * 100) : 0;
+
+    // Mostra widget
+    bar.style.display      = 'flex';
     bar.style.flexDirection = 'column';
 
-    const secs   = Math.max(0, d.segundos_rest || 0);
-    const total  = d.duracao || 60;
-    const pct    = total > 0 ? ((total - secs) / total) * 100 : 0;
-    const status = d.status_lucro || 'neutro';
-    const direcao= (d.direcao || '').toUpperCase();
-
-    // Ícone de status (Verde = ganhando, Vermelho = perdendo, Amarelo = neutro)
+    // Ícone e cor
     const iconMap = { ganhando: '🟢', perdendo: '🔴', neutro: '🟡' };
-    icone.textContent = iconMap[status] || '🟡';
-    icone.className   = status;
+    if (icone)  { icone.textContent = iconMap[status] || '🟡'; icone.className = status; }
+
+    // Classe de cor da barra (controla animação CSS)
+    bar.className = status;
 
     // Barra de progresso
     if (barInner) {
-        barInner.style.width   = pct.toFixed(1) + '%';
-        barInner.className     = status === 'perdendo' ? 'perdendo' : '';
+        barInner.style.width = pct.toFixed(1) + '%';
+        barInner.className   = status === 'perdendo' ? 'perdendo' : '';
     }
-
-    // Classe de cor da barra wrapper
-    bar.className = status;
 
     // Cronômetro
     if (countEl) {
@@ -26575,97 +26637,39 @@ function _tradeStatusAtualizar(d) {
         countEl.className   = secs <= 5 ? 'urgente' : '';
     }
 
-    // Direção da operação
+    // Direção
     if (dirIco) {
         dirIco.textContent = direcao === 'CALL' ? '▲' : (direcao === 'PUT' ? '▼' : '');
         dirIco.style.color = direcao === 'CALL' ? '#27c93f' : '#ff4444';
     }
 
-    // Texto de status
+    // Labels de texto
     const statusNome = { ganhando: 'GANHANDO', perdendo: 'PERDENDO', neutro: 'AGUARDANDO' };
     const labelCor   = { ganhando: '#27c93f',  perdendo: '#ff4444',  neutro: '#ffbd2e'    };
-    if (statusLbl) {
-        statusLbl.textContent = statusNome[status] || '';
-        statusLbl.style.color = labelCor[status]   || '#aaa';
-    }
+    if (statusLbl) { statusLbl.textContent = statusNome[status] || ''; statusLbl.style.color = labelCor[status] || '#aaa'; }
     if (statusTxt) {
-        const ativoNome = d.ativo_nome ? ` ${d.ativo_nome}` : '';
-        const valorStr  = d.valor  ? ` $${parseFloat(d.valor).toFixed(2)}`  : '';
-        statusTxt.textContent = `${direcao}${ativoNome}${valorStr}`;
+        const vStr = val ? ` $${parseFloat(val).toFixed(2)}` : '';
+        statusTxt.textContent = `${direcao}${nomAtv ? ' ' + nomAtv : ''}${vStr}`;
     }
 }
 
-// Poll a cada 1s — funciona para trades abertos via Tampermonkey (corretora)
-// e também via bot automático (bot._buying = true)
+// Poll do servidor a cada 1s — APENAS para trades Quotex via Tampermonkey.
+// Para trades Deriv, o estado local (_tsLocal) já cuida sem precisar de rede.
 setInterval(() => {
+    // Se há trade local Deriv ativo, o servidor não sabe — não consultar
+    if (_tsLocal.ativo && _tsLocal._fonte === 'deriv') return;
     fetch('/quotex/trade-status')
         .then(r => r.json())
-        .then(d => _tradeStatusAtualizar(d))
+        .then(d => {
+            if (d && d.ativo) {
+                _tradeMostrarWidget(d);
+            } else if (!_tsLocal.ativo) {
+                // Sem trade em nenhuma fonte — esconde
+                _tradeMostrarWidget(null);
+            }
+        })
         .catch(() => {});
 }, 1000);
-
-// ── Integração com o bot Deriv (_buying = true) — também dispara o widget ──
-// Quando o bot faz uma compra via WebSocket Deriv, bot._buying vai a true.
-// Criamos um proxy para interceptar e mostrar o cronômetro mesmo sem Tampermonkey.
-(function _hookBotBuying() {
-    let _botBuyingWatchTs = 0;
-    let _botBuyingWatchTimer = null;
-
-    function _onBotComprou() {
-        // Estimativa de duração: usa bot.duracao se disponível
-        const dur = (typeof bot !== 'undefined' && bot._lastDuracao) ? bot._lastDuracao : 60;
-        const tsInicio = Date.now();
-        let secs = dur;
-
-        // Mostra widget localmente (não precisa do servidor)
-        const _atualizarLocal = () => {
-            secs = Math.max(0, dur - Math.round((Date.now() - tsInicio) / 1000));
-            const bar      = document.getElementById('trade-ativo-bar');
-            const countEl  = document.getElementById('trade-countdown');
-            const barInner = document.getElementById('trade-barra-prog-inner');
-            const icone    = document.getElementById('trade-status-icone');
-            const statusLbl= document.getElementById('trade-status-label');
-            const dirIco   = document.getElementById('trade-direcao-icone');
-            if (!bar) return;
-            bar.style.display = 'flex';
-            bar.style.flexDirection = 'column';
-            bar.className = 'neutro';
-            if (icone)    { icone.textContent = '🟡'; icone.className = 'neutro'; }
-            if (countEl)  { countEl.textContent = secs; countEl.className = secs <= 5 ? 'urgente' : ''; }
-            if (barInner) { barInner.style.width = (((dur - secs) / dur) * 100).toFixed(1) + '%'; }
-            if (statusLbl){ statusLbl.textContent = 'AGUARDANDO'; statusLbl.style.color = '#ffbd2e'; }
-            if (dirIco)   { dirIco.textContent = ''; }
-            if (secs <= 0) { clearInterval(_botBuyingWatchTimer); _botBuyingWatchTimer = null; }
-        };
-
-        clearInterval(_botBuyingWatchTimer);
-        _botBuyingWatchTimer = setInterval(() => {
-            if (typeof bot === 'undefined' || !bot._buying) {
-                clearInterval(_botBuyingWatchTimer); _botBuyingWatchTimer = null;
-                // Esconde somente se o poll do servidor não estiver ativo
-                setTimeout(() => {
-                    fetch('/quotex/trade-status').then(r=>r.json()).then(d=>{
-                        if (!d.ativo) _tradeStatusAtualizar({ativo:false});
-                    }).catch(()=>{});
-                }, 500);
-                return;
-            }
-            _atualizarLocal();
-        }, 500);
-        _atualizarLocal();
-    }
-
-    // Observer para _buying mudando para true
-    setInterval(() => {
-        if (typeof bot === 'undefined') return;
-        if (bot._buying && !_botBuyingWatchTs) {
-            _botBuyingWatchTs = Date.now();
-            _onBotComprou();
-        } else if (!bot._buying) {
-            _botBuyingWatchTs = 0;
-        }
-    }, 200);
-})();
 
 /**
  * Processa um resultado de trade Quotex:
