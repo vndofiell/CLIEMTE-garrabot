@@ -4838,10 +4838,13 @@ class GerenciadorUnificado {
             case "🛡️ Recovery Conservador": {
                 this._dividaLR = Math.max(0, parseFloat((this._dividaLR - this.currentStake * 0.95).toFixed(2)));
                 if (this._dividaLR < 0.05) this._dividaLR = 0;
-                // Se ainda há dívida, mantém stake de recuperação; se zerou, volta à base
                 if (this._dividaLR > 0) {
                     const pct = parseFloat((this.cfg || {}).rec_cons_pct || 30) / 100;
-                    this.currentStake = Math.max(base, parseFloat((base + this._dividaLR * pct).toFixed(2)));
+                    // Calcula stake que cobre a dívida em 1 operação (stake × 0.95 >= dívida)
+                    const stakeParaCobrir = parseFloat((this._dividaLR / 0.95).toFixed(2));
+                    const stakePct       = parseFloat((base + this._dividaLR * pct).toFixed(2));
+                    // Usa a MAIOR entre as duas — garante convergência sem ficar menor que a anterior
+                    this.currentStake = Math.max(base, stakeParaCobrir, stakePct);
                 } else {
                     this.currentStake = base;
                 }
