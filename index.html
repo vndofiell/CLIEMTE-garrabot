@@ -10493,7 +10493,8 @@ function initWebSocket(wssUrl) {
         // ==========================
 
         // Tick — decide entrada pela estratégia
-        if (data.msg_type === 'tick' && bot.running && !bot._buying) {
+        // Bloqueia nova entrada se já há um contrato aberto aguardando resultado
+        if (data.msg_type === 'tick' && bot.running && !bot._buying && !(typeof _tsLocal !== 'undefined' && _tsLocal.ativo)) {
             const preco  = data.tick.quote;
             const digit  = parseInt(preco.toString().slice(-1));
             const est    = ESTRATEGIAS[bot.estrategia];
@@ -10889,7 +10890,7 @@ function initWebSocket(wssUrl) {
                 // bot._buying é checado aqui também: se ainda estiver em operação,
                 // descarta o sinal — nunca abre duas entradas simultâneas
                 if (bot._candleSinalPendente) {
-                    if (bot._buying) {
+                    if (bot._buying || (typeof _tsLocal !== 'undefined' && _tsLocal.ativo)) {
                         // Ainda em operação — descarta sinal e começa nova vela limpa
                         bot._candleSinalPendente = null;
                         bot._candleBuffer = [preco];
@@ -10987,7 +10988,7 @@ function initWebSocket(wssUrl) {
 
                 // ── FASE 2: sinal pendente → entra na virada ──────────────────
                 if (bot._tpSinalPendente) {
-                    if (bot._buying) {
+                    if (bot._buying || (typeof _tsLocal !== 'undefined' && _tsLocal.ativo)) {
                         bot._tpSinalPendente = null;
                         // mantém o buffer — não zera, apenas descarta 1 vela para reanalisar logo
                         bot._candleBuffer = bot._candleBuffer.slice(-_tpJanela * 59);
@@ -11246,7 +11247,7 @@ function initWebSocket(wssUrl) {
 
                 // FASE 2 — sinal pendente: entra na virada
                 if (bot._tpAiSinalPendente) {
-                    if (bot._buying) {
+                    if (bot._buying || (typeof _tsLocal !== 'undefined' && _tsLocal.ativo)) {
                         bot._tpAiSinalPendente = null;
                         _seqStatusUpdate(`🤖 TRADING PRO — operação em andamento...`);
                         return;
@@ -11406,7 +11407,7 @@ function initWebSocket(wssUrl) {
 
                 // ── FASE 2: sinal pendente → entra agora (ou na virada da vela) ──
                 if (bot._hmaSinalPendente) {
-                    if (bot._buying) {
+                    if (bot._buying || (typeof _tsLocal !== 'undefined' && _tsLocal.ativo)) {
                         bot._hmaSinalPendente = null;
                         _seqStatusUpdate(`🧠 HMA — operação em andamento, aguardando resultado...`);
                         return;
@@ -26581,7 +26582,8 @@ setInterval(() => {
 
 // Estado local do trade em curso (independente do servidor)
 const _tsLocal = {
-    ativo:           false,    // true enquanto o trade está aberto
+    ativo:           false,    // true APENAS enquanto o contrato está aberto (bloqueio de entradas)
+    visivelAteMs:    0,        // timestamp até quando o widget fica visível (exibe resultado por 2s)
     tsInicio:        0,        // timestamp ms da confirmação da compra
     duracao:         0,        // duração em segundos
     direcao:         '',       // 'CALL' | 'PUT'
@@ -26612,19 +26614,23 @@ function _tradeAtivarLocal(direcao, durSecs, ativoNome, valor, fonte) {
     _tsLocal._timer = setInterval(_tradeMostrarWidget, 500);
 }
 
-// Encerra o widget: mostra o resultado final (verde/vermelho) por 2s antes de esconder
+// Encerra o contrato: libera o bloqueio de entrada IMEDIATAMENTE
+// e mantém o widget visível por 2s exibindo o resultado final
 function _tradeEncerrarLocal(statusFinal) {
-    // Para o cronômetro imediatamente
+    // ── Libera o bloqueio de entradas AGORA ──
+    _tsLocal.ativo = false;
+    // Para o cronômetro
     if (_tsLocal._timer) { clearInterval(_tsLocal._timer); _tsLocal._timer = null; }
-    // Aplica o status final se fornecido (ganhando/perdendo vindo do resultado real)
+    // Aplica o status final (ganhando/perdendo vindo do resultado real)
     if (statusFinal) _tsLocal.status = statusFinal;
-    // Mostra o resultado final com ícone correto (cronômetro = 0)
-    _tsLocal.duracao = Math.round((Date.now() - _tsLocal.tsInicio) / 1000);
+    // Mostra o resultado final com ícone correto
+    _tsLocal.duracao   = Math.round((Date.now() - _tsLocal.tsInicio) / 1000);
+    _tsLocal.visivelAteMs = Date.now() + 2000;   // fica visível por 2s
     _tradeMostrarWidget();
-    // Aguarda 2s exibindo o resultado antes de sumir
+    // Some após 2s
     if (_tsLocal._timerEncerrando) clearTimeout(_tsLocal._timerEncerrando);
     _tsLocal._timerEncerrando = setTimeout(() => {
-        _tsLocal.ativo = false;
+        _tsLocal.visivelAteMs  = 0;
         _tsLocal._timerEncerrando = null;
         _tradeMostrarWidget();
     }, 2000);
@@ -26642,10 +26648,11 @@ function _tradeMostrarWidget(dadosServidor) {
     if (!bar) return;
 
     // Decide qual fonte usar: servidor (Quotex) ou local (Deriv)
-    const usarServidor = dadosServidor && dadosServidor.ativo;
-    const ativo        = usarServidor ? true : _tsLocal.ativo;
+    const usarServidor  = dadosServidor && dadosServidor.ativo;
+    // Mostra o widget se: trade ativo OU ainda dentro dos 2s de exibição do resultado
+    const deveExibir    = usarServidor || _tsLocal.ativo || (_tsLocal.visivelAteMs > Date.now());
 
-    if (!ativo) {
+    if (!deveExibir) {
         bar.style.display = 'none';
         return;
     }
