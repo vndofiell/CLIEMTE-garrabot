@@ -8918,6 +8918,7 @@ function processCommand(cmd) {
         bot._hmaAnalisandoTs      = null;  // cancela timestamp do lock HMA
         bot._hmaSinalPendente     = null;  // cancela sinal HMA pendente
         bot._precos               = [];    // limpa buffer de preços HMA
+        if (bot._hmaViradaTimer) { clearTimeout(bot._hmaViradaTimer); bot._hmaViradaTimer = null; } // cancela timer de virada HMA
         _seqStatusClear();
         // Para conta secundária se estiver operando
         if (typeof _sec !== 'undefined' && _sec.espelhandoAtivo) {
@@ -11306,13 +11307,16 @@ function initWebSocket(wssUrl) {
 
                 // _precos é acumulado globalmente acima (antes do guard bot._buying)
 
-                // ── FASE 2: sinal pendente → entra agora ──────────────────────
+                // ── FASE 2: sinal pendente → entra agora (ou na virada da vela) ──
                 if (bot._hmaSinalPendente) {
                     if (bot._buying) {
                         bot._hmaSinalPendente = null;
                         _seqStatusUpdate(`🧠 HMA — operação em andamento, aguardando resultado...`);
                         return;
                     }
+                    // Evita reagendar se já há um timer de virada ativo
+                    if (bot._hmaViradaTimer) return;
+
                     const _hmaS = bot._hmaSinalPendente;
                     bot._hmaSinalPendente = null;
                     bot._hmaSinalUltimo   = _hmaS;   // guarda para aprendizado após resultado
@@ -11351,19 +11355,48 @@ function initWebSocket(wssUrl) {
                     bot._buying  = true;
                     // Incrementa contador de operações no ativo atual (usado pelo scan periódico)
                     bot._hmaOpCiclo = (bot._hmaOpCiclo || 0) + 1;
-                    print(
-                        `🧠 HMA ENTRADA | ${_hmaS.decisao} | conf <b>${_hmaS.confianca}%</b>` +
-                        ` | regime: <b>${_hmaS.regime}</b>` +
-                        ` | ativo: <b>${_hmaS.ativo || est.ativo}</b>` +
-                        ` | janelas: <b>${(_hmaS.janelas_usadas || []).join(',')}</b> ✅`,
-                        'log-win'
-                    );
-                    _edcEntrar(() => {
-                        buy();
-                        // Restaura contrato original após compra
-                        est.contract = _hmaEstOrig.contract;
-                        est.barrier  = _hmaEstOrig.barrier;
-                    });
+
+                    // ── Função de disparo da compra ──────────────────────────────
+                    const _hmaDisparar = () => {
+                        bot._hmaViradaTimer = null;
+                        if (!bot.running) {
+                            bot._buying = false;
+                            est.contract = _hmaEstOrig.contract;
+                            est.barrier  = _hmaEstOrig.barrier;
+                            return;
+                        }
+                        print(
+                            `🧠 HMA ENTRADA | ${_hmaS.decisao} | conf <b>${_hmaS.confianca}%</b>` +
+                            ` | regime: <b>${_hmaS.regime}</b>` +
+                            ` | ativo: <b>${_hmaS.ativo || est.ativo}</b>` +
+                            ` | janelas: <b>${(_hmaS.janelas_usadas || []).join(',')}</b> ✅`,
+                            'log-win'
+                        );
+                        _edcEntrar(() => {
+                            buy();
+                            // Restaura contrato original após compra
+                            est.contract = _hmaEstOrig.contract;
+                            est.barrier  = _hmaEstOrig.barrier;
+                        });
+                    };
+
+                    // ── Para CALL/PUT em minutos: aguarda a virada exata da vela ─
+                    const _hmaEhMinutos = (est.duracao_unit === 'm') && (_hmaCt === 'CALL' || _hmaCt === 'PUT');
+                    if (_hmaEhMinutos) {
+                        // ms decorridos no minuto atual; faltam (60000 - msDecorridos) até a virada
+                        const _hmaMsDecorridos = Date.now() % 60000;
+                        const _hmaMsFalta      = 60000 - _hmaMsDecorridos;
+                        // Se faltam menos de 200ms (já estamos na virada) entra imediatamente
+                        const _hmaAtraso = _hmaMsFalta < 200 ? 0 : _hmaMsFalta;
+                        _seqStatusUpdate(
+                            `🧠 HMA ${_hmaS.decisao} | conf <b>${_hmaS.confianca}%</b>` +
+                            ` ⏳ aguardando virada da vela em <b>${(_hmaAtraso / 1000).toFixed(1)}s</b>...`
+                        );
+                        bot._hmaViradaTimer = setTimeout(_hmaDisparar, _hmaAtraso);
+                    } else {
+                        // Ticks ou DIGIT: entra no próximo tick (comportamento original)
+                        _hmaDisparar();
+                    }
                     return;
                 }
 
