@@ -1072,7 +1072,8 @@
             <span style="color:rgba(0,255,65,0.4); font-size:0.6rem; margin-left:-4px;">s</span>
             <span id="trade-status-txt" style="color:#555; font-size:0.62rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; min-width:0;"></span>
         </div>
-        <div style="display:flex; flex-direction:column; align-items:flex-end; gap:2px; flex-shrink:0; min-width:80px;">
+        <div style="display:flex; flex-direction:column; align-items:flex-end; gap:2px; flex-shrink:0;">
+            <span id="trade-lucro-badge" style="display:none; font-size:0.78rem; font-weight:bold; letter-spacing:0.5px; padding:1px 8px; border-radius:20px; border:1px solid currentColor;"></span>
             <span id="trade-status-label" style="font-size:0.6rem; letter-spacing:0.5px; font-weight:bold;"></span>
             <div id="trade-barra-prog">
                 <div id="trade-barra-prog-inner"></div>
@@ -11895,7 +11896,7 @@ function initWebSocket(wssUrl) {
                 const _dbsProfit = parseFloat(data.proposal_open_contract.profit);
                 const _dbsWon    = _dbsProfit > 0;
                 // ── Encerra o widget de cronômetro (DBS) com status final ──
-                if (typeof _tradeEncerrarLocal === 'function') _tradeEncerrarLocal(_dbsWon ? 'ganhando' : 'perdendo');
+                if (typeof _tradeEncerrarLocal === 'function') _tradeEncerrarLocal(_dbsWon ? 'ganhando' : 'perdendo', _dbsProfit);
                 // Atualiza lucro, placar e sequências máximas do header
                 bot.profit += _dbsProfit;
                 if (_dbsWon) {
@@ -11979,7 +11980,7 @@ function initWebSocket(wssUrl) {
                 bot._duplaLadoMap          = null;
                 bot._buying                = false;
                 // ── Encerra o widget de cronômetro (Dupla) com status final ──
-                if (typeof _tradeEncerrarLocal === 'function') _tradeEncerrarLocal(wonReal ? 'ganhando' : 'perdendo');
+                if (typeof _tradeEncerrarLocal === 'function') _tradeEncerrarLocal(wonReal ? 'ganhando' : 'perdendo', totalProfit);
 
                 bot.profit += totalProfit;
 
@@ -12060,7 +12061,7 @@ function initWebSocket(wssUrl) {
                 // ── Resultado normal (contrato único) ─────────────────────
                 bot._buying = false;
                 // ── Encerra o widget de cronômetro com status final ──
-                if (typeof _tradeEncerrarLocal === 'function') _tradeEncerrarLocal(won ? 'ganhando' : 'perdendo');
+                if (typeof _tradeEncerrarLocal === 'function') _tradeEncerrarLocal(won ? 'ganhando' : 'perdendo', profit);
                 bot.profit  += profit;
                 const _stakeAntes = bot.stake; // captura stake usada ANTES do updateResult
                 bot.mgr.updateResult(won, profit);
@@ -26624,6 +26625,7 @@ const _tsLocal = {
     ativoNome:       '',       // ex: R_100
     valor:           0,        // stake
     status:          'neutro', // 'ganhando' | 'perdendo' | 'neutro'
+    lucro:           null,     // lucro real após resultado (null = ainda aberto)
     _timer:          null,     // setInterval do cronômetro local
     _timerEncerrando: null,    // setTimeout para sumir após resultado
     _fonte:          '',       // 'deriv' | 'quotex'
@@ -26649,32 +26651,32 @@ function _tradeAtivarLocal(direcao, durSecs, ativoNome, valor, fonte) {
 }
 
 // Encerra o contrato: libera o bloqueio de entrada IMEDIATAMENTE
-// e mantém o widget visível por 2s exibindo o resultado final
-function _tradeEncerrarLocal(statusFinal) {
+// e mantém o widget visível por 3s exibindo o resultado final com lucro
+function _tradeEncerrarLocal(statusFinal, lucroFinal) {
     // ── Libera o bloqueio de entradas AGORA ──
     _tsLocal.ativo = false;
     // Para o cronômetro
     if (_tsLocal._timer) { clearInterval(_tsLocal._timer); _tsLocal._timer = null; }
-    // Aplica o status final (ganhando/perdendo vindo do resultado real)
+    // Aplica o status e lucro final
     if (statusFinal) _tsLocal.status = statusFinal;
-    // Mostra o resultado final com ícone correto
-    _tsLocal.duracao   = Math.round((Date.now() - _tsLocal.tsInicio) / 1000);
-    _tsLocal.visivelAteMs = Date.now() + 2000;   // fica visível por 2s
+    _tsLocal.lucro    = (lucroFinal !== undefined && lucroFinal !== null) ? parseFloat(lucroFinal) : null;
+    _tsLocal.duracao  = Math.round((Date.now() - _tsLocal.tsInicio) / 1000);
+    _tsLocal.visivelAteMs = Date.now() + 3000;   // fica visível por 3s
     _tradeMostrarWidget();
-    // Some após 2s
+    // Some após 3s
     if (_tsLocal._timerEncerrando) clearTimeout(_tsLocal._timerEncerrando);
     _tsLocal._timerEncerrando = setTimeout(() => {
         _tsLocal.visivelAteMs  = 0;
+        _tsLocal.lucro         = null;
         _tsLocal._timerEncerrando = null;
         _tradeMostrarWidget();
-    }, 2000);
+    }, 3000);
 }
 
 // ── Referências em cache (evita getElementById a cada frame) ──
 // Cache DOM — sempre tenta obter; usa querySelector como fallback
-let _tBar, _tIcone, _tCount, _tTxt, _tLbl, _tInner, _tDir;
+let _tBar, _tIcone, _tCount, _tTxt, _tLbl, _tInner, _tDir, _tLucro;
 function _tradeGetEls() {
-    // Sempre retenta se algum elemento ainda não foi encontrado
     if (!_tBar)   _tBar   = document.getElementById('trade-ativo-bar');
     if (!_tIcone) _tIcone = document.getElementById('trade-status-icone');
     if (!_tCount) _tCount = document.getElementById('trade-countdown');
@@ -26682,6 +26684,7 @@ function _tradeGetEls() {
     if (!_tLbl)   _tLbl   = document.getElementById('trade-status-label');
     if (!_tInner) _tInner = document.getElementById('trade-barra-prog-inner');
     if (!_tDir)   _tDir   = document.getElementById('trade-direcao-icone');
+    if (!_tLucro) _tLucro = document.getElementById('trade-lucro-badge');
 }
 
 // Renderiza o widget com o estado atual
@@ -26748,6 +26751,25 @@ function _tradeMostrarWidget(dadosServidor) {
     if (_tTxt) {
         const vStr = val ? ` $${parseFloat(val).toFixed(2)}` : '';
         _tTxt.textContent = `${_dirNorm.label}${nomAtv ? ' ' + nomAtv : ''}${vStr}`;
+    }
+
+    // Badge de lucro — exibido durante os 3s após o encerramento do trade
+    const lucroFinal = _tsLocal.lucro;
+    const tradeEncerrado = !_tsLocal.ativo && _tsLocal.visivelAteMs > Date.now();
+    if (_tLucro) {
+        if (tradeEncerrado && lucroFinal !== null && lucroFinal !== undefined) {
+            const lucroPos = lucroFinal >= 0;
+            const lucroStr = lucroPos
+                ? `+$${lucroFinal.toFixed(2)} USD`
+                : `-$${Math.abs(lucroFinal).toFixed(2)} USD`;
+            _tLucro.textContent = lucroStr;
+            _tLucro.style.color        = lucroPos ? '#27c93f' : '#ff4444';
+            _tLucro.style.borderColor  = lucroPos ? '#27c93f' : '#ff4444';
+            _tLucro.style.background   = lucroPos ? 'rgba(39,201,63,0.12)' : 'rgba(255,68,68,0.12)';
+            _tLucro.style.display      = 'inline-block';
+        } else {
+            _tLucro.style.display = 'none';
+        }
     }
 }
 
