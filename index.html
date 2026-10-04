@@ -11829,11 +11829,26 @@ function initWebSocket(wssUrl) {
                 }
                 // ── Ativa o widget de cronômetro assim que a compra é confirmada ──
                 if (typeof _tradeAtivarLocal === 'function') {
-                    const _est = ESTRATEGIAS[bot.estrategia] || {};
-                    const _dur = bot._lastDuracao || (_est.duracao_unit === 'm' ? (_est.duracao || 1) * 60 : (_est.duracao || 1));
-                    const _dir = _est.tipo === 'fluxo' || _est.tipo === 'candle' || _est.tipo === 'trend_pro' || _est.tipo === 'hma_core' || _est.tipo === 'trading_pro'
-                        ? (bot._canaleDir || bot._fluxoDir || 'CALL')
-                        : (_est.contract || '');
+                    const _est    = ESTRATEGIAS[bot.estrategia] || {};
+                    const _dur    = bot._lastDuracao || (_est.duracao_unit === 'm' ? (_est.duracao || 1) * 60 : (_est.duracao || 1));
+                    // Lê a direção real da resposta da Deriv:
+                    //   data.buy.contract_type → 'CALL' | 'PUT' | 'DIGITUNDER' etc.
+                    //   echo_req.contract_type → o que foi enviado no proposal
+                    //   fallback → bot._canaleDir / bot._hmaSinalUltimo / est.contract
+                    const _buyData   = data.buy || {};
+                    const _echoReq   = data.echo_req || {};
+                    const _ctRaw     = (_buyData.contract_type || _echoReq.contract_type || '').toUpperCase();
+                    let   _dir;
+                    if (_ctRaw === 'CALL' || _ctRaw === 'PUT') {
+                        _dir = _ctRaw;
+                    } else if (_ctRaw) {
+                        // DIGITUNDER, DIGITOVER, etc. — usa o tipo como direção
+                        _dir = _ctRaw;
+                    } else {
+                        // Fallback: HMA e outros que usam direção dinâmica
+                        const _hmaDir = bot._hmaSinalUltimo && bot._hmaSinalUltimo.decisao;
+                        _dir = _hmaDir || bot._canaleDir || bot._fluxoDir || _est.contract || '';
+                    }
                     _tradeAtivarLocal(_dir, _dur, _est.ativo || 'R_100', bot.stake, 'deriv');
                 }
             }
@@ -26713,18 +26728,26 @@ function _tradeMostrarWidget(dadosServidor) {
         _tCount.className   = secs <= 5 ? 'urgente' : '';
     }
 
-    // Direção
-    if (_tDir) {
-        _tDir.textContent = direcao === 'CALL' ? '▲' : (direcao === 'PUT' ? '▼' : '');
-        _tDir.style.color = direcao === 'CALL' ? '#27c93f' : '#ff4444';
-    }
+    // Direção — normaliza CALL/PUT/RISE/FALL e DIGIT*
+    const _dirNorm = (function(d) {
+        if (!d) return { seta: '', label: '', cor: '#aaa' };
+        const u = d.toUpperCase();
+        if (u === 'CALL' || u === 'RISE')  return { seta: '▲', label: 'CALL', cor: '#27c93f' };
+        if (u === 'PUT'  || u === 'FALL')  return { seta: '▼', label: 'PUT',  cor: '#ff4444' };
+        if (u.startsWith('DIGITOVER'))  return { seta: '▲', label: u, cor: '#27c93f' };
+        if (u.startsWith('DIGITUNDER')) return { seta: '▼', label: u, cor: '#ff4444' };
+        if (u === 'DIGITEVEN') return { seta: '◆', label: 'EVEN', cor: '#0ff' };
+        if (u === 'DIGITODD')  return { seta: '◇', label: 'ODD',  cor: '#f90' };
+        return { seta: '', label: u, cor: '#aaa' };
+    })(direcao);
+    if (_tDir) { _tDir.textContent = _dirNorm.seta; _tDir.style.color = _dirNorm.cor; }
 
     // Labels
     const statusNome = { ganhando: 'GANHANDO', perdendo: 'PERDENDO', neutro: 'AGUARDANDO' };
     if (_tLbl) { _tLbl.textContent = statusNome[status] || ''; }
     if (_tTxt) {
         const vStr = val ? ` $${parseFloat(val).toFixed(2)}` : '';
-        _tTxt.textContent = `${direcao}${nomAtv ? ' ' + nomAtv : ''}${vStr}`;
+        _tTxt.textContent = `${_dirNorm.label}${nomAtv ? ' ' + nomAtv : ''}${vStr}`;
     }
 }
 
