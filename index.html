@@ -9715,7 +9715,10 @@ async function _secConectar() {
                 // Registra a stake real usada nesta operação antes de comprar
                 const _stakeReal = parseFloat(d.echo_req.amount || 0);
                 if (_stakeReal > _sec._maxStakeUsada) _sec._maxStakeUsada = _stakeReal;
-                _sec.ws.send(JSON.stringify({ buy: d.proposal.id, price: d.echo_req.amount }));
+                // Guarda o req_id da proposta → será o echo_req.req_id do buy
+                // (a Deriv ecoa o req_id do buy, não da proposal — guardamos o mapeamento)
+                _sec._lastProposalReqId = rid;
+                _sec.ws.send(JSON.stringify({ buy: d.proposal.id, price: d.echo_req.amount, req_id: rid }));
             }
         }
 
@@ -9726,16 +9729,32 @@ async function _secConectar() {
                 contract_id: d.buy.contract_id,
                 subscribe: 1
             }));
-            // Ativa o mesmo widget de trade da conta principal
+            // Ativa o widget de cronômetro usando a meta salva em _pendingMeta
             if (typeof _tradeAtivarLocal === 'function') {
-                const _echoSec  = d.echo_req || {};
-                const _ctSec    = (d.buy.contract_type || _echoSec.contract_type || '').toUpperCase();
-                const _durSec   = parseInt(_echoSec.duration) || 1;
-                const _unitSec  = (_echoSec.duration_unit || 't').toLowerCase();
-                const _durSegsSec = _unitSec === 'm' ? _durSec * 60 : _durSec;
-                const _est      = ESTRATEGIAS[bot.estrategia] || {};
-                const _stakeS   = parseFloat(_echoSec.amount || (_sec.mgr ? _sec.mgr.getStake() : 0.35));
-                _tradeAtivarLocal(_ctSec || 'SEC', _durSegsSec, _est.ativo || 'R_100', _stakeS, 'deriv');
+                // Recupera duração/unidade que foram salvas antes da proposta ser enviada
+                const _rid  = d.echo_req && d.echo_req.req_id;
+                const _meta = (_sec._pendingMeta && _rid && _sec._pendingMeta[_rid])
+                              || (_sec._pendingMeta && _sec._lastProposalReqId && _sec._pendingMeta[_sec._lastProposalReqId])
+                              || null;
+                // Limpa a entrada usada para evitar vazamento de memória
+                if (_meta && _sec._pendingMeta) {
+                    delete _sec._pendingMeta[_rid];
+                    if (_sec._lastProposalReqId) delete _sec._pendingMeta[_sec._lastProposalReqId];
+                }
+                const _est = ESTRATEGIAS[bot.estrategia] || {};
+                const _ctSec = (d.buy.contract_type || (_meta && _meta.contract_type) || '').toUpperCase();
+                let _durSegsSec;
+                if (_meta) {
+                    const _u = (_meta.duration_unit || 't').toLowerCase();
+                    _durSegsSec = _u === 'm' ? (_meta.duration || 1) * 60 : (_meta.duration || 1);
+                } else {
+                    // Fallback: lê da estratégia atual (sem conversão errada do echo_req)
+                    const _u = ((_est.duracao_unit) || 't').toLowerCase();
+                    _durSegsSec = _u === 'm' ? ((_est.duracao || 1) * 60) : (_est.duracao || 1);
+                }
+                const _stakeS = (_meta && _meta.stake) || (_sec.mgr ? _sec.mgr.getStake() : 0.35);
+                const _ativoS = (_meta && _meta.ativo) || _est.ativo || 'R_100';
+                _tradeAtivarLocal(_ctSec || 'SEC', _durSegsSec, _ativoS, _stakeS, 'deriv');
             }
         }
 
@@ -9832,6 +9851,17 @@ function _secEntrarAutonoma(opts) {
     _sec._buying = true;
     const reqId  = -(Math.floor(Math.random() * 90000) + 10000);
     _sec._pendingReqs.add(reqId);
+
+    // Salva duração/unidade/stake para o widget de cronômetro (d.echo_req no buy
+    // só contém { buy, price } — não tem duration/duration_unit)
+    if (!_sec._pendingMeta) _sec._pendingMeta = {};
+    _sec._pendingMeta[reqId] = {
+        duration:      dur,
+        duration_unit: durUnit,
+        stake:         stake,
+        contract_type: opts.contract_type || '',
+        ativo:         est.ativo || 'R_100',
+    };
 
     const p = {
         proposal:          1,
