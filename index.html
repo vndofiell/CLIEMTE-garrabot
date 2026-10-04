@@ -1061,6 +1061,26 @@
 </head>
 <body>
 
+<!-- ══ OVERLAY FIXO DE TRADE ATIVO — inserido aqui para existir antes dos scripts ══ -->
+<div id="trade-ativo-bar" style="display:none;">
+    <div id="trade-bar-inner">
+        <div style="display:flex; align-items:center; gap:8px; flex:1; min-width:0;">
+            <span id="trade-status-icone" class="neutro">🟡</span>
+            <span style="color:rgba(0,255,65,0.55); font-size:0.6rem; white-space:nowrap; letter-spacing:1.5px; text-transform:uppercase;">Trade</span>
+            <span id="trade-direcao-icone" style="font-size:0.82rem; font-weight:bold;"></span>
+            <span id="trade-countdown" title="Segundos restantes">--</span>
+            <span style="color:rgba(0,255,65,0.4); font-size:0.6rem; margin-left:-4px;">s</span>
+            <span id="trade-status-txt" style="color:#555; font-size:0.62rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; min-width:0;"></span>
+        </div>
+        <div style="display:flex; flex-direction:column; align-items:flex-end; gap:2px; flex-shrink:0; min-width:80px;">
+            <span id="trade-status-label" style="font-size:0.6rem; letter-spacing:0.5px; font-weight:bold;"></span>
+            <div id="trade-barra-prog">
+                <div id="trade-barra-prog-inner"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- ══ BOTÃO FLUTUANTE INSTALAR APP ══════════════════════════ -->
 <div id="btn-instalar-app-container" style="display:none; position:fixed; bottom:20px; right:20px; z-index:9999;">
   <button onclick="instalarAppMobile()"
@@ -26636,17 +26656,17 @@ function _tradeEncerrarLocal(statusFinal) {
 }
 
 // ── Referências em cache (evita getElementById a cada frame) ──
+// Cache DOM — sempre tenta obter; usa querySelector como fallback
 let _tBar, _tIcone, _tCount, _tTxt, _tLbl, _tInner, _tDir;
 function _tradeGetEls() {
-    if (!_tBar) {
-        _tBar   = document.getElementById('trade-ativo-bar');
-        _tIcone = document.getElementById('trade-status-icone');
-        _tCount = document.getElementById('trade-countdown');
-        _tTxt   = document.getElementById('trade-status-txt');
-        _tLbl   = document.getElementById('trade-status-label');
-        _tInner = document.getElementById('trade-barra-prog-inner');
-        _tDir   = document.getElementById('trade-direcao-icone');
-    }
+    // Sempre retenta se algum elemento ainda não foi encontrado
+    if (!_tBar)   _tBar   = document.getElementById('trade-ativo-bar');
+    if (!_tIcone) _tIcone = document.getElementById('trade-status-icone');
+    if (!_tCount) _tCount = document.getElementById('trade-countdown');
+    if (!_tTxt)   _tTxt   = document.getElementById('trade-status-txt');
+    if (!_tLbl)   _tLbl   = document.getElementById('trade-status-label');
+    if (!_tInner) _tInner = document.getElementById('trade-barra-prog-inner');
+    if (!_tDir)   _tDir   = document.getElementById('trade-direcao-icone');
 }
 
 // Renderiza o widget com o estado atual
@@ -28475,32 +28495,6 @@ function qxEntrarSinal(sinal) {
     qxOperar(sinal.sinal === 'CALL' ? 'call' : 'put');
 }
 </script>
-
-
-
-<!-- ══════════════════════════════════════════════════════════════════
-     OVERLAY FIXO DE TRADE ATIVO
-     position:fixed — permanece visível em qualquer scroll, minimização
-     ou troca de aba. Aparece apenas quando há operação aberta.
-════════════════════════════════════════════════════════════════════ -->
-<div id="trade-ativo-bar" style="display:none;">
-    <div id="trade-bar-inner">
-        <div style="display:flex; align-items:center; gap:8px; flex:1; min-width:0;">
-            <span id="trade-status-icone" class="neutro">🟡</span>
-            <span style="color:rgba(0,255,65,0.55); font-size:0.6rem; white-space:nowrap; letter-spacing:1.5px; text-transform:uppercase;">Trade</span>
-            <span id="trade-direcao-icone" style="font-size:0.82rem; font-weight:bold;"></span>
-            <span id="trade-countdown" title="Segundos restantes">--</span>
-            <span style="color:rgba(0,255,65,0.4); font-size:0.6rem; margin-left:-4px;">s</span>
-            <span id="trade-status-txt" style="color:#555; font-size:0.62rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; min-width:0;"></span>
-        </div>
-        <div style="display:flex; flex-direction:column; align-items:flex-end; gap:2px; flex-shrink:0; min-width:80px;">
-            <span id="trade-status-label" style="font-size:0.6rem; letter-spacing:0.5px; font-weight:bold;"></span>
-            <div id="trade-barra-prog">
-                <div id="trade-barra-prog-inner"></div>
-            </div>
-        </div>
-    </div>
-</div>
 
 </body>
 </html>
