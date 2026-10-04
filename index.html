@@ -9707,13 +9707,37 @@ async function _secConectar() {
             }
         }
 
-        // Compra confirmada → subscreve resultado
+        // Compra confirmada → subscreve resultado + ativa widget de cronômetro
         if (d.msg_type === 'buy' && d.buy) {
             _sec.ws.send(JSON.stringify({
                 proposal_open_contract: 1,
                 contract_id: d.buy.contract_id,
                 subscribe: 1
             }));
+            // Ativa o mesmo widget de trade da conta principal
+            if (typeof _tradeAtivarLocal === 'function') {
+                const _echoSec  = d.echo_req || {};
+                const _ctSec    = (d.buy.contract_type || _echoSec.contract_type || '').toUpperCase();
+                const _durSec   = parseInt(_echoSec.duration) || 1;
+                const _unitSec  = (_echoSec.duration_unit || 't').toLowerCase();
+                const _durSegsSec = _unitSec === 'm' ? _durSec * 60 : _durSec;
+                const _est      = ESTRATEGIAS[bot.estrategia] || {};
+                const _stakeS   = parseFloat(_echoSec.amount || (_sec.mgr ? _sec.mgr.getStake() : 0.35));
+                _tradeAtivarLocal(_ctSec || 'SEC', _durSegsSec, _est.ativo || 'R_100', _stakeS, 'deriv');
+            }
+        }
+
+        // Atualiza ícone ganhando/perdendo durante o contrato da secundária (updates intermediários)
+        if (d.msg_type === 'proposal_open_contract' &&
+            d.proposal_open_contract && !d.proposal_open_contract.is_sold) {
+            if (typeof _tsLocal !== 'undefined' && _tsLocal.ativo) {
+                const _lucroInt = parseFloat(d.proposal_open_contract.profit || 0);
+                const _statusInt = _lucroInt > 0 ? 'ganhando' : (_lucroInt < 0 ? 'perdendo' : 'neutro');
+                if (_tsLocal.status !== _statusInt) {
+                    _tsLocal.status = _statusInt;
+                    if (typeof _tradeMostrarWidget === 'function') _tradeMostrarWidget();
+                }
+            }
         }
 
         // Resultado do contrato — processa sempre (contratos já enviados devem fechar normalmente)
@@ -9748,6 +9772,11 @@ async function _secConectar() {
                 print(`💳 SECUNDÁRIA ✅ WIN | ${sinal} | Próxima entrada: $${_secProxStake.toFixed(2)} | ${_secMgrStatus}`, 'log-win');
             } else {
                 print(`💳 SECUNDÁRIA 🔁 LOSS | ${sinal} | Próxima entrada: $${_secProxStake.toFixed(2)} | ${_secMgrStatus}`, 'log-loss');
+            }
+
+            // Encerra o widget de cronômetro com resultado final da secundária
+            if (typeof _tradeEncerrarLocal === 'function') {
+                _tradeEncerrarLocal(won ? 'ganhando' : 'perdendo', p);
             }
 
             // ── Notificação Telegram/WhatsApp com dados da conta SECUNDÁRIA ──
