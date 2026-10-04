@@ -6907,6 +6907,14 @@ setInterval(() => {
     if (!bot.running) { _buyingTs = 0; return; }
     if (bot._buying) {
         if (_buyingTs === 0) { _buyingTs = Date.now(); return; }
+        // ⚠️ Nunca libera _buying enquanto há trade aberto na corretora (_tsLocal.ativo).
+        // Contratos de 1 minuto ficam abertos por 60s — o Watchdog de 12s não pode
+        // interromper: liberaria o bloqueio antes do resultado e causaria entrada dupla.
+        if (typeof _tsLocal !== 'undefined' && _tsLocal.ativo) {
+            // Trade ainda aberto — adia o timeout sem imprimir nada
+            _buyingTs = Date.now();
+            return;
+        }
         if (Date.now() - _buyingTs > 12000) {
             bot._buying          = false;
             bot._pendingReqId    = null;
@@ -6914,6 +6922,10 @@ setInterval(() => {
             bot._hmaAnalisandoTs = null;
             _buyingTs            = 0;
             if (bot.running) print('⚠️ Watchdog: _buying travado liberado — continuando...', 'log-info');
+            // Garante que o widget de cronômetro não fica "fantasma" aberto
+            if (typeof _tradeEncerrarLocal === 'function' && typeof _tsLocal !== 'undefined' && _tsLocal.ativo) {
+                _tradeEncerrarLocal();
+            }
         }
     } else {
         _buyingTs = 0;
