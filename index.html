@@ -203,83 +203,99 @@
     .stat-box.losses span { color: var(--terminal-red); }
     .stat-box.info-box span { color: #ffbd2e; }
 
-    /* ── Widget de Trade Ativo — cronômetro + status em tempo real ── */
+    /* ── Widget de Trade Ativo — overlay FIXO, sempre visível ── */
     #trade-ativo-bar {
-        display: none;
-        align-items: center;
-        gap: 8px;
-        padding: 5px 10px;
-        margin-top: 4px;
-        border-top: 1px solid rgba(0,255,65,0.2);
-        background: rgba(0,0,0,0.3);
+        display: none;          /* JS muda para 'block' quando ativo */
+        position: fixed;
+        bottom: 18px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 99999;         /* acima de tudo */
+        min-width: 280px;
+        max-width: 94vw;
         font-family: 'Share Tech Mono', monospace;
         font-size: 0.72rem;
-        animation: tradeBarPulse 2s ease-in-out infinite;
+        pointer-events: none;   /* não bloqueia cliques */
     }
-    @keyframes tradeBarPulse {
-        0%,100% { border-top-color: rgba(0,255,65,0.2); }
-        50%      { border-top-color: rgba(0,255,65,0.5); }
+    #trade-bar-inner {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 7px 14px 5px;
+        background: rgba(0,5,0,0.92);
+        border: 1px solid rgba(0,255,65,0.35);
+        border-radius: 8px;
+        box-shadow: 0 0 18px rgba(0,255,65,0.18), inset 0 0 10px rgba(0,255,65,0.04);
     }
-    #trade-ativo-bar.ganhando {
-        border-top-color: rgba(0,255,65,0.6) !important;
-        animation: tradeBarWin 1s ease-in-out infinite;
+    /* Cores do container por status */
+    #trade-ativo-bar.ganhando #trade-bar-inner {
+        border-color: rgba(39,201,63,0.7);
+        box-shadow: 0 0 22px rgba(39,201,63,0.3), inset 0 0 12px rgba(39,201,63,0.06);
+        animation: tradeWinPulse 1.2s ease-in-out infinite;
     }
-    @keyframes tradeBarWin {
-        0%,100% { border-top-color: rgba(39,201,63,0.4); background: rgba(0,20,0,0.4); }
-        50%      { border-top-color: rgba(39,201,63,0.9); background: rgba(0,40,0,0.5); }
+    @keyframes tradeWinPulse {
+        0%,100% { box-shadow: 0 0 14px rgba(39,201,63,0.25); }
+        50%      { box-shadow: 0 0 28px rgba(39,201,63,0.55); }
     }
-    #trade-ativo-bar.perdendo {
-        border-top-color: rgba(255,68,68,0.6) !important;
-        animation: tradeBarLoss 1s ease-in-out infinite;
+    #trade-ativo-bar.perdendo #trade-bar-inner {
+        border-color: rgba(255,68,68,0.7);
+        box-shadow: 0 0 22px rgba(255,68,68,0.3), inset 0 0 12px rgba(255,68,68,0.06);
+        animation: tradeLossPulse 1.2s ease-in-out infinite;
     }
-    @keyframes tradeBarLoss {
-        0%,100% { border-top-color: rgba(255,68,68,0.4); background: rgba(20,0,0,0.4); }
-        50%      { border-top-color: rgba(255,68,68,0.9); background: rgba(40,0,0,0.5); }
+    @keyframes tradeLossPulse {
+        0%,100% { box-shadow: 0 0 14px rgba(255,68,68,0.25); }
+        50%      { box-shadow: 0 0 28px rgba(255,68,68,0.55); }
     }
+    /* Linha de progresso na base do inner */
+    #trade-barra-prog {
+        position: absolute;
+        bottom: 0; left: 0; right: 0;
+        height: 3px;
+        background: rgba(0,255,65,0.1);
+        border-radius: 0 0 8px 8px;
+        overflow: hidden;
+    }
+    #trade-bar-inner { position: relative; }
+    #trade-barra-prog-inner {
+        height: 100%;
+        background: rgba(0,255,65,0.6);
+        border-radius: 0 0 8px 8px;
+        transition: width 0.9s linear, background 0.3s;
+    }
+    #trade-ativo-bar.ganhando #trade-barra-prog-inner { background: #27c93f; }
+    #trade-ativo-bar.perdendo #trade-barra-prog-inner { background: #ff4444; }
+    /* Ícone e textos */
     #trade-status-icone {
-        font-size: 1.1rem;
+        font-size: 1.25rem;
         line-height: 1;
-        transition: all 0.4s ease;
-        filter: drop-shadow(0 0 4px currentColor);
+        filter: drop-shadow(0 0 5px currentColor);
+        transition: filter 0.3s;
+        flex-shrink: 0;
     }
     #trade-status-icone.ganhando { color: #27c93f; }
     #trade-status-icone.perdendo { color: #ff4444; }
     #trade-status-icone.neutro   { color: #ffbd2e; }
     #trade-countdown {
-        font-size: 1.05rem;
+        font-size: 1.15rem;
         font-weight: bold;
         color: #0ff;
         letter-spacing: 1px;
-        min-width: 28px;
+        min-width: 26px;
         text-align: center;
-        transition: color 0.3s;
+        flex-shrink: 0;
     }
-    #trade-countdown.urgente { color: #ff4; animation: piscar 0.5s step-end infinite; }
+    #trade-countdown.urgente {
+        color: #ff4;
+        animation: piscar 0.45s step-end infinite;
+    }
     @keyframes piscar { 50% { opacity: 0; } }
-    #trade-status-txt {
-        font-size: 0.68rem;
+    #trade-status-label {
+        font-weight: bold;
         letter-spacing: 0.5px;
-        color: #aaa;
-        flex: 1;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
     }
-    #trade-barra-prog {
-        height: 3px;
-        background: rgba(0,255,65,0.15);
-        border-radius: 2px;
-        overflow: hidden;
-        width: 100%;
-        margin-top: 3px;
-    }
-    #trade-barra-prog-inner {
-        height: 100%;
-        background: #27c93f;
-        border-radius: 2px;
-        transition: width 0.9s linear, background 0.4s;
-    }
-    #trade-barra-prog-inner.perdendo { background: #ff4444; }
+    #trade-ativo-bar.ganhando #trade-status-label { color: #27c93f; }
+    #trade-ativo-bar.perdendo #trade-status-label { color: #ff4444; }
+    #trade-ativo-bar.neutro   #trade-status-label { color: #ffbd2e; }
 
     .buttons { display: flex; gap: 8px; }
     .btn { width: 12px; height: 12px; border-radius: 50%; }
@@ -2206,23 +2222,6 @@
             <div class="stat-box" id="hd-ect-box" style="display:none;flex:1 1 0%; border-color:rgba(255,189,0,0.45); min-width:90px; cursor:pointer;" onclick="ectAbrirPainel()" title="ECT Monitor — clique para abrir">
                 🤖 <span id="hd-ect-status" style="color:#ffbd00; font-weight:bold; font-size:0.75rem;">ECT OFF</span>
                 <span id="hd-ect-next" style="color:#ffee44; font-size:0.7rem; font-weight:bold;"></span>
-            </div>
-        </div>
-
-        <!-- ══ TRADE ATIVO — cronômetro + ícone status em tempo real ══ -->
-        <div id="trade-ativo-bar">
-            <span id="trade-status-icone" class="neutro">🟡</span>
-            <span style="color:#aaa; font-size:0.65rem; white-space:nowrap; letter-spacing:1px;">TRADE</span>
-            <span id="trade-direcao-icone" style="font-size:0.8rem;"></span>
-            <span id="trade-countdown" title="Segundos restantes até o trade fechar">--</span>
-            <span style="color:rgba(0,255,65,0.4); font-size:0.65rem;">s</span>
-            <span id="trade-status-txt" style="color:#666;"></span>
-            <div style="flex:1;"></div>
-            <div style="display:flex; flex-direction:column; align-items:flex-end; gap:2px; min-width:90px;">
-                <span id="trade-status-label" style="font-size:0.62rem; letter-spacing:0.5px; color:#aaa;"></span>
-                <div id="trade-barra-prog" style="width:90px;">
-                    <div id="trade-barra-prog-inner"></div>
-                </div>
             </div>
         </div>
 
@@ -26636,89 +26635,102 @@ function _tradeEncerrarLocal(statusFinal) {
     }, 2000);
 }
 
-// Renderiza o widget com o estado atual (chamado pelo timer e pelo poll)
-function _tradeMostrarWidget(dadosServidor) {
-    const bar      = document.getElementById('trade-ativo-bar');
-    const icone    = document.getElementById('trade-status-icone');
-    const countEl  = document.getElementById('trade-countdown');
-    const statusTxt= document.getElementById('trade-status-txt');
-    const statusLbl= document.getElementById('trade-status-label');
-    const barInner = document.getElementById('trade-barra-prog-inner');
-    const dirIco   = document.getElementById('trade-direcao-icone');
-    if (!bar) return;
+// ── Referências em cache (evita getElementById a cada frame) ──
+let _tBar, _tIcone, _tCount, _tTxt, _tLbl, _tInner, _tDir;
+function _tradeGetEls() {
+    if (!_tBar) {
+        _tBar   = document.getElementById('trade-ativo-bar');
+        _tIcone = document.getElementById('trade-status-icone');
+        _tCount = document.getElementById('trade-countdown');
+        _tTxt   = document.getElementById('trade-status-txt');
+        _tLbl   = document.getElementById('trade-status-label');
+        _tInner = document.getElementById('trade-barra-prog-inner');
+        _tDir   = document.getElementById('trade-direcao-icone');
+    }
+}
 
-    // Decide qual fonte usar: servidor (Quotex) ou local (Deriv)
-    const usarServidor  = dadosServidor && dadosServidor.ativo;
-    // Mostra o widget se: trade ativo OU ainda dentro dos 2s de exibição do resultado
-    const deveExibir    = usarServidor || _tsLocal.ativo || (_tsLocal.visivelAteMs > Date.now());
+// Renderiza o widget com o estado atual
+function _tradeMostrarWidget(dadosServidor) {
+    _tradeGetEls();
+    if (!_tBar) return;
+
+    const usarServidor = dadosServidor && dadosServidor.ativo;
+    const deveExibir   = usarServidor || _tsLocal.ativo || (_tsLocal.visivelAteMs > Date.now());
 
     if (!deveExibir) {
-        bar.style.display = 'none';
+        _tBar.style.display = 'none';
         return;
     }
 
     // Dados: prioridade servidor > local
+    const agora   = Date.now();
     const secs    = usarServidor
         ? Math.max(0, dadosServidor.segundos_rest || 0)
-        : Math.max(0, _tsLocal.duracao - Math.round((Date.now() - _tsLocal.tsInicio) / 1000));
-    const total   = usarServidor ? (dadosServidor.duracao   || 60)     : (_tsLocal.duracao   || 60);
+        : (_tsLocal.ativo
+            ? Math.max(0, _tsLocal.duracao - Math.round((agora - _tsLocal.tsInicio) / 1000))
+            : 0);
+    const total   = usarServidor ? (dadosServidor.duracao || 60) : (_tsLocal.duracao || 60);
     const status  = usarServidor ? (dadosServidor.status_lucro || 'neutro') : _tsLocal.status;
-    const direcao = usarServidor ? (dadosServidor.direcao    || '').toUpperCase() : _tsLocal.direcao;
-    const nomAtv  = usarServidor ? (dadosServidor.ativo_nome || '')     : _tsLocal.ativoNome;
-    const val     = usarServidor ? (dadosServidor.valor      || 0)      : _tsLocal.valor;
-    const pct     = total > 0 ? Math.min(100, ((total - secs) / total) * 100) : 0;
+    const direcao = usarServidor ? (dadosServidor.direcao || '').toUpperCase() : _tsLocal.direcao;
+    const nomAtv  = usarServidor ? (dadosServidor.ativo_nome || '') : _tsLocal.ativoNome;
+    const val     = usarServidor ? (dadosServidor.valor || 0) : _tsLocal.valor;
+    const pct     = total > 0 ? Math.min(100, ((total - secs) / total) * 100) : 100;
 
-    // Mostra widget
-    bar.style.display      = 'flex';
-    bar.style.flexDirection = 'column';
+    // Exibe — display:block porque o container é position:fixed
+    _tBar.style.display = 'block';
+    _tBar.className     = status;           // controla animação CSS
 
-    // Ícone e cor
+    // Ícone
     const iconMap = { ganhando: '🟢', perdendo: '🔴', neutro: '🟡' };
-    if (icone)  { icone.textContent = iconMap[status] || '🟡'; icone.className = status; }
-
-    // Classe de cor da barra (controla animação CSS)
-    bar.className = status;
+    if (_tIcone) { _tIcone.textContent = iconMap[status] || '🟡'; _tIcone.className = status; }
 
     // Barra de progresso
-    if (barInner) {
-        barInner.style.width = pct.toFixed(1) + '%';
-        barInner.className   = status === 'perdendo' ? 'perdendo' : '';
-    }
+    if (_tInner) { _tInner.style.width = pct.toFixed(1) + '%'; }
 
     // Cronômetro
-    if (countEl) {
-        countEl.textContent = secs;
-        countEl.className   = secs <= 5 ? 'urgente' : '';
+    if (_tCount) {
+        _tCount.textContent = secs;
+        _tCount.className   = secs <= 5 ? 'urgente' : '';
     }
 
     // Direção
-    if (dirIco) {
-        dirIco.textContent = direcao === 'CALL' ? '▲' : (direcao === 'PUT' ? '▼' : '');
-        dirIco.style.color = direcao === 'CALL' ? '#27c93f' : '#ff4444';
+    if (_tDir) {
+        _tDir.textContent = direcao === 'CALL' ? '▲' : (direcao === 'PUT' ? '▼' : '');
+        _tDir.style.color = direcao === 'CALL' ? '#27c93f' : '#ff4444';
     }
 
-    // Labels de texto
+    // Labels
     const statusNome = { ganhando: 'GANHANDO', perdendo: 'PERDENDO', neutro: 'AGUARDANDO' };
-    const labelCor   = { ganhando: '#27c93f',  perdendo: '#ff4444',  neutro: '#ffbd2e'    };
-    if (statusLbl) { statusLbl.textContent = statusNome[status] || ''; statusLbl.style.color = labelCor[status] || '#aaa'; }
-    if (statusTxt) {
+    if (_tLbl) { _tLbl.textContent = statusNome[status] || ''; }
+    if (_tTxt) {
         const vStr = val ? ` $${parseFloat(val).toFixed(2)}` : '';
-        statusTxt.textContent = `${direcao}${nomAtv ? ' ' + nomAtv : ''}${vStr}`;
+        _tTxt.textContent = `${direcao}${nomAtv ? ' ' + nomAtv : ''}${vStr}`;
     }
 }
 
+// ── Reativa o cronômetro quando a aba volta ao foco ──────────────────────────
+// Browsers pausam setIntervals em abas em segundo plano.
+// Ao voltar ao foco, recalculamos imediatamente com Date.now().
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && (_tsLocal.ativo || _tsLocal.visivelAteMs > Date.now())) {
+        // Recalcula e exibe imediatamente ao voltar
+        _tradeMostrarWidget();
+        // Reinicia o timer se estava ativo
+        if (_tsLocal.ativo && !_tsLocal._timer) {
+            _tsLocal._timer = setInterval(_tradeMostrarWidget, 500);
+        }
+    }
+});
+
 // Poll do servidor a cada 1s — APENAS para trades Quotex via Tampermonkey.
-// Para trades Deriv, o estado local (_tsLocal) já cuida sem precisar de rede.
 setInterval(() => {
-    // Se há trade local Deriv ativo, o servidor não sabe — não consultar
     if (_tsLocal.ativo && _tsLocal._fonte === 'deriv') return;
     fetch('/quotex/trade-status')
         .then(r => r.json())
         .then(d => {
             if (d && d.ativo) {
                 _tradeMostrarWidget(d);
-            } else if (!_tsLocal.ativo) {
-                // Sem trade em nenhuma fonte — esconde
+            } else if (!_tsLocal.ativo && !(_tsLocal.visivelAteMs > Date.now())) {
                 _tradeMostrarWidget(null);
             }
         })
@@ -28465,6 +28477,30 @@ function qxEntrarSinal(sinal) {
 </script>
 
 
+
+<!-- ══════════════════════════════════════════════════════════════════
+     OVERLAY FIXO DE TRADE ATIVO
+     position:fixed — permanece visível em qualquer scroll, minimização
+     ou troca de aba. Aparece apenas quando há operação aberta.
+════════════════════════════════════════════════════════════════════ -->
+<div id="trade-ativo-bar" style="display:none;">
+    <div id="trade-bar-inner">
+        <div style="display:flex; align-items:center; gap:8px; flex:1; min-width:0;">
+            <span id="trade-status-icone" class="neutro">🟡</span>
+            <span style="color:rgba(0,255,65,0.55); font-size:0.6rem; white-space:nowrap; letter-spacing:1.5px; text-transform:uppercase;">Trade</span>
+            <span id="trade-direcao-icone" style="font-size:0.82rem; font-weight:bold;"></span>
+            <span id="trade-countdown" title="Segundos restantes">--</span>
+            <span style="color:rgba(0,255,65,0.4); font-size:0.6rem; margin-left:-4px;">s</span>
+            <span id="trade-status-txt" style="color:#555; font-size:0.62rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; min-width:0;"></span>
+        </div>
+        <div style="display:flex; flex-direction:column; align-items:flex-end; gap:2px; flex-shrink:0; min-width:80px;">
+            <span id="trade-status-label" style="font-size:0.6rem; letter-spacing:0.5px; font-weight:bold;"></span>
+            <div id="trade-barra-prog">
+                <div id="trade-barra-prog-inner"></div>
+            </div>
+        </div>
+    </div>
+</div>
 
 </body>
 </html>
