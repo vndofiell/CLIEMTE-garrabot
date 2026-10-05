@@ -26801,6 +26801,10 @@ function _tradeAtivarLocal(direcao, durSecs, ativoNome, valor, fonte) {
     _tradeMostrarWidget();
     // Atualiza o cronômetro a cada 500ms localmente (suave e sem flickering)
     _tsLocal._timer = setInterval(_tradeMostrarWidget, 500);
+    // Inicia o widget ao vivo no Telegram
+    if (typeof _tgLiveIniciar === 'function') {
+        _tgLiveIniciar(_tsLocal.direcao, _tsLocal.duracao, _tsLocal.ativoNome, _tsLocal.valor);
+    }
 }
 
 // Encerra o contrato: libera o bloqueio de entrada IMEDIATAMENTE
@@ -26816,6 +26820,12 @@ function _tradeEncerrarLocal(statusFinal, lucroFinal) {
     _tsLocal.duracao  = Math.round((Date.now() - _tsLocal.tsInicio) / 1000);
     _tsLocal.visivelAteMs = Date.now() + 3000;   // fica visível por 3s
     _tradeMostrarWidget();
+    // Encerra o widget ao vivo no Telegram com o resultado final
+    if (typeof _tgLiveEncerrar === 'function') {
+        const _won   = statusFinal === 'ganhando';
+        const _lucro = (lucroFinal !== undefined && lucroFinal !== null) ? parseFloat(lucroFinal) : 0;
+        _tgLiveEncerrar(_won, _lucro);
+    }
     // Some após 3s
     if (_tsLocal._timerEncerrando) clearTimeout(_tsLocal._timerEncerrando);
     _tsLocal._timerEncerrando = setTimeout(() => {
@@ -26839,6 +26849,89 @@ function _tradeGetEls() {
     if (!_tDir)   _tDir   = document.getElementById('trade-direcao-icone');
     if (!_tLucro) _tLucro = document.getElementById('trade-lucro-badge');
     if (!_tGlow)  _tGlow  = document.getElementById('trade-screen-glow');
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// WIDGET AO VIVO NO TELEGRAM — espelha o cronômetro do bot em tempo real
+// Usa 3 rotas: /tg-trade-aberto (abre) → /tg-trade-tick (1×/s) → /tg-trade-fechado
+// Só envia se Telegram estiver habilitado e com resultados ativos (_tgCfg)
+// ════════════════════════════════════════════════════════════════════════════
+const _tgLive = {
+    ativo:        false,
+    direcao:      '',
+    total:        0,
+    ativo_nome:   '',
+    stake:        0,
+    _tickTimer:   null,
+    _ultimoSecs:  -1,   // evita editar quando os segundos não mudaram
+};
+
+function _tgLiveIniciar(direcao, total, ativoNome, stake) {
+    if (!_tgCfg.enabled || !_tgCfg.resultados || !_tgCfg.token || !_tgCfg.chat_id) return;
+    // Cancela qualquer ciclo anterior
+    if (_tgLive._tickTimer) { clearInterval(_tgLive._tickTimer); _tgLive._tickTimer = null; }
+    _tgLive.ativo       = true;
+    _tgLive.direcao     = direcao || '';
+    _tgLive.total       = total   || 60;
+    _tgLive.ativo_nome  = ativoNome || 'R_100';
+    _tgLive.stake       = parseFloat(stake) || 0;
+    _tgLive._ultimoSecs = -1;
+
+    const secsAtual = Math.max(0, _tsLocal.duracao - Math.round((Date.now() - _tsLocal.tsInicio) / 1000));
+    fetch('/tg-trade-aberto', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            token:   _tgCfg.token,
+            chat_id: _tgCfg.chat_id,
+            direcao: direcao,
+            secs:    secsAtual,
+            total:   total,
+            ativo:   ativoNome,
+            stake:   stake,
+        }),
+    }).catch(() => {});
+
+    // Edita a cada segundo enquanto o trade estiver aberto
+    _tgLive._tickTimer = setInterval(() => {
+        if (!_tgLive.ativo || !_tsLocal.ativo) return;
+        const secs = Math.max(0, _tsLocal.duracao - Math.round((Date.now() - _tsLocal.tsInicio) / 1000));
+        // Não edita se os segundos não mudaram (evita flood no Telegram)
+        if (secs === _tgLive._ultimoSecs) return;
+        _tgLive._ultimoSecs = secs;
+        fetch('/tg-trade-tick', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                direcao: _tgLive.direcao,
+                secs:    secs,
+                total:   _tgLive.total,
+                status:  _tsLocal.status || 'neutro',
+                ativo:   _tgLive.ativo_nome,
+                stake:   _tgLive.stake,
+            }),
+        }).catch(() => {});
+    }, 1000);
+}
+
+function _tgLiveEncerrar(won, lucro) {
+    if (!_tgLive.ativo) return;
+    _tgLive.ativo = false;
+    if (_tgLive._tickTimer) { clearInterval(_tgLive._tickTimer); _tgLive._tickTimer = null; }
+    if (!_tgCfg.enabled || !_tgCfg.resultados || !_tgCfg.token || !_tgCfg.chat_id) return;
+    fetch('/tg-trade-fechado', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            token:   _tgCfg.token,
+            chat_id: _tgCfg.chat_id,
+            direcao: _tgLive.direcao,
+            ativo:   _tgLive.ativo_nome,
+            stake:   _tgLive.stake,
+            won:     won,
+            lucro:   lucro != null ? lucro : 0,
+        }),
+    }).catch(() => {});
 }
 
 // Renderiza o widget com o estado atual

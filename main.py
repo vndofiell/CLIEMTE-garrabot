@@ -3056,6 +3056,207 @@ def _tg_enviar_texto(token: str, chat_id: str, msg: str) -> bool:
         print(f"[TG] sendMessage erro: {e}")
         return False
 
+
+
+def _tg_enviar_texto_ret(token: str, chat_id: str, msg: str) -> int:
+    """Envia mensagem de texto e retorna o message_id (0 em caso de erro)."""
+    try:
+        resp = requests.post(
+            _tg_url(token, "sendMessage"),
+            headers=_TG_HEADERS,
+            json={"chat_id": str(chat_id), "text": msg, "parse_mode": "HTML"},
+            timeout=_TG_TIMEOUT,
+            verify=False,
+        )
+        r = resp.json()
+        if r.get("ok"):
+            return int(r["result"]["message_id"])
+        print(f"[TG-LIVE] sendMessage falhou: {resp.text[:200]}")
+        return 0
+    except Exception as e:
+        print(f"[TG-LIVE] sendMessage erro: {e}")
+        return 0
+
+
+def _tg_editar_texto(token: str, chat_id: str, message_id: int, msg: str) -> bool:
+    """Edita uma mensagem existente pelo message_id."""
+    try:
+        resp = requests.post(
+            _tg_url(token, "editMessageText"),
+            headers=_TG_HEADERS,
+            json={
+                "chat_id":    str(chat_id),
+                "message_id": message_id,
+                "text":       msg,
+                "parse_mode": "HTML",
+            },
+            timeout=_TG_TIMEOUT,
+            verify=False,
+        )
+        r = resp.json()
+        if not r.get("ok") and "not modified" not in str(r.get("description", "")):
+            print(f"[TG-LIVE] editMessageText falhou: {resp.text[:150]}")
+        return r.get("ok", False)
+    except Exception as e:
+        print(f"[TG-LIVE] editMessageText erro: {e}")
+        return False
+
+
+def _tg_deletar(token: str, chat_id: str, message_id: int):
+    """Deleta uma mensagem pelo message_id (silencioso em caso de erro)."""
+    try:
+        requests.post(
+            _tg_url(token, "deleteMessage"),
+            headers=_TG_HEADERS,
+            json={"chat_id": str(chat_id), "message_id": message_id},
+            timeout=_TG_TIMEOUT,
+            verify=False,
+        )
+    except Exception:
+        pass
+
+
+# Estado global do widget ao vivo
+_tg_live_state: dict = {
+    "message_id": 0,
+    "token":      "",
+    "chat_id":    "",
+    "lock":       threading.Lock(),
+}
+
+
+def _tg_live_montar(direcao: str, secs: int, total: int, status: str,
+                    ativo: str, stake: float) -> str:
+    icone = {"neutro": "🟡", "ganhando": "🟢", "perdendo": "🔴"}.get(status, "🟡")
+    pct    = min(1.0, (total - secs) / total) if total > 0 else 1.0
+    filled = int(pct * 10)
+    barra  = "▓" * filled + "░" * (10 - filled)
+    dir_up = direcao.upper()
+    if dir_up in ("CALL", "RISE"):           seta = "▲ CALL"
+    elif dir_up in ("PUT", "FALL"):          seta = "▼ PUT"
+    elif "OVER"  in dir_up:                  seta = "▲ OVER"
+    elif "UNDER" in dir_up:                  seta = "▼ UNDER"
+    elif "EVEN"  in dir_up:                  seta = "◆ EVEN"
+    elif "ODD"   in dir_up:                  seta = "◇ ODD"
+    else:                                    seta = dir_up or "—"
+    seg_txt = f"⚡ {secs}s" if 0 < secs <= 5 else f"{secs}s"
+    linha_status = {
+        "neutro":   "⏳ <b>AGUARDANDO</b>",
+        "ganhando": "✅ <b>GANHANDO</b>",
+        "perdendo": "🔄 <b>PERDENDO</b>",
+    }.get(status, "⏳ <b>AGUARDANDO</b>")
+    return (
+        f"━━━━━━━━━━━━━━━━━━\n"
+        f"⚡ <b>BOT GARRA — TRADE AO VIVO</b>\n"
+        f"━━━━━━━━━━━━━━━━━━\n"
+        f"{icone}  {seta}  •  <b>{ativo}</b>  •  ${stake:.2f}\n"
+        f"⏱  {seg_txt}  [{barra}]\n"
+        f"{linha_status}\n"
+        f"━━━━━━━━━━━━━━━━━━"
+    )
+
+
+def _tg_live_resultado(direcao: str, ativo: str, stake: float,
+                       won: bool, lucro: float) -> str:
+    cot = _buscar_cotacao()
+    lucro_brl = abs(lucro) * cot
+    dir_up = direcao.upper()
+    seta = "▲" if dir_up in ("CALL","RISE","DIGITOVER") else "▼"
+    if won:
+        return (
+            f"━━━━━━━━━━━━━━━━━━\n"
+            f"✅ <b>WIN!</b>  {seta} {dir_up}  •  <b>{ativo}</b>\n"
+            f"━━━━━━━━━━━━━━━━━━\n"
+            f"💰 Entrada:   ${stake:.2f}\n"
+            f"📈 Lucro:    <b>+${lucro:.2f}</b>  (R$+{lucro_brl:.2f})\n"
+            f"━━━━━━━━━━━━━━━━━━"
+        )
+    else:
+        return (
+            f"━━━━━━━━━━━━━━━━━━\n"
+            f"🔄 <b>LOSS</b>  {seta} {dir_up}  •  <b>{ativo}</b>\n"
+            f"━━━━━━━━━━━━━━━━━━\n"
+            f"💰 Entrada:   ${stake:.2f}\n"
+            f"📉 Resultado: <b>-${abs(lucro):.2f}</b>  (R$-{lucro_brl:.2f})\n"
+            f"━━━━━━━━━━━━━━━━━━"
+        )
+
+
+@app.route('/tg-trade-aberto', methods=['POST'])
+def tg_trade_aberto():
+    """Chamado quando nova entrada é confirmada. Envia mensagem inicial e salva message_id."""
+    d = request.get_json(force=True, silent=True) or {}
+    token   = d.get("token", "")
+    chat_id = d.get("chat_id", "")
+    if not token or not chat_id:
+        return jsonify({"ok": False, "erro": "token/chat_id ausentes"})
+    direcao = str(d.get("direcao", ""))
+    secs    = int(d.get("secs",  60))
+    total   = int(d.get("total", secs))
+    ativo   = str(d.get("ativo", "R_100"))
+    stake   = float(d.get("stake", 0))
+    with _tg_live_state["lock"]:
+        old_id  = _tg_live_state["message_id"]
+        old_tok = _tg_live_state["token"]
+        old_cid = _tg_live_state["chat_id"]
+        if old_id:
+            _tg_deletar(old_tok, old_cid, old_id)
+        texto = _tg_live_montar(direcao, secs, total, "neutro", ativo, stake)
+        mid = _tg_enviar_texto_ret(token, chat_id, texto)
+        _tg_live_state["message_id"] = mid
+        _tg_live_state["token"]      = token
+        _tg_live_state["chat_id"]    = chat_id
+    return jsonify({"ok": True, "message_id": mid})
+
+
+@app.route('/tg-trade-tick', methods=['POST'])
+def tg_trade_tick():
+    """Chamado a cada segundo. Edita a mensagem com cronômetro atualizado."""
+    d = request.get_json(force=True, silent=True) or {}
+    with _tg_live_state["lock"]:
+        mid     = _tg_live_state["message_id"]
+        token   = _tg_live_state["token"]
+        chat_id = _tg_live_state["chat_id"]
+    if not mid:
+        return jsonify({"ok": False, "motivo": "sem mensagem ativa"})
+    direcao = str(d.get("direcao", ""))
+    secs    = int(d.get("secs",  0))
+    total   = int(d.get("total", 60))
+    status  = str(d.get("status", "neutro"))
+    ativo   = str(d.get("ativo", "R_100"))
+    stake   = float(d.get("stake", 0))
+    texto = _tg_live_montar(direcao, secs, total, status, ativo, stake)
+    ok = _tg_editar_texto(token, chat_id, mid, texto)
+    return jsonify({"ok": ok})
+
+
+@app.route('/tg-trade-fechado', methods=['POST'])
+def tg_trade_fechado():
+    """Chamado quando o contrato fecha. Edita com resultado e deleta após 4s."""
+    d = request.get_json(force=True, silent=True) or {}
+    with _tg_live_state["lock"]:
+        mid     = _tg_live_state["message_id"]
+        token   = _tg_live_state["token"]
+        chat_id = _tg_live_state["chat_id"]
+        _tg_live_state["message_id"] = 0
+    if not mid:
+        return jsonify({"ok": False, "motivo": "sem mensagem ativa"})
+    direcao = str(d.get("direcao", ""))
+    ativo   = str(d.get("ativo",   "R_100"))
+    stake   = float(d.get("stake", 0))
+    won     = bool(d.get("won",    False))
+    lucro   = float(d.get("lucro", 0))
+    def _fechar():
+        import time as _t
+        texto_res = _tg_live_resultado(direcao, ativo, stake, won, lucro)
+        _tg_editar_texto(token, chat_id, mid, texto_res)
+        _t.sleep(4)
+        _tg_deletar(token, chat_id, mid)
+    _tg_dispatch(_fechar)
+    return jsonify({"ok": True})
+
+
+
 def _tg_dispatch(fn):
     """Executa fn numa thread daemon — não bloqueia o Flask."""
     threading.Thread(target=fn, daemon=True).start()
