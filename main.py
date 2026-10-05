@@ -12285,6 +12285,11 @@ def garra_hma_avaliar_multi():
     contrato         = str(dados.get("contrato", "AUTO")).upper()
     janelas          = dados.get("janelas", None)
     confianca_minima = float(dados.get("confianca_minima", 68.0))
+    # Na varredura multi usamos threshold reduzido para não descartar mercados
+    # que estão ligeiramente abaixo do limiar de entrada — o melhor é escolhido
+    # pelo maior score entre os aprovados, então o limiar de comparação pode ser
+    # menor que o de entrada (mínimo 50, máximo = limiar de entrada).
+    confianca_scan = max(50.0, confianca_minima - 15.0)
     banca            = float(dados.get("banca", 100.0))
     stake            = float(dados.get("stake", 1.0))
     payout           = float(dados.get("payout", 0.85))
@@ -12305,7 +12310,8 @@ def garra_hma_avaliar_multi():
             if ticks_prontos and len(ticks_prontos) >= 10:
                 ticks = ticks_prontos
             else:
-                ticks = _buscar_ticks_ws_sync(ativo, count=100)
+                # 300 ticks garante janelas de 10/25/50/100/250 preenchidas
+                ticks = _buscar_ticks_ws_sync(ativo, count=300)
             if not ticks or len(ticks) < 10:
                 print(f"[HMA-MULTI] {ativo} — ticks insuficientes ({len(ticks) if ticks else 0})")
                 return
@@ -12313,7 +12319,7 @@ def garra_hma_avaliar_multi():
                 ticks            = ticks,
                 contrato         = contrato,
                 janelas          = janelas,
-                confianca_minima = confianca_minima,
+                confianca_minima = confianca_scan,   # threshold reduzido para comparação
                 banca            = banca,
                 stake            = stake,
                 payout           = payout,
