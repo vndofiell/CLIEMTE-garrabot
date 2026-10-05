@@ -26801,8 +26801,9 @@ function _tradeAtivarLocal(direcao, durSecs, ativoNome, valor, fonte) {
     _tradeMostrarWidget();
     // Atualiza o cronômetro a cada 500ms localmente (suave e sem flickering)
     _tsLocal._timer = setInterval(_tradeMostrarWidget, 500);
-    // Inicia o widget ao vivo no Telegram
-    if (typeof _tgLiveIniciar === 'function') {
+    // Inicia o widget ao vivo no Telegram — apenas quando a conta secundária está operando
+    const _secEspelhando = typeof _sec !== 'undefined' && _sec.pronto && _sec.espelhandoAtivo;
+    if (_secEspelhando && typeof _tgLiveIniciar === 'function') {
         _tgLiveIniciar(_tsLocal.direcao, _tsLocal.duracao, _tsLocal.ativoNome, _tsLocal.valor);
     }
 }
