@@ -7659,7 +7659,8 @@ function resetarPlacar() {
     bot._maxWinConsec  = 0;
     bot._maxLossConsec = 0;
     bot._maxStakeUsada = 0;
-    bot._buying = false;
+    bot._buying          = false;
+    bot._contratoEmCurso = false;  // reseta guard de contrato em minutos
     bot.mgr = new GerenciadorUnificado(bot.gerenciamento,
         Object.assign({ stake: bot.initialStake }, (bot._mgrCfgs && bot._mgrCfgs[bot.gerenciamento]) || {}));
     bot.stake = bot.initialStake;
@@ -11578,6 +11579,9 @@ function initWebSocket(wssUrl) {
 
                 // _precos é acumulado globalmente acima (antes do guard bot._buying)
 
+                // ── GUARD: não analisa enquanto há contrato de minutos em aberto ──
+                if (bot._contratoEmCurso) return;
+
                 // ── FASE 2: sinal pendente → entra agora (ou na virada da vela) ──
                 if (bot._hmaSinalPendente) {
                     if (bot._buying || (typeof _tsLocal !== 'undefined' && _tsLocal.ativo)) {
@@ -11971,6 +11975,12 @@ function initWebSocket(wssUrl) {
                 // Guarda estado do espelho NO MOMENTO da compra — evita race condition no fechamento
                 if (!bot._cidEspelho) bot._cidEspelho = {};
                 bot._cidEspelho[cid] = !!(typeof _sec !== 'undefined' && _sec.espelhandoAtivo);
+                // Bloqueia nova análise HMA enquanto contrato de minutos estiver em aberto
+                const _estAtual = ESTRATEGIAS[bot.estrategia];
+                if (_estAtual && _estAtual.duracao_unit === 'm') {
+                    bot._contratoEmCurso = true;
+                    _seqStatusUpdate(`🧠 HMA — contrato em andamento (${_estAtual.duracao || 1}m), aguardando resultado para nova análise...`);
+                }
                 bot.ws.send(json({ proposal_open_contract: 1, contract_id: cid, subscribe: 1 }));
                 // Modo Dupla: rastreia IDs pendentes e mapeia cid → lado (OVER/UNDER)
                 if (bot._duplaAtiva) {
@@ -12132,6 +12142,7 @@ function initWebSocket(wssUrl) {
                 bot._duplaResultados_debug = null;
                 bot._duplaLadoMap          = null;
                 bot._buying                = false;
+                bot._contratoEmCurso       = false;  // libera nova análise HMA (dupla)
                 // ── Encerra o widget de cronômetro (Dupla) com status final ──
                 if (typeof _tradeEncerrarLocal === 'function') _tradeEncerrarLocal(wonReal ? 'ganhando' : 'perdendo', totalProfit);
 
@@ -12213,6 +12224,7 @@ function initWebSocket(wssUrl) {
             } else {
                 // ── Resultado normal (contrato único) ─────────────────────
                 bot._buying = false;
+                bot._contratoEmCurso = false;  // libera nova análise HMA
                 // ── Encerra o widget de cronômetro com status final ──
                 if (typeof _tradeEncerrarLocal === 'function') _tradeEncerrarLocal(won ? 'ganhando' : 'perdendo', profit);
                 bot.profit  += profit;
