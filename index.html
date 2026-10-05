@@ -4827,7 +4827,7 @@ const ESTRATEGIAS = {
         // Modo de análise: "manual" | "multi_tick" | "hibrido" | "automatico"
         hma_modo:         "hibrido",
         // Seleção automática de ativo
-        hma_auto_ativo:   false,
+        hma_auto_ativo:   true,
         hma_mercados:     ["R_10","R_25","R_50","R_75","R_100"],
         hma_losses_troca: 3,   // trocar mercado após N losses seguidos (0 = desligado)
         // Aprendizado: registra resultado em /garra-hma/historico
@@ -11878,6 +11878,12 @@ function initWebSocket(wssUrl) {
                     const _riskVeto = _hmaRes.risk_gate && !_hmaRes.risk_gate.aprovado
                         ? ` | 🛡️ RISK GATE: ${(_hmaRes.risk_gate.motivos_veto || []).join('; ')}`
                         : '';
+
+                    // Bloqueio do servidor (operação em andamento) — não tenta outros mercados
+                    if (_motHma === 'Aguardando resultado da operação anterior.') {
+                        _seqStatusUpdate(`🧠 HMA ⏳ operação em andamento — aguardando resultado...`);
+                        return;
+                    }
 
                     // ── AUTO: tenta outros mercados se NO TRADE no ativo atual ─
                     if (est.hma_auto_ativo && Array.isArray(est.hma_mercados) && est.hma_mercados.length > 0) {
