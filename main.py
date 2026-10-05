@@ -12028,10 +12028,6 @@ def garra_m1_stats():
 # ═══════════════════════════════════════════════════════════════════════════════
 from trading_pro_multi_ai import get_orchestrator as _get_trading_pro
 
-# ── Bloqueio de operação em andamento (Trading Pro) ───────────────────────────
-_tp_op_lock   = threading.Lock()
-_tp_op_estado = {"em_andamento": False}   # True = aguardando resultado
-
 @app.route('/trading-pro/avaliar', methods=['POST'])
 def trading_pro_avaliar():
     """
@@ -12066,18 +12062,6 @@ def trading_pro_avaliar():
             "timestamp":  float(v.get("timestamp",  v.get("time",  0))),
         })
 
-    # ── Bloqueio: não entra enquanto há operação em andamento ────────────────
-    with _tp_op_lock:
-        if _tp_op_estado["em_andamento"]:
-            return jsonify({
-                "operar":  False,
-                "direcao": "AGUARDAR",
-                "score":   0,
-                "motivo":  "Aguardando resultado da operação anterior.",
-                "votos":   {},
-                "lider":   None,
-            })
-
     orc = _get_trading_pro()
     # Recarrega config do disco a cada avaliação — garante que mudanças no JSON
     # sejam aplicadas sem reiniciar o servidor
@@ -12094,11 +12078,6 @@ def trading_pro_avaliar():
 
     resultado = orc.avaliar(velas_norm, broker=broker, ativo=ativo,
                             drawdown_pct=drawdown_pct)
-
-    # Se aprovado, marca operação em andamento — bloqueia próxima entrada
-    if resultado.get("operar"):
-        with _tp_op_lock:
-            _tp_op_estado["em_andamento"] = True
 
     # Notificação Telegram quando aprovado (bloqueado no modo ESPELHO — sinais não enviados)
     if resultado.get("operar") and _MODO_OPERACAO.get("modo") != "ESPELHO":
@@ -12151,11 +12130,6 @@ def trading_pro_resultado():
         ativo     = str(dados.get("ativo", "")),
         score     = float(dados.get("score", 0.0)),
     )
-
-    # ── Libera o bloqueio — próxima operação pode ser analisada ──────────────
-    with _tp_op_lock:
-        _tp_op_estado["em_andamento"] = False
-
     return jsonify({"ok": True, "status": orc.status()})
 
 
@@ -12186,12 +12160,6 @@ def _ping():
 # Motor híbrido de decisão multi-timeframe
 # ═══════════════════════════════════════════════════════════════════════════════
 
-# ── Bloqueio de operação em andamento (HMA) ───────────────────────────────────
-# Após um sinal aprovado, novas avaliações retornam NO_TRADE até o resultado
-# da operação anterior ser registrado via /garra-hma/historico.
-_hma_op_lock   = threading.Lock()
-_hma_op_estado = {"em_andamento": False}   # True = aguardando resultado
-
 @app.route('/garra-hma/avaliar', methods=['POST'])
 def garra_hma_avaliar():
     """
@@ -12218,16 +12186,6 @@ def garra_hma_avaliar():
             "motivo": "Mínimo de 10 ticks necessário.",
         }), 400
 
-    # ── Bloqueio: não entra enquanto há operação em andamento ────────────────
-    with _hma_op_lock:
-        if _hma_op_estado["em_andamento"]:
-            return jsonify({
-                "aprovado": False,
-                "decisao":  "NO_TRADE",
-                "confianca": 0,
-                "motivo":   "Aguardando resultado da operação anterior.",
-            })
-
     # historico_recente: int (losses seguidos) vindo do front-end
     _hist = dados.get("historico_recente", 0)
     try:
@@ -12246,16 +12204,10 @@ def garra_hma_avaliar():
         historico_recente = _hist,
     )
 
-    # Se aprovado, marca operação em andamento — bloqueia próxima entrada
-    if resultado.get("aprovado"):
-        with _hma_op_lock:
-            _hma_op_estado["em_andamento"] = True
-
     # Log local
     print(
         f"[HMA] decisao={resultado['decisao']} conf={resultado['confianca']}% "
-        f"regime={resultado['regime']} aprovado={resultado['aprovado']} "
-        f"em_andamento={_hma_op_estado['em_andamento']}"
+        f"regime={resultado['regime']} aprovado={resultado['aprovado']}"
     )
 
     return jsonify(resultado)
@@ -12285,11 +12237,6 @@ def garra_hma_avaliar_multi():
     contrato         = str(dados.get("contrato", "AUTO")).upper()
     janelas          = dados.get("janelas", None)
     confianca_minima = float(dados.get("confianca_minima", 68.0))
-    # Na varredura multi usamos threshold reduzido para não descartar mercados
-    # que estão ligeiramente abaixo do limiar de entrada — o melhor é escolhido
-    # pelo maior score entre os aprovados, então o limiar de comparação pode ser
-    # menor que o de entrada (mínimo 50, máximo = limiar de entrada).
-    confianca_scan = max(50.0, confianca_minima - 15.0)
     banca            = float(dados.get("banca", 100.0))
     stake            = float(dados.get("stake", 1.0))
     payout           = float(dados.get("payout", 0.85))
@@ -12310,8 +12257,7 @@ def garra_hma_avaliar_multi():
             if ticks_prontos and len(ticks_prontos) >= 10:
                 ticks = ticks_prontos
             else:
-                # 300 ticks garante janelas de 10/25/50/100/250 preenchidas
-                ticks = _buscar_ticks_ws_sync(ativo, count=300)
+                ticks = _buscar_ticks_ws_sync(ativo, count=100)
             if not ticks or len(ticks) < 10:
                 print(f"[HMA-MULTI] {ativo} — ticks insuficientes ({len(ticks) if ticks else 0})")
                 return
@@ -12319,7 +12265,7 @@ def garra_hma_avaliar_multi():
                 ticks            = ticks,
                 contrato         = contrato,
                 janelas          = janelas,
-                confianca_minima = confianca_scan,   # threshold reduzido para comparação
+                confianca_minima = confianca_minima,
                 banca            = banca,
                 stake            = stake,
                 payout           = payout,
@@ -12401,11 +12347,7 @@ def garra_hma_historico():
 
     _hma_hist_salvar(entrada)
 
-    # ── Libera o bloqueio — próxima operação pode ser analisada ──────────────
-    with _hma_op_lock:
-        _hma_op_estado["em_andamento"] = False
-
-    print(f"[HMA-HIST] {resultado} | {entrada['ativo']} | {entrada['contrato']} | conf={entrada['confianca']}% | desbloqueado")
+    print(f"[HMA-HIST] {resultado} | {entrada['ativo']} | {entrada['contrato']} | conf={entrada['confianca']}%")
     return jsonify({"ok": True, "msg": "Resultado registrado no histórico HMA."})
 
 

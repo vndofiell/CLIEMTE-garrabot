@@ -162,27 +162,21 @@ class MultiTimeframeAnalyzer:
         pct_over5   = n_over5   / n
         pct_under5  = n_under5  / n
 
-        # ── Slope LONGO: regressão sobre toda a janela ────────────────────────
-        slope_longo = _slope_linear(slice_t)
-        media_slice = sum(slice_t) / n
-        slope_longo_norm = slope_longo / max(abs(media_slice), 0.0001)
+        # ── Tendência via regressão linear dos últimos min(25, janela) ticks ──
+        # Usa uma janela deslizante curta para detectar a tendência recente sem
+        # ser contaminado por movimentos antigos da janela grande.
+        slope_n = min(25, janela)
+        slope_ticks = slice_t[-slope_n:]
+        slope = _slope_linear(slope_ticks)
+        media_slope = sum(slope_ticks) / len(slope_ticks)
+        # Normaliza o slope pelo nível de preço para comparar ativos diferentes
+        slope_norm = slope / max(abs(media_slope), 0.0001)
+        tendencia_alta = slope > 0
 
-        # ── Slope CURTO: últimos min(15, janela//3) ticks — tendência recente ─
-        slope_curto_n = max(5, min(15, janela // 3))
-        slope_curto_ticks = slice_t[-slope_curto_n:]
-        slope_curto = _slope_linear(slope_curto_ticks)
-        media_curto = sum(slope_curto_ticks) / len(slope_curto_ticks)
-        slope_curto_norm = slope_curto / max(abs(media_curto), 0.0001)
-
-        # Direção confirmada somente quando slope curto E longo apontam o mesmo lado
-        tendencia_alta_longa = slope_longo > 0
-        tendencia_alta_curta = slope_curto > 0
-        tendencia_confirmada = (tendencia_alta_longa == tendencia_alta_curta)
-        tendencia_alta = tendencia_alta_curta   # usamos o curto como sinal principal
-
-        # ── Volatilidade normalizada da janela completa ────────────────────────
-        variancia = sum((t - media_slice) ** 2 for t in slice_t) / n
-        vol = math.sqrt(variancia) / max(abs(media_slice), 0.0001)
+        # Volatilidade normalizada da janela completa
+        media = sum(slice_t) / n
+        variancia = sum((t - media) ** 2 for t in slice_t) / n
+        vol = math.sqrt(variancia) / max(abs(media), 0.0001)
 
         # Seleciona direção e confiança conforme contrato solicitado
         contrato_u = contrato.upper()
@@ -208,61 +202,32 @@ class MultiTimeframeAnalyzer:
             direcao   = "ODD" if pct_pares >= 0.50 else "EVEN"
 
         elif contrato_u in ("CALL/PUT AUTO", "CALL_PUT_AUTO", "DIRECIONAL"):
-            # ── Slope duplo: curto + longo devem concordar ────────────────────
-            # force proporcional à MÉDIA dos slopes curto e longo — evita inflação
-            # quando apenas um dos dois é forte.
-            force_c = min(1.0, abs(slope_curto_norm) * 3000)
-            force_l = min(1.0, abs(slope_longo_norm) * 3000)
-            force   = (force_c + force_l) / 2.0   # média — mais conservador
-
-            if not tendencia_confirmada:
-                # Slopes divergem — confiança cai para zona de NO_TRADE
-                confianca = 45.0
-                direcao   = "NOTR"
-            else:
-                # Confiança parte de 55 (força zero) e vai até 90 (força máxima)
-                # Muito mais honesto que o antigo 72..95 fixo
-                confianca = 55.0 + force * 35.0
-                direcao   = "CALL" if tendencia_alta else "PUT"
+            # ── Regressão linear real: confiança sobe com a força do slope ──
+            # slope_norm: quanto o preço sobe/desce por tick em relação ao nível médio
+            # |slope_norm| = 0.0001 → movimento muito fraco → ~72% confiança
+            # |slope_norm| = 0.001  → movimento forte     → ~80% confiança
+            # Caps em 95% para evitar over-confidence
+            force = min(1.0, abs(slope_norm) * 5000)   # 0..1
+            confianca_base = 72 + force * 23            # 72..95
+            direcao   = "CALL" if tendencia_alta else "PUT"
+            confianca = confianca_base
 
         elif contrato_u == "CALL":
-            force_c = min(1.0, abs(slope_curto_norm) * 3000)
-            force_l = min(1.0, abs(slope_longo_norm) * 3000)
-            force   = (force_c + force_l) / 2.0
-            if not tendencia_confirmada:
-                confianca = 45.0
-                direcao   = "NOTR"
-            elif tendencia_alta:
-                confianca = 55.0 + force * 35.0
-                direcao   = "CALL"
-            else:
-                confianca = 40.0 - force * 10.0
-                direcao   = "PUT"
+            # Força a entrada em CALL; confiança depende da intensidade do slope
+            force     = min(1.0, abs(slope_norm) * 5000)
+            confianca = (70 + force * 25) if tendencia_alta else (45 - force * 15)
+            direcao   = "CALL" if tendencia_alta else "PUT"
 
         elif contrato_u == "PUT":
-            force_c = min(1.0, abs(slope_curto_norm) * 3000)
-            force_l = min(1.0, abs(slope_longo_norm) * 3000)
-            force   = (force_c + force_l) / 2.0
-            if not tendencia_confirmada:
-                confianca = 45.0
-                direcao   = "NOTR"
-            elif not tendencia_alta:
-                confianca = 55.0 + force * 35.0
-                direcao   = "PUT"
-            else:
-                confianca = 40.0 - force * 10.0
-                direcao   = "CALL"
+            force     = min(1.0, abs(slope_norm) * 5000)
+            confianca = (70 + force * 25) if not tendencia_alta else (45 - force * 15)
+            direcao   = "PUT" if not tendencia_alta else "CALL"
 
         else:
             # ── AUTO: avalia todas as 6 direções e escolhe a mais forte ──
-            force_c  = min(1.0, abs(slope_curto_norm) * 3000)
-            force_l  = min(1.0, abs(slope_longo_norm) * 3000)
-            force_cp = (force_c + force_l) / 2.0 * 0.45
-            if tendencia_confirmada:
-                score_call = 0.50 + force_cp if tendencia_alta else 0.50 - force_cp
-            else:
-                score_call = 0.50   # sem confirmação → neutro
-            score_put = 1.0 - score_call
+            force_cp = min(0.45, abs(slope_norm) * 5000 / 100)
+            score_call  = 0.50 + force_cp if tendencia_alta  else 0.50 - force_cp
+            score_put   = 1.0 - score_call
             opcoes = {
                 "OVER":  pct_over5,
                 "UNDER": pct_under5,
@@ -273,27 +238,23 @@ class MultiTimeframeAnalyzer:
             }
             melhor    = max(opcoes, key=opcoes.get)
             confianca = opcoes[melhor] * 100
-            direcao   = melhor if confianca > 53 else "NOTR"
+            direcao   = melhor if confianca > 52 else "NOTR"
 
         confianca = round(min(99, max(0, confianca)), 1)
 
-        # ── Penalização por alta volatilidade ─────────────────────────────────
-        if vol > 0.008:
-            confianca *= 0.85   # penaliza mais cedo e mais forte
-        elif vol > 0.005:
-            confianca *= 0.93
+        # Penalização por alta volatilidade (afeta todos os tipos)
+        if vol > 0.01:
+            confianca *= 0.88
 
         return {
-            "janela":              janela,
-            "direcao":             direcao,
-            "confianca":           round(confianca, 1),
-            "pct_pares":           round(pct_pares, 3),
-            "pct_over5":           round(pct_over5, 3),
-            "volatilidade":        round(vol, 5),
-            "tendencia_alta":      tendencia_alta,
-            "tendencia_confirmada": tendencia_confirmada,
-            "slope_curto_norm":    round(slope_curto_norm, 8),
-            "slope_longo_norm":    round(slope_longo_norm, 8),
+            "janela":        janela,
+            "direcao":       direcao,
+            "confianca":     round(confianca, 1),
+            "pct_pares":     round(pct_pares, 3),
+            "pct_over5":     round(pct_over5, 3),
+            "volatilidade":  round(vol, 5),
+            "tendencia_alta": tendencia_alta,
+            "slope_norm":    round(slope_norm, 8),
         }
 
     def analisar(self, ticks: List[float], janelas: Optional[List[int]], contrato: str) -> dict:
@@ -422,21 +383,18 @@ class DecisionEngine:
 
         # ── Agrupa votos por direção com peso = log2(janela) ──────────────────
         votos: Dict[str, float] = {}
-        contagem_dir: Dict[str, int] = {}   # quantas janelas votaram em cada direção
         detalhes = []
-        total_janelas_validas = 0
 
         for janela, sinal in sinais_mtf.items():
             dir_j  = sinal["direcao"]
             conf_j = sinal["confianca"]
-            peso_j = math.log2(max(2, int(janela)))
+            # Peso proporcional à quantidade de informação da janela
+            peso_j = math.log2(max(2, int(janela)))   # mínimo log2(2)=1
             if dir_j == "NOTR" or conf_j < 50:
                 detalhes.append(f"J{janela}(w{peso_j:.1f}): NOTR ({conf_j:.0f}%)")
                 continue
-            total_janelas_validas += 1
             voto_ponderado = conf_j * peso_j
             votos[dir_j] = votos.get(dir_j, 0) + voto_ponderado
-            contagem_dir[dir_j] = contagem_dir.get(dir_j, 0) + 1
             detalhes.append(f"J{janela}(w{peso_j:.1f}): {dir_j} {conf_j:.0f}%")
 
         if not votos:
@@ -446,30 +404,15 @@ class DecisionEngine:
         total_peso  = sum(votos.values())
         consenso_pct = votos[melhor_dir] / total_peso * 100
 
-        # ── Mínimo de janelas concordantes ────────────────────────────────────
-        # Exige que pelo menos 2 janelas votem na mesma direção — evita entradas
-        # baseadas em 1 única janela que inflou a confiança.
-        janelas_concordando = contagem_dir.get(melhor_dir, 0)
-        if janelas_concordando < 2:
-            return {
-                "decisao": "NO_TRADE",
-                "confianca": round(consenso_pct, 1),
-                "motivo": f"apenas {janelas_concordando} janela confirma {melhor_dir} — mínimo 2",
-                "detalhes": detalhes,
-                "votos": votos,
-            }
-
-        # ── Limiar de conflito mais rigoroso ──────────────────────────────────
-        # 2ª direção com >25% já é conflito — antes era 35%.
-        # Quando temos poucas janelas o limiar cai ainda mais.
-        if total_janelas_validas <= 2:
-            limiar_conflito = 20   # poucas janelas → qualquer oposição veta
-        elif consenso_pct < 60:
-            limiar_conflito = 25
-        elif consenso_pct < 75:
-            limiar_conflito = 30
+        # ── Limiar de conflito adaptativo ─────────────────────────────────────
+        # Confiança total bruta (antes de penalizações) serve de proxy para
+        # a "certeza geral" do mercado. Quanto menos certa, mais exigente o limiar.
+        if consenso_pct < 60:
+            limiar_conflito = 45   # muito incerto → exige 55%+ de dominância
+        elif consenso_pct < 70:
+            limiar_conflito = 40   # moderadamente incerto → 60%+
         else:
-            limiar_conflito = 35
+            limiar_conflito = 35   # confiante → mantém o limiar original
 
         dirs_ordenadas = sorted(votos.items(), key=lambda x: x[1], reverse=True)
         conflito = False
