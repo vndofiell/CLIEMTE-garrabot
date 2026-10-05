@@ -233,13 +233,46 @@ class MultiTimeframeAnalyzer:
         pct_over5   = n_over5   / n
         pct_under5  = n_under5  / n
 
-        # ── Tendência via regressão linear dos últimos min(25, janela) ticks ──
-        slope_n = min(25, janela)
-        slope_ticks = slice_t[-slope_n:]
-        slope = _slope_linear(slope_ticks)
-        media_slope = sum(slope_ticks) / len(slope_ticks)
-        slope_norm = slope / max(abs(media_slope), 0.0001)
+        # ── Tendência: slope curto (ruído) + slope longo (tendência principal) ──
+        #
+        # PROBLEMA CORRIGIDO: usar só os últimos 25 ticks para janelas grandes
+        # significa que uma pequena correção momentânea pode mascarar uma tendência
+        # de alta/baixa clara visível no gráfico. Solução:
+        #   - slope_curto: últimos min(25, janela) ticks  → micro-tendência
+        #   - slope_longo: janela inteira                 → tendência dominante
+        # A tendência dominante tem prioridade quando é forte (>2× o slope_curto).
+        #
+        slope_curto_n  = min(25, janela)
+        slope_longo_n  = janela   # janela inteira
+
+        slope_ticks_curto = slice_t[-slope_curto_n:]
+        slope_curto  = _slope_linear(slope_ticks_curto)
+        slope_longo  = _slope_linear(slice_t)   # toda a janela
+
+        media_slope  = sum(slice_t) / n
+        nivel        = max(abs(media_slope), 0.0001)
+
+        slope_curto_norm = slope_curto / nivel
+        slope_longo_norm = slope_longo / nivel
+
+        # Tendência dominante: se o slope longo é forte e contradiz o curto,
+        # prevalecer o longo (evita entrar contra a tendência do gráfico).
+        _longo_forte  = abs(slope_longo_norm) > abs(slope_curto_norm) * 0.5
+        _contradicao  = (slope_longo > 0) != (slope_curto > 0)
+        if janela >= 100 and _longo_forte and _contradicao:
+            # Usa o slope longo como diretivo (respeita a tendência principal)
+            slope      = slope_longo
+            slope_norm = slope_longo_norm
+        else:
+            slope      = slope_curto
+            slope_norm = slope_curto_norm
+
+        # Guarda ambos para uso posterior no retorno e no veto do DecisionEngine
+        slope_ticks = slope_ticks_curto
         tendencia_alta = slope > 0
+
+        # Flag de conflito: curto e longo apontam em direções opostas
+        conflito_slope = _contradicao and janela >= 50
 
         # ── SNR da janela: distingue tendência real de ruído ─────────────────
         snr = _snr(slope_ticks)
@@ -338,6 +371,10 @@ class MultiTimeframeAnalyzer:
         if contrato_u in ("CALL/PUT AUTO", "CALL_PUT_AUTO", "DIRECIONAL", "CALL", "PUT") \
                 and snr < 0.5:
             confianca *= 0.92
+        # Conflito curto×longo: janela grande com micro-correção na contramão
+        # → penaliza confiança para evitar entradas contra a tendência do gráfico
+        if conflito_slope and contrato_u in ("CALL/PUT AUTO", "CALL_PUT_AUTO", "DIRECIONAL", "CALL", "PUT"):
+            confianca *= 0.85
 
         return {
             "janela":              janela,
@@ -348,6 +385,8 @@ class MultiTimeframeAnalyzer:
             "volatilidade":        round(vol, 5),
             "tendencia_alta":      tendencia_alta,
             "slope_norm":          round(slope_norm, 8),
+            "slope_longo_norm":    round(slope_longo_norm, 8),
+            "conflito_slope":      conflito_slope,
             "snr":                 round(snr, 4),
             "quebra_resistencia":  quebra_resistencia,
             "quebra_suporte":      quebra_suporte,
@@ -475,16 +514,16 @@ class DecisionEngine:
     """
     Consolida os votos das janelas em uma decisão final.
 
-    Melhorias v2:
-      - Peso de cada janela = log2(janela) em vez de peso uniforme.
-        Janela 500 ticks pesa ~8.97×, janela 10 ticks pesa ~3.32×.
-        Isso reduz o impacto do ruído das janelas curtas.
-      - Limiar de conflito adaptativo:
-        · Base: 35% (como antes)
-        · Sobe para 40% se confiança total < 70% (mercado incerto)
-        · Sobe para 45% se confiança total < 60% (mercado muito incerto)
-      - Penalização de CALL/PUT em regime LATERALIZACAO:
-        DIGIT não é penalizado (lateralização é neutra para dígitos).
+    v3 (assertividade):
+      - Peso de cada janela = log2(janela) × fator_SNR
+      - Limiar de conflito adaptativo
+      - Bonus de super-consenso
+      - Veto pivot×direção e penalidade de entropia
+      - BUGFIX v3.1: veto de inversão tendência longa×curta —
+        quando as janelas longas (>=100) apontam na direção OPOSTA
+        à decisão, o motor recua para NO_TRADE. Isso evita entrar
+        contra a tendência visível no gráfico (ex: gráfico subindo
+        mas micro-correção de ticks gera PUT).
     """
 
     # Tipos de contrato direcionais (afetados pela penalização de lateral)
@@ -526,6 +565,43 @@ class DecisionEngine:
         melhor_dir  = max(votos, key=votos.get)
         total_peso  = sum(votos.values())
         consenso_pct = votos[melhor_dir] / total_peso * 100
+
+        # ── BUGFIX v3.1: Veto de inversão tendência longa×curta ──────────────
+        # Se as janelas longas (>=100) têm conflito_slope E apontam na direção
+        # OPOSTA à decisão dominante → a decisão está contra a tendência do gráfico.
+        # Ex: gráfico subindo (slope_longo positivo) mas ticks recentes desceram
+        #     → janela 25 diz PUT, janelas 100/250/500 dizem CALL
+        #     → sem esse veto, o motor poderia entrar em PUT contra o gráfico.
+        _janelas_longas_contra = [
+            j for j, s in sinais_mtf.items()
+            if int(j) >= 100
+            and s.get("conflito_slope")
+            and s.get("direcao") != melhor_dir
+            and s.get("direcao") not in ("NOTR",)
+        ]
+        if _janelas_longas_contra and melhor_dir in self._DIRECIONAIS:
+            # Verifica se slope_longo das janelas longas aponta contra a decisão
+            _slope_longas = [
+                sinais_mtf[j].get("slope_longo_norm", 0)
+                for j in _janelas_longas_contra
+            ]
+            _slope_medio_longo = sum(_slope_longas) / len(_slope_longas)
+            _contra_tendencia = (
+                (melhor_dir == "PUT"  and _slope_medio_longo > 0.00005) or
+                (melhor_dir == "CALL" and _slope_medio_longo < -0.00005)
+            )
+            if _contra_tendencia:
+                return {
+                    "decisao":  "NO_TRADE",
+                    "confianca": round(consenso_pct, 1),
+                    "motivo":   (
+                        f"VETO: decisao {melhor_dir} contra tendencia longa "
+                        f"(slope_longo={_slope_medio_longo:.6f}) — "
+                        f"janelas longas conflitantes: {list(_janelas_longas_contra)}"
+                    ),
+                    "detalhes": detalhes,
+                    "votos":    votos,
+                }
 
         # ── v3: Bonus de super-consenso (todas as janelas na mesma direção) ──
         n_janelas_ativas = len(votos)
