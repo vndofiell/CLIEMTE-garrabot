@@ -7659,8 +7659,9 @@ function resetarPlacar() {
     bot._maxWinConsec  = 0;
     bot._maxLossConsec = 0;
     bot._maxStakeUsada = 0;
-    bot._buying          = false;
-    bot._contratoEmCurso = false;  // reseta guard de contrato em minutos
+    bot._buying               = false;
+    bot._contratoEmCurso      = false;  // reseta guard de contrato em minutos
+    bot._contratoEmCursoLogado = false;
     bot.mgr = new GerenciadorUnificado(bot.gerenciamento,
         Object.assign({ stake: bot.initialStake }, (bot._mgrCfgs && bot._mgrCfgs[bot.gerenciamento]) || {}));
     bot.stake = bot.initialStake;
@@ -11580,7 +11581,14 @@ function initWebSocket(wssUrl) {
                 // _precos é acumulado globalmente acima (antes do guard bot._buying)
 
                 // ── GUARD: não analisa enquanto há contrato de minutos em aberto ──
-                if (bot._contratoEmCurso) return;
+                if (bot._contratoEmCurso) {
+                    if (!bot._contratoEmCursoLogado) {
+                        bot._contratoEmCursoLogado = true;
+                        _seqStatusUpdate(`🔒 HMA — contrato em andamento, bloqueado até o resultado chegar...`);
+                    }
+                    return;
+                }
+                bot._contratoEmCursoLogado = false; // reseta para logar novamente na próxima vez
 
                 // ── FASE 2: sinal pendente → entra agora (ou na virada da vela) ──
                 if (bot._hmaSinalPendente) {
@@ -11636,9 +11644,16 @@ function initWebSocket(wssUrl) {
                         bot._hmaViradaTimer = null;
                         if (!bot.running) {
                             bot._buying = false;
+                            bot._contratoEmCurso = false;
                             est.contract = _hmaEstOrig.contract;
                             est.barrier  = _hmaEstOrig.barrier;
                             return;
+                        }
+                        // Bloqueia IMEDIATAMENTE antes de qualquer I/O assíncrono
+                        // Impede que próximos ticks disparem nova análise enquanto a
+                        // resposta da API ainda está em trânsito (~200-500ms de latência)
+                        if (est.duracao_unit === 'm') {
+                            bot._contratoEmCurso = true;
                         }
                         print(
                             `🧠 HMA ENTRADA | ${_hmaS.decisao} | conf <b>${_hmaS.confianca}%</b>` +
@@ -11975,12 +11990,6 @@ function initWebSocket(wssUrl) {
                 // Guarda estado do espelho NO MOMENTO da compra — evita race condition no fechamento
                 if (!bot._cidEspelho) bot._cidEspelho = {};
                 bot._cidEspelho[cid] = !!(typeof _sec !== 'undefined' && _sec.espelhandoAtivo);
-                // Bloqueia nova análise HMA enquanto contrato de minutos estiver em aberto
-                const _estAtual = ESTRATEGIAS[bot.estrategia];
-                if (_estAtual && _estAtual.duracao_unit === 'm') {
-                    bot._contratoEmCurso = true;
-                    _seqStatusUpdate(`🧠 HMA — contrato em andamento (${_estAtual.duracao || 1}m), aguardando resultado para nova análise...`);
-                }
                 bot.ws.send(json({ proposal_open_contract: 1, contract_id: cid, subscribe: 1 }));
                 // Modo Dupla: rastreia IDs pendentes e mapeia cid → lado (OVER/UNDER)
                 if (bot._duplaAtiva) {
@@ -12143,6 +12152,7 @@ function initWebSocket(wssUrl) {
                 bot._duplaLadoMap          = null;
                 bot._buying                = false;
                 bot._contratoEmCurso       = false;  // libera nova análise HMA (dupla)
+                bot._contratoEmCursoLogado = false;
                 // ── Encerra o widget de cronômetro (Dupla) com status final ──
                 if (typeof _tradeEncerrarLocal === 'function') _tradeEncerrarLocal(wonReal ? 'ganhando' : 'perdendo', totalProfit);
 
@@ -12223,8 +12233,9 @@ function initWebSocket(wssUrl) {
 
             } else {
                 // ── Resultado normal (contrato único) ─────────────────────
-                bot._buying = false;
-                bot._contratoEmCurso = false;  // libera nova análise HMA
+                bot._buying                = false;
+                bot._contratoEmCurso       = false;  // libera nova análise HMA
+                bot._contratoEmCursoLogado = false;
                 // ── Encerra o widget de cronômetro com status final ──
                 if (typeof _tradeEncerrarLocal === 'function') _tradeEncerrarLocal(won ? 'ganhando' : 'perdendo', profit);
                 bot.profit  += profit;
