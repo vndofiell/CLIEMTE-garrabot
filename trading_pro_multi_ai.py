@@ -26,7 +26,7 @@ import math
 import os
 import time
 import threading
-from typing import Optional
+from typing import Optional, Tuple
 
 _BASE_DIR    = os.path.dirname(os.path.abspath(__file__))
 _CONFIG_FILE = os.path.join(_BASE_DIR, "trading_pro_config.json")
@@ -71,6 +71,33 @@ def _ema(closes: list, periodo: int) -> float:
     for c in closes[periodo:]:
         v = c * k + v * (1 - k)
     return v
+
+
+def _macd(closes: list, rapida: int = 12, lenta: int = 26, sinal: int = 9
+          ) -> Tuple[float, float, float]:
+    """
+    Retorna (macd_line, signal_line, histograma).
+    Todos NaN se dados insuficientes.
+    """
+    if len(closes) < lenta + sinal:
+        return float("nan"), float("nan"), float("nan")
+    ema_r = _ema(closes, rapida)
+    ema_l = _ema(closes, lenta)
+    if math.isnan(ema_r) or math.isnan(ema_l):
+        return float("nan"), float("nan"), float("nan")
+    # Gera série MACD completa para calcular a signal line
+    macd_serie = []
+    for i in range(lenta - 1, len(closes)):
+        er = _ema(closes[:i + 1], rapida)
+        el = _ema(closes[:i + 1], lenta)
+        if not (math.isnan(er) or math.isnan(el)):
+            macd_serie.append(er - el)
+    if len(macd_serie) < sinal:
+        return float("nan"), float("nan"), float("nan")
+    macd_val   = macd_serie[-1]
+    signal_val = _ema(macd_serie, sinal)
+    hist       = macd_val - (signal_val if not math.isnan(signal_val) else macd_val)
+    return round(macd_val, 8), round(signal_val if not math.isnan(signal_val) else 0.0, 8), round(hist, 8)
 
 
 def _rsi(closes: list, periodo: int = 14) -> float:
@@ -141,7 +168,8 @@ def _adx(velas: list, periodo: int = 14) -> float:
 
 class AI01Tendencia:
     """
-    Analisa EMA 20/50/200, RSI e inclinação do preço.
+    Analisa EMA 20/50/200, RSI, MACD e inclinação do preço.
+    v3: MACD confirma cruzamento EMA; penalidade por divergência MACD×EMA.
     Retorna: { direcao, confianca, detalhes }
     """
 
@@ -151,10 +179,20 @@ class AI01Tendencia:
 
         closes = [v["fechamento"] for v in velas]
         ema20  = _ema(closes, 20)
-        ema50  = _ema(closes, 50) if len(closes) >= 50 else float("nan")
+        ema50  = _ema(closes, 50)  if len(closes) >= 50  else float("nan")
         ema200 = _ema(closes, 200) if len(closes) >= 200 else float("nan")
         rsi    = _rsi(closes, 14)
         slope  = _slope(closes, 5)
+
+        # ── MACD (12, 26, 9) ─────────────────────────────────────────────────
+        macd_linha, macd_sinal, macd_hist = _macd(closes)
+        macd_ok = not math.isnan(macd_linha)
+        macd_bullish = macd_ok and macd_linha > macd_sinal
+        macd_cruzou  = False   # cruzamento recente (histograma mudou de sinal)
+        if macd_ok and len(closes) >= 28:
+            _, _, hist_prev = _macd(closes[:-1])
+            if not math.isnan(hist_prev):
+                macd_cruzou = (hist_prev < 0 < macd_hist) or (hist_prev > 0 > macd_hist)
 
         alta  = ema20 > (ema50 if not math.isnan(ema50) else ema20 - 1)
         baixa = ema20 < (ema50 if not math.isnan(ema50) else ema20 + 1)
@@ -166,33 +204,50 @@ class AI01Tendencia:
         score = 0
         if alta:
             score += 40
-            if rsi > 50: score += 20
-            if rsi > 60: score += 10
-            if slope > 0: score += 15
+            if rsi > 50: score += 15
+            if rsi > 60: score += 8
+            if slope > 0: score += 12
+            # ── v3: MACD confirma alta ────────────────────────────────────────
+            if macd_ok and macd_bullish:  score += 12
+            if macd_cruzou and macd_hist > 0: score += 8   # cruzamento recente de alta
             direcao = "CALL"
         elif baixa:
             score += 40
-            if rsi < 50: score += 20
-            if rsi < 40: score += 10
-            if slope < 0: score += 15
+            if rsi < 50: score += 15
+            if rsi < 40: score += 8
+            if slope < 0: score += 12
+            # ── v3: MACD confirma baixa ───────────────────────────────────────
+            if macd_ok and not macd_bullish: score += 12
+            if macd_cruzou and macd_hist < 0: score += 8   # cruzamento recente de baixa
             direcao = "PUT"
         else:
             return self._neutro("EMAs sem alinhamento")
 
-        # Penalidade RSI extremo (sobrecompra/sobrevenda)
+        # ── Penalidade RSI extremo ─────────────────────────────────────────────
         if rsi > 75 and direcao == "CALL": score -= 15
         if rsi < 25 and direcao == "PUT":  score -= 15
 
-        confianca = min(score, 100)
+        # ── v3: Penalidade por divergência MACD × EMA (sinal contraditório) ───
+        if macd_ok:
+            diverge = (direcao == "CALL" and not macd_bullish) or \
+                      (direcao == "PUT"  and macd_bullish)
+            if diverge:
+                score -= 10   # MACD contradiz EMA → confiança menor
+
+        confianca = min(max(score, 0), 100)
         return {
             "direcao":   direcao,
             "confianca": confianca,
             "detalhes":  {
-                "ema20":  round(ema20, 6),
-                "ema50":  round(ema50, 6) if not math.isnan(ema50)  else None,
-                "ema200": round(ema200, 6) if not math.isnan(ema200) else None,
-                "rsi":    rsi,
-                "slope":  round(slope, 8),
+                "ema20":       round(ema20, 6),
+                "ema50":       round(ema50, 6)  if not math.isnan(ema50)  else None,
+                "ema200":      round(ema200, 6) if not math.isnan(ema200) else None,
+                "rsi":         rsi,
+                "slope":       round(slope, 8),
+                "macd":        round(macd_linha, 8) if macd_ok else None,
+                "macd_sinal":  round(macd_sinal, 8) if macd_ok else None,
+                "macd_hist":   round(macd_hist, 8)  if macd_ok else None,
+                "macd_cruzou": macd_cruzou,
             },
         }
 
@@ -384,6 +439,8 @@ class AI04RegimeRisco:
 class AI05Supervisor:
     """
     Recebe os votos das 4 IAs e calcula o consenso ponderado.
+    v3: penalidade quando IAs contradizem, bonus quando todas concordam,
+        e veto quando score de divergência é alto demais.
     Veto da AI04 → resultado imediato AGUARDAR (independente das outras).
     """
 
@@ -417,9 +474,13 @@ class AI05Supervisor:
         min_consensus       = cfg.get("min_consensus", 35)
         min_lead_confidence = cfg.get("min_lead_confidence", 30)
 
-        # Contagem ponderada por direção
+        # ── Contagem ponderada por direção ────────────────────────────────────
         score_call = 0
         score_put  = 0
+        ias_call   = []
+        ias_put    = []
+        ias_neutro = []
+
         for ia, peso in self.PESOS.items():
             if ia == "AI_04_REGIME_RISCO":
                 continue
@@ -428,33 +489,59 @@ class AI05Supervisor:
             dir_ = voto.get("direcao", "NEUTRO")
             if dir_ == "CALL":
                 score_call += conf * peso / 100
+                ias_call.append(ia)
             elif dir_ == "PUT":
                 score_put  += conf * peso / 100
+                ias_put.append(ia)
+            else:
+                ias_neutro.append(ia)
 
         score_total = max(score_call, score_put)
         direcao     = "CALL" if score_call >= score_put else "PUT"
 
-        if score_total < min_consensus:
+        # ── v3: Bonus quando todas as IAs ativas concordam (super-consenso) ──
+        ias_ativas = [ia for ia in self.PESOS if ia != "AI_04_REGIME_RISCO"
+                      and votos.get(ia, {}).get("direcao", "NEUTRO") != "NEUTRO"]
+        todas_concordam = len(ias_ativas) >= 2 and all(
+            votos.get(ia, {}).get("direcao") == direcao for ia in ias_ativas
+        )
+        bonus_unanimidade = 5 if todas_concordam else 0
+
+        # ── v3: Penalidade por divergência entre IAs ──────────────────────────
+        # Se uma IA com peso alto (AI01 ou AI02) aponta para o lado oposto
+        ias_opostas_peso_alto = [
+            ia for ia in (ias_put if direcao == "CALL" else ias_call)
+            if self.PESOS.get(ia, 0) >= 30
+        ]
+        penalidade_divergencia = len(ias_opostas_peso_alto) * 8
+
+        score_ajustado = score_total + bonus_unanimidade - penalidade_divergencia
+
+        if score_ajustado < min_consensus:
             return {
                 "operar":  False,
                 "direcao": "AGUARDAR",
-                "score":   round(score_total, 1),
-                "motivo":  f"Consenso insuficiente ({score_total:.1f} < {min_consensus})",
+                "score":   round(score_ajustado, 1),
+                "motivo":  (
+                    f"Consenso insuficiente ({score_ajustado:.1f} < {min_consensus})"
+                    + (f" — divergência AI alta ({penalidade_divergencia}pt)" if penalidade_divergencia > 0 else "")
+                ),
                 "votos":   votos,
             }
 
-        # Sem bloqueio por conflito — entra na direção dominante
-
         return {
-            "operar":       True,
-            "direcao":      direcao,
-            "score":        round(score_total, 1),
-            "score_call":   round(score_call, 1),
-            "score_put":    round(score_put, 1),
-            "min_consensus": min_consensus,
-            "motivo":       "Consenso aprovado",
-            "votos":        votos,
-            "regime":       votos["AI_04_REGIME_RISCO"].get("regime", "—"),
+            "operar":               True,
+            "direcao":              direcao,
+            "score":                round(score_ajustado, 1),
+            "score_call":           round(score_call, 1),
+            "score_put":            round(score_put, 1),
+            "bonus_unanimidade":    bonus_unanimidade,
+            "penalidade_divergencia": penalidade_divergencia,
+            "todas_concordam":      todas_concordam,
+            "min_consensus":        min_consensus,
+            "motivo":               "Consenso aprovado" + (" — unanimidade total" if todas_concordam else ""),
+            "votos":                votos,
+            "regime":               votos["AI_04_REGIME_RISCO"].get("regime", "—"),
         }
 
 
