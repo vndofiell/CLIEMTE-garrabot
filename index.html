@@ -11688,9 +11688,18 @@ function initWebSocket(wssUrl) {
                         // Só entra se MTF CONFIRMA ou NEUTRO (nunca entra contra MTF)
                         const _HMA_REANALISE_MS = 60000; // 1 minuto antes da virada
 
-                        const _hmaDispararComReanalise = () => {
+                        // _hmaDispararComReanalise: aceita atraso opcional para quando
+                        // é chamado com menos de 1min restante (usa o tempo real restante)
+                        const _hmaDispararComReanalise = (_atrasoRestante) => {
+                            // Tempo que deve aguardar APÓS o MTF para entrar na virada
+                            // Quando chamado imediato (< 1min): usa o atraso real restante
+                            // Quando chamado com 1min de antecedência: usa _HMA_REANALISE_MS
+                            const _tempoAposReanalise = (typeof _atrasoRestante === 'number')
+                                ? Math.max(0, _atrasoRestante)
+                                : _HMA_REANALISE_MS;
+
                             if (!bot._precos || bot._precos.length < 10) {
-                                _hmaDisparar();
+                                bot._hmaViradaTimer = setTimeout(_hmaDisparar, _tempoAposReanalise);
                                 return;
                             }
                             const _ticksSnap   = bot._precos.slice();
@@ -11799,31 +11808,35 @@ function initWebSocket(wssUrl) {
                                     );
                                 }
 
-                                // Agenda disparo para a virada (60s restantes)
-                                bot._hmaViradaTimer = setTimeout(_hmaDisparar, _HMA_REANALISE_MS);
+                                // Agenda disparo para a virada — usa tempo real restante
+                                bot._hmaViradaTimer = setTimeout(_hmaDisparar, _tempoAposReanalise);
                             })
                             .catch(() => {
-                                print(`⚠️ HMA -1min | falha na reanálise MTF — mantendo <b>${_direcaoAtual}</b>`, 'log-info');
-                                bot._hmaViradaTimer = setTimeout(_hmaDisparar, _HMA_REANALISE_MS);
+                                print(`⚠️ HMA MTF | falha na análise — mantendo <b>${_direcaoAtual}</b>`, 'log-info');
+                                bot._hmaViradaTimer = setTimeout(_hmaDisparar, _tempoAposReanalise);
                             });
                         };
 
                         if (_hmaAtraso > _HMA_REANALISE_MS + 500) {
-                            // Há tempo: aguarda até 1min antes da virada, então reavalia
+                            // Há tempo: aguarda até 1min antes da virada, então roda MTF
                             const _hmaAtrasoReanalise = _hmaAtraso - _HMA_REANALISE_MS;
                             _seqStatusUpdate(
                                 `🧠 HMA ${_hmaS.decisao} | conf <b>${_hmaS.confianca}%</b>` +
                                 ` ⏳ virada em <b>${(_hmaAtraso / 1000).toFixed(0)}s</b>` +
-                                ` | reanálise MTF em <b>${(_hmaAtrasoReanalise / 1000).toFixed(0)}s</b>...`
+                                ` | MTF em <b>${(_hmaAtrasoReanalise / 1000).toFixed(0)}s</b>...`
                             );
+                            // Sem argumento → usa _HMA_REANALISE_MS como tempo após análise
                             bot._hmaViradaTimer = setTimeout(_hmaDispararComReanalise, _hmaAtrasoReanalise);
                         } else {
-                            // Menos de 1min para a virada — entra direto sem reanálise
+                            // Menos de 1min para a virada — MTF IMEDIATO, depois entra no tempo restante
                             _seqStatusUpdate(
                                 `🧠 HMA ${_hmaS.decisao} | conf <b>${_hmaS.confianca}%</b>` +
-                                ` ⏳ aguardando virada ${parseInt(est.duracao) || 1}m em <b>${(_hmaAtraso / 1000).toFixed(1)}s</b>...`
+                                ` ⏳ virada em <b>${(_hmaAtraso / 1000).toFixed(1)}s</b> — MTF agora...`
                             );
-                            bot._hmaViradaTimer = setTimeout(_hmaDisparar, _hmaAtraso);
+                            // Passa _hmaAtraso como tempo restante para a virada
+                            bot._hmaViradaTimer = setTimeout(() => {
+                                _hmaDispararComReanalise(_hmaAtraso);
+                            }, 0);
                         }
                     } else {
                         // Ticks ou DIGIT: entra no próximo tick (comportamento original)
