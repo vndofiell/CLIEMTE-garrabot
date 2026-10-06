@@ -11681,87 +11681,147 @@ function initWebSocket(wssUrl) {
                         // Se faltam menos de 200ms (já estamos na virada) entra imediatamente
                         const _hmaAtraso = _hmaMsFalta < 200 ? 0 : _hmaMsFalta;
 
-                        // ── Reanálise 20s antes da virada ────────────────────────
-                        // Se houver tempo suficiente, faz nova chamada ao HMA com os
-                        // ticks mais recentes. Se o mercado reverteu, troca o sinal.
-                        const _HMA_REANALISE_MS = 20000; // 20 segundos antes da virada
+                        // ── Reanálise 1 minuto antes + MTF ───────────────────────
+                        // 1) Reavalia HMA com ticks atuais (sinal pode ter mudado)
+                        // 2) Chama MTF para confirmar tendência nos TFs superiores
+                        //    M3 → M5, M15, M30, H1 | M1 → M5, M15, M30, H1
+                        // Só entra se MTF CONFIRMA ou NEUTRO (nunca entra contra MTF)
+                        const _HMA_REANALISE_MS = 60000; // 1 minuto antes da virada
 
                         const _hmaDispararComReanalise = () => {
-                            // Se não há ticks suficientes, entra com sinal original
                             if (!bot._precos || bot._precos.length < 10) {
                                 _hmaDisparar();
                                 return;
                             }
-                            fetch('/garra-hma/avaliar', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({
-                                    ticks:            bot._precos.slice(),
-                                    contrato:         _hmaS.decisao, // reavalia na mesma direção original
-                                    janelas:          est.hma_janelas || null,
-                                    confianca_minima: est.hma_confianca || 68,
-                                    banca:            parseFloat(document.getElementById('hd-balance')?.textContent?.replace(/[^0-9.]/g,'')) || 100,
-                                    stake:            bot.stake || 0.35,
-                                    payout:           0.85,
-                                    historico_recente: bot._seqLossAtual || 0,
-                                }),
-                            })
-                            .then(r => r.json())
-                            .then(_reRes => {
-                                const _reDecisao = _reRes.decisao; // CALL, PUT ou NO_TRADE
-                                const _hmaContrMapR = { 'CALL': 'CALL', 'PUT': 'PUT' };
-                                const _novoContrato = _hmaContrMapR[_reDecisao];
+                            const _ticksSnap   = bot._precos.slice();
+                            const _duracaoM    = parseInt(est.duracao) || 1;
+                            const _banca       = parseFloat(document.getElementById('hd-balance')?.textContent?.replace(/[^0-9.]/g,'')) || 100;
+                            const _direcaoAtual = _hmaS.decisao;
 
-                                if (_novoContrato && _novoContrato !== _hmaS.decisao && _reRes.aprovado) {
-                                    // Mercado reverteu — atualiza sinal antes de entrar
+                            _seqStatusUpdate(`🔬 HMA -1min | reanalisando HMA + MTF (${_duracaoM}m)...`);
+
+                            // ── 1) Reavalia HMA com ticks frescos ──────────────
+                            Promise.all([
+                                fetch('/garra-hma/avaliar', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                        ticks:             _ticksSnap,
+                                        contrato:          'CALL/PUT AUTO',
+                                        janelas:           est.hma_janelas || null,
+                                        confianca_minima:  est.hma_confianca || 68,
+                                        banca:             _banca,
+                                        stake:             bot.stake || 0.35,
+                                        payout:            0.85,
+                                        historico_recente: bot._seqLossAtual || 0,
+                                    }),
+                                }).then(r => r.json()).catch(() => null),
+
+                                // ── 2) MTF: confirma tendência nos TFs superiores ──
+                                fetch('/garra-hma/mtf', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                        ticks:     _ticksSnap,
+                                        duracao_m: _duracaoM,
+                                        direcao:   _direcaoAtual,
+                                    }),
+                                }).then(r => r.json()).catch(() => null),
+                            ])
+                            .then(([_reRes, _mtfRes]) => {
+                                // ── Processa resultado do HMA ───────────────────
+                                const _reDecisao    = _reRes?.decisao || _direcaoAtual;
+                                const _reAprovado   = !!_reRes?.aprovado;
+                                const _reConfianca  = _reRes?.confianca || 0;
+
+                                // ── Processa resultado do MTF ───────────────────
+                                const _mtfConsenso  = _mtfRes?.consenso  || 'NEUTRO';
+                                const _mtfDirecao   = _mtfRes?.direcao_mtf || 'LATERAL';
+                                const _mtfDetalhe   = (_mtfRes?.detalhes || [])
+                                    .map(d => `${d.tf_min}m:${d.tendencia}`).join(' ');
+
+                                // ── Loga resultado MTF ──────────────────────────
+                                const _mtfCor = _mtfConsenso === 'CONFIRMA' ? 'log-win'
+                                              : _mtfConsenso === 'CONTRA'   ? 'log-loss' : 'log-info';
+                                print(
+                                    `📊 MTF -1min | ${_mtfDirecao} | consenso: <b>${_mtfConsenso}</b>` +
+                                    ` | ${_mtfDetalhe}`,
+                                    _mtfCor
+                                );
+
+                                // ── Decide direção final ────────────────────────
+                                let _direcaoFinal = _direcaoAtual; // padrão: mantém original
+
+                                if (_mtfConsenso === 'CONTRA') {
+                                    // MTF vai contra o sinal — não inverte, CANCELA a entrada
                                     print(
-                                        `🔄 HMA REVERSÃO -20s | ${_hmaS.decisao} → <b>${_reDecisao}</b>` +
-                                        ` | conf <b>${_reRes.confianca}%</b> | regime: ${_reRes.regime}`,
-                                        'log-info'
+                                        `🚫 HMA -1min | MTF CONTRA <b>${_direcaoAtual}</b>` +
+                                        ` (TFs superiores: ${_mtfDirecao}) — entrada CANCELADA`,
+                                        'log-loss'
                                     );
-                                    // Atualiza contrato na estratégia temporariamente
-                                    est.contract = _novoContrato;
-                                    est.barrier  = null;
-                                    // Atualiza sinal para log correto no _hmaDisparar
-                                    _hmaS.decisao   = _reDecisao;
-                                    _hmaS.confianca = _reRes.confianca;
-                                    _hmaS.regime    = _reRes.regime;
-                                } else if (!_novoContrato || !_reRes.aprovado) {
-                                    // Sinal sumiu ou reverteu sem aprovação — mantém original e loga
+                                    // Cancela: libera tudo e não entra
+                                    bot._buying          = false;
+                                    bot._contratoEmCurso = false;
+                                    bot._contratoEmCursoLogado = false;
+                                    est.contract = _hmaEstOrig.contract;
+                                    est.barrier  = _hmaEstOrig.barrier;
+                                    bot._hmaSinalPendente = null;
+                                    return;
+                                }
+
+                                // MTF CONFIRMA ou NEUTRO — verifica se HMA mudou direção
+                                if (_reAprovado && _reDecisao !== _direcaoAtual && (_reDecisao === 'CALL' || _reDecisao === 'PUT')) {
+                                    // HMA detectou reversão E MTF não está contra
+                                    if (_mtfConsenso === 'CONFIRMA' || _mtfDirecao === _reDecisao || _mtfDirecao === 'LATERAL') {
+                                        print(
+                                            `🔄 HMA REVERSÃO -1min | ${_direcaoAtual} → <b>${_reDecisao}</b>` +
+                                            ` | conf <b>${_reConfianca}%</b> | MTF: ${_mtfConsenso}`,
+                                            'log-info'
+                                        );
+                                        _direcaoFinal = _reDecisao;
+                                        est.contract  = _reDecisao;
+                                        est.barrier   = null;
+                                        _hmaS.decisao   = _reDecisao;
+                                        _hmaS.confianca = _reConfianca;
+                                        _hmaS.regime    = _reRes?.regime || _hmaS.regime;
+                                    }
+                                } else if (_reAprovado && _reDecisao === _direcaoAtual) {
                                     print(
-                                        `⚠️ HMA -20s | reanálise: ${_reDecisao || 'NO_TRADE'} (conf ${_reRes.confianca || 0}%) — mantendo sinal original <b>${_hmaS.decisao}</b>`,
+                                        `✅ HMA -1min | <b>${_direcaoAtual}</b> confirmado` +
+                                        ` (conf ${_reConfianca}%) | MTF: ${_mtfConsenso}`,
                                         'log-info'
                                     );
                                 } else {
-                                    // Sinal confirmado — apenas loga confirmação
                                     print(
-                                        `✅ HMA -20s | sinal <b>${_hmaS.decisao}</b> confirmado (conf ${_reRes.confianca}%)`,
+                                        `⚠️ HMA -1min | HMA: ${_reDecisao || 'NO_TRADE'} (conf ${_reConfianca}%)` +
+                                        ` | MTF: ${_mtfConsenso} — mantendo <b>${_direcaoAtual}</b>`,
                                         'log-info'
                                     );
                                 }
-                                // Agenda disparo para a virada (20s restantes)
+
+                                // Agenda disparo para a virada (60s restantes)
                                 bot._hmaViradaTimer = setTimeout(_hmaDisparar, _HMA_REANALISE_MS);
                             })
                             .catch(() => {
-                                // Erro de rede — entra com sinal original sem atrasar
-                                print(`⚠️ HMA -20s | falha na reanálise — mantendo sinal original <b>${_hmaS.decisao}</b>`, 'log-info');
+                                print(`⚠️ HMA -1min | falha na reanálise MTF — mantendo <b>${_direcaoAtual}</b>`, 'log-info');
                                 bot._hmaViradaTimer = setTimeout(_hmaDisparar, _HMA_REANALISE_MS);
                             });
                         };
 
                         if (_hmaAtraso > _HMA_REANALISE_MS + 500) {
-                            // Há tempo: aguarda até 20s antes da virada, então reavalia
+                            // Há tempo: aguarda até 1min antes da virada, então reavalia
                             const _hmaAtrasoReanalise = _hmaAtraso - _HMA_REANALISE_MS;
                             _seqStatusUpdate(
                                 `🧠 HMA ${_hmaS.decisao} | conf <b>${_hmaS.confianca}%</b>` +
-                                ` ⏳ aguardando virada da vela ${parseInt(est.duracao) || 1}m em <b>${(_hmaAtraso / 1000).toFixed(1)}s</b> (reanálise em ${(_hmaAtrasoReanalise / 1000).toFixed(0)}s)...`
+                                ` ⏳ virada em <b>${(_hmaAtraso / 1000).toFixed(0)}s</b>` +
+                                ` | reanálise MTF em <b>${(_hmaAtrasoReanalise / 1000).toFixed(0)}s</b>...`
                             );
                             bot._hmaViradaTimer = setTimeout(_hmaDispararComReanalise, _hmaAtrasoReanalise);
                         } else {
-                            // Menos de 20s para a virada — entra direto sem reanálise
+                            // Menos de 1min para a virada — entra direto sem reanálise
                             _seqStatusUpdate(
                                 `🧠 HMA ${_hmaS.decisao} | conf <b>${_hmaS.confianca}%</b>` +
-                                ` ⏳ aguardando virada da vela ${parseInt(est.duracao) || 1}m em <b>${(_hmaAtraso / 1000).toFixed(1)}s</b>...`
+                                ` ⏳ aguardando virada ${parseInt(est.duracao) || 1}m em <b>${(_hmaAtraso / 1000).toFixed(1)}s</b>...`
                             );
                             bot._hmaViradaTimer = setTimeout(_hmaDisparar, _hmaAtraso);
                         }

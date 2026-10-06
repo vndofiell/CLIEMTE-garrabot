@@ -12409,6 +12409,163 @@ def garra_hma_historico_stats():
     })
 
 
+# ── Mapa de timeframes superiores por duração do gráfico operado ────────────
+_MTF_MAP = {
+    1:  [5, 15, 30, 60],    # M1  → M5, M15, M30, H1
+    3:  [5, 15, 30, 60],    # M3  → M5, M15, M30, H1
+    5:  [15, 30, 60, 240],  # M5  → M15, M30, H1, H4
+    10: [30, 60, 240],      # M10 → M30, H1, H4
+    15: [60, 240, 1440],    # M15 → H1, H4, D1
+}
+
+
+def _sintetizar_candles(ticks: list, periodo_seg: int) -> list:
+    """
+    Agrupa ticks brutos em candles OHLC do período dado (em segundos).
+    Usa timestamps gerados retroativamente a partir do tempo atual,
+    assumindo 1 tick ≈ 1s no índice Deriv Volatility.
+    Retorna lista de dicts {o, h, l, c}.
+    """
+    if not ticks or periodo_seg <= 0:
+        return []
+    agora = int(time.time())
+    n = len(ticks)
+    # Cada tick recebe um timestamp aproximado retroativo
+    ts_inicio = agora - n
+    candles_raw = {}
+    for i, p in enumerate(ticks):
+        ts = ts_inicio + i
+        slot = (ts // periodo_seg) * periodo_seg
+        if slot not in candles_raw:
+            candles_raw[slot] = {"o": p, "h": p, "l": p, "c": p}
+        else:
+            c = candles_raw[slot]
+            c["h"] = max(c["h"], p)
+            c["l"] = min(c["l"], p)
+            c["c"] = p
+    return [candles_raw[k] for k in sorted(candles_raw)]
+
+
+def _tendencia_candles(candles: list) -> str:
+    """
+    Detecta tendência pelos últimos fechamentos dos candles.
+    Usa regressão linear simples sobre os closes.
+    Retorna 'CALL', 'PUT' ou 'LATERAL'.
+    """
+    if len(candles) < 3:
+        return "LATERAL"
+    closes = [c["c"] for c in candles]
+    n = len(closes)
+    # Regressão linear: slope dos closes
+    x_mean = (n - 1) / 2
+    y_mean = sum(closes) / n
+    num = sum((i - x_mean) * (closes[i] - y_mean) for i in range(n))
+    den = sum((i - x_mean) ** 2 for i in range(n))
+    if den == 0:
+        return "LATERAL"
+    slope = num / den
+    # Normaliza pelo nível de preço
+    slope_norm = slope / max(abs(y_mean), 0.0001)
+    LIMIAR = 0.00005  # 0.005% por candle = tendência relevante
+    if slope_norm > LIMIAR:
+        return "CALL"
+    if slope_norm < -LIMIAR:
+        return "PUT"
+    return "LATERAL"
+
+
+@app.route('/garra-hma/mtf', methods=['POST'])
+def garra_hma_mtf():
+    """
+    Análise Multi-Timeframe (MTF) para confirmar direção antes de entrar.
+
+    Recebe ticks brutos do timeframe operado e sintetiza candles dos
+    timeframes superiores para verificar consenso de tendência.
+
+    Body JSON:
+        ticks      : list[float]  — ticks brutos acumulados (mín 50, ideal 500+)
+        duracao_m  : int          — duração do gráfico operado em minutos (1,3,5,10,15)
+        direcao    : str          — sinal original ("CALL" | "PUT")
+
+    Resposta:
+        consenso   : "CONFIRMA" | "CONTRA" | "NEUTRO"
+        direcao_mtf: "CALL" | "PUT" | "LATERAL"
+        votos_call : int
+        votos_put  : int
+        votos_lat  : int
+        total_tf   : int
+        detalhes   : list[{tf_min, tendencia, candles}]
+    """
+    dados = request.get_json(force=True, silent=True) or {}
+    ticks     = dados.get("ticks", [])
+    duracao_m = int(dados.get("duracao_m", 1))
+    direcao   = str(dados.get("direcao", "CALL")).upper()
+
+    if not isinstance(ticks, list) or len(ticks) < 30:
+        return jsonify({
+            "consenso":    "NEUTRO",
+            "direcao_mtf": "LATERAL",
+            "motivo":      "ticks insuficientes (mín 30)",
+            "votos_call": 0, "votos_put": 0, "votos_lat": 0,
+            "total_tf": 0, "detalhes": [],
+        })
+
+    ticks_f = [float(t) for t in ticks]
+    tfs = _MTF_MAP.get(duracao_m, _MTF_MAP[1])  # fallback para M1
+
+    votos_call = 0
+    votos_put  = 0
+    votos_lat  = 0
+    detalhes   = []
+
+    for tf_min in tfs:
+        periodo_seg = tf_min * 60
+        candles = _sintetizar_candles(ticks_f, periodo_seg)
+        tend = _tendencia_candles(candles)
+        if tend == "CALL":
+            votos_call += 1
+        elif tend == "PUT":
+            votos_put += 1
+        else:
+            votos_lat += 1
+        detalhes.append({
+            "tf_min":    tf_min,
+            "tendencia": tend,
+            "candles":   len(candles),
+        })
+        print(f"[MTF] {tf_min}min → {tend} ({len(candles)} candles)")
+
+    total_tf = len(tfs)
+    # Tendência dominante nos TFs superiores
+    if votos_call > votos_put and votos_call >= total_tf // 2 + 1:
+        direcao_mtf = "CALL"
+    elif votos_put > votos_call and votos_put >= total_tf // 2 + 1:
+        direcao_mtf = "PUT"
+    else:
+        direcao_mtf = "LATERAL"
+
+    # Consenso em relação ao sinal original
+    if direcao_mtf == "LATERAL":
+        consenso = "NEUTRO"
+    elif direcao_mtf == direcao:
+        consenso = "CONFIRMA"
+    else:
+        consenso = "CONTRA"
+
+    print(f"[MTF] duracao={duracao_m}m direcao={direcao} → MTF={direcao_mtf} consenso={consenso} "
+          f"(CALL:{votos_call} PUT:{votos_put} LAT:{votos_lat})")
+
+    return jsonify({
+        "consenso":    consenso,
+        "direcao_mtf": direcao_mtf,
+        "votos_call":  votos_call,
+        "votos_put":   votos_put,
+        "votos_lat":   votos_lat,
+        "total_tf":    total_tf,
+        "detalhes":    detalhes,
+    })
+
+
 def start_server():
     # Oracle Cloud / Render — porta configurável via variável de ambiente, padrão 5000
     port = int(os.environ.get("PORT", 5000))
