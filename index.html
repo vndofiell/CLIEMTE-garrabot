@@ -11738,7 +11738,7 @@ function initWebSocket(wssUrl) {
                                 const _mtfConsenso  = _mtfRes?.consenso  || 'NEUTRO';
                                 const _mtfDirecao   = _mtfRes?.direcao_mtf || 'LATERAL';
                                 const _mtfDetalhe   = (_mtfRes?.detalhes || [])
-                                    .map(d => `${d.tf_min}m:${d.tendencia}`).join(' ');
+                                    .map(d => `${d.tf_min}:${d.tendencia}`).join(' ');
 
                                 // ── Loga resultado MTF ──────────────────────────
                                 const _mtfCor = _mtfConsenso === 'CONFIRMA' ? 'log-win'

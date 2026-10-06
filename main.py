@@ -12409,69 +12409,78 @@ def garra_hma_historico_stats():
     })
 
 
-# ── Mapa de timeframes superiores por duração do gráfico operado ────────────
+# ── Proporção de ticks por "zoom" de timeframe ───────────────────────────────
+# Cada TF usa uma fração diferente dos ticks disponíveis para simular
+# a "visão" de um gráfico maior sem precisar de histórico extra.
+# Quanto maior o TF, maior a janela de ticks usada (mais passado).
+# Proporções calibradas para ~500 ticks acumulados pelo bot.
+_MTF_PROPORCOES = {
+    "micro":  0.04,   # ~  20 ticks → representa escala curta  (≈ M1)
+    "curto":  0.12,   # ~  60 ticks → representa escala média  (≈ M5)
+    "medio":  0.30,   # ~ 150 ticks → representa escala longa  (≈ M15)
+    "longo":  0.60,   # ~ 300 ticks → representa escala maior  (≈ M30)
+    "maior":  1.00,   # ~ 500 ticks → representa visão completa (≈ H1)
+}
+
+# Mapa de TF nome → proporção usada, por duração operada
 _MTF_MAP = {
-    1:  [5, 15, 30, 60],    # M1  → M5, M15, M30, H1
-    3:  [5, 15, 30, 60],    # M3  → M5, M15, M30, H1
-    5:  [15, 30, 60, 240],  # M5  → M15, M30, H1, H4
-    10: [30, 60, 240],      # M10 → M30, H1, H4
-    15: [60, 240, 1440],    # M15 → H1, H4, D1
+    1:  [("M5",  "curto"), ("M15", "medio"), ("M30", "longo"),  ("H1",  "maior")],
+    3:  [("M5",  "curto"), ("M15", "medio"), ("M30", "longo"),  ("H1",  "maior")],
+    5:  [("M15", "medio"), ("M30", "longo"),  ("H1",  "maior"), ("H4",  "maior")],
+    10: [("M30", "longo"),  ("H1",  "maior"), ("H4",  "maior")],
+    15: [("H1",  "maior"), ("H4",  "maior")],
 }
 
 
-def _sintetizar_candles(ticks: list, periodo_seg: int) -> list:
-    """
-    Agrupa ticks brutos em candles OHLC do período dado (em segundos).
-    Usa timestamps gerados retroativamente a partir do tempo atual,
-    assumindo 1 tick ≈ 1s no índice Deriv Volatility.
-    Retorna lista de dicts {o, h, l, c}.
-    """
-    if not ticks or periodo_seg <= 0:
-        return []
-    agora = int(time.time())
+def _slope_ticks(ticks: list) -> float:
+    """Regressão linear sobre lista de floats. Retorna slope normalizado."""
     n = len(ticks)
-    # Cada tick recebe um timestamp aproximado retroativo
-    ts_inicio = agora - n
-    candles_raw = {}
-    for i, p in enumerate(ticks):
-        ts = ts_inicio + i
-        slot = (ts // periodo_seg) * periodo_seg
-        if slot not in candles_raw:
-            candles_raw[slot] = {"o": p, "h": p, "l": p, "c": p}
-        else:
-            c = candles_raw[slot]
-            c["h"] = max(c["h"], p)
-            c["l"] = min(c["l"], p)
-            c["c"] = p
-    return [candles_raw[k] for k in sorted(candles_raw)]
-
-
-def _tendencia_candles(candles: list) -> str:
-    """
-    Detecta tendência pelos últimos fechamentos dos candles.
-    Usa regressão linear simples sobre os closes.
-    Retorna 'CALL', 'PUT' ou 'LATERAL'.
-    """
-    if len(candles) < 3:
-        return "LATERAL"
-    closes = [c["c"] for c in candles]
-    n = len(closes)
-    # Regressão linear: slope dos closes
+    if n < 3:
+        return 0.0
     x_mean = (n - 1) / 2
-    y_mean = sum(closes) / n
-    num = sum((i - x_mean) * (closes[i] - y_mean) for i in range(n))
+    y_mean = sum(ticks) / n
+    num = sum((i - x_mean) * (ticks[i] - y_mean) for i in range(n))
     den = sum((i - x_mean) ** 2 for i in range(n))
     if den == 0:
-        return "LATERAL"
+        return 0.0
     slope = num / den
-    # Normaliza pelo nível de preço
-    slope_norm = slope / max(abs(y_mean), 0.0001)
-    LIMIAR = 0.00005  # 0.005% por candle = tendência relevante
+    return slope / max(abs(y_mean), 0.0001)
+
+
+def _tendencia_bloco(ticks: list, proporcao: float) -> tuple:
+    """
+    Analisa tendência numa janela proporcional dos ticks.
+    Divide a janela em 5 sub-blocos e calcula slope médio dos closes de cada bloco,
+    simulando candles do TF maior.
+
+    Retorna (tendencia: str, slope_norm: float, n_blocos: int).
+    """
+    n_total = len(ticks)
+    janela  = max(6, int(n_total * proporcao))
+    amostra = ticks[-janela:]
+
+    # Divide em 5 sub-blocos e pega o close (último) de cada
+    n_blocos = 5
+    tam_bloco = max(1, len(amostra) // n_blocos)
+    closes = []
+    for i in range(n_blocos):
+        bloco = amostra[i * tam_bloco: (i + 1) * tam_bloco]
+        if bloco:
+            closes.append(bloco[-1])
+
+    if len(closes) < 3:
+        return "LATERAL", 0.0, len(closes)
+
+    slope_norm = _slope_ticks(closes)
+
+    # Limiar proporcional: TFs maiores (menos sensíveis) usam limiar menor
+    # porque o slope normalizado de closes já é suave
+    LIMIAR = 0.00008
     if slope_norm > LIMIAR:
-        return "CALL"
+        return "CALL", slope_norm, len(closes)
     if slope_norm < -LIMIAR:
-        return "PUT"
-    return "LATERAL"
+        return "PUT", slope_norm, len(closes)
+    return "LATERAL", slope_norm, len(closes)
 
 
 @app.route('/garra-hma/mtf', methods=['POST'])
@@ -12501,27 +12510,26 @@ def garra_hma_mtf():
     duracao_m = int(dados.get("duracao_m", 1))
     direcao   = str(dados.get("direcao", "CALL")).upper()
 
-    if not isinstance(ticks, list) or len(ticks) < 30:
+    if not isinstance(ticks, list) or len(ticks) < 20:
         return jsonify({
             "consenso":    "NEUTRO",
             "direcao_mtf": "LATERAL",
-            "motivo":      "ticks insuficientes (mín 30)",
+            "motivo":      "ticks insuficientes (mín 20)",
             "votos_call": 0, "votos_put": 0, "votos_lat": 0,
             "total_tf": 0, "detalhes": [],
         })
 
     ticks_f = [float(t) for t in ticks]
-    tfs = _MTF_MAP.get(duracao_m, _MTF_MAP[1])  # fallback para M1
+    tfs      = _MTF_MAP.get(duracao_m, _MTF_MAP[1])  # fallback para M1
 
     votos_call = 0
     votos_put  = 0
     votos_lat  = 0
     detalhes   = []
 
-    for tf_min in tfs:
-        periodo_seg = tf_min * 60
-        candles = _sintetizar_candles(ticks_f, periodo_seg)
-        tend = _tendencia_candles(candles)
+    for (tf_nome, proporcao_key) in tfs:
+        proporcao = _MTF_PROPORCOES.get(proporcao_key, 1.0)
+        tend, slope_norm, n_blocos = _tendencia_bloco(ticks_f, proporcao)
         if tend == "CALL":
             votos_call += 1
         elif tend == "PUT":
@@ -12529,17 +12537,18 @@ def garra_hma_mtf():
         else:
             votos_lat += 1
         detalhes.append({
-            "tf_min":    tf_min,
+            "tf_min":    tf_nome,
             "tendencia": tend,
-            "candles":   len(candles),
+            "slope":     round(slope_norm * 10000, 2),  # em bps para leitura
+            "blocos":    n_blocos,
         })
-        print(f"[MTF] {tf_min}min → {tend} ({len(candles)} candles)")
+        print(f"[MTF] {tf_nome} (prop={proporcao:.0%}) → {tend} slope={slope_norm:.6f} blocos={n_blocos}")
 
     total_tf = len(tfs)
-    # Tendência dominante nos TFs superiores
-    if votos_call > votos_put and votos_call >= total_tf // 2 + 1:
+    # Maioria simples entre CALL e PUT — LATERAL não vota
+    if votos_call > votos_put:
         direcao_mtf = "CALL"
-    elif votos_put > votos_call and votos_put >= total_tf // 2 + 1:
+    elif votos_put > votos_call:
         direcao_mtf = "PUT"
     else:
         direcao_mtf = "LATERAL"
