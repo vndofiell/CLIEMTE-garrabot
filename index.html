@@ -11673,14 +11673,16 @@ function initWebSocket(wssUrl) {
                     // ── Para CALL/PUT em minutos: aguarda a virada exata da vela ─
                     const _hmaEhMinutos = (est.duracao_unit === 'm') && (_hmaCt === 'CALL' || _hmaCt === 'PUT');
                     if (_hmaEhMinutos) {
-                        // ms decorridos no minuto atual; faltam (60000 - msDecorridos) até a virada
-                        const _hmaMsDecorridos = Date.now() % 60000;
-                        const _hmaMsFalta      = 60000 - _hmaMsDecorridos;
+                        // Calcula o período da vela em ms de acordo com a duração configurada
+                        // Ex: 1m → 60000ms | 3m → 180000ms | 5m → 300000ms
+                        const _hmaVelaDurMs   = (parseInt(est.duracao) || 1) * 60000;
+                        const _hmaMsDecorridos = Date.now() % _hmaVelaDurMs;
+                        const _hmaMsFalta      = _hmaVelaDurMs - _hmaMsDecorridos;
                         // Se faltam menos de 200ms (já estamos na virada) entra imediatamente
                         const _hmaAtraso = _hmaMsFalta < 200 ? 0 : _hmaMsFalta;
                         _seqStatusUpdate(
                             `🧠 HMA ${_hmaS.decisao} | conf <b>${_hmaS.confianca}%</b>` +
-                            ` ⏳ aguardando virada da vela em <b>${(_hmaAtraso / 1000).toFixed(1)}s</b>...`
+                            ` ⏳ aguardando virada da vela ${parseInt(est.duracao) || 1}m em <b>${(_hmaAtraso / 1000).toFixed(1)}s</b>...`
                         );
                         bot._hmaViradaTimer = setTimeout(_hmaDisparar, _hmaAtraso);
                     } else {
