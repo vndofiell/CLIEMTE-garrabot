@@ -4894,6 +4894,33 @@ const ESTRATEGIAS = {
         hma_aprendizado:  true,
         desc: "Motor Híbrido HMA | Multi-Timeframe · Regime · Consenso · Risk Gate · NO TRADE inteligente",
     },
+
+    // ── GARRA AI CORE — HMA QUOTEX ────────────────────────────────────────────
+    "🟠 GARRA AI CORE — HMA QUOTEX": {
+        tipo:               "hma_quotex",
+        // Confiança mínima para entrar (%)
+        qhma_confianca:     75,
+        // Tipo de mercado: ambos | otc | abertos
+        qhma_tipo_mercado:  "ambos",
+        // Payout mínimo para aceitar o ativo (%)
+        qhma_payout_min:    75,
+        // Modo de análise
+        qhma_modo:          "hibrido",
+        // Janelas de candles para análise
+        qhma_periodo:       60,   // 60s = M1
+        // Trocar mercado após N losses consecutivos (0 = desligado)
+        qhma_losses_troca:  3,
+        // Gerenciamento de stake
+        qhma_gerenciamento: "fixo",
+        qhma_mult_gale:     2.0,
+        qhma_max_gales:     3,
+        // Stop Win / Stop Loss em $ (0 = desligado)
+        qhma_stop_win:      0,
+        qhma_stop_loss:     0,
+        // Registrar resultados para aprendizado
+        qhma_aprendizado:   true,
+        desc: "Motor HMA exclusivo para Quotex · OTC e Abertos · Análise em tempo real · CALL/PUT automático",
+    },
 };
 
 // ═══════════════════════════════════════════════════════
@@ -8314,6 +8341,55 @@ function selecionarEstrategia(nome) {
               undefined, undefined, undefined, [1,2,3,5,10]);
         campo('Ativo único (quando seleção automática desligada)', 'cfg-ativo', 'select', est.ativo || 'R_100',
               undefined, undefined, undefined, _todosAtivosHma);
+
+    } else if (est.tipo === 'hma_quotex') {
+        // ── GARRA AI CORE — HMA QUOTEX ───────────────────────────────────────
+        const qhDiv = document.createElement('div');
+        qhDiv.style.cssText = 'background:rgba(255,107,0,0.06);border:1px solid rgba(255,107,0,0.35);border-radius:4px;padding:10px 12px;font-size:0.70rem;color:#ff6b00;font-family:"Share Tech Mono";margin-bottom:10px;line-height:1.8;';
+        qhDiv.innerHTML =
+            '🟠 <b>GARRA AI CORE — HMA QUOTEX</b><br>' +
+            '<span style="color:#8899aa">Candles → HMA Multi-Timeframe → Regime → Decision Engine → Risk Gate</span><br>' +
+            '<span style="color:#556677">Analisa mercados OTC e Abertos em tempo real · CALL/PUT automático</span>';
+        campos.appendChild(qhDiv);
+
+        campo('Confiança mínima para entrar (%)', 'cfg-qhma-confianca', 'number', est.qhma_confianca || 75, 50, 95, 1);
+
+        campo('Tipo de mercado', 'cfg-qhma-tipo', 'select', est.qhma_tipo_mercado || 'ambos',
+              undefined, undefined, undefined, ['ambos','otc','abertos']);
+
+        campo('Payout mínimo (%)', 'cfg-qhma-payout', 'number', est.qhma_payout_min || 75, 50, 99, 1);
+
+        campo('Modo de análise', 'cfg-qhma-modo', 'select', est.qhma_modo || 'hibrido',
+              undefined, undefined, undefined, ['hibrido','automatico','multi_tick']);
+
+        campo('Período das velas (s)', 'cfg-qhma-periodo', 'select', est.qhma_periodo || 60,
+              undefined, undefined, undefined, [60, 300, 900]);
+
+        campo('Trocar mercado após N losses (0=off)', 'cfg-qhma-losses-troca', 'number', est.qhma_losses_troca ?? 3, 0, 10, 1);
+
+        campo('Gerenciamento de stake', 'cfg-qhma-mgr', 'select', est.qhma_gerenciamento || 'fixo',
+              undefined, undefined, undefined, ['fixo','martingale','sorosgale','loss_recovery','qsr']);
+
+        campo('Multiplicador Gale', 'cfg-qhma-mult', 'number', est.qhma_mult_gale || 2.0, 1.1, 10, 0.1);
+
+        campo('Máximo de Gales', 'cfg-qhma-maxg', 'number', est.qhma_max_gales || 3, 1, 10, 1);
+
+        campo('Stop Win ($) — 0=desligado', 'cfg-qhma-sw', 'number', est.qhma_stop_win || 0, 0, 9999, 0.5);
+        campo('Stop Loss ($) — 0=desligado', 'cfg-qhma-sl', 'number', est.qhma_stop_loss || 0, 0, 9999, 0.5);
+
+        // Aprendizado
+        const aprQRow = document.createElement('div');
+        aprQRow.style.cssText = 'display:flex;align-items:center;gap:8px;margin-top:4px;';
+        const aprQChk = document.createElement('input');
+        aprQChk.type = 'checkbox'; aprQChk.id = 'cfg-qhma-aprendizado';
+        aprQChk.checked = est.qhma_aprendizado !== false;
+        aprQChk.style.cssText = 'accent-color:#ffbd2e;width:14px;height:14px;';
+        const aprQLbl = document.createElement('label');
+        aprQLbl.htmlFor = 'cfg-qhma-aprendizado';
+        aprQLbl.style.cssText = 'font-size:0.72rem;color:#ffbd2e;font-family:"Share Tech Mono";cursor:pointer;';
+        aprQLbl.textContent = '📊 Registrar resultados para aprendizado estatístico';
+        aprQRow.appendChild(aprQChk); aprQRow.appendChild(aprQLbl);
+        campos.appendChild(aprQRow);
     }
 
     fecharModal('modal-estrategia');
@@ -8432,6 +8508,33 @@ function confirmarEstrategia() {
         const _aprEl = document.getElementById('cfg-hma-aprendizado');
         if (_aprEl) est.hma_aprendizado = _aprEl.checked;
     }
+    // ── Campos hma_quotex ─────────────────────────────────────────────────────
+    if (est.tipo === 'hma_quotex') {
+        const _qConf = document.getElementById('cfg-qhma-confianca');
+        if (_qConf) est.qhma_confianca   = Math.max(50, Math.min(95, parseInt(_qConf.value) || 75));
+        const _qTipo = document.getElementById('cfg-qhma-tipo');
+        if (_qTipo) est.qhma_tipo_mercado = _qTipo.value || 'ambos';
+        const _qPay  = document.getElementById('cfg-qhma-payout');
+        if (_qPay)  est.qhma_payout_min  = Math.max(50, Math.min(99, parseInt(_qPay.value) || 75));
+        const _qModo = document.getElementById('cfg-qhma-modo');
+        if (_qModo) est.qhma_modo        = _qModo.value || 'hibrido';
+        const _qPer  = document.getElementById('cfg-qhma-periodo');
+        if (_qPer)  est.qhma_periodo     = parseInt(_qPer.value) || 60;
+        const _qLoss = document.getElementById('cfg-qhma-losses-troca');
+        if (_qLoss) est.qhma_losses_troca = Math.max(0, Math.min(10, parseInt(_qLoss.value) || 3));
+        const _qMgr  = document.getElementById('cfg-qhma-mgr');
+        if (_qMgr)  est.qhma_gerenciamento = _qMgr.value || 'fixo';
+        const _qMult = document.getElementById('cfg-qhma-mult');
+        if (_qMult) est.qhma_mult_gale   = Math.max(1.1, parseFloat(_qMult.value) || 2.0);
+        const _qMaxg = document.getElementById('cfg-qhma-maxg');
+        if (_qMaxg) est.qhma_max_gales   = Math.max(1, parseInt(_qMaxg.value) || 3);
+        const _qSw   = document.getElementById('cfg-qhma-sw');
+        if (_qSw)   est.qhma_stop_win    = parseFloat(_qSw.value) || 0;
+        const _qSl   = document.getElementById('cfg-qhma-sl');
+        if (_qSl)   est.qhma_stop_loss   = parseFloat(_qSl.value) || 0;
+        const _qApr  = document.getElementById('cfg-qhma-aprendizado');
+        if (_qApr)  est.qhma_aprendizado = _qApr.checked;
+    }
     // Reseta contador de sequência ao confirmar
     bot._seqContador = 0;
     _seqStatusClear();
@@ -8460,7 +8563,9 @@ function confirmarEstrategia() {
 
     // Atualiza boto do painel
     let resumo = nome;
-    if (est.tipo === 'hma_core') {
+    if (est.tipo === 'hma_quotex') {
+        resumo = `conf≥${est.qhma_confianca || 75}% | ${est.qhma_tipo_mercado || 'ambos'} | pay≥${est.qhma_payout_min || 75}%`;
+    } else if (est.tipo === 'hma_core') {
         resumo = `conf≥${est.hma_confianca || 68}% | ${est.hma_contrato || 'AUTO'} | ${est.duracao || 1}${est.duracao_unit || 't'} | ${est.ativo || 'R_100'}`;
     } else if (est.tipo === 'trading_pro') {
         resumo = `score≥${est.score_min || 35} | ${est.duracao || 1}${est.duracao_unit || 't'} | ${est.ativo || 'R_100'}`;
@@ -8483,7 +8588,12 @@ function confirmarEstrategia() {
         `${nome}<span class="cmd-label">${resumo.replace(nome,'').substring(0,36) || est.desc.substring(0,28)}</span>`;
 
     fecharModal('modal-cfg-estrategia');
-    if (est.tipo === 'hma_core') {
+    if (est.tipo === 'hma_quotex') {
+        print(`🟠 <b>GARRA AI CORE — HMA QUOTEX</b> ativado | conf≥<b>${est.qhma_confianca || 75}%</b> | tipo=<b>${est.qhma_tipo_mercado || 'ambos'}</b> | pay≥<b>${est.qhma_payout_min || 75}%</b> | modo=<b>${est.qhma_modo || 'hibrido'}</b>`, "log-win");
+        print(`🟠 HMA Quotex: Candles → Multi-Timeframe → Regime → Decision Engine → Risk Gate · OTC + Abertos`, "log-info");
+        // Inicia o motor HMA Quotex automaticamente
+        _qxHmaQ.pendente = true;
+    } else if (est.tipo === 'hma_core') {
         const _jStr = est.hma_janelas ? est.hma_janelas.join(',') + ' ticks' : 'automático';
         print(`🧠 <b>GARRA AI CORE — HMA</b> ativado | contrato=<b>${est.hma_contrato || 'AUTO'}</b> | conf≥<b>${est.hma_confianca || 68}%</b> | modo=<b>${est.hma_modo || 'hibrido'}</b> | janelas=<b>${_jStr}</b> | ativo=<b>${est.ativo || 'R_100'}</b>`, "log-win");
         print(`🧠 HMA: Tick Analyzer · Multi-Timeframe · Regime · Decision Engine · Risk Gate · NO TRADE inteligente`, "log-info");
@@ -29978,6 +30088,376 @@ function _qxHmaAguardarResultado(opId, contexto, direcao) {
         _qxHmaStatus('⚠️ Falha ao buscar resultado: ' + e.message, '#f87171');
     });
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 🟠 GARRA AI CORE — HMA QUOTEX (motor dedicado)
+// Motor exclusivo para Quotex: busca ativos OTC e Abertos em tempo real,
+// analisa com o mesmo backend HMA, opera CALL/PUT automaticamente.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const _qxHmaQ = {
+    rodando:        false,
+    opBloqueada:    false,
+    timer:          null,
+    ativoAtual:     null,
+    losses:         0,
+    lucroSessao:    0,
+    valorBase:      1,
+    valorAtual:     1,
+    galeAtual:      0,
+    qsrIdx:         0,
+    qsrSeq:         [1,2,3,4],
+    pendente:       false,   // true quando estratégia foi selecionada e bot está rodando
+    _cicloRodando:  false,
+    _ultimaVirada:  0,
+    _entradaTimer:  null,
+    _entradaWatch:  null,
+};
+
+// ── Iniciar motor HMA Quotex ──────────────────────────────────────────────────
+function _qxHmaQIniciar() {
+    const est = ESTRATEGIAS['🟠 GARRA AI CORE — HMA QUOTEX'];
+    if (!est) return;
+
+    _qxHmaQ.rodando        = true;
+    _qxHmaQ.opBloqueada    = false;
+    _qxHmaQ._cicloRodando  = false;
+    _qxHmaQ._ultimaVirada  = 0;
+    _qxHmaQ.lucroSessao    = 0;
+    _qxHmaQ.losses         = 0;
+    _qxHmaQ.galeAtual      = 0;
+    _qxHmaQ.qsrIdx         = 0;
+    _qxHmaQ.ativoAtual     = null;
+    _qxHmaQ.pendente       = false;
+
+    const vBase = parseFloat(document.getElementById('stake-input')?.value || 1);
+    _qxHmaQ.valorBase  = vBase;
+    _qxHmaQ.valorAtual = vBase;
+    const nQsr = est.qhma_max_gales || 4;
+    _qxHmaQ.qsrSeq = Array.from({length: nQsr}, (_, i) =>
+        parseFloat(((i + 1) * vBase).toFixed(2)));
+
+    print('🟠 <b>HMA QUOTEX</b> motor iniciado — analisando mercados...', 'log-win');
+
+    // Ciclo imediato + watcher de virada de vela
+    _qxHmaQCiclo();
+    clearInterval(_qxHmaQ.timer);
+    _qxHmaQ.timer = setInterval(() => {
+        if (!_qxHmaQ.rodando || _qxHmaQ._cicloRodando) return;
+        const periodo = (ESTRATEGIAS['🟠 GARRA AI CORE — HMA QUOTEX']?.qhma_periodo || 60);
+        const agora   = Math.floor(Date.now() / 1000);
+        const tsAb    = Math.floor(agora / periodo) * periodo;
+        const seg     = agora - tsAb;
+        if (seg >= 0 && seg <= 3 && tsAb !== _qxHmaQ._ultimaVirada) {
+            _qxHmaQ._ultimaVirada = tsAb;
+            _qxHmaQCiclo();
+        }
+    }, 500);
+}
+
+// ── Parar motor HMA Quotex ────────────────────────────────────────────────────
+function _qxHmaQParar() {
+    _qxHmaQ.rodando     = false;
+    _qxHmaQ.pendente    = false;
+    _qxHmaQ._cicloRodando = false;
+    clearInterval(_qxHmaQ.timer);
+    clearTimeout(_qxHmaQ._entradaTimer);
+    clearInterval(_qxHmaQ._entradaWatch);
+    _qxHmaQ.timer = null;
+}
+
+// ── Ciclo principal ───────────────────────────────────────────────────────────
+async function _qxHmaQCiclo() {
+    if (!_qxHmaQ.rodando) return;
+    if (_qx.status !== 'conectado') {
+        print('🟠 HMA QUOTEX: ⚠️ Quotex não conectada — aguardando...', 'log-info');
+        return;
+    }
+    if (_qxHmaQ._cicloRodando) return;
+    _qxHmaQ._cicloRodando = true;
+
+    const est = ESTRATEGIAS['🟠 GARRA AI CORE — HMA QUOTEX'] || {};
+
+    // Stop Win / Stop Loss
+    if (est.qhma_stop_win  > 0 && _qxHmaQ.lucroSessao >=  est.qhma_stop_win) {
+        _qxHmaQParar(); print(`🏆 HMA QUOTEX — Stop Win atingido! +$${_qxHmaQ.lucroSessao.toFixed(2)}`, 'log-win'); return;
+    }
+    if (est.qhma_stop_loss > 0 && _qxHmaQ.lucroSessao <= -est.qhma_stop_loss) {
+        _qxHmaQParar(); print(`🛑 HMA QUOTEX — Stop Loss atingido! -$${Math.abs(_qxHmaQ.lucroSessao).toFixed(2)}`, 'log-loss'); return;
+    }
+
+    // 1) Busca ativos com payout
+    let ativos = [];
+    try {
+        const d = await fetch('/quotex/ativos-payout').then(r => r.json());
+        if (d.ok && d.ativos) {
+            ativos = d.ativos.filter(a => {
+                if (!a.id) return false;
+                const pOk = parseInt(a.payout || 0) >= (est.qhma_payout_min || 75);
+                if (!pOk) return false;
+                const isOtc = (a.id || '').toLowerCase().includes('otc') ||
+                              (a.nome || '').toLowerCase().includes('otc');
+                if (est.qhma_tipo_mercado === 'otc')     return isOtc;
+                if (est.qhma_tipo_mercado === 'abertos')  return !isOtc && a.aberto;
+                return isOtc || a.aberto; // ambos
+            });
+        }
+    } catch (_e) {
+        _qxHmaQ._cicloRodando = false;
+        print('🟠 HMA QUOTEX: ⚠️ Erro ao buscar ativos: ' + _e.message, 'log-info');
+        return;
+    }
+
+    if (ativos.length === 0) {
+        _qxHmaQ._cicloRodando = false;
+        print(`🟠 HMA QUOTEX: Nenhum ativo com payout ≥ ${est.qhma_payout_min || 75}% (${est.qhma_tipo_mercado || 'ambos'})`, 'log-info');
+        return;
+    }
+
+    // 2) Troca de mercado por losses
+    if ((est.qhma_losses_troca || 0) > 0 && _qxHmaQ.losses >= est.qhma_losses_troca && _qxHmaQ.ativoAtual) {
+        const outros = ativos.filter(a => a.id !== _qxHmaQ.ativoAtual.id);
+        if (outros.length > 0) {
+            print(`🟠 HMA QUOTEX: 🔁 ${_qxHmaQ.losses} losses em ${_qxHmaQ.ativoAtual.nome||_qxHmaQ.ativoAtual.id} — trocando mercado`, 'log-info');
+            _qxHmaQ.ativoAtual = null;
+            _qxHmaQ.losses     = 0;
+            ativos = outros;
+        }
+    }
+
+    // 3) Ordena por payout (maior primeiro)
+    ativos.sort((a, b) => parseInt(b.payout || 0) - parseInt(a.payout || 0));
+    const top = ativos.slice(0, 5);
+
+    print(`🟠 HMA QUOTEX: 🔍 Analisando ${top.length} ativos (${top.map(a => (a.nome||a.id).split(' ')[0]).join(', ')})...`, 'log-info');
+
+    // 4) Analisa cada ativo
+    const resultados = [];
+    for (const ativo of top) {
+        try {
+            const r = await _qxHmaQAnalisarAtivo(ativo, est);
+            if (r) resultados.push(r);
+        } catch (_e) { console.warn('[HMAq]', ativo.id, _e); }
+    }
+
+    _qxHmaQ._cicloRodando = false;
+    if (!_qxHmaQ.rodando) return;
+
+    // 5) Renderiza lista no terminal
+    _qxHmaQLogLista(resultados, est);
+
+    // 6) Opera o melhor aprovado
+    const aprovados = resultados.filter(r => r.aprovado);
+    if (aprovados.length === 0) {
+        print(`🟠 HMA QUOTEX: NO TRADE — nenhum ativo aprovado (conf ≥ ${est.qhma_confianca || 75}%)`, 'log-info');
+        return;
+    }
+    const melhor = aprovados.reduce((a, b) => b.confianca > a.confianca ? b : a);
+    if (_qxHmaQ.opBloqueada) { print('🟠 HMA QUOTEX: ⏳ Aguardando resultado anterior...', 'log-info'); return; }
+
+    _qxHmaQ.ativoAtual = { id: melhor.ativoId, nome: melhor.ativoNome, payout: melhor.payout };
+    const direcao = melhor.decisao === 'CALL' ? 'call' : 'put';
+    print(`🟠 HMA QUOTEX: ${melhor.decisao} | ${melhor.ativoNome} | conf <b>${melhor.confianca}%</b> | payout ${melhor.payout}% | $${_qxHmaQ.valorAtual}`, melhor.decisao === 'CALL' ? 'log-win' : 'log-loss');
+    _qxHmaQOperar(direcao, melhor, est);
+}
+
+// ── Analisa ativo via candles + /garra-hma/avaliar ───────────────────────────
+async function _qxHmaQAnalisarAtivo(ativo, est) {
+    const periodo = est.qhma_periodo || 60;
+    let ticks = [];
+    try {
+        const d = await fetch(`/quotex/candles?ativo=${encodeURIComponent(ativo.id)}&periodo=${periodo}&limite=100`).then(r => r.json());
+        if (!d.ok || !d.candles || d.candles.length < 10) return null;
+        ticks = d.candles.filter(c => c.close > 0).sort((a,b) => a.time - b.time).map(c => c.close);
+    } catch (_e) { return null; }
+    if (ticks.length < 10) return null;
+
+    let hmaRes = null;
+    try {
+        const resp = await fetch('/garra-hma/avaliar', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                ticks:            ticks,
+                contrato:         'CALL/PUT AUTO',
+                janelas:          null,
+                confianca_minima: est.qhma_confianca || 75,
+                banca:            _qxModo.saldoAtual || 100,
+                stake:            _qxHmaQ.valorAtual || 1,
+                payout:           parseInt(ativo.payout || 80) / 100,
+                historico_recente: _qxHmaQ.losses || 0,
+            }),
+        });
+        hmaRes = await resp.json();
+    } catch (_e) { return null; }
+    if (!hmaRes) return null;
+
+    const isOtc = (ativo.id||'').toLowerCase().includes('otc');
+    return {
+        ativoId:   ativo.id,
+        ativoNome: ativo.nome || ativo.id,
+        payout:    ativo.payout,
+        isOtc,
+        aprovado:  hmaRes.aprovado,
+        decisao:   hmaRes.decisao,
+        confianca: hmaRes.confianca || 0,
+        regime:    hmaRes.regime    || '',
+        motivo:    hmaRes.motivo    || '',
+        ts:        Date.now(),
+    };
+}
+
+// ── Log da lista de ativos no terminal ────────────────────────────────────────
+function _qxHmaQLogLista(resultados, est) {
+    if (!resultados || resultados.length === 0) return;
+    const sorted = [...resultados].sort((a,b) => {
+        if (b.aprovado !== a.aprovado) return b.aprovado ? 1 : -1;
+        return b.confianca - a.confianca;
+    });
+    const linhas = sorted.map(r => {
+        const tag   = r.isOtc ? '[OTC]' : '[AB]';
+        const sinal = r.aprovado ? `<b style="color:${r.decisao==='CALL'?'#27c93f':'#ef5350'}">${r.decisao}</b>` : 'NO TRADE';
+        const bar   = `<span style="color:${r.confianca>=80?'#27c93f':r.confianca>=65?'#ffbd2e':'#555'}">${r.confianca.toFixed(0)}%</span>`;
+        return `  ${tag} ${r.ativoNome||r.ativoId} · ${sinal} · conf ${bar} · pay ${r.payout}%`;
+    }).join('<br>');
+    print(`🟠 HMA QUOTEX — Mercados:<br>${linhas}`, 'log-info');
+}
+
+// ── Executa operação ──────────────────────────────────────────────────────────
+function _qxHmaQOperar(direcao, contexto, est) {
+    if (!_qxHmaQ.rodando || _qxHmaQ.opBloqueada) return;
+    _qxHmaQ.opBloqueada = true;
+
+    // Atualiza stake no input visível
+    const inp = document.getElementById('stake-input');
+    if (inp) inp.value = _qxHmaQ.valorAtual.toFixed(2);
+
+    const periodo = est.qhma_periodo || 60;
+    fetch('/quotex/operar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            ativo:           contexto.ativoId,
+            direcao:         direcao,
+            valor:           _qxHmaQ.valorAtual,
+            alinhar_minuto:  true,
+            minutos:         Math.max(1, Math.round(periodo / 60)),
+        }),
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (!d.ok) {
+            _qxHmaQ.opBloqueada = false;
+            print('🟠 HMA QUOTEX: ⚠️ Erro ao operar: ' + (d.erro || d.detalhe || '?'), 'log-loss');
+            return;
+        }
+        print(`🟠 HMA QUOTEX: ✅ Operação enviada | id=${d.id} | ${direcao.toUpperCase()} | $${_qxHmaQ.valorAtual}`, 'log-info');
+        _qxHmaQAguardarResultado(d.id, contexto, direcao, est);
+    })
+    .catch(e => {
+        _qxHmaQ.opBloqueada = false;
+        print('🟠 HMA QUOTEX: ⚠️ Falha de rede: ' + e.message, 'log-loss');
+    });
+}
+
+// ── Aguarda resultado + gerenciamento de stake ────────────────────────────────
+function _qxHmaQAguardarResultado(opId, contexto, direcao, est) {
+    if (!opId) { _qxHmaQ.opBloqueada = false; return; }
+    fetch(`/quotex/resultado/${opId}`)
+    .then(r => r.json())
+    .then(d => {
+        _qxHmaQ.opBloqueada = false;
+        if (!d.ok) { print('🟠 HMA QUOTEX: ⚠️ Resultado não disponível: ' + (d.erro||'timeout'), 'log-info'); return; }
+
+        const win   = d.win;
+        const lucro = parseFloat(d.lucro || 0);
+        _qxHmaQ.lucroSessao += lucro;
+
+        if (win) {
+            _qxHmaQ.losses = 0;
+            print(`🟠 HMA QUOTEX: ✅ WIN +$${lucro.toFixed(2)} | ${contexto.ativoNome} | sessão: ${_qxHmaQ.lucroSessao >= 0 ? '+' : ''}$${_qxHmaQ.lucroSessao.toFixed(2)}`, 'log-win');
+        } else {
+            _qxHmaQ.losses++;
+            print(`🟠 HMA QUOTEX: ❌ LOSS -$${Math.abs(lucro).toFixed(2)} | ${contexto.ativoNome} | losses: ${_qxHmaQ.losses}`, 'log-loss');
+        }
+
+        // Registra aprendizado
+        if (est.qhma_aprendizado !== false) {
+            fetch('/garra-hma/historico', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    timestamp:  new Date().toISOString().replace('T',' ').slice(0,19),
+                    ativo:      contexto.ativoId,
+                    contrato:   direcao.toUpperCase(),
+                    regime:     contexto.regime || '',
+                    confianca:  contexto.confianca || 0,
+                    payout:     parseInt(contexto.payout||80) / 100,
+                    stake:      _qxHmaQ.valorAtual,
+                    decisao:    contexto.decisao || direcao.toUpperCase(),
+                    resultado:  win ? 'WIN' : 'LOSS',
+                    broker:     'QUOTEX',
+                }),
+            }).catch(() => {});
+        }
+
+        // Aplica gerenciamento de stake
+        _qxHmaQStake(win, est);
+
+        // Stop Win / Stop Loss dinâmico
+        if (est.qhma_stop_win  > 0 && _qxHmaQ.lucroSessao >=  est.qhma_stop_win)  { _qxHmaQParar(); print(`🏆 HMA QUOTEX — Stop Win! +$${_qxHmaQ.lucroSessao.toFixed(2)}`, 'log-win'); }
+        if (est.qhma_stop_loss > 0 && _qxHmaQ.lucroSessao <= -est.qhma_stop_loss)  { _qxHmaQParar(); print(`🛑 HMA QUOTEX — Stop Loss! -$${Math.abs(_qxHmaQ.lucroSessao).toFixed(2)}`, 'log-loss'); }
+    })
+    .catch(e => {
+        _qxHmaQ.opBloqueada = false;
+        print('🟠 HMA QUOTEX: ⚠️ Falha resultado: ' + e.message, 'log-info');
+    });
+}
+
+// ── Gerenciamento de stake ────────────────────────────────────────────────────
+function _qxHmaQStake(win, est) {
+    const mgr   = est.qhma_gerenciamento || 'fixo';
+    const vBase = _qxHmaQ.valorBase;
+
+    if (mgr === 'fixo') {
+        _qxHmaQ.valorAtual = vBase; _qxHmaQ.galeAtual = 0;
+    } else if (mgr === 'martingale' || mgr === 'loss_recovery') {
+        if (win) { _qxHmaQ.valorAtual = vBase; _qxHmaQ.galeAtual = 0; }
+        else if (_qxHmaQ.galeAtual < (est.qhma_max_gales || 3)) {
+            _qxHmaQ.valorAtual = parseFloat((_qxHmaQ.valorAtual * (est.qhma_mult_gale || 2)).toFixed(2));
+            _qxHmaQ.galeAtual++;
+        } else { _qxHmaQ.valorAtual = vBase; _qxHmaQ.galeAtual = 0; }
+    } else if (mgr === 'sorosgale') {
+        if (win) {
+            _qxHmaQ.galeAtual++;
+            if (_qxHmaQ.galeAtual >= (est.qhma_max_gales || 3)) { _qxHmaQ.valorAtual = vBase; _qxHmaQ.galeAtual = 0; }
+            else _qxHmaQ.valorAtual = parseFloat((_qxHmaQ.valorAtual * (est.qhma_mult_gale || 2)).toFixed(2));
+        } else { _qxHmaQ.valorAtual = vBase; _qxHmaQ.galeAtual = 0; }
+    } else if (mgr === 'qsr') {
+        if (win) { _qxHmaQ.qsrIdx = 0; _qxHmaQ.valorAtual = vBase; }
+        else { _qxHmaQ.qsrIdx = Math.min(_qxHmaQ.qsrIdx + 1, _qxHmaQ.qsrSeq.length - 1); _qxHmaQ.valorAtual = _qxHmaQ.qsrSeq[_qxHmaQ.qsrIdx] || vBase; }
+    }
+
+    const inp = document.getElementById('stake-input');
+    if (inp) inp.value = _qxHmaQ.valorAtual.toFixed(2);
+}
+
+// ── Integração com o loop principal do bot (chamado no ON_BOT_STARTED) ────────
+// Quando bot.estrategia = 'hma_quotex' e _qxHmaQ.pendente = true, inicia o motor.
+(function _qxHmaQWatch() {
+    setInterval(() => {
+        if (!_qxHmaQ.pendente) return;
+        if (_qx.status !== 'conectado') return;
+        if (bot.rodando && bot.estrategia === '🟠 GARRA AI CORE — HMA QUOTEX') {
+            _qxHmaQIniciar();
+        } else if (!bot.rodando && _qxHmaQ.rodando) {
+            _qxHmaQParar();
+        }
+    }, 1000);
+})();
+
+// ── Parar quando bot parar ────────────────────────────────────────────────────
+const _origBotStop = typeof botParar === 'function' ? botParar : null;
 
 // ── Gerenciamento de stake HMA ────────────────────────────────────────────────
 function _qxHmaAtualizarStake(win, lucro) {
