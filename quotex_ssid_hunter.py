@@ -1,5 +1,12 @@
 # ═══════════════════════════════════════════════════════════════════════════════
-# QUOTEX SSID HUNTER — Captura automática do cookie SSID via Chrome
+# QUOTEX SSID HUNTER — Captura automática do SSID via Chrome (Selenium)
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# Abre uma janela do Chrome incognito, aguarda o usuário fazer login na Quotex
+# e captura o token SSID automaticamente a partir de window.settings.token,
+# localStorage ou cookies — sem interação manual além do próprio login.
+#
+# Após capturar, notifica o quotex_connector via quotex_ssid_definir().
 # ═══════════════════════════════════════════════════════════════════════════════
 import os
 import threading
@@ -13,9 +20,6 @@ _HUNTER_STATE: dict = {
     "ts_inicio": 0,
 }
 _HUNTER_LOCK = threading.Lock()
-
-_PROFILE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                             "quotex_chrome_profile")
 
 
 def ssid_hunter_status() -> dict:
@@ -108,10 +112,11 @@ def _hunter_thread():
 
                 token = ""
 
-                # 1ª tentativa: window.settings.token (injetado pela Quotex no /trade)
+                # 1ª tentativa: window.settings.token
                 try:
                     token = driver.execute_script(
-                        "return (window.settings && window.settings.token) ? window.settings.token : '';"
+                        "return (window.settings && window.settings.token)"
+                        " ? window.settings.token : '';"
                     ) or ""
                     if token:
                         print(f"[SSID Hunter] 🎯 Token via window.settings: {token[:12]}...")
@@ -135,7 +140,7 @@ def _hunter_thread():
                 if not token:
                     try:
                         cookies = _todos_cookies(driver)
-                        token = cookies.get("token") or cookies.get("ssid") or ""
+                        token   = cookies.get("token") or cookies.get("ssid") or ""
                         if token:
                             print(f"[SSID Hunter] 🍪 Token via cookie: {token[:12]}...")
                     except Exception:
@@ -146,6 +151,15 @@ def _hunter_thread():
                     with _HUNTER_LOCK:
                         _HUNTER_STATE["ssid"]   = token
                         _HUNTER_STATE["status"] = "capturado"
+
+                    # ── Notifica o quotex_connector ───────────────────────────
+                    try:
+                        from quotex_connector import quotex_ssid_definir
+                        quotex_ssid_definir(token)
+                        print("[SSID Hunter] 🔗 SSID registrado no quotex_connector.")
+                    except Exception as _e:
+                        print(f"[SSID Hunter] ⚠️ Não foi possível notificar o connector: {_e}")
+
                     time.sleep(2)
                     try:
                         driver.quit()
@@ -185,5 +199,8 @@ def ssid_hunter_iniciar() -> dict:
     ssid_hunter_parar()
     t = threading.Thread(target=_hunter_thread, daemon=True, name="ssid-hunter")
     t.start()
-    return {"ok": True, "status": "abrindo",
-            "msg": "Chrome abrindo — faça login na Quotex e o SSID será capturado automaticamente."}
+    return {
+        "ok":    True,
+        "status": "abrindo",
+        "msg":   "Chrome abrindo — faça login na Quotex e o SSID será capturado automaticamente.",
+    }

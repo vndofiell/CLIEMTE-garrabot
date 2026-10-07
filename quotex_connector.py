@@ -2,8 +2,12 @@
 # QUOTEX CONNECTOR — Módulo de conexão com a corretora Quotex
 # ═══════════════════════════════════════════════════════════════════════════════
 #
-# Usa a biblioteca pyquotex (https://github.com/cleitonleonel/pyquotex)
-# para autenticar e operar na Quotex via WebSocket.
+# Fluxo principal:
+#   1. quotex_capturar_ssid(email, senha) → faz login HTTP e extrai o SSID
+#   2. quotex_conectar(email, senha, tipo_conta, ssid) → conecta via WebSocket
+#
+# A captura automática do SSID usa curl_cffi (impersonate Chrome) e fallback
+# para requests padrão. Sem Selenium — funciona em servidores headless.
 #
 # Padrão idêntico ao módulo Deriv do main.py:
 #   - Estado global protegido por threading.Lock
@@ -16,9 +20,10 @@ import time
 import asyncio
 import json
 import os
+import re
 import traceback
 
-# ── Estado global ──────────────────────────────────────────────────────────────
+# ── Estado global da conexão ──────────────────────────────────────────────────
 _QUOTEX_STATE: dict = {
     "status":           "desconectado",   # desconectado | conectando | conectado | erro
     "email":            "",
@@ -34,15 +39,27 @@ _QUOTEX_STATE: dict = {
 }
 _QUOTEX_LOCK = threading.Lock()
 
-# Arquivo de credenciais salvas
+# ── Estado global da captura SSID ─────────────────────────────────────────────
+_SSID_CAPTURE_STATE: dict = {
+    "status":  "idle",      # idle | capturando | capturado | erro
+    "ssid":    "",
+    "erro":    "",
+    "ts":      0,
+}
+_SSID_CAPTURE_LOCK = threading.Lock()
+
+# Arquivo de configuração salva
 _BASE_DIR        = os.path.dirname(os.path.abspath(__file__))
 _QUOTEX_CFG_FILE = os.path.join(_BASE_DIR, "quotex_config.json")
 
 
-# ── Persistência de credenciais ────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════════
+# PERSISTÊNCIA DE CREDENCIAIS
+# ═══════════════════════════════════════════════════════════════════════════════
+
 def quotex_cfg_carregar() -> dict:
-    """Carrega email/senha/tipo da Quotex salvos em disco."""
-    padrao = {"email": "", "senha": "", "tipo_conta": "DEMO"}
+    """Carrega email/senha/tipo_conta/ssid salvos em disco."""
+    padrao = {"email": "", "senha": "", "tipo_conta": "DEMO", "ssid": ""}
     try:
         if os.path.exists(_QUOTEX_CFG_FILE):
             with open(_QUOTEX_CFG_FILE, "r", encoding="utf-8") as f:
@@ -54,17 +71,348 @@ def quotex_cfg_carregar() -> dict:
     return padrao
 
 
-def quotex_cfg_salvar(email: str, senha: str, tipo_conta: str = "DEMO") -> None:
-    """Salva credenciais da Quotex em disco (sem criptografia — mesmo padrão do resto do bot)."""
+def quotex_cfg_salvar(email: str, senha: str, tipo_conta: str = "DEMO",
+                      ssid: str = "") -> None:
+    """Salva credenciais da Quotex em disco."""
     try:
         with open(_QUOTEX_CFG_FILE, "w", encoding="utf-8") as f:
-            json.dump({"email": email, "senha": senha, "tipo_conta": tipo_conta},
-                      f, ensure_ascii=False, indent=2)
+            json.dump({
+                "email":      email,
+                "senha":      senha,
+                "tipo_conta": tipo_conta,
+                "ssid":       ssid,
+            }, f, ensure_ascii=False, indent=2)
     except Exception:
         pass
 
 
-# ── Helpers de status ──────────────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════════
+# CAPTURA AUTOMÁTICA DO SSID
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def quotex_ssid_status() -> dict:
+    """Retorna o estado atual da captura de SSID."""
+    with _SSID_CAPTURE_LOCK:
+        return {
+            "status": _SSID_CAPTURE_STATE["status"],
+            "ssid":   _SSID_CAPTURE_STATE["ssid"],
+            "erro":   _SSID_CAPTURE_STATE["erro"],
+            "ts":     _SSID_CAPTURE_STATE["ts"],
+        }
+
+
+def _ssid_extrair_do_html(html: str) -> str:
+    """Tenta extrair o token SSID de uma página HTML da Quotex."""
+    # 1ª tentativa: window.settings.token (objeto JS embutido na página)
+    m = re.search(r'window\.settings\s*=\s*(\{[^<]+?\})\s*;', html)
+    if m:
+        try:
+            settings = json.loads(m.group(1))
+            tok = settings.get("token", "")
+            if tok and len(tok) >= 16:
+                return tok
+        except Exception:
+            pass
+
+    # 2ª tentativa: regex direto no JSON embutido
+    m2 = re.search(r'"token"\s*:\s*"([a-zA-Z0-9_\-\.]{20,})"', html)
+    if m2:
+        tok = m2.group(1)
+        if len(tok) >= 20:
+            return tok
+
+    return ""
+
+
+def _ssid_capturar_curl_cffi(email: str, senha: str,
+                               user_ip: str = "") -> tuple[bool, str, str]:
+    """
+    Faz login na Quotex usando curl_cffi (impersonate Chrome).
+    Retorna (ok, ssid, erro).
+    """
+    try:
+        from curl_cffi import requests as _creqs
+
+        ua = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+              "AppleWebKit/537.36 (KHTML, like Gecko) "
+              "Chrome/120.0.0.0 Safari/537.36")
+
+        s = _creqs.Session(impersonate="chrome120")
+        s.headers.update({
+            "User-Agent":      ua,
+            "Accept-Language": "pt-BR,pt;q=0.9",
+        })
+        if user_ip:
+            s.headers.update({
+                "X-Forwarded-For": user_ip,
+                "X-Real-IP":       user_ip,
+            })
+
+        # 1. Obtém CSRF token
+        csrf = ""
+        try:
+            pg   = s.get("https://qxbroker.com/pt/sign-in", timeout=15)
+            m    = re.search(r'name="_token"\s+value="([^"]+)"', pg.text)
+            if m:
+                csrf = m.group(1)
+        except Exception:
+            pass
+
+        # 2. POST de login
+        payload = {"email": email, "password": senha}
+        if csrf:
+            payload["_token"] = csrf
+
+        resp = s.post(
+            "https://qxbroker.com/pt/sign-in",
+            data=payload,
+            headers={
+                "Content-Type": "application/x-www-form-urlencoded",
+                "Referer":      "https://qxbroker.com/pt/sign-in",
+                "Origin":       "https://qxbroker.com",
+            },
+            timeout=20,
+            allow_redirects=True,
+        )
+
+        # 3. Detecta OTP
+        if ("otp" in resp.text.lower() or "two" in resp.text.lower()
+                or resp.status_code == 422):
+            return False, "", "OTP_REQUIRED"
+
+        # 4. Tenta extrair token da resposta JSON
+        try:
+            j = resp.json()
+            tok = j.get("token") or j.get("ssid") or (j.get("data") or {}).get("token", "")
+            if tok and len(tok) >= 16:
+                return True, tok, ""
+        except Exception:
+            pass
+
+        # 5. Acessa /trade e extrai token do HTML
+        try:
+            trade = s.get("https://qxbroker.com/pt/trade", timeout=15)
+            tok   = _ssid_extrair_do_html(trade.text)
+            if tok:
+                return True, tok, ""
+        except Exception:
+            pass
+
+        return False, "", f"Login falhou (HTTP {resp.status_code}). Verifique email/senha."
+
+    except ImportError:
+        return False, "", "curl_cffi_indisponivel"
+    except Exception as e:
+        return False, "", str(e)
+
+
+def _ssid_capturar_requests(email: str, senha: str) -> tuple[bool, str, str]:
+    """
+    Fallback: faz login usando requests padrão (sem impersonate).
+    Retorna (ok, ssid, erro).
+    """
+    try:
+        import requests as _req
+
+        ua = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+              "AppleWebKit/537.36 (KHTML, like Gecko) "
+              "Chrome/120.0.0.0 Safari/537.36")
+        s  = _req.Session()
+        s.headers.update({"User-Agent": ua, "Accept-Language": "pt-BR,pt;q=0.9"})
+
+        # CSRF
+        csrf = ""
+        try:
+            pg   = s.get("https://qxbroker.com/pt/sign-in", timeout=15)
+            m    = re.search(r'name="_token"\s+value="([^"]+)"', pg.text)
+            if m:
+                csrf = m.group(1)
+        except Exception:
+            pass
+
+        payload = {"email": email, "password": senha}
+        if csrf:
+            payload["_token"] = csrf
+
+        resp = s.post(
+            "https://qxbroker.com/pt/sign-in",
+            data=payload,
+            headers={
+                "Content-Type": "application/x-www-form-urlencoded",
+                "Referer":      "https://qxbroker.com/pt/sign-in",
+                "Origin":       "https://qxbroker.com",
+            },
+            timeout=20,
+            allow_redirects=True,
+        )
+
+        if ("otp" in resp.text.lower() or "two" in resp.text.lower()
+                or resp.status_code == 422):
+            return False, "", "OTP_REQUIRED"
+
+        # Tenta /trade
+        trade = s.get("https://qxbroker.com/pt/trade", timeout=15)
+        tok   = _ssid_extrair_do_html(trade.text)
+        if tok:
+            return True, tok, ""
+
+        return False, "", f"Token não encontrado (HTTP {resp.status_code})."
+
+    except Exception as e:
+        return False, "", str(e)
+
+
+def _ssid_capturar_pyquotex(email: str, senha: str,
+                              otp_callback=None) -> tuple[bool, str, str]:
+    """
+    Usa a classe Login do pyquotex para autenticar via HTTP assíncrono.
+    Retorna (ok, ssid, erro).
+    """
+    try:
+        from pyquotex.network.login import Login
+        from pyquotex.api import QuotexAPI
+
+        # Patch de compatibilidade: curl_cffi.Response não tem reason_phrase
+        try:
+            from curl_cffi.requests import Response as _CffiResponse
+            if not hasattr(_CffiResponse, "reason_phrase"):
+                _CffiResponse.reason_phrase = property(
+                    lambda self: getattr(self, "reason", str(self.status_code))
+                )
+        except Exception:
+            pass
+
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+        async def _run():
+            api = QuotexAPI(
+                host="qxbroker.com",
+                username=email,
+                password=senha,
+                lang="pt",
+                on_otp_callback=otp_callback,
+            )
+            login = Login(api=api)
+            ok, motivo = await login(username=email, password=senha)
+
+            token = ""
+            if ok:
+                token = (api.session_data or {}).get("token", "") or ""
+                if not token:
+                    try:
+                        await login.get_profile()
+                        token = (api.session_data or {}).get("token", "") or ""
+                    except Exception:
+                        pass
+                if not token:
+                    token = getattr(login, "ssid", "") or ""
+
+            try:
+                if getattr(login, "_client", None):
+                    await login._client.close()
+            except Exception:
+                pass
+
+            return ok, motivo, token
+
+        ok, motivo, token = loop.run_until_complete(_run())
+        loop.close()
+
+        if ok and token:
+            return True, token, ""
+        elif ok:
+            return False, "", "Login OK mas token não encontrado."
+        else:
+            return False, "", motivo or "Login HTTP falhou."
+
+    except ImportError:
+        return False, "", "pyquotex_indisponivel"
+    except Exception as e:
+        return False, "", str(e)
+
+
+def quotex_capturar_ssid(email: str, senha: str,
+                          otp_callback=None) -> dict:
+    """
+    Captura o SSID da Quotex de forma automática usando múltiplas estratégias
+    em cascata (sem necessidade de Selenium ou interação manual):
+
+      1. curl_cffi (impersonate Chrome) — mais confiável, evita bloqueios
+      2. pyquotex Login HTTP assíncrono — biblioteca oficial
+      3. requests padrão — fallback simples
+
+    Retorna dict com { ok, ssid, erro }.
+    Atualiza _SSID_CAPTURE_STATE com o resultado.
+    """
+    with _SSID_CAPTURE_LOCK:
+        _SSID_CAPTURE_STATE.update({"status": "capturando", "ssid": "", "erro": "", "ts": time.time()})
+
+    print(f"[Quotex] 🔐 Iniciando captura SSID para {email}...")
+
+    # Estratégia 1: curl_cffi
+    ok, ssid, erro = _ssid_capturar_curl_cffi(email, senha)
+    if ok and ssid:
+        print(f"[Quotex] ✅ SSID capturado via curl_cffi! len={len(ssid)}")
+        _atualizar_captura(ssid)
+        return {"ok": True, "ssid": ssid, "metodo": "curl_cffi"}
+
+    if erro == "OTP_REQUIRED":
+        with _SSID_CAPTURE_LOCK:
+            _SSID_CAPTURE_STATE.update({"status": "otp_necessario", "erro": "OTP_REQUIRED", "ts": time.time()})
+        return {"ok": False, "ssid": "", "erro": "OTP_REQUIRED", "otp": True}
+
+    print(f"[Quotex] ⚠️ curl_cffi falhou ({erro}). Tentando pyquotex...")
+
+    # Estratégia 2: pyquotex Login HTTP
+    ok2, ssid2, erro2 = _ssid_capturar_pyquotex(email, senha, otp_callback)
+    if ok2 and ssid2:
+        print(f"[Quotex] ✅ SSID capturado via pyquotex! len={len(ssid2)}")
+        _atualizar_captura(ssid2)
+        return {"ok": True, "ssid": ssid2, "metodo": "pyquotex"}
+
+    if erro2 == "OTP_REQUIRED":
+        with _SSID_CAPTURE_LOCK:
+            _SSID_CAPTURE_STATE.update({"status": "otp_necessario", "erro": "OTP_REQUIRED", "ts": time.time()})
+        return {"ok": False, "ssid": "", "erro": "OTP_REQUIRED", "otp": True}
+
+    print(f"[Quotex] ⚠️ pyquotex falhou ({erro2}). Tentando requests...")
+
+    # Estratégia 3: requests padrão
+    ok3, ssid3, erro3 = _ssid_capturar_requests(email, senha)
+    if ok3 and ssid3:
+        print(f"[Quotex] ✅ SSID capturado via requests! len={len(ssid3)}")
+        _atualizar_captura(ssid3)
+        return {"ok": True, "ssid": ssid3, "metodo": "requests"}
+
+    # Todas as estratégias falharam
+    motivo_final = erro3 or erro2 or erro or "Todas as estratégias de captura falharam."
+    print(f"[Quotex] ❌ Captura SSID falhou: {motivo_final}")
+    with _SSID_CAPTURE_LOCK:
+        _SSID_CAPTURE_STATE.update({"status": "erro", "erro": motivo_final, "ts": time.time()})
+    return {"ok": False, "ssid": "", "erro": motivo_final}
+
+
+def _atualizar_captura(ssid: str):
+    """Registra SSID capturado no estado global."""
+    with _SSID_CAPTURE_LOCK:
+        _SSID_CAPTURE_STATE.update({
+            "status": "capturado",
+            "ssid":   ssid,
+            "erro":   "",
+            "ts":     time.time(),
+        })
+
+
+def quotex_ssid_definir(ssid: str):
+    """Permite que fontes externas (frontend, SSID Hunter) registrem um SSID capturado."""
+    _atualizar_captura(ssid)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# HELPERS DE STATUS
+# ═══════════════════════════════════════════════════════════════════════════════
+
 def quotex_status() -> dict:
     """Retorna cópia segura do estado atual (sem expor o client object)."""
     with _QUOTEX_LOCK:
@@ -81,25 +429,55 @@ def quotex_status() -> dict:
 
 def quotex_conectado() -> bool:
     with _QUOTEX_LOCK:
-        return _QUOTEX_STATE["status"] == "conectado" and _QUOTEX_STATE["client"] is not None
+        return (_QUOTEX_STATE["status"] == "conectado"
+                and _QUOTEX_STATE["client"] is not None)
 
 
-# ── Conexão principal ──────────────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════════
+# CONEXÃO PRINCIPAL (WebSocket via pyquotex)
+# ═══════════════════════════════════════════════════════════════════════════════
+
 def _quotex_conectar_thread(email: str, senha: str, tipo_conta: str,
                              otp_callback=None, ssid: str = "") -> None:
     """
     Executa em thread background.
     Instancia QuotexAPI, autentica e atualiza o estado global.
 
-    Se ssid for fornecido, usa set_session() para pular o login por senha
-    (evita HTTP 403 por bloqueio de IP/User-Agent da Quotex).
+    Se ssid for fornecido, injeta o token na sessão (pula authenticate).
+    Se ssid estiver vazio, tenta capturá-lo automaticamente via HTTP antes
+    de abrir o WebSocket.
     """
     with _QUOTEX_LOCK:
-        _QUOTEX_STATE["status"] = "conectando"
-        _QUOTEX_STATE["erro"]   = ""
-        _QUOTEX_STATE["email"]  = email
-        _QUOTEX_STATE["senha"]  = senha
+        _QUOTEX_STATE["status"]    = "conectando"
+        _QUOTEX_STATE["erro"]      = ""
+        _QUOTEX_STATE["email"]     = email
+        _QUOTEX_STATE["senha"]     = senha
         _QUOTEX_STATE["tipo_conta"] = tipo_conta.upper()
+
+    # ── Auto-captura do SSID se não fornecido ─────────────────────────────────
+    if not ssid and email and senha:
+        print("[Quotex] 🔄 SSID não fornecido — capturando automaticamente...")
+        resultado_ssid = quotex_capturar_ssid(email, senha, otp_callback)
+        if resultado_ssid.get("ok") and resultado_ssid.get("ssid"):
+            ssid = resultado_ssid["ssid"]
+            print(f"[Quotex] ✅ SSID capturado automaticamente. len={len(ssid)}")
+        elif resultado_ssid.get("otp"):
+            # OTP necessário — informa ao estado e aguarda callback
+            with _QUOTEX_LOCK:
+                _QUOTEX_STATE["status"] = "aguardando_otp"
+                _QUOTEX_STATE["erro"]   = "OTP necessário"
+            print("[Quotex] ⚠️ OTP necessário — aguardando código via callback...")
+            if otp_callback:
+                # Se o callback resolver o OTP, tenta de novo em loop simples
+                for _tentativa in range(3):
+                    r2 = quotex_capturar_ssid(email, senha, otp_callback)
+                    if r2.get("ok") and r2.get("ssid"):
+                        ssid = r2["ssid"]
+                        break
+                    time.sleep(3)
+        else:
+            print(f"[Quotex] ⚠️ Captura SSID falhou: {resultado_ssid.get('erro')}. "
+                  "Tentando conexão direta com email/senha...")
 
     try:
         from pyquotex.stable_api import Quotex
@@ -119,16 +497,23 @@ def _quotex_conectar_thread(email: str, senha: str, tipo_conta: str,
             on_otp_callback=otp_callback,
         )
 
-        # ── Modo SSID: injeta sessão do browser — pula login por senha ──
+        # ── Injeta sessão SSID: pula authenticate() completamente ─────────────
         if ssid and ssid.strip():
-            from pyquotex.network.navigator import USER_AGENT_DEFAULT
+            try:
+                from pyquotex.network.navigator import USER_AGENT_DEFAULT
+                _ua = USER_AGENT_DEFAULT
+            except ImportError:
+                _ua = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                       "AppleWebKit/537.36 (KHTML, like Gecko) "
+                       "Chrome/120.0.0.0 Safari/537.36")
+
             _ssid = ssid.strip()
             # 1. Persiste em disco (usado por reconexões futuras)
-            client.set_session(user_agent=USER_AGENT_DEFAULT, ssid=_ssid)
-            # 2. Atualiza session_data NA MEMÓRIA — sem isso connect() ainda chama authenticate()
+            client.set_session(user_agent=_ua, ssid=_ssid)
+            # 2. Atualiza session_data NA MEMÓRIA — sem isso connect() chama authenticate()
             client.session_data["token"]      = _ssid
-            client.session_data["user_agent"] = USER_AGENT_DEFAULT
-            print(f"[Quotex] 🔑 Usando SSID direto (pula authenticate)")
+            client.session_data["user_agent"] = _ua
+            print(f"[Quotex] 🔑 Sessão SSID injetada (pula authenticate). len={len(_ssid)}")
 
         check, reason = loop.run_until_complete(client.connect())
 
@@ -145,24 +530,23 @@ def _quotex_conectar_thread(email: str, senha: str, tipo_conta: str,
         # Sincroniza perfil do servidor (offset de fuso horário).
         # Sem isso, a primeira operação falha com:
         # "unsupported type for timedelta seconds component: NoneType"
-        # porque get_server_time() usa profile.offset que ainda é None.
         try:
             loop.run_until_complete(client.get_server_time())
         except Exception as _ste:
             print(f"[Quotex] ⚠️ Aviso na sync de tempo: {_ste}")
 
         with _QUOTEX_LOCK:
-            _QUOTEX_STATE["client"]       = client
-            _QUOTEX_STATE["status"]           = "conectado"
-            _QUOTEX_STATE["saldo"]            = float(saldo or 0)
-            _QUOTEX_STATE["ts_conectado"]     = time.time()
-            _QUOTEX_STATE["erro"]             = ""
-            _QUOTEX_STATE["_falhas_balance"]  = 0   # zera contador de falhas
+            _QUOTEX_STATE["client"]          = client
+            _QUOTEX_STATE["status"]          = "conectado"
+            _QUOTEX_STATE["saldo"]           = float(saldo or 0)
+            _QUOTEX_STATE["ts_conectado"]    = time.time()
+            _QUOTEX_STATE["erro"]            = ""
+            _QUOTEX_STATE["_falhas_balance"] = 0
 
         print(f"[Quotex] ✅ Conectado | conta={tipo_conta} | saldo={saldo:.2f}")
 
-        # Salva credenciais após conexão bem-sucedida
-        quotex_cfg_salvar(email, senha, tipo_conta)
+        # Salva credenciais + SSID após conexão bem-sucedida
+        quotex_cfg_salvar(email, senha, tipo_conta, ssid)
 
         # Mantém o loop vivo para operações futuras
         loop.run_forever()
@@ -181,14 +565,16 @@ def _quotex_conectar_thread(email: str, senha: str, tipo_conta: str,
             _QUOTEX_STATE["status"] = "erro"
             _QUOTEX_STATE["erro"]   = msg
             _QUOTEX_STATE["client"] = None
-        # ── Reconexão automática se tinha credenciais salvas ──────────────
-        # Aguarda 15s e tenta reconectar automaticamente (evita loop imediato)
+
+        # ── Reconexão automática ──────────────────────────────────────────────
         time.sleep(15)
         with _QUOTEX_LOCK:
-            # Só reconecta se o status ainda é "erro" (usuário não desconectou manualmente)
-            deve_reconectar = _QUOTEX_STATE["status"] == "erro" and email and senha
+            deve_reconectar = (
+                _QUOTEX_STATE["status"] == "erro"
+                and email and senha
+            )
         if deve_reconectar:
-            print(f"[Quotex] 🔄 Reconectando automaticamente em background...")
+            print("[Quotex] 🔄 Reconectando automaticamente...")
             _quotex_conectar_thread(email, senha, tipo_conta, otp_callback, ssid)
 
 
@@ -196,7 +582,10 @@ def quotex_conectar(email: str, senha: str, tipo_conta: str = "DEMO",
                     otp_callback=None, ssid: str = "") -> dict:
     """
     Inicia conexão com a Quotex em background.
-    ssid: token SSID capturado do browser (evita HTTP 403).
+
+    Se ssid for fornecido, usa-o diretamente (pula authenticate).
+    Se ssid estiver vazio e email+senha forem fornecidos, captura o SSID
+    automaticamente antes de abrir o WebSocket.
     """
     quotex_desconectar()
 
@@ -208,7 +597,9 @@ def quotex_conectar(email: str, senha: str, tipo_conta: str = "DEMO",
     )
     t.start()
 
-    return {"ok": True, "status": "conectando", "msg": "Conexão com Quotex iniciada em background."}
+    msg = ("Capturando SSID e conectando à Quotex..."
+           if not ssid else "Conectando à Quotex via SSID...")
+    return {"ok": True, "status": "conectando", "msg": msg}
 
 
 def quotex_desconectar() -> dict:
@@ -222,14 +613,12 @@ def quotex_desconectar() -> dict:
         _QUOTEX_STATE["saldo"]        = 0.0
         _QUOTEX_STATE["loop"]         = None
 
-    # Para o loop de forma segura
     if loop and loop.is_running():
         try:
             loop.call_soon_threadsafe(loop.stop)
         except Exception:
             pass
 
-    # Fecha o cliente
     if client:
         try:
             client.close()
@@ -240,61 +629,41 @@ def quotex_desconectar() -> dict:
     return {"ok": True, "status": "desconectado"}
 
 
-# ── Duração alinhada à virada do minuto ───────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════════
+# UTILITÁRIOS
+# ═══════════════════════════════════════════════════════════════════════════════
+
 def quotex_duracao_alinhada(minutos: int = 1) -> int:
     """
     Calcula a duração em segundos para que a operação expire exatamente
     na virada do N-ésimo minuto a partir de agora.
-
-    Exemplo com minutos=1 (padrão):
-      - Você entra no segundo :40 de uma vela M1
-      - Faltam 20s para a virada do minuto
-      - A função retorna 20s como duração
-      - A operação expira exatamente na virada da próxima vela ✅
-
-    Exemplo com minutos=2:
-      - Você entra no segundo :40
-      - Faltam 20s + 60s = 80s para a virada de 2 minutos
-      - A função retorna 80s ✅
-
-    Parâmetros:
-        minutos — número de velas completas que a operação deve durar (padrão: 1)
-
-    Retorna:
-        duração em segundos (mínimo 5s para evitar rejeição pela Quotex)
     """
-    segundos_no_minuto = time.time() % 60          # posição no minuto atual (0-59)
-    segundos_ate_virada = 60 - segundos_no_minuto  # segundos até o próximo minuto
+    segundos_no_minuto  = time.time() % 60
+    segundos_ate_virada = 60 - segundos_no_minuto
 
-    # Se já estamos muito próximos da virada (< 3s), pula para o minuto seguinte
-    # para evitar que a ordem chegue após a virada
     if segundos_ate_virada < 3:
         segundos_ate_virada += 60
 
-    # Adiciona os minutos completos extras além do primeiro
     duracao_total = int(segundos_ate_virada) + (minutos - 1) * 60
-
-    # Garante mínimo de 5 segundos (Quotex rejeita durações muito curtas)
     return max(5, duracao_total)
 
 
-# ── Saldo ──────────────────────────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════════
+# SALDO
+# ═══════════════════════════════════════════════════════════════════════════════
+
 def quotex_get_saldo() -> dict:
     """
     Consulta saldo atual da conta Quotex.
-
-    Quando get_balance() falha (WS morto / timeout), retorna o último
-    valor salvo em cache com ok=True para que o frontend continue
-    exibindo o saldo — em vez de travar em '--'.
+    Retorna cache quando get_balance() falha.
     """
     with _QUOTEX_LOCK:
-        client       = _QUOTEX_STATE.get("client")
-        loop         = _QUOTEX_STATE.get("loop")
-        tipo         = _QUOTEX_STATE["tipo_conta"]
-        saldo_cache  = _QUOTEX_STATE["saldo"]   # último valor conhecido
+        client      = _QUOTEX_STATE.get("client")
+        loop        = _QUOTEX_STATE.get("loop")
+        tipo        = _QUOTEX_STATE["tipo_conta"]
+        saldo_cache = _QUOTEX_STATE["saldo"]
 
     if not client or not loop:
-        # Sem conector — retorna cache se disponível, senão erro real
         if saldo_cache > 0:
             return {"ok": True, "saldo": saldo_cache, "tipo_conta": tipo, "cache": True}
         return {"ok": False, "erro": "Quotex não conectada."}
@@ -306,14 +675,16 @@ def quotex_get_saldo() -> dict:
             _QUOTEX_STATE["saldo"] = float(saldo or 0)
         return {"ok": True, "saldo": float(saldo or 0), "tipo_conta": tipo}
     except Exception as e:
-        # WS morto ou timeout — usa o cache para não travar o frontend
-        print(f"[Quotex] ⚠️ get_balance falhou ({e}). Retornando saldo em cache: ${saldo_cache:.2f}")
+        print(f"[Quotex] ⚠️ get_balance falhou ({e}). Retornando cache: ${saldo_cache:.2f}")
         if saldo_cache > 0:
             return {"ok": True, "saldo": saldo_cache, "tipo_conta": tipo, "cache": True}
         return {"ok": False, "erro": str(e)}
 
 
-# ── Ativos disponíveis ─────────────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════════
+# ATIVOS
+# ═══════════════════════════════════════════════════════════════════════════════
+
 def quotex_get_ativos() -> dict:
     """Retorna lista de ativos disponíveis para operar."""
     with _QUOTEX_LOCK:
@@ -324,9 +695,8 @@ def quotex_get_ativos() -> dict:
         return {"ok": False, "erro": "Quotex não conectada.", "ativos": []}
 
     try:
-        fut    = asyncio.run_coroutine_threadsafe(client.get_all_assets(), loop)
-        dados  = fut.result(timeout=10)
-        # pyquotex.get_all_assets() → dict {nome: payout_str}
+        fut   = asyncio.run_coroutine_threadsafe(client.get_all_assets(), loop)
+        dados = fut.result(timeout=10)
         ativos = []
         if isinstance(dados, dict):
             for nome, payout in dados.items():
@@ -342,7 +712,10 @@ def quotex_get_ativos() -> dict:
         return {"ok": False, "erro": str(e), "ativos": []}
 
 
-# ── Executar operação (CALL / PUT) ─────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════════
+# OPERAÇÕES
+# ═══════════════════════════════════════════════════════════════════════════════
+
 def quotex_operar(ativo: str, direcao: str, valor: float, duracao: int) -> dict:
     """
     Executa uma operação binária na Quotex.
@@ -352,8 +725,6 @@ def quotex_operar(ativo: str, direcao: str, valor: float, duracao: int) -> dict:
         direcao  — "call" | "put"  (alta | baixa)
         valor    — valor da entrada em USD
         duracao  — duração em segundos (ex.: 60 = 1 min)
-
-    Retorna dict com id da operação e resultado quando disponível.
     """
     with _QUOTEX_LOCK:
         client = _QUOTEX_STATE.get("client")
@@ -367,22 +738,19 @@ def quotex_operar(ativo: str, direcao: str, valor: float, duracao: int) -> dict:
         return {"ok": False, "erro": f"Direção inválida: '{direcao}'. Use 'call' ou 'put'."}
 
     try:
-        # Garante que o perfil/offset do servidor está carregado antes de operar.
-        # Evita "unsupported type for timedelta seconds component: NoneType"
-        # que ocorre quando get_server_time() ainda tem profile.offset=None.
+        # Garante offset do servidor carregado antes de operar
         try:
             sync_fut = asyncio.run_coroutine_threadsafe(client.get_server_time(), loop)
             sync_fut.result(timeout=8)
         except Exception:
-            pass  # não bloqueia a operação se a sync falhar
+            pass
 
-        # buy(amount, asset, direction, duration) → tuple[bool, Any]
-        fut    = asyncio.run_coroutine_threadsafe(
+        fut = asyncio.run_coroutine_threadsafe(
             client.buy(amount=valor, asset=ativo, direction=direcao_norm, duration=duracao),
             loop
         )
         resultado = fut.result(timeout=30)
-        # resultado é tuple[bool, info]
+
         if isinstance(resultado, (list, tuple)) and len(resultado) >= 2:
             ok, info = bool(resultado[0]), resultado[1]
         else:
@@ -392,21 +760,21 @@ def quotex_operar(ativo: str, direcao: str, valor: float, duracao: int) -> dict:
             return {"ok": False, "erro": "Ordem rejeitada pela Quotex.", "detalhe": str(info)}
 
         op_id = info.get("id") or info.get("uid") or ""
-        print(f"[Quotex] 📈 Operação enviada | ativo={ativo} | dir={direcao_norm} | val={valor} | dur={duracao}s | id={op_id}")
+        print(f"[Quotex] 📈 Operação | ativo={ativo} | dir={direcao_norm} | "
+              f"val={valor} | dur={duracao}s | id={op_id}")
         return {
-            "ok":        True,
-            "id":        op_id,
-            "ativo":     ativo,
-            "direcao":   direcao_norm,
-            "valor":     valor,
-            "duracao":   duracao,
-            "info":      info,
+            "ok":      True,
+            "id":      op_id,
+            "ativo":   ativo,
+            "direcao": direcao_norm,
+            "valor":   valor,
+            "duracao": duracao,
+            "info":    info,
         }
     except Exception as e:
         return {"ok": False, "erro": str(e)}
 
 
-# ── Verificar resultado de operação ───────────────────────────────────────────
 def quotex_resultado(op_id: str) -> dict:
     """
     Verifica o resultado (win/loss) de uma operação pelo ID.
@@ -420,18 +788,16 @@ def quotex_resultado(op_id: str) -> dict:
         return {"ok": False, "erro": "Quotex não conectada."}
 
     try:
-        fut = asyncio.run_coroutine_threadsafe(
-            client.check_win(op_id),
-            loop
-        )
+        fut       = asyncio.run_coroutine_threadsafe(client.check_win(op_id), loop)
         resultado = fut.result(timeout=310)
-        # check_win → tuple[str, float]  (status, profit)
+
         if isinstance(resultado, (list, tuple)) and len(resultado) >= 2:
             res, lucro = resultado[0], resultado[1]
         else:
             res, lucro = "desconhecido", float(resultado or 0)
 
         win = float(lucro or 0) > 0
-        return {"ok": True, "id": op_id, "resultado": res, "lucro": float(lucro or 0), "win": win}
+        return {"ok": True, "id": op_id, "resultado": res,
+                "lucro": float(lucro or 0), "win": win}
     except Exception as e:
         return {"ok": False, "erro": str(e)}

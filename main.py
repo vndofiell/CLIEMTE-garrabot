@@ -2499,6 +2499,11 @@ def rota_ssid_captura_receber():
         _SSID_CAPTURA_STATE["ssid"]   = ssid
         _SSID_CAPTURA_STATE["status"] = "capturado"
         _SSID_CAPTURA_STATE["ts"]     = time.time()
+    # Notifica também o quotex_connector para uso imediato na conexão
+    try:
+        quotex_ssid_definir(ssid)
+    except Exception:
+        pass
     print(f"[Quotex] 🍪 SSID capturado via redirect! len={len(ssid)}")
     return jsonify({"ok": True, "msg": "SSID recebido com sucesso."})
 
@@ -2903,32 +2908,51 @@ def rota_quotex_login_page():
   <h1>⚡ BOT GARRA</h1>
   <div class="sub">Conectar conta Quotex</div>
 
-  <!-- TELA PRINCIPAL: abre Quotex e aguarda login -->
+  <!-- TELA PRINCIPAL -->
   <div id="tela-inicio">
     <div class="icone">🌐</div>
-    <div class="msg-p">Clique para abrir a Quotex</div>
-    <div class="msg-s">
-      Faça login na janela que abrirá.<br>
-      O SSID é capturado <b style="color:#00ff41">automaticamente</b> após o login.
+    <div class="msg-p">Captura automática de SSID</div>
+    <div class="msg-s" style="margin-bottom:14px;">
+      <b style="color:#00cfff;">Passo 1:</b> Arraste o botão abaixo para a barra de favoritos<br>
+      <b style="color:#00cfff;">Passo 2:</b> Abra a Quotex e faça login<br>
+      <b style="color:#00cfff;">Passo 3:</b> Clique o favorito salvo — SSID capturado! ✅
     </div>
-    <button class="btn btn-cyan" onclick="iniciar()" id="btn-abrir" style="margin-top:14px;">
-      🌐 ABRIR QUOTEX E CAPTURAR
+
+    <!-- BOOKMARKLET — arrasta para a barra de favoritos -->
+    <div style="background:rgba(0,207,255,0.06); border:1px dashed rgba(0,207,255,0.4);
+                border-radius:8px; padding:12px; margin-bottom:12px;">
+      <div style="font-size:0.6rem; color:#555; margin-bottom:8px; letter-spacing:1px;">
+        ① ARRASTE ESTE BOTÃO PARA SUA BARRA DE FAVORITOS:
+      </div>
+      <a id="bkm" href="" style="display:inline-block; padding:10px 18px;
+         background:rgba(0,255,65,0.15); border:2px solid #00ff41; border-radius:6px;
+         color:#00ff41; font-family:'Courier New'; font-size:0.82rem; font-weight:bold;
+         text-decoration:none; cursor:grab; letter-spacing:1px;">
+        ⚡ GarraBot SSID
+      </a>
+      <div style="font-size:0.58rem; color:#555; margin-top:8px;">
+        Depois abra a Quotex, faça login e clique este favorito
+      </div>
+    </div>
+
+    <button class="btn btn-cyan" onclick="abrirQuotex()" style="margin-bottom:6px;">
+      🌐 ② ABRIR QUOTEX
     </button>
     <button class="btn btn-warn" onclick="mostrarManual()"
-            style="font-size:0.68rem; padding:9px; margin-top:6px;">
+            style="font-size:0.68rem; padding:9px;">
       ✏️ Já tenho o SSID — inserir manualmente
     </button>
   </div>
 
-  <!-- TELA AGUARDANDO LOGIN -->
+  <!-- TELA AGUARDANDO (polling servidor) -->
   <div id="tela-prog" style="display:none;">
     <div class="icone"><span class="girando" id="icone-spin">🔄</span></div>
-    <div class="msg-p" id="msg-p">Aguardando login na Quotex...</div>
-    <div class="msg-s" id="msg-s">Faça login na janela que abriu</div>
+    <div class="msg-p" id="msg-p">Aguardando captura...</div>
+    <div class="msg-s" id="msg-s">Clique o favorito "GarraBot SSID" na aba da Quotex</div>
     <div class="barra"><div class="barra-inner"></div></div>
-    <button class="btn btn-warn" onclick="reabrirJanela()"
+    <button class="btn btn-warn" onclick="trocarTela('tela-inicio')"
             style="font-size:0.68rem; padding:9px; margin-top:4px;">
-      🔄 Reabrir janela da Quotex
+      ← Voltar
     </button>
   </div>
 
@@ -3224,6 +3248,10 @@ try:
         quotex_operar,
         quotex_resultado,
         quotex_cfg_carregar,
+        # ── Captura automática de SSID ────────────────────────────
+        quotex_capturar_ssid,
+        quotex_ssid_status,
+        quotex_ssid_definir,
     )
     _QUOTEX_DISPONIVEL = True
     print("[Quotex] ✅ Módulo quotex_connector carregado com sucesso.")
@@ -3249,7 +3277,7 @@ except ImportError as _qx_err:
     def quotex_resultado(*a, **kw):
         return {"ok": False, "erro": "pyquotex não instalado."}
     def quotex_cfg_carregar():
-        return {"email": "", "senha": "", "tipo_conta": "DEMO"}
+        return {"email": "", "senha": "", "tipo_conta": "DEMO", "ssid": ""}
     def quotex_duracao_alinhada(minutos: int = 1) -> int:
         import time
         seg = time.time() % 60
@@ -3257,6 +3285,12 @@ except ImportError as _qx_err:
         if ate_virada < 3:
             ate_virada += 60
         return max(5, int(ate_virada) + (minutos - 1) * 60)
+    def quotex_capturar_ssid(*a, **kw):
+        return {"ok": False, "ssid": "", "erro": "pyquotex não instalado."}
+    def quotex_ssid_status():
+        return {"status": "indisponivel", "ssid": "", "erro": "pyquotex não instalado.", "ts": 0}
+    def quotex_ssid_definir(ssid: str):
+        pass
 
 
 # Contador de versão — incrementado toda vez que o saldo é atualizado via frontend.
@@ -3292,6 +3326,40 @@ def rota_quotex_resultados_pendentes():
     return jsonify({"resultados": pendentes})
 
 
+# ── Rota: capturar SSID automaticamente (sem WebSocket) ──────────────────────
+@app.route('/quotex/capturar-ssid', methods=['POST'])
+def rota_quotex_capturar_ssid():
+    """
+    Faz login HTTP na Quotex e captura o SSID de forma automática.
+    Usa cascata: curl_cffi → pyquotex Login → requests.
+
+    Payload JSON:
+      { "email": "...", "senha": "..." }
+
+    Retorna { ok, ssid, metodo, erro }.
+    """
+    dados = request.get_json(silent=True) or {}
+    email = str(dados.get("email", "")).strip()
+    senha = str(dados.get("senha", "")).strip()
+
+    if not email or not senha:
+        return jsonify({"ok": False, "erro": "Email e senha são obrigatórios."}), 400
+
+    resultado = quotex_capturar_ssid(email, senha, _otp_callback_flask)
+
+    # Se OTP necessário, informa o frontend
+    if resultado.get("otp"):
+        return jsonify({"ok": False, "otp": True, "erro": "Código 2FA necessário."})
+
+    return jsonify(resultado)
+
+
+@app.route('/quotex/capturar-ssid/status', methods=['GET'])
+def rota_quotex_capturar_ssid_status():
+    """Retorna o estado atual da captura de SSID no connector."""
+    return jsonify(quotex_ssid_status())
+
+
 # ── Rota: conectar à Quotex ───────────────────────────────────────────────────
 @app.route('/quotex/conectar', methods=['POST'])
 def rota_quotex_conectar():
@@ -3299,8 +3367,11 @@ def rota_quotex_conectar():
     Autentica na Quotex com email e senha.
 
     Payload JSON:
-      { "email": "...", "senha": "...", "tipo_conta": "DEMO" | "REAL" }
+      { "email": "...", "senha": "...", "tipo_conta": "DEMO" | "REAL", "ssid": "..." }
 
+    Se ssid for fornecido, pula o login por senha e conecta diretamente.
+    Se ssid não for fornecido, o connector captura o SSID automaticamente via HTTP
+    antes de abrir o WebSocket — não é necessário Selenium nem ação manual.
     Se email/senha não forem enviados, tenta usar as credenciais salvas em disco.
     """
     dados      = request.get_json(silent=True) or {}
@@ -3309,13 +3380,20 @@ def rota_quotex_conectar():
     email      = (dados.get("email")      or cfg_salva.get("email")      or "").strip()
     senha      = (dados.get("senha")      or cfg_salva.get("senha")      or "").strip()
     tipo_conta = (dados.get("tipo_conta") or cfg_salva.get("tipo_conta") or "DEMO").upper()
-    ssid       = (dados.get("ssid")       or "").strip()
+    # SSID: prioridade — payload → estado de captura → disco
+    ssid = (dados.get("ssid") or "").strip()
+    if not ssid:
+        cap = quotex_ssid_status()
+        if cap.get("status") == "capturado" and cap.get("ssid"):
+            ssid = cap["ssid"]
+    if not ssid:
+        ssid = cfg_salva.get("ssid", "").strip()
 
-    # Com SSID não precisa de senha — sem SSID exige email + senha
+    # Com SSID não precisa de senha — sem SSID o connector captura automaticamente
     if not ssid and (not email or not senha):
-        return jsonify({"ok": False, "erro": "Informe email e senha, ou cole o SSID da Quotex."}), 400
+        return jsonify({"ok": False, "erro": "Informe email e senha para conectar à Quotex."}), 400
     if not email:
-        return jsonify({"ok": False, "erro": "Campo 'email' obrigatório (mesmo usando SSID)."}), 400
+        return jsonify({"ok": False, "erro": "Campo 'email' obrigatório."}), 400
 
     resultado = quotex_conectar(email=email, senha=senha, tipo_conta=tipo_conta,
                                 otp_callback=_otp_callback_flask, ssid=ssid)
