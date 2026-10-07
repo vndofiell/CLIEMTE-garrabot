@@ -2172,6 +2172,18 @@ def _ssid_auto_thread(email: str, senha: str):
         from pyquotex.network.login import Login
         from pyquotex.api import QuotexAPI
 
+        # ── Patch de compatibilidade: curl_cffi.Response não tem reason_phrase ──
+        # O login.py do pyquotex usa home.reason_phrase na mensagem de erro;
+        # curl_cffi.Response tem apenas .reason — adicionamos o alias aqui.
+        try:
+            from curl_cffi.requests import Response as _CffiResponse
+            if not hasattr(_CffiResponse, "reason_phrase"):
+                _CffiResponse.reason_phrase = property(
+                    lambda self: getattr(self, "reason", str(self.status_code))
+                )
+        except Exception:
+            pass
+
         loop = _asyncio.new_event_loop()
         _asyncio.set_event_loop(loop)
 
