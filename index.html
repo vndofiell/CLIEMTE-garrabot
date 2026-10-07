@@ -26770,8 +26770,16 @@ function _qxOnSsidCapturado(ssid) {
     fetch('/quotex/ssid-captura/limpar', { method: 'POST' }).catch(() => {});
     try { if (_qxWin && !_qxWin.closed) _qxWin.close(); } catch(e) {}
 
+    // Preenche campo oculto (usado por quotexConectarSsid)
     const inp = document.getElementById('qx-ssid-input');
     if (inp) inp.value = ssid;
+
+    // Preenche campo visível e habilita botões DEMO/REAL manuais
+    const inpVis = document.getElementById('qx-ssid-manual-inp');
+    if (inpVis) {
+        inpVis.value = ssid;
+        qxSsidManualVerificar(ssid);
+    }
 
     _qxSsidMsg('✅', 'SSID capturado!', 'Escolha o tipo de conta abaixo');
     const espera = document.getElementById('qx-ssid-aguardando');
