@@ -26765,9 +26765,16 @@ function quotexConectar(tipo) {
 // ── Conectar via SSID (sem senha — evita HTTP 403) ───────────────────────────
 function quotexConectarSsid(tipo) {
     const email = (document.getElementById('qx-email-ssid') || {}).value || '';
-    const ssid  = (document.getElementById('qx-ssid-input')  || {}).value || '';
+    const ssid  = ((document.getElementById('qx-ssid-input')  || {}).value || '').trim();
     if (!email) { _qxBadge('⚠️ Informe o email da conta', '#ffbd2e'); return; }
     if (!ssid)  { _qxBadge('⚠️ Cole o valor do cookie ssid', '#ffbd2e'); return; }
+    // Bloqueia se o usuário colou o bookmarklet no campo por engano
+    if (ssid.startsWith('javascript:') || ssid.length < 16) {
+        const inp = document.getElementById('qx-ssid-input');
+        if (inp) inp.value = '';
+        _qxBadge('⚠️ SSID inválido! Cole o TOKEN da Quotex, não o bookmarklet.', '#f87171');
+        return;
+    }
     _qxSalvarEmail(email);   // salva email para próximas conexões
     _qxBadge('⏳ CONECTANDO VIA SSID...', '#ffbd2e');
     _qxAtualizarBotao('conectando');

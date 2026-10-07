@@ -2234,9 +2234,11 @@ def rota_quotex_login_page():
   <div class="sub">Captura automática do token da Quotex</div>
 
   <div class="steps">
-    <b>1.</b> Clique em "Abrir Quotex e fazer login"<br>
-    <b>2.</b> Faça login normalmente na Quotex<br>
-    <b>3.</b> Volte nesta aba — o SSID será capturado automaticamente ✅
+    <b>1.</b> Clique em "Abrir Quotex" abaixo<br>
+    <b>2.</b> Faça login na Quotex normalmente<br>
+    <b>3.</b> Volte aqui e clique "Já fiz login"<br>
+    <b>4.</b> Copie o código e cole na <span style="color:#ff9f43;text-decoration:underline;">BARRA DE ENDEREÇOS</span> da aba Quotex<br>
+    <b style="color:#f87171;">⚠️ NÃO cole no campo SSID do bot!</b>
   </div>
 
   <a id="btn-abrir" class="btn" onclick="abrirQuotex()">🌐 Abrir Quotex e fazer login</a>
@@ -2345,14 +2347,18 @@ function mostrarInstrucaoManual() {{
   div.id = 'instrucao-manual';
   div.style.cssText = 'margin-top:14px;text-align:left;font-size:0.65rem;color:#888;line-height:1.9;border:1px solid rgba(255,189,46,0.3);border-radius:6px;padding:14px;background:rgba(255,189,46,0.04);';
   div.innerHTML = `
-    <b style="color:#ffbd2e;">📋 Método manual (1 passo só):</b><br><br>
-    1. Certifique-se de estar <b style="color:#fff;">logado</b> na aba da Quotex<br>
-    2. Copie o código abaixo e cole na <b style="color:#fff;">barra de endereços</b> da aba Quotex:<br>
+    <b style="color:#ffbd2e;">📋 Como usar:</b><br><br>
+    <b style="color:#fff;">1.</b> Clique em <b style="color:#00cfff;">"📋 Copiar código"</b> abaixo<br>
+    <b style="color:#fff;">2.</b> Vá para a <b style="color:#ff9f43;">aba da Quotex</b> que está aberta<br>
+    <b style="color:#fff;">3.</b> Clique na <b style="color:#ff9f43;">barra de endereços</b> do navegador (onde fica a URL)<br>
+    <b style="color:#fff;">4.</b> Cole o código (<b>Ctrl+V</b>) e pressione <b>Enter</b><br>
+    <b style="color:#f87171;">⚠️ Cole na BARRA DE ENDEREÇOS, não no campo SSID do bot!</b><br><br>
     <div style="position:relative;margin:8px 0;">
-      <code id="bookmarklet-code" style="color:#00cfff;font-size:0.58rem;word-break:break-all;display:block;background:#0a0a12;padding:8px 10px;border-radius:4px;border:1px solid rgba(0,207,255,0.2);line-height:1.6;cursor:text;user-select:all;">${{BOOKMARKLET}}</code>
-      <button id="btn-copiar" onclick="copiarBookmarklet()" style="margin-top:6px;width:100%;padding:8px;background:rgba(0,207,255,0.1);border:1px solid rgba(0,207,255,0.5);color:#00cfff;font-family:'Share Tech Mono';font-size:0.72rem;cursor:pointer;border-radius:4px;letter-spacing:1px;">📋 Copiar</button>
+      <div style="font-size:0.58rem;color:#555;margin-bottom:4px;">Código a colar na barra de endereços:</div>
+      <code id="bookmarklet-code" style="color:#00cfff;font-size:0.55rem;word-break:break-all;display:block;background:#0a0a12;padding:8px 10px;border-radius:4px;border:1px solid rgba(0,207,255,0.2);line-height:1.6;cursor:text;user-select:all;max-height:80px;overflow-y:auto;">${{BOOKMARKLET}}</code>
+      <button id="btn-copiar" onclick="copiarBookmarklet()" style="margin-top:6px;width:100%;padding:10px;background:rgba(0,207,255,0.15);border:2px solid #00cfff;color:#00cfff;font-family:'Share Tech Mono';font-size:0.78rem;cursor:pointer;border-radius:4px;letter-spacing:1px;font-weight:bold;">📋 COPIAR CÓDIGO</button>
     </div>
-    3. Pressione <b style="color:#fff;">Enter</b> — uma mensagem de confirmação vai aparecer ✅
+    Após pressionar Enter vai aparecer: <b style="color:#00ff41;">"✅ SSID capturado!"</b>
   `;
   card.appendChild(div);
   mostrarStatus('👆 Siga as instruções abaixo para capturar o SSID', '#ffbd2e');
