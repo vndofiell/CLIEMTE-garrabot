@@ -26667,14 +26667,11 @@ function qxMostrarAba(aba) {
 // ── SSID Hunter — captura automática via servidor (sem abrir janela) ──────────
 let _hunterTimer = null;
 
-// Captura o SSID automaticamente — fluxo no BROWSER DO USUÁRIO:
-// 1. Abre qxbroker.com/pt/trade em nova janela (já logado = captura imediata)
-// 2. Se não logado → /sign-in → usuário faz login → redireciona para /trade
-// 3. Detecta /trade via polling (200ms) e navega janela para /quotex/ssid-inject
-// 4. ssid-inject extrai token, envia ao servidor e fecha a janela automaticamente
-// 5. Polling em /quotex/ssid-captura/status preenche campo e mostra DEMO/REAL
+// Captura SSID — abre /quotex/ssid-inject (mesma origem) numa nova janela.
+// Essa página faz fetch para a Quotex COM os cookies do browser do usuário.
+// Se já logado → captura imediata. Se não → instrui o usuário a fazer login.
+// Toda a comunicação é via postMessage (mesma origem — sem bloqueio cross-origin).
 let _qxWin = null;
-let _qxWinPollTimer = null;
 
 function qxCapturarSsidAuto() {
     fetch('/quotex/ssid-captura/limpar', { method: 'POST' }).catch(() => {});
@@ -26686,19 +26683,19 @@ function qxCapturarSsidAuto() {
     if (espera) espera.style.display = 'block';
     if (botoes) botoes.style.display = 'none';
 
-    _qxSsidMsg('⏳', 'Abrindo Quotex...', 'Se já logado, captura em segundos');
+    _qxSsidMsg('⏳', 'Capturando SSID...', 'Se já logado, fecha em segundos');
     _qxBadge('⏳ Capturando SSID...', '#00cfff');
 
-    // Abre direto em /trade — se já logado captura imediatamente
-    // Se não logado, redireciona para /sign-in e aguarda login
-    _qxWin = window.open('https://qxbroker.com/pt/trade', '_blank',
-                         'width=1050,height=700,left=30,top=30');
+    // Abre DIRETO nossa página de injeção — mesma origem, sem problema cross-origin
+    // Essa página usa fetch com credentials para pegar o token da sessão da Quotex
+    _qxWin = window.open(window.location.origin + '/quotex/ssid-inject',
+                         '_blank', 'width=440,height=320,left=200,top=150');
 
+    // Escuta postMessage da janela ssid-inject
     window.removeEventListener('message', _qxMsgHandler);
     window.addEventListener('message', _qxMsgHandler);
 
-    // Começa poll imediatamente com 200ms — captura rápida se já logado
-    _qxIniciarPollJanela();
+    // Polling servidor como fallback
     _qxSsidPollCaptura();
 }
 
@@ -26707,44 +26704,11 @@ function _qxMsgHandler(e) {
     if (e.data.type === 'SSID_OK' && e.data.ssid) {
         _qxOnSsidCapturado(e.data.ssid);
     } else if (e.data.type === 'SSID_FALHOU') {
-        // Não achou token ainda — continua aguardando login
-        _qxSsidMsg('⚠️', 'Token não encontrado', 'Faça login na janela aberta');
-        _qxBadge('⚠️ Faça login na janela aberta', '#ffbd2e');
-        _qxPararPollJanela();
-        // Re-inicia poll para detectar novo login
-        setTimeout(_qxIniciarPollJanela, 2000);
+        // Não achou — usuário precisa fazer login na Quotex
+        // A janela ssid-inject já abriu a Quotex para login
+        _qxSsidMsg('🔑', 'Faça login na Quotex', 'Após o login, o SSID é capturado automaticamente');
+        _qxBadge('🔑 Aguardando login na Quotex...', '#ffbd2e');
     }
-}
-
-function _qxIniciarPollJanela() {
-    _qxPararPollJanela();
-    _qxWinPollTimer = setInterval(() => {
-        if (!_qxWin || _qxWin.closed) {
-            _qxPararPollJanela();
-            return;
-        }
-        try {
-            // Lê URL — funciona apenas quando é mesmo origin (nossa página ssid-inject)
-            // Enquanto está na Quotex (cross-origin) lança exceção — normal
-            const url = _qxWin.location.href;
-            if (url && (url.includes('/trade') || url.includes(window.location.origin))) {
-                _qxPararPollJanela();
-                if (url.includes('/trade') && !url.includes(window.location.origin)) {
-                    // Está em /trade na Quotex — redireciona para ssid-inject
-                    _qxSsidMsg('🔄', 'Extraindo token...', 'Aguarde — fechando em breve');
-                    _qxWin.location.href = window.location.origin + '/quotex/ssid-inject';
-                }
-                // Se já está no ssid-inject (mesmo origin) aguarda postMessage
-            }
-        } catch (cross) {
-            // Cross-origin (ainda na Quotex) — normal, continua aguardando
-        }
-    }, 200);
-}
-
-function _qxPararPollJanela() {
-    clearInterval(_qxWinPollTimer);
-    _qxWinPollTimer = null;
 }
 
 function _qxSsidPollCaptura() {
@@ -26758,7 +26722,7 @@ function _qxSsidPollCaptura() {
                 if (d.status === 'capturado' && d.ssid) {
                     clearInterval(_hunterTimer);
                     _qxOnSsidCapturado(d.ssid);
-                } else if (t > 200) {
+                } else if (t > 200) { // 5min timeout
                     clearInterval(_hunterTimer);
                     _qxSsidErro('Tempo esgotado. Tente novamente.');
                 }
@@ -26768,11 +26732,8 @@ function _qxSsidPollCaptura() {
 
 function _qxOnSsidCapturado(ssid) {
     clearInterval(_hunterTimer);
-    _qxPararPollJanela();
     window.removeEventListener('message', _qxMsgHandler);
     fetch('/quotex/ssid-captura/limpar', { method: 'POST' }).catch(() => {});
-
-    // Fecha a janela da Quotex automaticamente
     try { if (_qxWin && !_qxWin.closed) _qxWin.close(); } catch(e) {}
 
     const inp = document.getElementById('qx-ssid-input');
@@ -26786,7 +26747,10 @@ function _qxOnSsidCapturado(ssid) {
     _qxBadge('✅ SSID capturado! Clique DEMO ou REAL.', '#00ff41');
 }
 
-function _qxSsidPollAuto() { _qxSsidPollCaptura(); } // compatibilidade
+// Stubs mantidos para compatibilidade
+function _qxSsidPollAuto()   { _qxSsidPollCaptura(); }
+function _qxIniciarPollJanela() {}
+function _qxPararPollJanela()   {}
 
 function _qxSsidMsg(icone, msg, sub) {
     const ed = document.getElementById('qx-ssid-dots');
