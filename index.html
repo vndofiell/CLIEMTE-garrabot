@@ -1555,13 +1555,35 @@
             </div>
 
             <!-- ══ SEÇÃO 2: CAPTURA AUTOMÁTICA ═══════════════════════════ -->
-            <!-- Botão principal -->
+
+            <!-- Bookmarklet — arrasta para a barra de favoritos -->
+            <div style="background:rgba(0,207,255,0.04); border:1px dashed rgba(0,207,255,0.3);
+                        border-radius:6px; padding:10px 12px; margin-bottom:10px;
+                        font-family:'Share Tech Mono';">
+                <div style="font-size:0.58rem; color:#555; margin-bottom:8px; letter-spacing:1px;">
+                    ① ARRASTE PARA A BARRA DE FAVORITOS:
+                </div>
+                <a id="qx-bkm-link" href=""
+                   style="display:inline-block; padding:8px 16px;
+                          background:rgba(0,255,65,0.12); border:1px solid #00ff41;
+                          border-radius:5px; color:#00ff41; font-size:0.78rem;
+                          font-weight:bold; text-decoration:none; cursor:grab;
+                          letter-spacing:1px;">
+                    ⚡ GarraBot SSID
+                </a>
+                <div style="font-size:0.58rem; color:#555; margin-top:7px; line-height:1.7;">
+                    ② Abra a Quotex, faça login<br>
+                    ③ Clique o favorito → SSID capturado ✅
+                </div>
+            </div>
+
+            <!-- Botão principal — abre Quotex + inicia polling -->
             <button onclick="qxCapturarSsidAuto()" id="qx-btn-capturar-ssid"
                 style="width:100%; padding:12px; margin-bottom:10px;
                        background:rgba(0,207,255,0.08); border:1px solid rgba(0,207,255,0.5);
                        color:#00cfff; font-family:'Share Tech Mono'; font-size:0.78rem;
                        letter-spacing:2px; cursor:pointer; border-radius:6px;">
-                🌐 ABRIR QUOTEX E CAPTURAR SSID
+                🌐 ABRIR QUOTEX (já logado? clique o favorito)
             </button>
 
             <!-- Status da captura automática -->
@@ -26704,9 +26726,32 @@ function qxMostrarAba(aba) {
 // ── SSID Hunter — captura automática via servidor (sem abrir janela) ──────────
 let _hunterTimer = null;
 
-// Captura SSID — abre /quotex/login-page (email+senha → login HTTP automático).
-// Sem Selenium, sem browser no servidor. Funciona em qualquer VPS.
+// Captura SSID — abre a Quotex no browser do usuário + bookmarklet para enviar o token.
+// Funciona em qualquer servidor (sem depender de login HTTP no servidor).
 let _qxWin = null;
+
+// Gera o código do bookmarklet usando a URL atual do servidor
+function _qxBookmarkletCode() {
+    const srv = window.location.origin;
+    return 'javascript:(function(){' +
+        'var t="";' +
+        'try{t=(window.settings&&window.settings.token)||"";}catch(e){}' +
+        'if(!t)try{t=localStorage.getItem("token")||localStorage.getItem("ssid")||"";}catch(e){}' +
+        'if(!t){var cc=document.cookie.split(";");for(var i=0;i<cc.length;i++){var p=cc[i].trim().split("=");if(p[0]==="token"||p[0]==="ssid"){t=decodeURIComponent(p[1]||"");break;}}}' +
+        'if(!t||t.length<8){alert("SSID nao encontrado. Certifique-se de estar em qxbroker.com/pt/trade e logado.");return;}' +
+        'fetch("' + srv + '/quotex/ssid-captura/receber",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ssid:t})})' +
+        '.then(function(){alert("✅ SSID enviado ao Bot Garra! Volte ao bot e clique DEMO ou REAL.");})' +
+        '.catch(function(){alert("Erro ao enviar. Tente novamente.");});' +
+        '})()';
+}
+
+// Injeta o bookmarklet nos links corretos ao carregar
+function _qxInicializarBookmarklet() {
+    var code = _qxBookmarkletCode();
+    // Link no modal principal (se existir)
+    var bkm = document.getElementById('qx-bkm-link');
+    if (bkm) bkm.href = code;
+}
 
 function qxCapturarSsidAuto() {
     fetch('/quotex/ssid-captura/limpar', { method: 'POST' }).catch(() => {});
@@ -26718,18 +26763,18 @@ function qxCapturarSsidAuto() {
     if (espera) espera.style.display = 'block';
     if (botoes) botoes.style.display = 'none';
 
-    _qxSsidMsg('⏳', 'Capturando SSID...', 'Aguarde...');
-    _qxBadge('⏳ Capturando SSID...', '#00cfff');
+    _qxSsidMsg('🌐', 'Abra a Quotex e clique o favorito', 'Clique em "GarraBot SSID" na barra de favoritos');
+    _qxBadge('🌐 Abra a Quotex e clique o favorito "GarraBot SSID"', '#00cfff');
 
-    // Abre página de login automático (email+senha → ssid-auto HTTP → postMessage)
-    const url = window.location.origin + '/quotex/login-page';
-    _qxWin = window.open(url, '_blank', 'width=420,height=560,left=200,top=100');
+    // Abre a Quotex diretamente no browser do usuário
+    _qxWin = window.open('https://qxbroker.com/pt/trade', '_blank',
+                         'width=1100,height=720,left=50,top=30');
 
-    // Escuta postMessage da janela ssid-inject
+    // Escuta postMessage (caso o bookmarklet envie via window.opener)
     window.removeEventListener('message', _qxMsgHandler);
     window.addEventListener('message', _qxMsgHandler);
 
-    // Polling servidor como fallback
+    // Polling servidor — recebe o SSID assim que o bookmarklet enviar
     _qxSsidPollCaptura();
 }
 
@@ -28442,6 +28487,8 @@ function qxAjustarValor(delta) {
 document.addEventListener('DOMContentLoaded', () => {
     const inp = document.getElementById('qx-valor-input');
     if (inp) inp.addEventListener('input', () => { _qxChart.valor = parseFloat(inp.value || 1); _qxRecalcPagamento(); });
+    // Inicializa bookmarklet com URL correta do servidor
+    _qxInicializarBookmarklet();
 });
 function _qxRecalcPagamento() {
     const valor = parseFloat(document.getElementById('qx-valor-input')?.value || 1);

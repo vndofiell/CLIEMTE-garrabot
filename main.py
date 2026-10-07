@@ -2989,6 +2989,23 @@ const SRV = "{servidor}";
 let _winQx  = null;
 let _pollId = null;
 
+// ── Bookmarklet: monta o href com o código JS de captura ─────────────────────
+// Quando clicado NA ABA DA QUOTEX, lê o token e envia ao servidor
+(function() {{
+  var code = [
+    '(function(){{',
+    '  var t="";',
+    '  try{{t=(window.settings&&window.settings.token)||"";}}catch(e){{}}',
+    '  if(!t)try{{t=localStorage.getItem("token")||localStorage.getItem("ssid")||"";}}catch(e){{}}',
+    '  if(!t){{var cc=document.cookie.split(";");for(var i=0;i<cc.length;i++){{var p=cc[i].trim().split("=");if(p[0]==="token"||p[0]==="ssid"){{t=decodeURIComponent(p[1]||"");break;}}}}}}',
+    '  if(!t||t.length<8){{alert("SSID nao encontrado. Certifique-se de estar logado em qxbroker.com/pt/trade");return;}}',
+    '  fetch("{servidor}/quotex/ssid-captura/receber",{{method:"POST",headers:{{"Content-Type":"application/json"}},body:JSON.stringify({{ssid:t}})}}).then(function(){{alert("SSID capturado! Volte ao Bot Garra.");}}).catch(function(){{alert("Erro ao enviar SSID. Tente novamente.");}});',
+    '}})()'
+  ].join('');
+  var el = document.getElementById('bkm');
+  if (el) el.href = 'javascript:' + code;
+}})();
+
 // Escuta postMessage de janelas filhas
 window.addEventListener('message', (e) => {{
   if (e.data && e.data.type === 'SSID_OK' && e.data.ssid)
