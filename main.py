@@ -2804,13 +2804,10 @@ def rota_quotex_login_page():
 
 <script>
 const SRV = "{servidor}";
-let _pollId = null;
 
-// postMessage da janela pai (index.html) ao abrir esta página
-window.addEventListener('message', (e) => {{
-  if (e.data && e.data.type === 'SSID_OK' && e.data.ssid)
-    onCapturado(e.data.ssid);
-}});
+// ── Login direto do browser do usuário (IP doméstico — sem bloqueio 403) ─────
+// O fetch sai do computador do usuário, não do servidor Oracle.
+// Quotex aceita porque o IP é residencial.
 
 async function conectar() {{
   const email = (document.getElementById('inp-email').value || '').trim();
@@ -2819,83 +2816,135 @@ async function conectar() {{
     mostrar('Preencha email e senha.', 'err');
     return;
   }}
-
   document.getElementById('btn-conectar').disabled = true;
   trocarTela('tela-prog');
-  setMsgs('🔄 Autenticando...', 'Conectando à Quotex via HTTP — aguarde ~10s');
+  setMsgs('🔄 Autenticando...', 'Fazendo login na Quotex pelo seu navegador...');
   mostrar('', '');
 
-  // Limpa estado anterior
-  try {{ await fetch(SRV + '/quotex/ssid-captura/limpar', {{ method: 'POST' }}); }} catch(_) {{}}
-
-  // Chama o login HTTP (pyquotex — sem Selenium, funciona no servidor)
-  let resp;
   try {{
-    resp = await fetch(SRV + '/quotex/ssid-auto/iniciar', {{
-      method: 'POST',
-      headers: {{ 'Content-Type': 'application/json' }},
-      body: JSON.stringify({{ email, senha }}),
-    }});
-    resp = await resp.json();
-  }} catch(e) {{
-    trocarTela('tela-form');
-    document.getElementById('btn-conectar').disabled = false;
-    mostrar('❌ Falha de rede: ' + e.message, 'err');
-    return;
-  }}
-
-  if (!resp.ok) {{
-    trocarTela('tela-form');
-    document.getElementById('btn-conectar').disabled = false;
-    mostrar('❌ ' + (resp.erro || 'Erro ao iniciar login.'), 'err');
-    return;
-  }}
-
-  // Inicia polling do status
-  iniciarPolling();
-}}
-
-function iniciarPolling() {{
-  clearInterval(_pollId);
-  let n = 0;
-  _pollId = setInterval(async () => {{
-    n++;
-    if (n > 120) {{  // 4 min
-      clearInterval(_pollId);
-      trocarTela('tela-form');
-      document.getElementById('btn-conectar').disabled = false;
-      mostrar('⏰ Tempo esgotado. Tente novamente.', 'warn');
-      return;
-    }}
+    // Passo 1 — obtém o CSRF token da página de login
+    setMsgs('🔄 Passo 1/3', 'Obtendo token CSRF...');
+    let csrfToken = '';
     try {{
-      const d = await fetch(SRV + '/quotex/ssid-auto/status').then(r => r.json());
+      const pg = await fetch('https://qxbroker.com/pt/sign-in', {{
+        credentials: 'include',
+        headers: {{ 'Accept': 'text/html' }},
+      }});
+      const txt = await pg.text();
+      const m = txt.match(/name="_token"\s+value="([^"]+)"/);
+      if (m) csrfToken = m[1];
+    }} catch(e) {{
+      // CORS pode bloquear — tenta sem CSRF
+    }}
 
-      if (d.status === 'capturado' && d.ssid && d.ssid.length >= 8) {{
-        clearInterval(_pollId);
-        onCapturado(d.ssid);
-        return;
-      }}
-      if (d.status === 'erro') {{
-        clearInterval(_pollId);
+    // Passo 2 — envia as credenciais
+    setMsgs('🔄 Passo 2/3', 'Enviando credenciais para a Quotex...');
+    const formData = new URLSearchParams();
+    formData.append('email', email);
+    formData.append('password', senha);
+    if (csrfToken) formData.append('_token', csrfToken);
+
+    const loginResp = await fetch('https://qxbroker.com/pt/sign-in', {{
+      method: 'POST',
+      credentials: 'include',
+      headers: {{
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Accept': 'application/json, text/html, */*',
+        'X-Requested-With': 'XMLHttpRequest',
+        'Referer': 'https://qxbroker.com/pt/sign-in',
+        'Origin': 'https://qxbroker.com',
+      }},
+      body: formData.toString(),
+    }});
+
+    // Passo 3 — extrai o token da resposta ou da página /trade
+    setMsgs('🔄 Passo 3/3', 'Extraindo SSID...');
+    let ssid = '';
+
+    // Tenta JSON primeiro
+    const ct = loginResp.headers.get('content-type') || '';
+    if (ct.includes('json')) {{
+      const j = await loginResp.json().catch(() => ({{}}));
+      ssid = j.token || j.ssid || j.data?.token || '';
+    }}
+
+    // Se não veio no JSON, vai para /trade e lê window.settings
+    if (!ssid) {{
+      const tradeResp = await fetch('https://qxbroker.com/pt/trade', {{
+        credentials: 'include',
+        headers: {{ 'Accept': 'text/html' }},
+      }});
+      const html = await tradeResp.text();
+      // window.settings = {{ ... "token": "XXXX" ... }}
+      const m2 = html.match(/"token"\s*:\s*"([^"]{20,})"/);
+      if (m2) ssid = m2[1];
+    }}
+
+    if (ssid && ssid.length >= 16) {{
+      await onCapturado(ssid);
+    }} else {{
+      // Pode ser 2FA — verifica se a resposta pede OTP
+      const html2 = await fetch('https://qxbroker.com/pt/trade', {{
+        credentials: 'include', headers: {{ 'Accept': 'text/html' }},
+      }}).then(r => r.text()).catch(() => '');
+
+      if (html2.includes('otp') || html2.includes('2fa') || html2.includes('verificar')) {{
+        trocarTela('tela-otp');
+        setMsgs('🔑 Código 2FA', 'Digite o código do autenticador');
+      }} else {{
+        // Login falhou (senha errada ou CORS bloqueou)
+        // Fallback: abre Quotex em nova aba e faz polling do localStorage
         trocarTela('tela-form');
         document.getElementById('btn-conectar').disabled = false;
-        mostrar('❌ ' + (d.erro || 'Erro no login.'), 'err');
-        return;
+        mostrar('⚠️ Login direto bloqueado pelo navegador (CORS). Use o método alternativo abaixo.', 'warn');
+        // Mostra automaticamente o modo abrir Quotex + ler token
+        setTimeout(() => abrirQuotexELer(email, senha), 400);
       }}
-      // OTP/2FA necessário?
-      const otp = await fetch(SRV + '/quotex/otp-status').then(r => r.json()).catch(() => ({{}}));
-      if (otp.aguardando) {{
-        trocarTela('tela-otp');
-        document.getElementById('msg-otp-p').textContent = otp.prompt || 'Digite o código 2FA';
-        return;
-      }}
-      // Atualiza mensagem
-      if (d.status === 'aguardando_login') {{
-        setMsgs('🔐 Autenticando...', 'Aguarde enquanto fazemos login na Quotex');
-      }} else if (d.status === 'conectando') {{
-        setMsgs('🔄 Conectando...', 'Processando credenciais — alguns segundos');
-      }}
-    }} catch(_) {{}}
+    }}
+  }} catch(err) {{
+    trocarTela('tela-form');
+    document.getElementById('btn-conectar').disabled = false;
+    // CORS bloqueou — usa modo abertura de Quotex
+    mostrar('⚠️ CORS bloqueado. Abrindo modo alternativo...', 'warn');
+    setTimeout(() => abrirQuotexELer(email, senha), 400);
+  }}
+}}
+
+// ── Modo alternativo: abre Quotex + preenche login + lê token ────────────────
+// Abre qxbroker.com/sign-in, injeta email/senha e detecta o redirect para /trade
+let _winQx   = null;
+let _pollQxId = null;
+
+function abrirQuotexELer(email, senha) {{
+  trocarTela('tela-prog');
+  setMsgs('🌐 Abrindo Quotex...', 'Faça login na janela que abrirá. O SSID é capturado automaticamente.');
+
+  // Monta URL com credenciais pré-preenchidas via /quotex/ssid-inject
+  const url = SRV + '/quotex/ssid-inject'
+            + '?email=' + encodeURIComponent(email)
+            + '&senha=' + encodeURIComponent(senha);
+  _winQx = window.open(url, '_blank', 'width=480,height=600,left=150,top=80');
+
+  // Polling: espera postMessage SSID_OK da janela ssid-inject
+  window.addEventListener('message', function handler(e) {{
+    if (e.data && e.data.type === 'SSID_OK' && e.data.ssid) {{
+      window.removeEventListener('message', handler);
+      onCapturado(e.data.ssid);
+    }}
+  }});
+
+  // Polling servidor como backup
+  clearInterval(_pollQxId);
+  let t = 0;
+  _pollQxId = setInterval(async () => {{
+    t++;
+    if (t > 150) {{ clearInterval(_pollQxId); trocarTela('tela-manual'); return; }}
+    const d = await fetch(SRV + '/quotex/ssid-captura/status').then(r=>r.json()).catch(()=>({{}}));
+    if (d.status === 'capturado' && d.ssid && d.ssid.length >= 8) {{
+      clearInterval(_pollQxId);
+      if (_winQx && !_winQx.closed) _winQx.close();
+      onCapturado(d.ssid);
+    }}
   }}, 2000);
 }}
 
@@ -2903,25 +2952,39 @@ async function enviarOtp() {{
   const codigo = (document.getElementById('inp-otp').value || '').trim();
   if (!codigo) {{ mostrar('Digite o código.', 'err'); return; }}
   document.getElementById('btn-otp').disabled = true;
+  // Envia OTP direto para a Quotex do browser do usuário
   try {{
-    await fetch(SRV + '/quotex/otp', {{
+    await fetch('https://qxbroker.com/pt/sign-in/otp', {{
       method: 'POST',
-      headers: {{ 'Content-Type': 'application/json' }},
-      body: JSON.stringify({{ codigo }}),
+      credentials: 'include',
+      headers: {{
+        'Content-Type': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest',
+      }},
+      body: JSON.stringify({{ code: codigo }}),
     }});
     trocarTela('tela-prog');
+    setMsgs('🔄 Verificando...', 'Aguarde');
     document.getElementById('btn-otp').disabled = false;
     document.getElementById('inp-otp').value = '';
-    setMsgs('🔄 Verificando código...', 'Aguarde');
+    // Tenta ler o token após OTP
+    setTimeout(async () => {{
+      const html = await fetch('https://qxbroker.com/pt/trade', {{
+        credentials: 'include', headers: {{ 'Accept': 'text/html' }},
+      }}).then(r => r.text()).catch(() => '');
+      const m = html.match(/"token"\s*:\s*"([^"]{20,})"/);
+      if (m) await onCapturado(m[1]);
+      else {{ trocarTela('tela-otp'); mostrar('Código inválido. Tente novamente.', 'err'); }}
+    }}, 2000);
   }} catch(e) {{
-    mostrar('❌ Falha: ' + e.message, 'err');
+    mostrar('❌ ' + e.message, 'err');
     document.getElementById('btn-otp').disabled = false;
   }}
 }}
 
 async function onCapturado(ssid) {{
-  clearInterval(_pollId);
-  // Grava no estado de captura
+  clearInterval(_pollQxId);
+  // Grava no servidor
   try {{
     await fetch(SRV + '/quotex/ssid-captura/receber', {{
       method: 'POST',
@@ -2932,7 +2995,7 @@ async function onCapturado(ssid) {{
   // Notifica janela pai (bot) — preenche o campo SSID automaticamente
   if (window.opener && !window.opener.closed)
     window.opener.postMessage({{ type: 'SSID_OK', ssid }}, '*');
-  document.getElementById('icone-spin').textContent   = '✅';
+  document.getElementById('icone-spin').textContent    = '✅';
   document.getElementById('icone-spin').style.animation = 'none';
   trocarTela('tela-prog');
   setMsgs('✅ SSID capturado!', 'Conectando ao bot — esta janela vai fechar...');
@@ -2963,9 +3026,7 @@ async function enviarSsid() {{
   }}
 }}
 
-function mostrarManual() {{
-  trocarTela('tela-manual');
-}}
+function mostrarManual() {{ trocarTela('tela-manual'); }}
 
 function trocarTela(id) {{
   ['tela-form','tela-prog','tela-otp','tela-manual'].forEach(t => {{
