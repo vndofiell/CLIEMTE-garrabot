@@ -26668,19 +26668,27 @@ function qxMostrarAba(aba) {
 // ── SSID Hunter — captura automática ─────────────────────────────────────────
 let _hunterTimer = null;
 
+// ── SSID Captura — nova estratégia sem Selenium ───────────────────────────────
+// Abre /quotex/login-page no dispositivo do usuário.
+// Essa página instrui o login e envia o token de volta ao servidor via fetch.
+// O bot fica em polling em /quotex/ssid-captura/status até receber o token.
+
 function qxCapturarSsidAuto() {
     const btn    = document.getElementById('qx-btn-capturar');
     const painel = document.getElementById('qx-hunter-status');
     if (btn)    btn.style.display    = 'none';
     if (painel) painel.style.display = 'block';
-    _qxHunterMsg('⏳', 'Abrindo Chrome...', 'Faça login na janela que vai abrir', '#ffbd2e');
-    fetch('/quotex/ssid-hunter/iniciar', { method: 'POST' })
-        .then(r => r.json())
-        .then(d => {
-            if (!d.ok) { _qxHunterMsg('❌', 'Erro: ' + (d.erro || 'falha'), '', '#f44'); return; }
-            _qxHunterPoll();
-        })
-        .catch(() => _qxHunterMsg('❌', 'Sem resposta do servidor', '', '#f44'));
+    _qxHunterMsg('⏳', 'Abrindo página de captura...', 'Uma nova aba vai abrir — faça login na Quotex', '#ffbd2e');
+
+    // Limpa estado anterior
+    fetch('/quotex/ssid-captura/limpar', { method: 'POST' }).catch(() => {});
+
+    // Abre a página de captura no dispositivo do usuário
+    const loginUrl = window.location.origin + '/quotex/login-page';
+    window.open(loginUrl, '_blank', 'width=480,height=620');
+
+    // Inicia polling aguardando o token chegar
+    _qxCapturaPoll();
 }
 
 function _qxHunterMsg(icone, msg, sub, cor) {
@@ -26692,43 +26700,37 @@ function _qxHunterMsg(icone, msg, sub, cor) {
     if (es) es.textContent = sub || '';
 }
 
-function _qxHunterPoll() {
+function _qxCapturaPoll() {
     clearInterval(_hunterTimer);
     _hunterTimer = setInterval(() => {
-        fetch('/quotex/ssid-hunter/status')
+        fetch('/quotex/ssid-captura/status')
             .then(r => r.json())
             .then(d => {
-                if (d.status === 'aguardando_login') {
-                    _qxHunterMsg('🌐', 'Chrome aberto!', 'Faça login na Quotex — o SSID será capturado automaticamente', '#00ff41');
-                } else if (d.status === 'capturado' && d.ssid) {
+                if (d.status === 'capturado' && d.ssid) {
                     clearInterval(_hunterTimer);
                     _qxHunterMsg('✅', 'SSID CAPTURADO!', 'Preenchido automaticamente — clique DEMO ou REAL', '#00ff41');
                     const inp = document.getElementById('qx-ssid-input');
                     if (inp) inp.value = d.ssid;
+                    // Limpa estado para próxima vez
+                    fetch('/quotex/ssid-captura/limpar', { method: 'POST' }).catch(() => {});
                     setTimeout(() => {
                         const painel = document.getElementById('qx-hunter-status');
                         const btn    = document.getElementById('qx-btn-capturar');
                         if (painel) painel.style.display = 'none';
                         if (btn)    btn.style.display    = 'block';
                         _qxBadge('✅ SSID capturado! Clique DEMO ou REAL para conectar.', '#00ff41');
-                    }, 3000);
-                } else if (d.status === 'erro') {
-                    clearInterval(_hunterTimer);
-                    _qxHunterMsg('❌', 'Erro: ' + (d.erro || 'falha'), '', '#f44');
-                    setTimeout(() => {
-                        const painel = document.getElementById('qx-hunter-status');
-                        const btn    = document.getElementById('qx-btn-capturar');
-                        if (painel) painel.style.display = 'none';
-                        if (btn)    btn.style.display    = 'block';
-                    }, 4000);
+                    }, 2000);
                 }
+                // idle = ainda aguardando — continua polling silenciosamente
             }).catch(() => {});
     }, 1500);
 }
 
+function _qxHunterPoll() { _qxCapturaPoll(); } // compatibilidade
+
 function qxCancelarHunter() {
     clearInterval(_hunterTimer);
-    fetch('/quotex/ssid-hunter/parar', { method: 'POST' }).catch(() => {});
+    fetch('/quotex/ssid-captura/limpar', { method: 'POST' }).catch(() => {});
     const painel = document.getElementById('qx-hunter-status');
     const btn    = document.getElementById('qx-btn-capturar');
     if (painel) painel.style.display = 'none';

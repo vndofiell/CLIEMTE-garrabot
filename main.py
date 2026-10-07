@@ -2129,7 +2129,7 @@ def clear_token():
 # QUOTEX — Integração com a corretora Quotex via pyquotex
 # ═══════════════════════════════════════════════════════════════════════════════
 
-# ── SSID Hunter — captura automática via Chrome ───────────────────────────────
+# ── SSID Hunter — captura via Selenium (opcional, só funciona localmente) ─────
 try:
     from quotex_ssid_hunter import (
         ssid_hunter_iniciar,
@@ -2147,6 +2147,207 @@ except ImportError as _sh_err:
         pass
     def ssid_hunter_status():
         return {"status": "indisponivel", "ssid": "", "erro": "selenium não instalado."}
+
+# ── SSID Captura — recebe token enviado pelo navegador do usuário ─────────────
+# Funciona sem Selenium: o usuário faz login na Quotex no próprio dispositivo,
+# nosso script JS lê o token e envia para o servidor via fetch.
+_SSID_CAPTURA_STATE: dict = {"ssid": "", "status": "idle", "ts": 0}
+_SSID_CAPTURA_LOCK = threading.Lock()
+
+@app.route('/quotex/ssid-captura/receber', methods=['POST', 'OPTIONS'])
+def rota_ssid_captura_receber():
+    """Recebe o SSID capturado pelo JS do usuário após login na Quotex."""
+    if request.method == 'OPTIONS':
+        resp = jsonify({"ok": True})
+        resp.headers['Access-Control-Allow-Origin']  = '*'
+        resp.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+        resp.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+        return resp
+    dados = request.get_json(silent=True) or {}
+    ssid  = str(dados.get("ssid", "")).strip()
+    if not ssid or len(ssid) < 8:
+        return jsonify({"ok": False, "erro": "SSID inválido ou muito curto."}), 400
+    with _SSID_CAPTURA_LOCK:
+        _SSID_CAPTURA_STATE["ssid"]   = ssid
+        _SSID_CAPTURA_STATE["status"] = "capturado"
+        _SSID_CAPTURA_STATE["ts"]     = time.time()
+    print(f"[Quotex] 🍪 SSID capturado via redirect! len={len(ssid)}")
+    return jsonify({"ok": True, "msg": "SSID recebido com sucesso."})
+
+@app.route('/quotex/ssid-captura/status', methods=['GET'])
+def rota_ssid_captura_status():
+    """Polling: retorna o estado atual da captura de SSID."""
+    with _SSID_CAPTURA_LOCK:
+        return jsonify({
+            "status": _SSID_CAPTURA_STATE["status"],
+            "ssid":   _SSID_CAPTURA_STATE["ssid"],
+            "ts":     _SSID_CAPTURA_STATE["ts"],
+        })
+
+@app.route('/quotex/ssid-captura/limpar', methods=['POST'])
+def rota_ssid_captura_limpar():
+    """Reseta o estado de captura."""
+    with _SSID_CAPTURA_LOCK:
+        _SSID_CAPTURA_STATE["ssid"]   = ""
+        _SSID_CAPTURA_STATE["status"] = "idle"
+        _SSID_CAPTURA_STATE["ts"]     = 0
+    return jsonify({"ok": True})
+
+@app.route('/quotex/login-page')
+def rota_quotex_login_page():
+    """
+    Página intermediária que o usuário abre no dispositivo.
+    Instrui a fazer login na Quotex e captura o token automaticamente
+    via localStorage / cookie, enviando de volta ao servidor.
+    """
+    servidor = _get_base_url()
+    html = f"""<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Capturar SSID — Quotex</title>
+<style>
+  body {{ background:#0d0d1a; color:#c8d0e0; font-family:'Share Tech Mono',monospace;
+         display:flex; flex-direction:column; align-items:center; justify-content:center;
+         min-height:100vh; margin:0; padding:20px; box-sizing:border-box; }}
+  .card {{ background:#0a0a14; border:1px solid rgba(0,207,255,0.3); border-radius:10px;
+           padding:28px 24px; max-width:420px; width:100%; text-align:center; }}
+  h1 {{ color:#00cfff; font-size:1.1rem; margin:0 0 6px; letter-spacing:2px; }}
+  .sub {{ color:#555; font-size:0.7rem; margin-bottom:20px; }}
+  .btn {{ display:block; width:100%; padding:14px; margin:8px 0;
+          background:rgba(0,207,255,0.1); border:2px solid #00cfff; color:#00cfff;
+          font-family:'Share Tech Mono'; font-size:0.9rem; letter-spacing:2px;
+          cursor:pointer; border-radius:6px; font-weight:bold; text-decoration:none; }}
+  .btn:hover {{ background:rgba(0,207,255,0.2); }}
+  .btn-green {{ background:rgba(0,255,65,0.1); border-color:#00ff41; color:#00ff41; }}
+  .btn-green:hover {{ background:rgba(0,255,65,0.2); }}
+  .status {{ margin-top:16px; padding:12px; border-radius:6px; font-size:0.75rem;
+             border:1px solid #333; background:rgba(0,0,0,0.3); display:none; }}
+  .steps {{ text-align:left; margin:16px 0; font-size:0.68rem; color:#888; line-height:2; }}
+  .steps b {{ color:#00cfff; }}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>🍪 CAPTURAR SSID</h1>
+  <div class="sub">Captura automática do token da Quotex</div>
+
+  <div class="steps">
+    <b>1.</b> Clique em "Abrir Quotex e fazer login"<br>
+    <b>2.</b> Faça login normalmente na Quotex<br>
+    <b>3.</b> Volte nesta aba — o SSID será capturado automaticamente ✅
+  </div>
+
+  <a id="btn-abrir" class="btn" onclick="abrirQuotex()">🌐 Abrir Quotex e fazer login</a>
+  <button id="btn-capturar" class="btn btn-green" onclick="tentarCapturar()" style="display:none;">
+    🔍 Já fiz login — capturar agora
+  </button>
+
+  <div id="status" class="status"></div>
+</div>
+
+<script>
+const SERVIDOR = "{servidor}";
+let _qxWin = null;
+let _pollTimer = null;
+
+function mostrarStatus(msg, cor) {{
+  const el = document.getElementById('status');
+  el.style.display = 'block';
+  el.style.color = cor || '#ffbd2e';
+  el.style.borderColor = cor ? cor + '44' : '#33333344';
+  el.textContent = msg;
+}}
+
+function abrirQuotex() {{
+  _qxWin = window.open('https://qxbroker.com/pt/sign-in', '_blank');
+  document.getElementById('btn-capturar').style.display = 'block';
+  mostrarStatus('⏳ Faça login na janela que abriu...', '#ffbd2e');
+  // Inicia polling automático após 5s
+  setTimeout(() => {{
+    _pollTimer = setInterval(tentarCapturar, 3000);
+  }}, 5000);
+}}
+
+async function tentarCapturar() {{
+  mostrarStatus('🔍 Tentando capturar token...', '#00cfff');
+  try {{
+    // Tenta ler o localStorage da janela filha (só funciona se mesmo domínio — não vai funcionar por cross-origin)
+    // Usa bookmarklet injetado via URL
+    const ssid = await _tentarViaBookmarklet();
+    if (ssid) {{
+      await enviarSsid(ssid);
+      return;
+    }}
+  }} catch(_) {{}}
+
+  // Fallback: pede ao usuário para copiar manualmente de um bookmarklet
+  mostrarStatus('⚠️ Não foi possível capturar automaticamente. Use o método manual abaixo.', '#f87171');
+  clearInterval(_pollTimer);
+  mostrarInstrucaoManual();
+}}
+
+async function _tentarViaBookmarklet() {{
+  // Injeta script na aba da Quotex via postMessage (funciona se a aba ainda está aberta)
+  return new Promise((resolve) => {{
+    if (!_qxWin || _qxWin.closed) {{ resolve(''); return; }}
+    const handler = (e) => {{
+      if (e.data && e.data.type === 'QX_SSID' && e.data.ssid) {{
+        window.removeEventListener('message', handler);
+        resolve(e.data.ssid);
+      }}
+    }};
+    window.addEventListener('message', handler);
+    try {{
+      _qxWin.postMessage({{ type: 'QX_GET_SSID' }}, 'https://qxbroker.com');
+    }} catch(_) {{}}
+    // Timeout de 2s
+    setTimeout(() => {{ window.removeEventListener('message', handler); resolve(''); }}, 2000);
+  }});
+}}
+
+async function enviarSsid(ssid) {{
+  clearInterval(_pollTimer);
+  mostrarStatus('✅ SSID capturado! Enviando ao servidor...', '#00ff41');
+  try {{
+    const r = await fetch(SERVIDOR + '/quotex/ssid-captura/receber', {{
+      method: 'POST',
+      headers: {{ 'Content-Type': 'application/json' }},
+      body: JSON.stringify({{ ssid }}),
+    }});
+    const d = await r.json();
+    if (d.ok) {{
+      mostrarStatus('✅ Pronto! Volte ao bot — SSID preenchido automaticamente.', '#00ff41');
+      if (_qxWin && !_qxWin.closed) _qxWin.close();
+      setTimeout(() => window.close(), 3000);
+    }} else {{
+      mostrarStatus('❌ Erro: ' + (d.erro || 'falha'), '#f44');
+    }}
+  }} catch(e) {{
+    mostrarStatus('❌ Falha ao enviar: ' + e.message, '#f44');
+  }}
+}}
+
+function mostrarInstrucaoManual() {{
+  const card = document.querySelector('.card');
+  const div = document.createElement('div');
+  div.style.cssText = 'margin-top:16px;text-align:left;font-size:0.65rem;color:#888;line-height:1.9;border:1px solid #333;border-radius:6px;padding:12px;';
+  div.innerHTML = `
+    <b style="color:#ffbd2e;">📋 Método manual:</b><br>
+    1. Na aba da Quotex aberta, copie a URL da barra de endereços<br>
+    2. Cole o seguinte na barra de endereços da aba Quotex:<br>
+    <code style="color:#00cfff;font-size:0.6rem;word-break:break-all;display:block;margin:6px 0;background:#0a0a12;padding:6px;border-radius:3px;">
+javascript:void(fetch('${{SERVIDOR}}/quotex/ssid-captura/receber',{{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{ssid:(localStorage.token||localStorage.ssid||document.cookie.match(/token=([^;]+)/)?.[1]||'')}})}}).then(r=>r.json()).then(d=>alert(d.ok?'✅ SSID capturado!':'❌ '+d.erro)))
+    </code>
+    3. Pressione Enter — uma mensagem de confirmação vai aparecer
+  `;
+  card.appendChild(div);
+}}
+</script>
+</body>
+</html>"""
+    return html, 200, {'Content-Type': 'text/html; charset=utf-8'}
 
 
 @app.route('/quotex/ssid-hunter/iniciar', methods=['POST'])
