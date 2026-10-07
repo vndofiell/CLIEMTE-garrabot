@@ -2685,9 +2685,10 @@ iniciarHunter().then(iniciarPolling);
 @app.route('/quotex/login-page')
 def rota_quotex_login_page():
     """
-    Página de status da captura automática de SSID via SSID Hunter (Selenium).
-    Ao carregar, inicia o hunter no servidor, exibe progresso e fecha sozinha
-    quando o SSID for capturado. O postMessage notifica o bot pai automaticamente.
+    Página de login automático da Quotex via HTTP (pyquotex).
+    Pede email e senha, chama /quotex/ssid-auto/iniciar no servidor,
+    faz polling até capturar o SSID e notifica o bot pai via postMessage.
+    Sem Selenium, sem abrir browser — funciona em qualquer servidor.
     """
     servidor = _get_base_url()
     html = f"""<!DOCTYPE html>
@@ -2695,74 +2696,107 @@ def rota_quotex_login_page():
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Conectando Quotex...</title>
+<title>Conectar Quotex — Bot Garra</title>
 <style>
   * {{ box-sizing:border-box; margin:0; padding:0; }}
   body {{ background:#0d0d1a; color:#c8d0e0; font-family:'Courier New',monospace;
          display:flex; align-items:center; justify-content:center;
          min-height:100vh; padding:16px; }}
   .card {{ background:#0a0a14; border:1px solid rgba(0,207,255,0.35);
-           border-radius:12px; padding:28px 22px; max-width:420px; width:100%;
+           border-radius:12px; padding:28px 22px; max-width:400px; width:100%;
            text-align:center; }}
   h1  {{ color:#00cfff; font-size:0.9rem; letter-spacing:3px; margin-bottom:4px; }}
-  .sub {{ color:#555; font-size:0.62rem; margin-bottom:22px; }}
-  .icone {{ font-size:3rem; margin:10px 0; }}
-  .msg-p {{ color:#00cfff; font-size:0.85rem; letter-spacing:1px; margin:12px 0 6px; }}
-  .msg-s {{ color:#555; font-size:0.62rem; line-height:1.8; }}
+  .sub {{ color:#555; font-size:0.62rem; margin-bottom:20px; }}
+  label {{ display:block; text-align:left; font-size:0.62rem; color:#555;
+           letter-spacing:1px; margin-bottom:3px; margin-top:10px; }}
+  input {{ display:block; width:100%; padding:11px 10px; background:#060610;
+           border:1px solid rgba(0,207,255,0.4); color:#00cfff;
+           font-family:'Courier New'; font-size:0.8rem; border-radius:6px;
+           outline:none; }}
+  input:focus {{ border-color:#00cfff; }}
+  input::placeholder {{ color:#333; }}
+  .btn {{ display:block; width:100%; padding:13px; margin:10px 0 4px; border-radius:8px;
+          font-family:'Courier New'; font-size:0.88rem; letter-spacing:2px;
+          cursor:pointer; font-weight:bold; border:2px solid; }}
+  .btn-cyan  {{ background:rgba(0,207,255,0.12); border-color:#00cfff; color:#00cfff; }}
+  .btn-green {{ background:rgba(0,255,65,0.12);  border-color:#00ff41; color:#00ff41; }}
+  .btn-warn  {{ background:rgba(255,189,46,0.1);  border-color:#ffbd2e; color:#ffbd2e; }}
+  .btn:disabled {{ opacity:0.35; cursor:default; }}
+  /* tela de progresso */
+  #tela-prog {{ display:none; padding:10px 0; }}
+  .icone {{ font-size:2.6rem; margin:8px 0; }}
   @keyframes spin {{ to {{ transform:rotate(360deg); }} }}
   .girando {{ display:inline-block; animation:spin 1.4s linear infinite; }}
-  .barra {{ width:100%; height:4px; background:#111; border-radius:2px; margin:18px 0 10px; overflow:hidden; }}
+  .msg-p {{ color:#00cfff; font-size:0.82rem; letter-spacing:1px; margin:10px 0 4px; }}
+  .msg-s {{ color:#555; font-size:0.62rem; line-height:1.8; }}
+  .barra {{ width:100%; height:3px; background:#111; border-radius:2px; margin:14px 0 8px; overflow:hidden; }}
   .barra-inner {{ height:100%; background:#00cfff; border-radius:2px;
-                  animation:barra-anim 2.5s ease-in-out infinite alternate; }}
-  @keyframes barra-anim {{ from {{ width:5%; }} to {{ width:88%; }} }}
-  .btn {{ display:block; width:100%; padding:12px; margin:6px 0; border-radius:8px;
-          font-family:'Courier New'; font-size:0.82rem; letter-spacing:2px;
-          cursor:pointer; font-weight:bold; border:2px solid; }}
-  .btn-warn  {{ background:rgba(255,189,46,0.1); border-color:#ffbd2e; color:#ffbd2e; }}
-  .btn-green {{ background:rgba(0,255,65,0.1);  border-color:#00ff41; color:#00ff41; }}
-  .btn-red   {{ background:rgba(244,68,68,0.1); border-color:#f44; color:#f44; }}
-  .btn:disabled {{ opacity:0.4; cursor:default; }}
-  #fallback {{ display:none; margin-top:14px; text-align:left; }}
-  input {{ display:block; width:100%; padding:10px; background:#060610;
-           border:1px solid rgba(0,207,255,0.4); color:#00cfff;
-           font-family:'Courier New'; font-size:0.75rem; border-radius:6px;
-           outline:none; margin:8px 0; }}
-  input::placeholder {{ color:#333; }}
-  #status {{ margin-top:12px; padding:10px; border-radius:8px; font-size:0.72rem;
+                  animation:ba 2.5s ease-in-out infinite alternate; }}
+  @keyframes ba {{ from {{ width:5%; }} to {{ width:88%; }} }}
+  /* otp */
+  #tela-otp {{ display:none; }}
+  #status {{ margin-top:10px; padding:10px; border-radius:8px; font-size:0.72rem;
              display:none; border:1px solid #333; }}
   #status.ok   {{ border-color:#00ff4144; color:#00ff41; background:rgba(0,255,65,0.06); }}
-  #status.err  {{ border-color:#f4444444; color:#f44; background:rgba(255,68,68,0.06); }}
+  #status.err  {{ border-color:#f4444444; color:#f44;    background:rgba(255,68,68,0.06); }}
   #status.inf  {{ border-color:#00cfff44; color:#00cfff; background:rgba(0,207,255,0.06); }}
   #status.warn {{ border-color:#ffbd2e44; color:#ffbd2e; background:rgba(255,189,46,0.06); }}
+  /* fallback ssid manual */
+  #tela-manual {{ display:none; margin-top:14px; text-align:left; }}
+  .hint {{ font-size:0.62rem; color:#555; line-height:1.9; margin-bottom:8px; }}
 </style>
 </head>
 <body>
 <div class="card">
   <h1>⚡ BOT GARRA</h1>
-  <div class="sub">Captura automática de SSID — Quotex</div>
+  <div class="sub">Conectar conta Quotex automaticamente</div>
 
-  <div id="tela-auto">
-    <div class="icone"><span class="girando" id="icone-emoji">🌐</span></div>
-    <div class="msg-p" id="msg-p">Iniciando Chrome anônimo...</div>
-    <div class="msg-s" id="msg-s">Faça login na janela do Chrome que abrirá no servidor</div>
-    <div class="barra"><div class="barra-inner"></div></div>
-    <button class="btn btn-warn" onclick="mostrarFallback()" style="font-size:0.68rem; padding:9px;">
-      ✏️ Inserir SSID manualmente
+  <!-- TELA 1: formulário email/senha -->
+  <div id="tela-form">
+    <label>EMAIL DA QUOTEX</label>
+    <input id="inp-email" type="email" placeholder="seu@email.com" autocomplete="email"/>
+    <label>SENHA DA QUOTEX</label>
+    <input id="inp-senha" type="password" placeholder="••••••••" autocomplete="current-password"/>
+    <button id="btn-conectar" class="btn btn-cyan" onclick="conectar()">
+      🔗 CONECTAR QUOTEX
     </button>
-    <button class="btn btn-red" onclick="cancelar()" style="font-size:0.68rem; padding:9px;">
-      ✖ Cancelar
+    <button class="btn btn-warn" onclick="mostrarManual()"
+            style="font-size:0.68rem; padding:9px; margin-top:2px;">
+      ✏️ Já tenho o SSID — inserir manualmente
     </button>
   </div>
 
-  <div id="fallback">
-    <p style="font-size:0.65rem; color:#888; margin-bottom:8px; line-height:1.8;">
-      <b style="color:#ffbd2e;">Como pegar o token manualmente:</b><br>
-      1. Na aba da Quotex pressione <b style="color:#fff;">F12</b><br>
-      2. Clique em <b style="color:#fff;">Application → Local Storage → qxbroker.com</b><br>
-      3. Copie o valor da chave <b style="color:#00cfff;">token</b>
+  <!-- TELA 2: progresso -->
+  <div id="tela-prog">
+    <div class="icone"><span class="girando" id="icone-spin">🔄</span></div>
+    <div class="msg-p" id="msg-p">Fazendo login...</div>
+    <div class="msg-s" id="msg-s">Aguarde — conectando à Quotex via HTTP</div>
+    <div class="barra"><div class="barra-inner"></div></div>
+  </div>
+
+  <!-- TELA 3: OTP (2FA) -->
+  <div id="tela-otp">
+    <div class="icone">🔑</div>
+    <div class="msg-p" id="msg-otp-p">Código 2FA necessário</div>
+    <div class="msg-s" style="margin-bottom:10px;">Digite o código do autenticador da Quotex:</div>
+    <input id="inp-otp" type="text" placeholder="000000" maxlength="8"
+           style="text-align:center; letter-spacing:4px; font-size:1rem;"/>
+    <button id="btn-otp" class="btn btn-green" onclick="enviarOtp()">
+      ✅ CONFIRMAR CÓDIGO
+    </button>
+  </div>
+
+  <!-- TELA 4: fallback SSID manual -->
+  <div id="tela-manual">
+    <p class="hint">
+      <b style="color:#ffbd2e;">Como pegar o SSID manualmente:</b><br>
+      1. Acesse <b style="color:#fff;">qxbroker.com</b> e faça login<br>
+      2. Pressione <b style="color:#fff;">F12</b> → Application<br>
+      3. Local Storage → qxbroker.com<br>
+      4. Copie o valor da chave <b style="color:#00cfff;">token</b>
     </p>
-    <input id="inp" type="text" placeholder="Cole o token aqui..." autocomplete="off"/>
-    <button id="btn-env" class="btn btn-green" onclick="enviarManual()">📤 ENVIAR TOKEN</button>
+    <input id="inp-ssid" type="text" placeholder="Cole o SSID/token aqui..." autocomplete="off"/>
+    <button id="btn-ssid" class="btn btn-green" onclick="enviarSsid()">📤 ENVIAR SSID</button>
   </div>
 
   <div id="status"></div>
@@ -2772,75 +2806,122 @@ def rota_quotex_login_page():
 const SRV = "{servidor}";
 let _pollId = null;
 
-// Escuta ssid-inject (caso aberto em outra janela)
+// postMessage da janela pai (index.html) ao abrir esta página
 window.addEventListener('message', (e) => {{
-  if (e.data && e.data.type === 'SSID_OK' && e.data.ssid) {{
-    clearInterval(_pollId);
+  if (e.data && e.data.type === 'SSID_OK' && e.data.ssid)
     onCapturado(e.data.ssid);
-  }}
 }});
 
-// ── Inicia hunter e polling ao carregar ────────────────────────────────────
-(async function() {{
-  // Limpa estado anterior
-  try {{ await fetch(SRV + '/quotex/ssid-captura/limpar', {{ method: 'POST' }}); }} catch(_) {{}}
-  // Dispara hunter (abre Chrome anônimo)
-  try {{
-    const r = await fetch(SRV + '/quotex/ssid-hunter/iniciar', {{ method: 'POST' }});
-    const d = await r.json();
-    if (!d.ok && d.erro) {{
-      mostrar('⚠️ ' + d.erro + ' — use o campo manual.', 'warn');
-      mostrarFallback();
-      return;
-    }}
-  }} catch(e) {{
-    mostrar('⚠️ Servidor indisponível — use o campo manual.', 'warn');
-    mostrarFallback();
+async function conectar() {{
+  const email = (document.getElementById('inp-email').value || '').trim();
+  const senha = (document.getElementById('inp-senha').value || '').trim();
+  if (!email || !senha) {{
+    mostrar('Preencha email e senha.', 'err');
     return;
   }}
+
+  document.getElementById('btn-conectar').disabled = true;
+  trocarTela('tela-prog');
+  setMsgs('🔄 Autenticando...', 'Conectando à Quotex via HTTP — aguarde ~10s');
+  mostrar('', '');
+
+  // Limpa estado anterior
+  try {{ await fetch(SRV + '/quotex/ssid-captura/limpar', {{ method: 'POST' }}); }} catch(_) {{}}
+
+  // Chama o login HTTP (pyquotex — sem Selenium, funciona no servidor)
+  let resp;
+  try {{
+    resp = await fetch(SRV + '/quotex/ssid-auto/iniciar', {{
+      method: 'POST',
+      headers: {{ 'Content-Type': 'application/json' }},
+      body: JSON.stringify({{ email, senha }}),
+    }});
+    resp = await resp.json();
+  }} catch(e) {{
+    trocarTela('tela-form');
+    document.getElementById('btn-conectar').disabled = false;
+    mostrar('❌ Falha de rede: ' + e.message, 'err');
+    return;
+  }}
+
+  if (!resp.ok) {{
+    trocarTela('tela-form');
+    document.getElementById('btn-conectar').disabled = false;
+    mostrar('❌ ' + (resp.erro || 'Erro ao iniciar login.'), 'err');
+    return;
+  }}
+
+  // Inicia polling do status
   iniciarPolling();
-}})();
+}}
 
 function iniciarPolling() {{
+  clearInterval(_pollId);
   let n = 0;
   _pollId = setInterval(async () => {{
     n++;
-    if (n > 150) {{  // 5 min
+    if (n > 120) {{  // 4 min
       clearInterval(_pollId);
-      mostrar('⏰ Tempo esgotado. Use o campo manual.', 'warn');
-      mostrarFallback();
+      trocarTela('tela-form');
+      document.getElementById('btn-conectar').disabled = false;
+      mostrar('⏰ Tempo esgotado. Tente novamente.', 'warn');
       return;
     }}
     try {{
-      const h = await fetch(SRV + '/quotex/ssid-hunter/status').then(r => r.json());
+      const d = await fetch(SRV + '/quotex/ssid-auto/status').then(r => r.json());
 
-      if (h.status === 'capturado' && h.ssid && h.ssid.length >= 8) {{
+      if (d.status === 'capturado' && d.ssid && d.ssid.length >= 8) {{
         clearInterval(_pollId);
-        onCapturado(h.ssid);
+        onCapturado(d.ssid);
         return;
       }}
-      if (h.status === 'erro') {{
+      if (d.status === 'erro') {{
         clearInterval(_pollId);
-        mostrar('⚠️ Chrome: ' + (h.erro || 'erro') + ' — use o campo manual.', 'warn');
-        mostrarFallback();
+        trocarTela('tela-form');
+        document.getElementById('btn-conectar').disabled = false;
+        mostrar('❌ ' + (d.erro || 'Erro no login.'), 'err');
+        return;
+      }}
+      // OTP/2FA necessário?
+      const otp = await fetch(SRV + '/quotex/otp-status').then(r => r.json()).catch(() => ({{}}));
+      if (otp.aguardando) {{
+        trocarTela('tela-otp');
+        document.getElementById('msg-otp-p').textContent = otp.prompt || 'Digite o código 2FA';
         return;
       }}
       // Atualiza mensagem
-      if (h.status === 'aguardando_login') {{
-        setMsgs('🔑 Aguardando seu login...', 'Faça login na janela do Chrome anônimo que abriu');
-      }} else if (h.status === 'abrindo') {{
-        setMsgs('🌐 Abrindo Chrome anônimo...', 'Aguarde alguns segundos');
+      if (d.status === 'aguardando_login') {{
+        setMsgs('🔐 Autenticando...', 'Aguarde enquanto fazemos login na Quotex');
+      }} else if (d.status === 'conectando') {{
+        setMsgs('🔄 Conectando...', 'Processando credenciais — alguns segundos');
       }}
     }} catch(_) {{}}
   }}, 2000);
 }}
 
+async function enviarOtp() {{
+  const codigo = (document.getElementById('inp-otp').value || '').trim();
+  if (!codigo) {{ mostrar('Digite o código.', 'err'); return; }}
+  document.getElementById('btn-otp').disabled = true;
+  try {{
+    await fetch(SRV + '/quotex/otp', {{
+      method: 'POST',
+      headers: {{ 'Content-Type': 'application/json' }},
+      body: JSON.stringify({{ codigo }}),
+    }});
+    trocarTela('tela-prog');
+    document.getElementById('btn-otp').disabled = false;
+    document.getElementById('inp-otp').value = '';
+    setMsgs('🔄 Verificando código...', 'Aguarde');
+  }} catch(e) {{
+    mostrar('❌ Falha: ' + e.message, 'err');
+    document.getElementById('btn-otp').disabled = false;
+  }}
+}}
+
 async function onCapturado(ssid) {{
-  setMsgs('✅ SSID capturado!', 'Conectando ao bot...');
-  document.getElementById('icone-emoji').textContent = '✅';
-  document.getElementById('icone-emoji').style.animation = 'none';
-  mostrar('✅ Conectado com sucesso! Esta janela vai fechar.', 'ok');
-  // Envia ao estado de captura (para polling do modal do bot)
+  clearInterval(_pollId);
+  // Grava no estado de captura
   try {{
     await fetch(SRV + '/quotex/ssid-captura/receber', {{
       method: 'POST',
@@ -2848,16 +2929,21 @@ async function onCapturado(ssid) {{
       body: JSON.stringify({{ ssid }}),
     }});
   }} catch(_) {{}}
-  // Notifica janela pai
+  // Notifica janela pai (bot) — preenche o campo SSID automaticamente
   if (window.opener && !window.opener.closed)
     window.opener.postMessage({{ type: 'SSID_OK', ssid }}, '*');
-  setTimeout(() => window.close(), 1800);
+  document.getElementById('icone-spin').textContent   = '✅';
+  document.getElementById('icone-spin').style.animation = 'none';
+  trocarTela('tela-prog');
+  setMsgs('✅ SSID capturado!', 'Conectando ao bot — esta janela vai fechar...');
+  mostrar('✅ Conectado com sucesso!', 'ok');
+  setTimeout(() => window.close(), 2000);
 }}
 
-async function enviarManual() {{
-  const v = (document.getElementById('inp').value || '').trim();
-  if (!v || v.length < 16) {{ mostrar('Token muito curto.', 'err'); return; }}
-  document.getElementById('btn-env').disabled = true;
+async function enviarSsid() {{
+  const v = (document.getElementById('inp-ssid').value || '').trim();
+  if (!v || v.length < 16) {{ mostrar('SSID muito curto.', 'err'); return; }}
+  document.getElementById('btn-ssid').disabled = true;
   mostrar('⏳ Enviando...', 'inf');
   try {{
     const r = await fetch(SRV + '/quotex/ssid-captura/receber', {{
@@ -2866,27 +2952,25 @@ async function enviarManual() {{
       body: JSON.stringify({{ ssid: v }}),
     }});
     const d = await r.json();
-    if (d.ok) {{
-      clearInterval(_pollId);
-      await onCapturado(v);
-    }} else {{
+    if (d.ok) {{ await onCapturado(v); }}
+    else {{
       mostrar('❌ ' + (d.erro || 'Erro.'), 'err');
-      document.getElementById('btn-env').disabled = false;
+      document.getElementById('btn-ssid').disabled = false;
     }}
   }} catch(e) {{
-    mostrar('❌ Falha de rede: ' + e.message, 'err');
-    document.getElementById('btn-env').disabled = false;
+    mostrar('❌ ' + e.message, 'err');
+    document.getElementById('btn-ssid').disabled = false;
   }}
 }}
 
-async function cancelar() {{
-  clearInterval(_pollId);
-  try {{ await fetch(SRV + '/quotex/ssid-hunter/parar', {{ method: 'POST' }}); }} catch(_) {{}}
-  window.close();
+function mostrarManual() {{
+  trocarTela('tela-manual');
 }}
 
-function mostrarFallback() {{
-  document.getElementById('fallback').style.display = 'block';
+function trocarTela(id) {{
+  ['tela-form','tela-prog','tela-otp','tela-manual'].forEach(t => {{
+    document.getElementById(t).style.display = (t === id) ? 'block' : 'none';
+  }});
 }}
 
 function setMsgs(p, s) {{
@@ -2900,7 +2984,7 @@ function mostrar(msg, tipo) {{
   const el = document.getElementById('status');
   el.textContent = msg;
   el.className = tipo || 'inf';
-  el.style.display = 'block';
+  el.style.display = msg ? 'block' : 'none';
 }}
 </script>
 </body>
