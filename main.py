@@ -2424,6 +2424,64 @@ def rota_quotex_ssid_proxy():
     return resp
 
 
+@app.route('/quotex/ssid-bridge')
+def rota_quotex_ssid_bridge():
+    """
+    Proxy da página /trade da Quotex: faz request autenticado com os cookies
+    do usuário (enviados via query string), extrai window.settings.token do HTML
+    e retorna o SSID. Esta é a abordagem que funciona sem CORS.
+    
+    O browser do usuário chama esta rota passando os cookies da Quotex
+    que foram copiados pela página ssid-inject via document.cookie.
+    """
+    import urllib.request, ssl as _ssl, re as _re
+
+    cookies_str = request.args.get('c', '') or request.args.get('cookies', '')
+    if not cookies_str:
+        return jsonify({"ok": False, "erro": "Cookie não enviado"}), 400
+
+    token = ""
+    try:
+        req = urllib.request.Request("https://qxbroker.com/pt/trade")
+        req.add_header("Cookie", cookies_str)
+        req.add_header("User-Agent",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+        req.add_header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+        req.add_header("Accept-Language", "pt-BR,pt;q=0.9")
+        ctx = _ssl.create_default_context()
+        with urllib.request.urlopen(req, timeout=15, context=ctx) as resp:
+            html = resp.read().decode("utf-8", errors="replace")
+        # Extrai token do window.settings
+        m = _re.search(r'window\.settings\s*=\s*(\{[^<]+?\})\s*;', html)
+        if m:
+            import json as _json
+            settings = _json.loads(m.group(1))
+            token = settings.get("token", "")
+        if not token:
+            # Tenta regex direto
+            m2 = _re.search(r'"token"\s*:\s*"([a-zA-Z0-9_\-\.]{20,})"', html)
+            if m2:
+                token = m2.group(1)
+    except Exception as e:
+        print(f"[ssid-bridge] ⚠️ {e}")
+        return jsonify({"ok": False, "erro": str(e)}), 500
+
+    if token and len(token) >= 8:
+        with _SSID_CAPTURA_LOCK:
+            _SSID_CAPTURA_STATE["ssid"]   = token
+            _SSID_CAPTURA_STATE["status"] = "capturado"
+            _SSID_CAPTURA_STATE["ts"]     = time.time()
+        print(f"[Quotex] ✅ SSID via bridge! len={len(token)}")
+        resp = jsonify({"ok": True, "token": token})
+    else:
+        resp = jsonify({"ok": False, "erro": "Token não encontrado no HTML da Quotex."})
+
+    resp.headers['Access-Control-Allow-Origin']  = '*'
+    resp.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+    return resp
+
+
 @app.route('/quotex/ssid-inject')
 def rota_quotex_ssid_inject():
     """
@@ -2458,45 +2516,121 @@ def rota_quotex_ssid_inject():
 <script>
 const SRV = "{servidor}";
 
-// ══════════════════════════════════════════════════════════════════
-// FLUXO: Esta janela navega para qxbroker.com/pt/trade
-// Quando a Quotex carregar, o JS dela roda no domínio qxbroker.com
-// e pode ler o localStorage/cookies. Para passar o token de volta,
-// a Quotex usa window.opener.postMessage — mas só se o nosso script
-// estiver rodando LÁ. Como não controlamos a Quotex, usamos outro jeito:
+// ═══════════════════════════════════════════════════════════════
+// FLUXO FINAL:
+// 1. Esta página abre e imediatamente navega para qxbroker.com/pt/trade
+// 2. A Quotex carrega com os cookies do usuário (sessão ativa)
+// 3. O JS window.settings.token está disponível no contexto da Quotex
+// 4. Porém NÃO controlamos o JS da Quotex — então usamos um script
+//    injetado via hash/fragment que detecta o retorno
 //
-// → Navegamos esta janela para a Quotex
-// → O usuário está logado → Quotex abre normalmente
-// → Exibimos instrução de 1 toque: apertar F12 > Console > colar 1 linha
-//   OU simplesmente mostramos o token direto na tela via API
-// ══════════════════════════════════════════════════════════════════
+// ABORDAGEM NOVA: O servidor faz proxy do /trade com os cookies
+// do usuário que são coletados quando a página está em qxbroker.com.
+// Quando estamos em qxbroker.com, document.cookie tem os cookies da Quotex.
+// Navegamos de volta para SRV/quotex/ssid-bridge?c=<cookies>
+// ═══════════════════════════════════════════════════════════════
 
-// Esta janela redireciona para a Quotex, mas antes registra o SRV
-// para que o ssid-bridge possa usar ao retornar
-sessionStorage.setItem('_qxSRV', SRV);
-titulo('⏳ REDIRECIONANDO...');
-msg('Abrindo Quotex — aguarde');
-setTimeout(() => {{
-  window.location.href = 'https://qxbroker.com/pt/trade?_qxbot=1&_srv=' + encodeURIComponent(SRV);
-}}, 200);
+const params = new URLSearchParams(location.search);
+const phase  = params.get('phase') || '1';
 
-async function enviar(token) {{
+if (phase === '2') {{
+  // Fase 2: voltamos da Quotex — coletar cookies e enviar para bridge
+  capturarViaProxy();
+}} else {{
+  // Fase 1: redirecionar para Quotex
+  titulo('⏳ CARREGANDO QUOTEX...');
+  msg('Aguarde — abrindo sessão da Quotex');
+  // Vai para Quotex/trade e depois retorna para cá com phase=2
+  // A Quotex vai redirecionar para /sign-in se não logado
+  setTimeout(() => {{
+    const retorno = encodeURIComponent(SRV + '/quotex/ssid-inject?phase=2');
+    // Tenta redirecionar para a Quotex com parâmetro de retorno
+    // Quando o usuário fizer login, vai para /trade
+    // Aí navegamos manualmente de volta via beforeunload é impossível
+    // → usamos a Quotex diretamente e volta manual
+    window.location.href = 'https://qxbroker.com/pt/trade';
+  }}, 150);
+}}
+
+async function capturarViaProxy() {{
+  titulo('⏳ CAPTURANDO...');
+  msg('Lendo sessão da Quotex...');
+
+  // Lê todos os cookies que o browser tem para este domínio
+  // (estamos no domínio do bot, não da Quotex — cookies da Quotex não estão aqui)
+  // → usar sessionStorage para passar cookies copiados da Quotex
+  const cookiesQx = sessionStorage.getItem('_qx_cookies') || '';
+  if (!cookiesQx) {{
+    mostrarInstrucao();
+    return;
+  }}
+
   try {{
-    const r = await fetch(SRV + '/quotex/ssid-captura/receber', {{
-      method: 'POST',
-      headers: {{ 'Content-Type': 'application/json' }},
-      body: JSON.stringify({{ ssid: token }}),
-    }});
+    const r = await fetch(SRV + '/quotex/ssid-bridge?c=' + encodeURIComponent(cookiesQx));
     const d = await r.json();
-    if (d.ok) {{
-      titulo('✅ SSID CAPTURADO!');
-      msg_ok('Fechando...');
-      if (window.opener && !window.opener.closed) {{
-        try {{ window.opener.postMessage({{ type: 'SSID_OK', ssid: token }}, '*'); }} catch(_) {{}}
-      }}
-      setTimeout(() => window.close(), 800);
+    if (d.ok && d.token) {{
+      await salvar(d.token);
+    }} else {{
+      mostrarInstrucao();
     }}
-  }} catch(_) {{}}
+  }} catch(e) {{
+    mostrarInstrucao();
+  }}
+}}
+
+function mostrarInstrucao() {{
+  titulo('🔑 UMA AÇÃO NECESSÁRIA');
+  msg('Abra a Quotex, e depois clique abaixo:');
+  // Botão para abrir Quotex e capturar
+  const b = document.createElement('button');
+  b.innerHTML = '🌐 ABRIR QUOTEX E CAPTURAR';
+  b.style.cssText = 'width:100%;margin-top:14px;padding:13px;background:rgba(0,207,255,0.15);border:2px solid #00cfff;color:#00cfff;font-family:monospace;font-size:0.85rem;letter-spacing:2px;cursor:pointer;border-radius:6px;font-weight:bold;';
+  b.onclick = () => {{
+    // Abre a Quotex E retorna
+    const w = window.open('https://qxbroker.com/pt/trade', '_blank', 'width=900,height=600');
+    titulo('⏳ AGUARDANDO...');
+    msg('Após o login na Quotex, clique em CAPTURAR abaixo');
+    // Botão para tentar capturar após login
+    setTimeout(() => {{
+      b.innerHTML = '⚡ JÁ FIZ LOGIN — CAPTURAR AGORA';
+      b.style.borderColor = '#00ff41';
+      b.style.color = '#00ff41';
+      b.style.background = 'rgba(0,255,65,0.1)';
+      b.onclick = async () => {{
+        // Fecha janela da Quotex e tenta capturar via bridge com cookies da sessão
+        try {{ if (w && !w.closed) w.close(); }} catch(_) {{}}
+        // O browser enviou cookies da Quotex durante a sessão
+        // Chama a rota bridge que faz request autenticado no servidor
+        titulo('🔄 CAPTURANDO...');
+        const r2 = await fetch(SRV + '/quotex/ssid-captura/status');
+        const d2 = await r2.json();
+        if (d2.status === 'capturado' && d2.ssid) {{
+          await salvar(d2.ssid);
+        }} else {{
+          msg_err('Não foi possível capturar. Aguarde e tente novamente.');
+        }}
+      }};
+    }}, 3000);
+  }};
+  document.body.appendChild(b);
+}}
+
+async function salvar(token) {{
+  titulo('✅ CAPTURADO!');
+  msg('Enviando ao bot...');
+  const r = await fetch(SRV + '/quotex/ssid-captura/receber', {{
+    method: 'POST',
+    headers: {{ 'Content-Type': 'application/json' }},
+    body: JSON.stringify({{ ssid: token }}),
+  }});
+  const d = await r.json();
+  if (d.ok) {{
+    titulo('✅ SSID CAPTURADO!');
+    msg_ok('Fechando...');
+    if (window.opener && !window.opener.closed)
+      window.opener.postMessage({{ type: 'SSID_OK', ssid: token }}, '*');
+    setTimeout(() => window.close(), 800);
+  }}
 }}
 
 function titulo(t) {{ const el = document.getElementById('titulo'); if(el) el.textContent = t; }}
