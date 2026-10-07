@@ -2155,7 +2155,14 @@ _SSID_AUTO_STATE: dict = {"ssid": "", "status": "idle", "erro": "", "ts": 0}
 _SSID_AUTO_LOCK = threading.Lock()
 
 def _ssid_auto_thread(email: str, senha: str):
-    """Executa login HTTP no servidor e salva o SSID capturado."""
+    """
+    Executa login HTTP no servidor usando pyquotex.Quotex.connect()
+    e extrai o token/SSID gerado após autenticação bem-sucedida.
+
+    Usa o mesmo fluxo interno do quotex_connector para evitar o erro
+    'Response object has no attribute reason_phrase' que ocorre ao usar
+    a classe Login diretamente com versões incompatíveis do httpx.
+    """
     import asyncio as _asyncio
 
     with _SSID_AUTO_LOCK:
@@ -2165,30 +2172,38 @@ def _ssid_auto_thread(email: str, senha: str):
         _SSID_AUTO_STATE["ts"]     = time.time()
 
     try:
-        from pyquotex.network.login import Login
+        from pyquotex.stable_api import Quotex
 
         loop = _asyncio.new_event_loop()
         _asyncio.set_event_loop(loop)
 
         async def _fazer_login():
-            # Cria objeto mínimo compatível com a interface esperada pelo Login
-            class _FakeAPI:
-                lang         = "pt"
-                https_url    = "https://qxbroker.com"
-                username     = email
-                session_data = {"cookies": "", "token": "", "user_agent": ""}
-                # OTP: usa o mesmo callback Flask que o quotex_connector usa
-                on_otp_callback = _otp_callback_flask
-
-            api = _FakeAPI()
-            login_obj = Login(api)
-
-            # Sinaliza que está aguardando possível OTP
             with _SSID_AUTO_LOCK:
                 _SSID_AUTO_STATE["status"] = "aguardando_login"
 
-            ok, motivo = await login_obj(email, senha)
-            return ok, motivo, api.session_data.get("token", "")
+            client = Quotex(
+                email=email,
+                password=senha,
+                lang="pt",
+                on_otp_callback=_otp_callback_flask,
+            )
+            ok, reason = await client.connect()
+
+            token = ""
+            if ok:
+                # Extrai o token gerado pela autenticação
+                token = (client.session_data or {}).get("token", "")
+                # Se session_data não tiver o token, tenta o atributo direto
+                if not token:
+                    token = getattr(client, "token", "") or getattr(client, "ssid", "") or ""
+
+            # Fecha a conexão WS — só precisamos do token
+            try:
+                await client.close()
+            except Exception:
+                pass
+
+            return ok, str(reason or ""), token
 
         ok, motivo, token = loop.run_until_complete(_fazer_login())
         loop.close()
@@ -2204,6 +2219,13 @@ def _ssid_auto_thread(email: str, senha: str):
                 _SSID_CAPTURA_STATE["status"] = "capturado"
                 _SSID_CAPTURA_STATE["ts"]     = time.time()
             print(f"[Quotex] ✅ SSID capturado via login HTTP! len={len(token)}")
+        elif ok and not token:
+            # Conectou mas não encontrou token — pede para usar SSID manual
+            motivo = "Login OK mas token não encontrado. Use captura manual via bookmarklet."
+            with _SSID_AUTO_LOCK:
+                _SSID_AUTO_STATE["status"] = "erro"
+                _SSID_AUTO_STATE["erro"]   = motivo
+            print(f"[Quotex] ⚠️ {motivo}")
         else:
             with _SSID_AUTO_LOCK:
                 _SSID_AUTO_STATE["status"] = "erro"
