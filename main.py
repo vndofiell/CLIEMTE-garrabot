@@ -2156,12 +2156,9 @@ _SSID_AUTO_LOCK = threading.Lock()
 
 def _ssid_auto_thread(email: str, senha: str):
     """
-    Executa login HTTP no servidor usando pyquotex.Quotex.connect()
-    e extrai o token/SSID gerado após autenticação bem-sucedida.
-
-    Usa o mesmo fluxo interno do quotex_connector para evitar o erro
-    'Response object has no attribute reason_phrase' que ocorre ao usar
-    a classe Login diretamente com versões incompatíveis do httpx.
+    Executa login HTTP puro na Quotex usando pyquotex.network.login.Login
+    (sem abrir WebSocket) e extrai o token SSID do window.settings da
+    página /trade após autenticação bem-sucedida.
     """
     import asyncio as _asyncio
 
@@ -2172,40 +2169,58 @@ def _ssid_auto_thread(email: str, senha: str):
         _SSID_AUTO_STATE["ts"]     = time.time()
 
     try:
-        from pyquotex.stable_api import Quotex
+        from pyquotex.network.login import Login
+        from pyquotex.api import QuotexAPI
 
         loop = _asyncio.new_event_loop()
         _asyncio.set_event_loop(loop)
 
-        async def _fazer_login():
+        async def _fazer_login_http():
             with _SSID_AUTO_LOCK:
                 _SSID_AUTO_STATE["status"] = "aguardando_login"
 
-            client = Quotex(
-                email=email,
+            # QuotexAPI é o objeto de baixo nível que Login espera como `api`
+            # (tem https_url, username, session_data, lang, on_otp_callback)
+            api = QuotexAPI(
+                host="qxbroker.com",
+                username=email,
                 password=senha,
                 lang="pt",
                 on_otp_callback=_otp_callback_flask,
             )
-            ok, reason = await client.connect()
+
+            login = Login(api=api)
+
+            # Login HTTP puro — sem abrir WebSocket
+            ok, motivo = await login(username=email, password=senha)
 
             token = ""
             if ok:
-                # Extrai o token gerado pela autenticação
-                token = (client.session_data or {}).get("token", "")
-                # Se session_data não tiver o token, tenta o atributo direto
-                if not token:
-                    token = getattr(client, "token", "") or getattr(client, "ssid", "") or ""
+                # get_settings() já preencheu api.session_data["token"]
+                token = (api.session_data or {}).get("token", "") or ""
 
-            # Fecha a conexão WS — só precisamos do token
+                # Fallback: /api/v1/cabinets/digest com cookies da sessão
+                if not token:
+                    try:
+                        await login.get_profile()
+                        token = (api.session_data or {}).get("token", "") or ""
+                    except Exception:
+                        pass
+
+                # Fallback 2: atributo ssid no objeto Login
+                if not token:
+                    token = getattr(login, "ssid", "") or ""
+
+            # Fecha sessão HTTP
             try:
-                await client.close()
+                if getattr(login, "_client", None):
+                    await login._client.close()
             except Exception:
                 pass
 
-            return ok, str(reason or ""), token
+            return ok, motivo, token
 
-        ok, motivo, token = loop.run_until_complete(_fazer_login())
+        ok, motivo, token = loop.run_until_complete(_fazer_login_http())
         loop.close()
 
         if ok and token:
@@ -2213,15 +2228,13 @@ def _ssid_auto_thread(email: str, senha: str):
                 _SSID_AUTO_STATE["ssid"]   = token
                 _SSID_AUTO_STATE["status"] = "capturado"
                 _SSID_AUTO_STATE["ts"]     = time.time()
-            # Também salva no estado de captura para o polling do frontend
             with _SSID_CAPTURA_LOCK:
                 _SSID_CAPTURA_STATE["ssid"]   = token
                 _SSID_CAPTURA_STATE["status"] = "capturado"
                 _SSID_CAPTURA_STATE["ts"]     = time.time()
             print(f"[Quotex] ✅ SSID capturado via login HTTP! len={len(token)}")
         elif ok and not token:
-            # Conectou mas não encontrou token — pede para usar SSID manual
-            motivo = "Login OK mas token não encontrado. Use captura manual via bookmarklet."
+            motivo = "Login OK mas token não encontrado na sessão."
             with _SSID_AUTO_LOCK:
                 _SSID_AUTO_STATE["status"] = "erro"
                 _SSID_AUTO_STATE["erro"]   = motivo
