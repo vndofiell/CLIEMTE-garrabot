@@ -4,6 +4,5 @@ urllib3
 gunicorn
 pillow
 pandas
-pyquotex
-selenium
 websocket-client
+git+https://github.com/cleitonleonel/pyquotex.git
