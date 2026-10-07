@@ -2575,7 +2575,7 @@ function p_err(t)   {{ const e=document.getElementById('msg'); if(e){{ e.textCon
 </script>
 </body>
 </html>"""
-    return html, 200, {{'Content-Type': 'text/html; charset=utf-8'}}
+    return html, 200, {'Content-Type': 'text/html; charset=utf-8'}
 
 
 @app.route('/quotex/login-page')
@@ -2868,7 +2868,7 @@ function mostrar(msg, tipo) {{
 </script>
 </body>
 </html>"""
-    return html, 200, {{'Content-Type': 'text/html; charset=utf-8'}}
+    return html, 200, {'Content-Type': 'text/html; charset=utf-8'}
 
 
 @app.route('/quotex/ssid-hunter/iniciar', methods=['POST'])
