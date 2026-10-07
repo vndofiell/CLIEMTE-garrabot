@@ -1510,30 +1510,66 @@
         <!-- Campos de login — aba SSID -->
         <div id="qx-form-ssid" style="display:none;">
 
-            <!-- Aviso -->
-            <div style="padding:10px 12px; margin-bottom:10px;
-                        background:rgba(0,207,255,0.05); border:1px solid rgba(0,207,255,0.2);
-                        border-radius:6px; font-family:'Share Tech Mono'; font-size:0.62rem;
-                        color:#888; line-height:1.8;">
-                Clique abaixo para abrir a Quotex.<br>
-                Faça login normalmente — o SSID é capturado <b style="color:#00ff41;">automaticamente</b>.
+            <!-- ══ SEÇÃO 1: COLAR SSID DIRETO ═══════════════════════════ -->
+            <div style="margin-bottom:12px;">
+                <label style="font-size:0.6rem; color:#00cfff; letter-spacing:2px;
+                              display:block; margin-bottom:6px;">
+                    📋 COLAR SSID DIRETO
+                </label>
+                <input id="qx-ssid-manual-inp" type="text" autocomplete="off"
+                    placeholder="Cole o token / SSID aqui..."
+                    style="width:100%; background:#0a0a12;
+                           border:1px solid rgba(0,207,255,0.6);
+                           color:#00cfff; padding:10px 12px;
+                           font-family:'Share Tech Mono'; font-size:0.78rem;
+                           border-radius:4px; outline:none; margin-bottom:8px;
+                           box-sizing:border-box;"
+                    oninput="qxSsidManualVerificar(this.value)">
+                <div style="display:flex; gap:8px;">
+                    <button onclick="quotexConectarSsidManual('DEMO')"
+                        id="qx-btn-ssid-man-demo" disabled
+                        style="flex:1; padding:10px; background:rgba(255,107,0,0.08);
+                               border:1px solid #ff6b00; color:#ff6b00;
+                               font-family:'Share Tech Mono'; font-size:0.75rem;
+                               letter-spacing:1px; cursor:default; border-radius:4px;
+                               opacity:0.35;">
+                        🧪 DEMO
+                    </button>
+                    <button onclick="quotexConectarSsidManual('REAL')"
+                        id="qx-btn-ssid-man-real" disabled
+                        style="flex:1; padding:10px; background:rgba(255,107,0,0.08);
+                               border:1px solid #ff4400; color:#ff4400;
+                               font-family:'Share Tech Mono'; font-size:0.75rem;
+                               letter-spacing:1px; cursor:default; border-radius:4px;
+                               opacity:0.35;">
+                        💰 REAL
+                    </button>
+                </div>
             </div>
 
+            <!-- Divisória -->
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
+                <div style="flex:1; height:1px; background:rgba(255,255,255,0.08);"></div>
+                <span style="font-size:0.58rem; color:#444; letter-spacing:1px;">OU CAPTURAR AUTOMATICAMENTE</span>
+                <div style="flex:1; height:1px; background:rgba(255,255,255,0.08);"></div>
+            </div>
+
+            <!-- ══ SEÇÃO 2: CAPTURA AUTOMÁTICA ═══════════════════════════ -->
             <!-- Botão principal -->
             <button onclick="qxCapturarSsidAuto()" id="qx-btn-capturar-ssid"
-                style="width:100%; padding:14px; margin-bottom:10px;
-                       background:rgba(0,207,255,0.12); border:2px solid #00cfff;
-                       color:#00cfff; font-family:'Share Tech Mono'; font-size:0.85rem;
-                       letter-spacing:2px; cursor:pointer; border-radius:6px; font-weight:bold;">
-                ⚡ ABRIR QUOTEX E CAPTURAR SSID
+                style="width:100%; padding:12px; margin-bottom:10px;
+                       background:rgba(0,207,255,0.08); border:1px solid rgba(0,207,255,0.5);
+                       color:#00cfff; font-family:'Share Tech Mono'; font-size:0.78rem;
+                       letter-spacing:2px; cursor:pointer; border-radius:6px;">
+                🌐 ABRIR QUOTEX E CAPTURAR SSID
             </button>
 
-            <!-- Status da captura -->
+            <!-- Status da captura automática -->
             <div id="qx-ssid-aguardando" style="display:none; text-align:center;
-                padding:14px 10px; margin-bottom:10px;
-                background:rgba(0,0,0,0.3); border:1px solid rgba(0,207,255,0.25);
+                padding:12px 10px; margin-bottom:10px;
+                background:rgba(0,0,0,0.3); border:1px solid rgba(0,207,255,0.2);
                 border-radius:6px; font-family:'Share Tech Mono'; font-size:0.72rem;">
-                <div id="qx-ssid-dots" style="font-size:1.4rem; margin-bottom:6px;">⏳</div>
+                <div id="qx-ssid-dots" style="font-size:1.2rem; margin-bottom:4px;">⏳</div>
                 <div id="qx-ssid-status-msg" style="color:#00cfff; letter-spacing:1px; margin-bottom:4px;">
                     Aguardando login na Quotex...
                 </div>
@@ -1548,52 +1584,14 @@
                 </button>
             </div>
 
-            <!-- Campo SSID oculto (preenchido automaticamente) -->
+            <!-- Campo SSID oculto (preenchido pela captura automática) -->
             <input id="qx-ssid-input" type="hidden" autocomplete="off">
 
-            <!-- ── COLAR SSID MANUALMENTE ───────────────────────────────── -->
-            <div id="qx-ssid-manual-wrap" style="margin-bottom:10px;">
-                <div style="font-size:0.6rem; color:#555; letter-spacing:1px;
-                            text-align:center; margin-bottom:6px; cursor:pointer;"
-                     onclick="qxToggleSsidManual()" id="qx-ssid-manual-label">
-                    ▼ &nbsp;Colar SSID manualmente
-                </div>
-                <div id="qx-ssid-manual-box" style="display:none;">
-                    <input id="qx-ssid-manual-inp" type="text" autocomplete="off"
-                        placeholder="Cole o SSID / token aqui..."
-                        style="width:100%; background:#0a0a12;
-                               border:1px solid rgba(0,207,255,0.5);
-                               color:#00cfff; padding:9px 10px;
-                               font-family:'Share Tech Mono'; font-size:0.75rem;
-                               border-radius:4px; outline:none; margin-bottom:6px;"
-                        oninput="qxSsidManualVerificar(this.value)">
-                    <div style="display:flex; gap:8px;">
-                        <button onclick="quotexConectarSsidManual('DEMO')"
-                            id="qx-btn-ssid-man-demo" disabled
-                            style="flex:1; padding:9px; background:rgba(255,107,0,0.08);
-                                   border:1px solid #ff6b00; color:#ff6b00;
-                                   font-family:'Share Tech Mono'; font-size:0.72rem;
-                                   letter-spacing:1px; cursor:pointer; border-radius:4px;
-                                   opacity:0.35;">
-                            🧪 DEMO
-                        </button>
-                        <button onclick="quotexConectarSsidManual('REAL')"
-                            id="qx-btn-ssid-man-real" disabled
-                            style="flex:1; padding:9px; background:rgba(255,107,0,0.08);
-                                   border:1px solid #ff4400; color:#ff4400;
-                                   font-family:'Share Tech Mono'; font-size:0.72rem;
-                                   letter-spacing:1px; cursor:pointer; border-radius:4px;
-                                   opacity:0.35;">
-                            💰 REAL
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Botões DEMO/REAL aparecem após captura bem-sucedida -->
+            <!-- Botões DEMO/REAL aparecem após captura automática bem-sucedida -->
             <div id="qx-ssid-botoes-conta" style="display:none; gap:8px; margin-bottom:12px;">
-                <div style="font-size:0.6rem; color:#555; text-align:center; margin-bottom:6px; letter-spacing:1px;">
-                    SSID capturado — escolha o tipo de conta:
+                <div style="font-size:0.6rem; color:#00ff41; text-align:center;
+                            margin-bottom:6px; letter-spacing:1px;">
+                    ✅ SSID capturado — escolha o tipo de conta:
                 </div>
                 <div style="display:flex; gap:8px;">
                     <button onclick="quotexConectarSsid('DEMO')"
@@ -26882,21 +26880,6 @@ function quotexConectarSsid(tipo) {
 }
 
 // ── Colar SSID manualmente ───────────────────────────────────────────────────
-function qxToggleSsidManual() {
-    const box   = document.getElementById('qx-ssid-manual-box');
-    const label = document.getElementById('qx-ssid-manual-label');
-    if (!box) return;
-    const aberto = box.style.display !== 'none';
-    box.style.display = aberto ? 'none' : 'block';
-    if (label) label.textContent = (aberto ? '▼' : '▲') + ' \u00a0Colar SSID manualmente';
-    if (!aberto) {
-        setTimeout(() => {
-            const inp = document.getElementById('qx-ssid-manual-inp');
-            if (inp) inp.focus();
-        }, 80);
-    }
-}
-
 function qxSsidManualVerificar(val) {
     const ok = val && val.trim().length >= 16;
     ['qx-btn-ssid-man-demo', 'qx-btn-ssid-man-real'].forEach(id => {
