@@ -26889,6 +26889,7 @@ setInterval(() => {
             _qxUltimoSaldoValido = _qxSaldoNum;
             // mantém saldo sincronizado para gerenciamentos % da banca
             if (typeof _qxModo !== 'undefined') _qxModo.saldoAtual = _qxSaldoNum;
+            if (typeof _qxHma  !== 'undefined') _qxHma.saldoAtual  = _qxSaldoNum;
 
             const lbl = document.getElementById('lbl-quotex-status');
             if (lbl) lbl.textContent = (d.tipo_conta || 'DEMO') + (d.cache ? ' ⚠' : '') + ' • $' + _qxSaldoNum.toFixed(2);
@@ -27545,6 +27546,16 @@ window.addEventListener('load', () => {
             </div>
           </div>
 
+          <div class="qx-modo-item" data-modo="hma" onclick="qxSelecionarModo('hma')"
+              style="display:flex; align-items:center; gap:8px; padding:7px 9px; border-radius:5px;
+                     cursor:pointer; border:1px solid rgba(0,207,255,0.18); background:transparent;">
+            <span style="font-size:0.85rem;">🧠</span>
+            <div>
+              <div style="font-size:0.68rem; color:#00cfff; letter-spacing:1px;">GARRA AI HMA</div>
+              <div style="font-size:0.58rem; color:#555;">Motor HMA · OTC ↔ Abertos automático</div>
+            </div>
+          </div>
+
         </div>
       </div>
 
@@ -27674,6 +27685,47 @@ window.addEventListener('load', () => {
             overflow-y:auto; max-height:420px; min-height:80px;">
           <div style="color:#333; font-size:0.62rem; text-align:center; margin-top:20px; padding:0 8px;">
             Clique em ▶ INICIAR para começar a análise
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Painel HMA — configurações do motor (visível só no modo hma) ─── -->
+      <div id="qx-painel-hma" style="display:none; border-top:1px solid rgba(0,207,255,0.18); width:100%;">
+        <div style="padding:8px 12px 6px; display:flex; justify-content:space-between; align-items:center;">
+          <span style="font-size:0.6rem; color:#00cfff; letter-spacing:1px;">🧠 GARRA AI HMA</span>
+          <div style="display:flex; gap:5px; align-items:center;">
+            <button id="qx-hma-cfg-btn" onclick="qxHmaAbrirCfg()"
+                style="font-size:0.58rem; padding:2px 7px; background:transparent;
+                       border:1px solid rgba(0,207,255,0.45); color:#00cfff;
+                       cursor:pointer; border-radius:3px; font-family:'Share Tech Mono';">⚙ CFG</button>
+            <button id="qx-hma-toggle"
+                style="font-size:0.58rem; padding:2px 7px; background:transparent;
+                       border:1px solid rgba(0,255,65,0.5); color:#00ff41;
+                       cursor:pointer; border-radius:3px; font-family:'Share Tech Mono';"
+                onclick="qxHmaToggle()">▶ INICIAR</button>
+          </div>
+        </div>
+        <!-- badges resumo -->
+        <div style="padding:0 12px 6px; display:flex; flex-wrap:wrap; gap:6px; align-items:center;">
+          <span style="font-size:0.58rem; color:#555;">Conf≥</span>
+          <span id="qx-hma-confianca-badge" style="font-size:0.62rem; color:#00cfff; font-weight:bold;">80%</span>
+          <span style="font-size:0.58rem; color:#555; margin-left:4px;">Mercado:</span>
+          <span id="qx-hma-mercado-badge" style="font-size:0.62rem; color:#ffbd2e;">AUTO</span>
+          <span style="font-size:0.58rem; color:#555; margin-left:4px;">Tipo:</span>
+          <span id="qx-hma-tipo-badge" style="font-size:0.62rem; color:#a78bfa;">OTC+ABERTOS</span>
+        </div>
+        <!-- status HMA -->
+        <div id="qx-hma-status" style="
+            margin:0 12px 6px; padding:6px 10px; border-radius:4px;
+            font-size:0.65rem; text-align:center; display:none;
+            border:1px solid #333; background:rgba(0,0,0,0.3); color:#aaa;"></div>
+        <!-- lista de ativos HMA -->
+        <div id="qx-hma-lista" style="
+            padding:0 6px 8px;
+            display:flex; flex-direction:column; gap:4px;
+            overflow-y:auto; max-height:380px; min-height:60px;">
+          <div style="color:#333; font-size:0.62rem; text-align:center; margin-top:16px; padding:0 8px;">
+            Clique em ▶ INICIAR para começar a análise HMA
           </div>
         </div>
       </div>
@@ -27837,6 +27889,139 @@ window.addEventListener('load', () => {
                    font-family:'Share Tech Mono'; font-size:0.72rem;
                    cursor:pointer; border-radius:4px; letter-spacing:1px; font-weight:bold;">
           ✓ ATIVAR
+        </button>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     MODAL — CONFIGURAÇÃO HMA (Quotex)
+════════════════════════════════════════════════════════════ -->
+<div id="modal-qx-hma-cfg" style="
+    display:none; position:fixed; top:0; left:0; width:100%; height:100%;
+    background:rgba(0,0,0,0.75); z-index:10600;
+    align-items:center; justify-content:center;">
+  <div style="
+      background:#0d0d1a; border:1px solid rgba(0,207,255,0.35);
+      border-radius:8px; width:340px; max-height:90vh; overflow-y:auto;
+      font-family:'Share Tech Mono',monospace; padding:0;">
+
+    <div style="padding:12px 16px; border-bottom:1px solid rgba(255,255,255,0.07);
+                display:flex; justify-content:space-between; align-items:center;">
+      <span style="color:#00cfff; font-size:0.8rem; letter-spacing:2px;">🧠 GARRA AI HMA — QUOTEX</span>
+      <button onclick="document.getElementById('modal-qx-hma-cfg').style.display='none'"
+          style="background:transparent; border:none; color:#555; font-size:1rem; cursor:pointer;">✕</button>
+    </div>
+
+    <div style="padding:14px 16px; display:flex; flex-direction:column; gap:14px;">
+
+      <!-- Confiança mínima -->
+      <div>
+        <div style="font-size:0.6rem; color:#555; letter-spacing:1px; margin-bottom:6px;">CONFIANÇA MÍNIMA (%)</div>
+        <input id="qx-hma-conf-input" type="number" min="50" max="95" step="1" value="80"
+            style="width:100%; background:#0a0a12; border:1px solid rgba(0,207,255,0.35);
+                   color:#00cfff; padding:7px 10px; font-family:'Share Tech Mono';
+                   font-size:0.82rem; border-radius:4px; outline:none;">
+      </div>
+
+      <!-- Tipo de mercado -->
+      <div>
+        <div style="font-size:0.6rem; color:#555; letter-spacing:1px; margin-bottom:6px;">TIPO DE MERCADO</div>
+        <select id="qx-hma-tipo-sel"
+            style="width:100%; background:#0a0a12; border:1px solid rgba(0,207,255,0.3);
+                   color:#c8d0e0; padding:7px 10px; font-family:'Share Tech Mono';
+                   font-size:0.72rem; border-radius:4px; outline:none;">
+          <option value="ambos">OTC + Abertos (automático)</option>
+          <option value="otc">Apenas OTC</option>
+          <option value="abertos">Apenas Abertos</option>
+        </select>
+        <div style="font-size:0.58rem; color:#555; margin-top:4px;">
+          Automático: testa OTC e Abertos, usa o de maior payout disponível
+        </div>
+      </div>
+
+      <!-- Payout mínimo -->
+      <div>
+        <div style="font-size:0.6rem; color:#555; letter-spacing:1px; margin-bottom:6px;">PAYOUT MÍNIMO (%)</div>
+        <input id="qx-hma-payout-input" type="number" min="50" max="99" step="1" value="75"
+            style="width:100%; background:#0a0a12; border:1px solid rgba(0,207,255,0.3);
+                   color:#c8d0e0; padding:7px 10px; font-family:'Share Tech Mono';
+                   font-size:0.82rem; border-radius:4px; outline:none;">
+      </div>
+
+      <!-- Losses para troca de mercado -->
+      <div>
+        <div style="font-size:0.6rem; color:#ff9f43; letter-spacing:1px; margin-bottom:6px;">🔁 TROCAR MERCADO APÓS N LOSSES (0=off)</div>
+        <input id="qx-hma-losses-troca" type="number" min="0" max="10" step="1" value="3"
+            style="width:100%; background:#0a0a12; border:1px solid rgba(255,159,67,0.35);
+                   color:#ff9f43; padding:7px 10px; font-family:'Share Tech Mono';
+                   font-size:0.82rem; border-radius:4px; outline:none;">
+      </div>
+
+      <!-- Modo de análise -->
+      <div>
+        <div style="font-size:0.6rem; color:#555; letter-spacing:1px; margin-bottom:6px;">MODO DE ANÁLISE</div>
+        <select id="qx-hma-modo-analise"
+            style="width:100%; background:#0a0a12; border:1px solid rgba(0,207,255,0.25);
+                   color:#c8d0e0; padding:7px 10px; font-family:'Share Tech Mono';
+                   font-size:0.72rem; border-radius:4px; outline:none;">
+          <option value="hibrido">Híbrido (recomendado)</option>
+          <option value="automatico">Automático</option>
+          <option value="multi_tick">Multi-Tick</option>
+        </select>
+      </div>
+
+      <!-- Stop Win / Stop Loss -->
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+        <div>
+          <div style="font-size:0.6rem; color:#4ade80; letter-spacing:1px; margin-bottom:4px;">STOP WIN ($)</div>
+          <input id="qx-hma-sw-input" type="number" min="0" step="0.5" value="0" placeholder="0=off"
+              style="width:100%; background:#0a0a12; border:1px solid rgba(74,222,128,0.3);
+                     color:#4ade80; padding:6px 8px; font-family:'Share Tech Mono';
+                     font-size:0.75rem; border-radius:4px; outline:none; box-sizing:border-box;">
+        </div>
+        <div>
+          <div style="font-size:0.6rem; color:#f87171; letter-spacing:1px; margin-bottom:4px;">STOP LOSS ($)</div>
+          <input id="qx-hma-sl-input" type="number" min="0" step="0.5" value="0" placeholder="0=off"
+              style="width:100%; background:#0a0a12; border:1px solid rgba(248,113,113,0.3);
+                     color:#f87171; padding:6px 8px; font-family:'Share Tech Mono';
+                     font-size:0.75rem; border-radius:4px; outline:none; box-sizing:border-box;">
+        </div>
+      </div>
+
+      <!-- Gerenciamento -->
+      <div>
+        <div style="font-size:0.6rem; color:#555; letter-spacing:1px; margin-bottom:6px;">GERENCIAMENTO DE STAKE</div>
+        <select id="qx-hma-mgr-sel"
+            style="width:100%; background:#0a0a12; border:1px solid rgba(255,107,0,0.3);
+                   color:#c8d0e0; padding:7px 10px; font-family:'Share Tech Mono';
+                   font-size:0.72rem; border-radius:4px; outline:none;"
+            onchange="qxHmaMgrParams()">
+          <option value="fixo">Stake Fixa</option>
+          <option value="martingale">Martingale</option>
+          <option value="sorosgale">SorosGale</option>
+          <option value="loss_recovery">Loss Recovery</option>
+          <option value="qsr">QSR</option>
+        </select>
+        <div id="qx-hma-mgr-params" style="margin-top:8px;"></div>
+      </div>
+
+      <!-- Botões -->
+      <div style="display:flex; gap:8px; padding-top:4px;">
+        <button onclick="document.getElementById('modal-qx-hma-cfg').style.display='none'"
+            style="flex:1; padding:9px; background:transparent; border:1px solid #333;
+                   color:#555; font-family:'Share Tech Mono'; font-size:0.72rem;
+                   cursor:pointer; border-radius:4px; letter-spacing:1px;">
+          CANCELAR
+        </button>
+        <button onclick="qxHmaSalvarCfg()"
+            style="flex:1; padding:9px; background:rgba(0,207,255,0.1);
+                   border:1px solid #00cfff; color:#00cfff;
+                   font-family:'Share Tech Mono'; font-size:0.72rem;
+                   cursor:pointer; border-radius:4px; letter-spacing:1px; font-weight:bold;">
+          ✓ SALVAR
         </button>
       </div>
 
@@ -28491,16 +28676,35 @@ const _qxModo = {
 function qxSelecionarModo(modo) {
     _qxModo.atual = modo;
     document.querySelectorAll('.qx-modo-item').forEach(el => el.classList.toggle('qx-modo-ativo', el.dataset.modo === modo));
+    // Highlight especial para o item HMA
+    document.querySelectorAll('.qx-modo-item').forEach(el => {
+        if (el.dataset.modo === 'hma') {
+            el.style.borderColor = modo === 'hma' ? 'rgba(0,207,255,0.7)' : 'rgba(0,207,255,0.18)';
+            el.style.background  = modo === 'hma' ? 'rgba(0,207,255,0.07)' : 'transparent';
+        }
+    });
     const painelSinais    = document.getElementById('qx-painel-sinais');
+    const painelHma       = document.getElementById('qx-painel-hma');
     const painelHistorico = document.getElementById('qx-painel-historico');
     const btnsCall = document.getElementById('qx-btn-call');
     const btnsPut  = document.getElementById('qx-btn-put');
     if (modo === 'manual') {
         if (painelSinais)    painelSinais.style.display    = 'none';
+        if (painelHma)       painelHma.style.display       = 'none';
         if (painelHistorico) painelHistorico.style.display = 'block';
         if (btnsCall) btnsCall.style.opacity = '1';
         if (btnsPut)  btnsPut.style.opacity  = '1';
         _qxPararAnalise();
+        _qxHmaParar();
+    } else if (modo === 'hma') {
+        if (painelSinais)    painelSinais.style.display    = 'none';
+        if (painelHma)       painelHma.style.display       = 'block';
+        if (painelHistorico) painelHistorico.style.display = 'none';
+        if (btnsCall) btnsCall.style.opacity = '0.3';
+        if (btnsPut)  btnsPut.style.opacity  = '0.3';
+        _qxPararAnalise();
+        // Abre config HMA ao selecionar o modo pela primeira vez
+        qxHmaAbrirCfg();
     } else {
         if (painelSinais) {
             painelSinais.style.display = 'block';
@@ -28512,7 +28716,9 @@ function qxSelecionarModo(modo) {
             const tituloEl = document.getElementById('qx-sinais-titulo');
             if (tituloEl) tituloEl.textContent = titulos[modo] || 'ANÁLISE';
         }
+        if (painelHma)       painelHma.style.display       = 'none';
         if (painelHistorico) painelHistorico.style.display = 'none';
+        _qxHmaParar();
         qxAbrirGerenciamento();
     }
 }
@@ -28520,7 +28726,7 @@ function qxSelecionarModo(modo) {
 function qxAbrirGerenciamento() {
     const m = document.getElementById('modal-qx-gerenciamento');
     if (!m) return;
-    const nomes = { manual:'⚪ MANUAL', price_action:'🔵 PRICE ACTION PRO', fluxo:'🟣 FLUXO PRO', automatico:'🟢 AUTOMÁTICO' };
+    const nomes = { manual:'⚪ MANUAL', price_action:'🔵 PRICE ACTION PRO', fluxo:'🟣 FLUXO PRO', automatico:'🟢 AUTOMÁTICO', hma:'🧠 GARRA AI HMA' };
     const badge = document.getElementById('qx-ger-modo-badge');
     if (badge) badge.textContent = nomes[_qxModo.atual] || _qxModo.atual;
     const radio = document.querySelector(`input[name="qx-estrategia"][value="${_qxModo.estrategia}"]`);
@@ -28978,6 +29184,638 @@ function qxEntrarSinal(sinal) {
         if (opt) { sel.value = sinal.ativo; _qxChart.ativo = sinal.ativo; qxChartCarregar(); }
     }
     qxOperar(sinal.sinal === 'CALL' ? 'call' : 'put');
+}
+// ═══════════════════════════════════════════════════════════════════════════════
+// 🧠 GARRA AI HMA — MOTOR QUOTEX
+// Usa o mesmo backend /garra-hma/avaliar da Deriv, mas opera na Quotex.
+// Troca automática entre mercados OTC e Abertos por payout e por losses.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ── Estado do motor HMA Quotex ────────────────────────────────────────────────
+const _qxHma = {
+    rodando:       false,
+    opBloqueada:   false,
+    timer:         null,          // watcher de virada de vela
+    ativoAtual:    null,          // {id, nome, payout, otc: bool}
+    losses:        0,             // losses consecutivos na sessão
+    lucroSessao:   0,             // lucro acumulado na sessão HMA
+    valorBase:     1,
+    valorAtual:    1,
+    galeAtual:     0,
+    // config (preenchida por qxHmaSalvarCfg)
+    confiancaMin:  80,
+    tipoMercado:   'ambos',       // 'ambos' | 'otc' | 'abertos'
+    payoutMin:     75,
+    lossesParaTroca: 3,
+    modoAnalise:   'hibrido',
+    stopWin:       0,
+    stopLoss:      0,
+    gerenciamento: 'fixo',
+    multGale:      2.0,
+    maxGales:      3,
+    qsrSeq:        [1,2,3,4],
+    qsrIdx:        0,
+    // internos
+    _ultimaVirada: 0,
+    _cicloRodando: false,
+};
+
+// ── Helpers de UI ─────────────────────────────────────────────────────────────
+function _qxHmaStatus(msg, cor) {
+    const el = document.getElementById('qx-hma-status');
+    if (!el) return;
+    el.style.display  = msg ? 'block' : 'none';
+    el.style.color    = cor || '#aaa';
+    el.style.borderColor = cor ? cor.replace(')', ',0.3)').replace('rgb','rgba') : '#333';
+    el.textContent    = msg || '';
+}
+
+function _qxHmaAtualizarBadges() {
+    const cb = document.getElementById('qx-hma-confianca-badge');
+    const mb = document.getElementById('qx-hma-mercado-badge');
+    const tb = document.getElementById('qx-hma-tipo-badge');
+    if (cb) cb.textContent = _qxHma.confiancaMin + '%';
+    if (mb) mb.textContent = _qxHma.ativoAtual ? (_qxHma.ativoAtual.nome || _qxHma.ativoAtual.id) : 'AUTO';
+    if (tb) {
+        const labels = { ambos: 'OTC+ABERTOS', otc: 'APENAS OTC', abertos: 'APENAS ABERTOS' };
+        tb.textContent = labels[_qxHma.tipoMercado] || _qxHma.tipoMercado;
+    }
+}
+
+// ── Abrir modal de configuração ───────────────────────────────────────────────
+function qxHmaAbrirCfg() {
+    const m = document.getElementById('modal-qx-hma-cfg');
+    if (!m) return;
+    // Restaura valores salvos nos inputs
+    const ci = document.getElementById('qx-hma-conf-input');
+    const ti = document.getElementById('qx-hma-tipo-sel');
+    const pi = document.getElementById('qx-hma-payout-input');
+    const li = document.getElementById('qx-hma-losses-troca');
+    const mi = document.getElementById('qx-hma-modo-analise');
+    const sw = document.getElementById('qx-hma-sw-input');
+    const sl = document.getElementById('qx-hma-sl-input');
+    const mg = document.getElementById('qx-hma-mgr-sel');
+    if (ci) ci.value = _qxHma.confiancaMin;
+    if (ti) ti.value = _qxHma.tipoMercado;
+    if (pi) pi.value = _qxHma.payoutMin;
+    if (li) li.value = _qxHma.lossesParaTroca;
+    if (mi) mi.value = _qxHma.modoAnalise;
+    if (sw) sw.value = _qxHma.stopWin  || '';
+    if (sl) sl.value = _qxHma.stopLoss || '';
+    if (mg) mg.value = _qxHma.gerenciamento;
+    qxHmaMgrParams();
+    m.style.display = 'flex';
+}
+
+// ── Campos dinâmicos por gerenciamento ───────────────────────────────────────
+function qxHmaMgrParams() {
+    const mgr = document.getElementById('qx-hma-mgr-sel')?.value || 'fixo';
+    const box = document.getElementById('qx-hma-mgr-params');
+    if (!box) return;
+    const _inp = (id, label, val, min, max, step, cor) =>
+        `<div style="display:flex;flex-direction:column;gap:2px;">
+           <div style="font-size:0.58rem;color:${cor||'#888'};letter-spacing:1px;">${label}</div>
+           <input id="${id}" type="number" value="${val}" min="${min}" max="${max}" step="${step}"
+             style="width:100%;background:#0a0a12;border:1px solid rgba(0,207,255,0.25);
+                    color:#c8d0e0;font-family:'Share Tech Mono';font-size:0.78rem;
+                    padding:5px 8px;border-radius:4px;outline:none;">
+         </div>`;
+    const _grid = (...fields) =>
+        `<div style="display:grid;grid-template-columns:${fields.map(()=>'1fr').join(' ')};gap:6px;">${fields.join('')}</div>`;
+    const defs = {
+        fixo:          '',
+        martingale:    _grid(
+            _inp('qx-hma-p-mult','MULTIPLICADOR',_qxHma.multGale,1.1,10,0.1,'#fbbf24'),
+            _inp('qx-hma-p-maxg','MAX GALES',_qxHma.maxGales,1,10,1,'#f87171')
+        ),
+        sorosgale:     _grid(
+            _inp('qx-hma-p-scic','CICLOS SOROS',3,1,10,1,'#a78bfa'),
+            _inp('qx-hma-p-maxg','MAX GALES',_qxHma.maxGales,1,10,1,'#f87171')
+        ),
+        loss_recovery: _grid(
+            _inp('qx-hma-p-mult','MULTIPLICADOR',_qxHma.multGale,1.1,5,0.1,'#fbbf24'),
+            _inp('qx-hma-p-maxg','MAX GALES',_qxHma.maxGales,1,10,1,'#f87171')
+        ),
+        qsr:           _grid(
+            _inp('qx-hma-p-maxg','NÍVEIS QSR',_qxHma.maxGales,2,8,1,'#60a5fa')
+        ),
+    };
+    box.innerHTML = defs[mgr] || '';
+}
+
+// ── Salvar configuração e iniciar ─────────────────────────────────────────────
+function qxHmaSalvarCfg() {
+    _qxHma.confiancaMin    = Math.max(50, Math.min(95, parseInt(document.getElementById('qx-hma-conf-input')?.value    || 80)));
+    _qxHma.tipoMercado     = document.getElementById('qx-hma-tipo-sel')?.value    || 'ambos';
+    _qxHma.payoutMin       = Math.max(50, Math.min(99, parseInt(document.getElementById('qx-hma-payout-input')?.value  || 75)));
+    _qxHma.lossesParaTroca = Math.max(0, Math.min(10, parseInt(document.getElementById('qx-hma-losses-troca')?.value   || 3)));
+    _qxHma.modoAnalise     = document.getElementById('qx-hma-modo-analise')?.value || 'hibrido';
+    _qxHma.stopWin         = parseFloat(document.getElementById('qx-hma-sw-input')?.value || 0);
+    _qxHma.stopLoss        = parseFloat(document.getElementById('qx-hma-sl-input')?.value || 0);
+    _qxHma.gerenciamento   = document.getElementById('qx-hma-mgr-sel')?.value     || 'fixo';
+    _qxHma.multGale        = parseFloat(document.getElementById('qx-hma-p-mult')?.value   || 2.0);
+    _qxHma.maxGales        = parseInt(document.getElementById('qx-hma-p-maxg')?.value      || 3);
+    // QSR: gera sequência proporcional
+    const nQsr = _qxHma.maxGales || 4;
+    _qxHma.qsrSeq = Array.from({length: nQsr}, (_, i) => parseFloat(((i + 1) * _qxHma.valorBase).toFixed(2)));
+    _qxHma.qsrIdx = 0; _qxHma.galeAtual = 0;
+    _qxHmaAtualizarBadges();
+    document.getElementById('modal-qx-hma-cfg').style.display = 'none';
+    // Auto-inicia
+    if (_qxHma.rodando) _qxHmaParar();
+    _qxHmaIniciar();
+}
+
+// ── Toggle INICIAR / PARAR ────────────────────────────────────────────────────
+function qxHmaToggle() {
+    if (_qxHma.rodando) _qxHmaParar();
+    else _qxHmaIniciar();
+}
+
+// ── Parar motor ───────────────────────────────────────────────────────────────
+function _qxHmaParar() {
+    _qxHma.rodando      = false;
+    _qxHma.opBloqueada  = false;
+    _qxHma._cicloRodando = false;
+    clearInterval(_qxHma.timer);
+    _qxHma.timer = null;
+    const btn = document.getElementById('qx-hma-toggle');
+    if (btn) { btn.textContent = '▶ INICIAR'; btn.style.borderColor = 'rgba(0,255,65,0.5)'; btn.style.color = '#00ff41'; }
+    _qxHmaStatus('⏹ Motor HMA parado.', '#555');
+}
+
+// ── Iniciar motor ─────────────────────────────────────────────────────────────
+function _qxHmaIniciar() {
+    if (_qxModo.atual !== 'hma') return;
+    _qxHma.rodando       = true;
+    _qxHma.opBloqueada   = false;
+    _qxHma._cicloRodando = false;
+    _qxHma._ultimaVirada = 0;
+    _qxHma.lucroSessao   = 0;
+    _qxHma.losses        = 0;
+    _qxHma.galeAtual     = 0;
+    _qxHma.qsrIdx        = 0;
+    _qxHma.ativoAtual    = null;
+    const vBase = parseFloat(document.getElementById('qx-valor-input')?.value || 1);
+    _qxHma.valorBase  = vBase;
+    _qxHma.valorAtual = vBase;
+    const nQsr = _qxHma.maxGales || 4;
+    _qxHma.qsrSeq = Array.from({length: nQsr}, (_, i) => parseFloat(((i + 1) * vBase).toFixed(2)));
+    const btn = document.getElementById('qx-hma-toggle');
+    if (btn) { btn.textContent = '⏹ PARAR'; btn.style.borderColor = 'rgba(244,68,68,0.6)'; btn.style.color = '#f44'; }
+    _qxHmaStatus('🔍 HMA iniciado — aguardando virada da vela...', '#00cfff');
+    _qxHmaAtualizarBadges();
+
+    // Executa imediatamente e depois a cada virada de vela
+    _qxExecutarCicloHma();
+    _qxHma.timer = setInterval(() => {
+        if (!_qxHma.rodando) return;
+        if (_qxHma._cicloRodando) return;
+        const periodo  = _qxChart.periodo || 60;
+        const agora    = Math.floor(Date.now() / 1000);
+        const tsAb     = _qxChart.tsAbertura || (Math.floor(agora / periodo) * periodo);
+        const segundos = agora - tsAb;
+        const novaVela = segundos >= 0 && segundos <= 3 && tsAb !== _qxHma._ultimaVirada;
+        if (novaVela) {
+            _qxHma._ultimaVirada = tsAb;
+            _qxExecutarCicloHma();
+        }
+    }, 500);
+}
+
+// ── Ciclo principal de análise HMA ────────────────────────────────────────────
+async function _qxExecutarCicloHma() {
+    if (!_qxHma.rodando) return;
+    if (_qx.status !== 'conectado') { _qxHmaStatus('⚠️ Quotex não conectada.', '#f87171'); return; }
+    if (_qxHma._cicloRodando) return;
+    _qxHma._cicloRodando = true;
+
+    // ── Stop Win / Stop Loss ──────────────────────────────────────────────────
+    if (_qxHma.stopWin  > 0 && _qxHma.lucroSessao >=  _qxHma.stopWin)  { _qxHmaParar(); _qxHmaStatus('🏆 Stop Win atingido! +$' + _qxHma.lucroSessao.toFixed(2), '#27c93f'); return; }
+    if (_qxHma.stopLoss > 0 && _qxHma.lucroSessao <= -_qxHma.stopLoss) { _qxHmaParar(); _qxHmaStatus('🛑 Stop Loss atingido! -$' + Math.abs(_qxHma.lucroSessao).toFixed(2), '#ef5350'); return; }
+
+    const lista = document.getElementById('qx-hma-lista');
+    if (lista) lista.innerHTML = '<div style="color:#555;font-size:0.62rem;text-align:center;padding:12px;">🔍 Analisando mercados HMA...</div>';
+
+    // ── 1) Busca ativos com payout e filtra por tipo (OTC / Abertos / Ambos) ──
+    let ativos = [];
+    try {
+        const d = await fetch('/quotex/ativos-payout').then(r => r.json());
+        if (d.ok && d.ativos) {
+            ativos = d.ativos.filter(a => {
+                if (!a.id) return false;
+                const pOk = parseInt(a.payout || 0) >= _qxHma.payoutMin;
+                if (!pOk) return false;
+                const isOtc = (a.id || '').toLowerCase().includes('otc') || (a.nome || '').toLowerCase().includes('otc');
+                if (_qxHma.tipoMercado === 'otc')     return isOtc;
+                if (_qxHma.tipoMercado === 'abertos')  return !isOtc && a.aberto;
+                // 'ambos': aceita OTC e abertos
+                return isOtc || a.aberto;
+            });
+        }
+    } catch (_e) {
+        _qxHma._cicloRodando = false;
+        _qxHmaStatus('⚠️ Erro ao buscar ativos: ' + _e.message, '#f87171');
+        return;
+    }
+
+    if (ativos.length === 0) {
+        _qxHma._cicloRodando = false;
+        _qxHmaStatus('Nenhum ativo disponível com payout ≥ ' + _qxHma.payoutMin + '% (' + _qxHma.tipoMercado + ')', '#555');
+        if (lista) lista.innerHTML = '<div style="color:#555;font-size:0.62rem;text-align:center;padding:12px;">Sem ativos disponíveis para este filtro</div>';
+        return;
+    }
+
+    // ── 2) Troca de mercado por losses consecutivos ───────────────────────────
+    // Se N losses seguidos → descarta ativo atual e tenta o próximo de maior payout
+    if (_qxHma.lossesParaTroca > 0 && _qxHma.losses >= _qxHma.lossesParaTroca && _qxHma.ativoAtual) {
+        const outrosAtivos = ativos.filter(a => a.id !== _qxHma.ativoAtual.id);
+        if (outrosAtivos.length > 0) {
+            _qxHmaStatus(`🔁 ${_qxHma.losses} losses em ${_qxHma.ativoAtual.nome||_qxHma.ativoAtual.id} — trocando mercado...`, '#ff9f43');
+            _qxHma.ativoAtual = null;  // força reavaliação abaixo
+            _qxHma.losses = 0;
+            ativos = outrosAtivos;     // exclui o ativo problemático desta rodada
+        }
+    }
+
+    // ── 3) Ordena ativos: OTC primeiro (quando modo = ambos), depois por payout ─
+    // Lógica: em horário de mercado fechado OTC terá mais ativos abertos;
+    // em horário de mercado aberto os abertos terão payout melhor.
+    ativos.sort((a, b) => {
+        const aOtc = (a.id||'').toLowerCase().includes('otc') ? 1 : 0;
+        const bOtc = (b.id||'').toLowerCase().includes('otc') ? 1 : 0;
+        if (_qxHma.tipoMercado === 'ambos') {
+            // Prefere abertos (mercado real) se payout >= OTC; senão OTC
+            const aPay = parseInt(a.payout || 0);
+            const bPay = parseInt(b.payout || 0);
+            return bPay - aPay;  // maior payout primeiro
+        }
+        return parseInt(b.payout || 0) - parseInt(a.payout || 0);
+    });
+
+    // Top N ativos para analisar (máx 5 para não sobrecarregar)
+    const top = ativos.slice(0, 5);
+    _qxHmaStatus(`🔍 HMA analisando ${top.length} ativos...`, '#00cfff');
+
+    // ── 4) Analisa cada ativo com o motor HMA ────────────────────────────────
+    const resultados = [];
+    for (const ativo of top) {
+        try {
+            const r = await _qxHmaAnalisarAtivo(ativo);
+            if (r) resultados.push(r);
+        } catch (_e) {
+            console.warn('[QX-HMA]', ativo.id, _e);
+        }
+    }
+
+    _qxHma._cicloRodando = false;
+    if (!_qxHma.rodando) return;
+
+    // ── 5) Renderiza resultado na lista ──────────────────────────────────────
+    _qxHmaRenderizarLista(resultados);
+
+    // ── 6) Escolhe o melhor ativo aprovado e opera ───────────────────────────
+    const aprovados = resultados.filter(r => r.aprovado);
+    if (aprovados.length === 0) {
+        _qxHmaStatus(`🧠 HMA — NO TRADE | nenhum ativo aprovado (conf ≥ ${_qxHma.confiancaMin}%)`, '#555');
+        return;
+    }
+
+    // Melhor = maior confiança entre os aprovados
+    const melhor = aprovados.reduce((a, b) => (b.confianca > a.confianca ? b : a));
+    if (_qxHma.opBloqueada) {
+        _qxHmaStatus('⏳ Aguardando resultado da operação anterior...', '#ffbd2e');
+        return;
+    }
+
+    // ── Troca de ativo no gráfico se necessário ───────────────────────────────
+    if (!_qxHma.ativoAtual || _qxHma.ativoAtual.id !== melhor.ativoId) {
+        _qxHma.ativoAtual = { id: melhor.ativoId, nome: melhor.ativoNome, payout: melhor.payout };
+        _qxHmaAtualizarBadges();
+        // Atualiza o seletor de ativo do gráfico
+        const sel = document.getElementById('qx-ativo-sel');
+        if (sel) {
+            const opt = Array.from(sel.options).find(o => o.value === melhor.ativoId);
+            if (opt) { sel.value = melhor.ativoId; _qxChart.ativo = melhor.ativoId; qxChartCarregar(); }
+        }
+    }
+
+    // ── Agenda entrada na virada da vela ─────────────────────────────────────
+    const direcao = melhor.decisao === 'CALL' ? 'call' : 'put';
+    const otcTag  = (melhor.ativoId||'').includes('otc') ? ' [OTC]' : ' [ABERTO]';
+    _qxHmaStatus(
+        `🧠 HMA ${melhor.decisao}${otcTag} | ${melhor.ativoNome||melhor.ativoId}` +
+        ` | conf <b>${melhor.confianca}%</b> | payout ${melhor.payout}%`,
+        melhor.decisao === 'CALL' ? '#27c93f' : '#ef5350'
+    );
+    _qxHmaAgendarEntrada(melhor, direcao);
+}
+
+// ── Analisa um ativo via /quotex/candles + /garra-hma/avaliar ─────────────────
+async function _qxHmaAnalisarAtivo(ativo) {
+    // Busca candles do ativo para extrair série de preços (fechamentos)
+    let ticks = [];
+    try {
+        const periodo = _qxChart.periodo || 60;
+        const d = await fetch(`/quotex/candles?ativo=${encodeURIComponent(ativo.id)}&periodo=${periodo}&limite=100`).then(r => r.json());
+        if (!d.ok || !d.candles || d.candles.length < 10) return null;
+        // Usa preços de fechamento como série de ticks para o HMA
+        ticks = d.candles
+            .filter(c => c.close > 0)
+            .sort((a, b) => a.time - b.time)
+            .map(c => c.close);
+    } catch (_e) { return null; }
+
+    if (ticks.length < 10) return null;
+
+    // Chama o motor HMA do backend (mesmo motor usado pela Deriv)
+    let hmaRes = null;
+    try {
+        const saldo = _qxModo.saldoAtual || _qxHma.saldoAtual || 100;
+        const resp = await fetch('/garra-hma/avaliar', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                ticks:             ticks,
+                contrato:          'CALL/PUT AUTO',
+                janelas:           null,
+                confianca_minima:  _qxHma.confiancaMin,
+                banca:             saldo,
+                stake:             _qxHma.valorAtual || 1,
+                payout:            parseInt(ativo.payout || 80) / 100,
+                historico_recente: _qxHma.losses || 0,
+            }),
+        });
+        hmaRes = await resp.json();
+    } catch (_e) { return null; }
+
+    if (!hmaRes) return null;
+
+    const isOtc = (ativo.id||'').toLowerCase().includes('otc');
+    return {
+        ativoId:   ativo.id,
+        ativoNome: ativo.nome || ativo.id,
+        payout:    ativo.payout,
+        isOtc,
+        aprovado:  hmaRes.aprovado,
+        decisao:   hmaRes.decisao,    // 'CALL' | 'PUT' | 'NO_TRADE'
+        confianca: hmaRes.confianca || 0,
+        regime:    hmaRes.regime    || '',
+        motivo:    hmaRes.motivo    || '',
+        janelas:   hmaRes.janelas_usadas || [],
+        ts:        Date.now(),
+    };
+}
+
+// ── Renderiza lista de ativos HMA ─────────────────────────────────────────────
+function _qxHmaRenderizarLista(resultados) {
+    const lista = document.getElementById('qx-hma-lista');
+    if (!lista) return;
+    if (!resultados || resultados.length === 0) {
+        lista.innerHTML = '<div style="color:#555;font-size:0.62rem;text-align:center;padding:12px;">Nenhum ativo analisado</div>';
+        return;
+    }
+    // Ordena: aprovados primeiro, depois por confiança
+    const sorted = [...resultados].sort((a, b) => {
+        if (b.aprovado !== a.aprovado) return b.aprovado ? 1 : -1;
+        return b.confianca - a.confianca;
+    });
+    lista.innerHTML = sorted.map(r => {
+        const cor    = r.aprovado ? (r.decisao === 'CALL' ? '#27c93f' : '#ef5350') : '#4b5563';
+        const emoji  = r.aprovado ? (r.decisao === 'CALL' ? '▲' : '▼') : '●';
+        const confPct = Math.min(100, Math.round(r.confianca));
+        const barCor  = confPct >= 80 ? '#27c93f' : confPct >= 65 ? '#ffbd2e' : '#4b5563';
+        const tag     = r.isOtc ? '<span style="color:#a78bfa;font-size:0.52rem;"> [OTC]</span>' : '<span style="color:#60a5fa;font-size:0.52rem;"> [AB]</span>';
+        const horario = new Date(r.ts).toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit'});
+        return `<div style="padding:7px 9px;border-radius:5px;border:1px solid ${r.aprovado ? cor+'44' : 'rgba(255,255,255,0.06)'};background:rgba(255,255,255,0.02);border-left:3px solid ${cor};">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;">
+            <span style="color:#c8d0e0;font-size:0.68rem;font-weight:bold;">${r.ativoNome||r.ativoId}${tag}</span>
+            <span style="color:#ffbd2e;font-size:0.58rem;font-weight:bold;">${r.payout}%</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px;">
+            <span style="color:${cor};font-size:0.75rem;font-weight:bold;letter-spacing:1px;">${emoji} ${r.aprovado ? r.decisao : 'NO TRADE'}</span>
+            <span style="color:#555;font-size:0.58rem;">${horario} · ${r.regime||'?'}</span>
+          </div>
+          <div style="height:2px;background:#1e2130;border-radius:1px;margin-bottom:3px;">
+            <div style="height:100%;width:${confPct}%;background:${barCor};border-radius:1px;"></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="color:#4b5563;font-size:0.55rem;">${r.aprovado ? '✅ APROVADO' : (r.motivo||'sem sinal').slice(0,32)}</span>
+            <span style="color:${barCor};font-size:0.55rem;font-weight:bold;">Conf:${r.confianca.toFixed(0)}%</span>
+          </div>
+        </div>`;
+    }).join('');
+}
+
+// ── Agenda entrada HMA na virada da vela ──────────────────────────────────────
+function _qxHmaAgendarEntrada(melhor, direcao) {
+    const periodo   = _qxChart.periodo || 60;
+    const periodoMs = periodo * 1000;
+    const ANTEC_MS  = 1500;   // entra 1.5s antes do fechamento
+
+    clearTimeout(_qxHma._entradaTimer);
+    clearInterval(_qxHma._entradaWatch);
+
+    const _tentar = () => {
+        if (!_qxHma.rodando || _qxHma.opBloqueada) return;
+        const agora     = Date.now();
+        const tsAb      = _qxChart.tsAbertura || Math.floor(agora / 1000 / periodo) * periodo;
+        const tsFech_ms = (tsAb + periodo) * 1000;
+        const msAte     = tsFech_ms - agora - ANTEC_MS;
+
+        if (msAte > periodoMs + 5000) {
+            _qxHma._entradaTimer = setTimeout(_tentar, 600);
+            return;
+        }
+
+        if (msAte > 200) {
+            _qxHmaStatus(
+                `🧠 HMA ${melhor.decisao} | ${melhor.ativoNome} | conf ${melhor.confianca.toFixed(0)}% | ⏱ ${Math.round(msAte/1000)}s`,
+                direcao === 'call' ? '#27c93f' : '#ef5350'
+            );
+            _qxHma._entradaTimer = setTimeout(() => {
+                if (!_qxHma.rodando || _qxHma.opBloqueada) return;
+                _qxHmaOperar(direcao, melhor);
+            }, msAte);
+        } else if (msAte > -3000) {
+            if (!_qxHma.opBloqueada) _qxHmaOperar(direcao, melhor);
+        } else {
+            // timing perdido — watch
+            let t = 0;
+            _qxHma._entradaWatch = setInterval(() => {
+                t++;
+                const aW     = Date.now();
+                const tsAbW  = _qxChart.tsAbertura || 0;
+                const msAteW = (tsAbW + periodo) * 1000 - aW - ANTEC_MS;
+                if (msAteW > 200 && msAteW < periodoMs) {
+                    clearInterval(_qxHma._entradaWatch);
+                    _qxHma._entradaTimer = setTimeout(() => {
+                        if (!_qxHma.rodando || _qxHma.opBloqueada) return;
+                        _qxHmaOperar(direcao, melhor);
+                    }, msAteW);
+                } else if (msAteW >= -500 && msAteW <= 200) {
+                    clearInterval(_qxHma._entradaWatch);
+                    if (!_qxHma.opBloqueada) _qxHmaOperar(direcao, melhor);
+                } else if (t > 10) {
+                    clearInterval(_qxHma._entradaWatch);
+                    _qxHmaStatus('⚠️ Timing perdido — aguardando próxima vela', '#ffbd2e');
+                }
+            }, 400);
+        }
+    };
+    _tentar();
+}
+
+// ── Executa a operação na Quotex ──────────────────────────────────────────────
+function _qxHmaOperar(direcao, contexto) {
+    if (!_qxHma.rodando || _qxHma.opBloqueada) return;
+    _qxHma.opBloqueada = true;
+
+    // Sincroniza valor com o input visível
+    const inp = document.getElementById('qx-valor-input');
+    if (inp) inp.value = _qxHma.valorAtual.toFixed(2);
+
+    _qxHmaStatus(`🧠 HMA ENTRADA | ${direcao.toUpperCase()} | ${contexto.ativoNome} | $${_qxHma.valorAtual.toFixed(2)}`, direcao === 'call' ? '#27c93f' : '#ef5350');
+
+    const duracao = _qxChart.duracao || 60;
+    fetch('/quotex/operar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            ativo:   contexto.ativoId,
+            direcao: direcao,
+            valor:   _qxHma.valorAtual,
+            duracao: duracao,
+        }),
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (!d.ok) {
+            _qxHma.opBloqueada = false;
+            _qxHmaStatus('⚠️ Erro ao operar: ' + (d.erro || d.detalhe || 'desconhecido'), '#f87171');
+            return;
+        }
+        // Adiciona ao histórico local
+        _qxAdicionarHistorico({ id: d.id, ativo: contexto.ativoId, direcao, status: 'aguardando', lucro: null, ts: Date.now() });
+        // Aguarda resultado
+        _qxHmaAguardarResultado(d.id, contexto, direcao);
+    })
+    .catch(e => {
+        _qxHma.opBloqueada = false;
+        _qxHmaStatus('⚠️ Falha de rede: ' + e.message, '#f87171');
+    });
+}
+
+// ── Aguarda resultado e aplica gerenciamento ──────────────────────────────────
+function _qxHmaAguardarResultado(opId, contexto, direcao) {
+    if (!opId) { _qxHma.opBloqueada = false; return; }
+    const duracao = _qxChart.duracao || 60;
+    const timeout = duracao + 30; // aguarda duração + 30s de buffer
+
+    fetch(`/quotex/resultado/${opId}`)
+    .then(r => r.json())
+    .then(d => {
+        _qxHma.opBloqueada = false;
+        if (!d.ok) {
+            _qxHmaStatus('⚠️ Resultado indisponível: ' + (d.erro||'timeout'), '#ffbd2e');
+            return;
+        }
+        const win   = d.win;
+        const lucro = parseFloat(d.lucro || 0);
+        _qxHma.lucroSessao += lucro;
+
+        // Registra no histórico
+        _qxAtualizarHistorico(opId, win ? 'win' : 'loss', lucro);
+
+        if (win) {
+            _qxHma.losses = 0;
+            _qxHmaStatus(
+                `✅ HMA WIN | +$${lucro.toFixed(2)} | ${contexto.ativoNome} | sessão: ${_qxHma.lucroSessao >= 0 ? '+' : ''}$${_qxHma.lucroSessao.toFixed(2)}`,
+                '#27c93f'
+            );
+        } else {
+            _qxHma.losses++;
+            _qxHmaStatus(
+                `❌ HMA LOSS | -$${Math.abs(lucro).toFixed(2)} | ${contexto.ativoNome} | losses: ${_qxHma.losses}`,
+                '#ef5350'
+            );
+        }
+
+        // Registra resultado para aprendizado HMA
+        fetch('/garra-hma/historico', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                timestamp:    new Date().toISOString().replace('T',' ').slice(0,19),
+                ativo:        contexto.ativoId,
+                contrato:     direcao.toUpperCase(),
+                regime:       contexto.regime || '',
+                confianca:    contexto.confianca || 0,
+                payout:       parseInt(contexto.payout||80) / 100,
+                stake:        _qxHma.valorAtual,
+                decisao:      contexto.decisao || direcao.toUpperCase(),
+                resultado:    win ? 'WIN' : 'LOSS',
+                broker:       'QUOTEX',
+            }),
+        }).catch(() => {});
+
+        // Aplica gerenciamento de stake
+        _qxHmaAtualizarStake(win, lucro);
+
+        // Atualiza badge de ativo atual
+        _qxHmaAtualizarBadges();
+    })
+    .catch(e => {
+        _qxHma.opBloqueada = false;
+        _qxHmaStatus('⚠️ Falha ao buscar resultado: ' + e.message, '#f87171');
+    });
+}
+
+// ── Gerenciamento de stake HMA ────────────────────────────────────────────────
+function _qxHmaAtualizarStake(win, lucro) {
+    const mgr   = _qxHma.gerenciamento;
+    const vBase = _qxHma.valorBase;
+
+    if (mgr === 'fixo') {
+        _qxHma.valorAtual = vBase;
+        _qxHma.galeAtual  = 0;
+    } else if (mgr === 'martingale' || mgr === 'loss_recovery') {
+        if (win) {
+            _qxHma.valorAtual = vBase;
+            _qxHma.galeAtual  = 0;
+        } else if (_qxHma.galeAtual < _qxHma.maxGales) {
+            _qxHma.valorAtual = parseFloat((_qxHma.valorAtual * _qxHma.multGale).toFixed(2));
+            _qxHma.galeAtual++;
+        } else {
+            _qxHma.valorAtual = vBase;
+            _qxHma.galeAtual  = 0;
+        }
+    } else if (mgr === 'sorosgale') {
+        if (win) {
+            _qxHma.galeAtual++;
+            if (_qxHma.galeAtual >= (_qxHma.maxGales || 3)) {
+                _qxHma.valorAtual = vBase;
+                _qxHma.galeAtual  = 0;
+            } else {
+                _qxHma.valorAtual = parseFloat((_qxHma.valorAtual * _qxHma.multGale).toFixed(2));
+            }
+        } else {
+            _qxHma.valorAtual = vBase;
+            _qxHma.galeAtual  = 0;
+        }
+    } else if (mgr === 'qsr') {
+        if (win) {
+            _qxHma.qsrIdx = 0;
+            _qxHma.valorAtual = vBase;
+        } else {
+            _qxHma.qsrIdx = Math.min(_qxHma.qsrIdx + 1, _qxHma.qsrSeq.length - 1);
+            _qxHma.valorAtual = _qxHma.qsrSeq[_qxHma.qsrIdx] || vBase;
+        }
+    }
+
+    // Atualiza input de valor
+    const inp = document.getElementById('qx-valor-input');
+    if (inp) inp.value = _qxHma.valorAtual.toFixed(2);
 }
 </script>
 
