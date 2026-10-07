@@ -2363,6 +2363,67 @@ def rota_ssid_captura_limpar():
         _SSID_CAPTURA_STATE["ts"]     = 0
     return jsonify({"ok": True})
 
+@app.route('/quotex/ssid-proxy')
+def rota_quotex_ssid_proxy():
+    """
+    Proxy: o browser do usuário envia os cookies da Quotex via parâmetro,
+    o servidor faz o request autenticado para qxbroker.com e extrai o token.
+    Retorna JSON com o token para o frontend.
+    """
+    import urllib.request, urllib.error, json as _json, ssl as _ssl
+
+    # Recebe os cookies da Quotex enviados pelo JS do usuário via query string
+    cookies_str = request.args.get('cookies', '') or request.headers.get('X-Qx-Cookies', '')
+
+    if not cookies_str:
+        return jsonify({"ok": False, "erro": "Nenhum cookie enviado."}), 400
+
+    urls_tentar = [
+        "https://qxbroker.com/api/v1/cabinets/digest",
+        "https://qxbroker.com/api/v1/profile",
+    ]
+
+    token = ""
+    for url in urls_tentar:
+        try:
+            req = urllib.request.Request(url)
+            req.add_header("Cookie", cookies_str)
+            req.add_header("Accept", "application/json")
+            req.add_header("X-Requested-With", "XMLHttpRequest")
+            req.add_header("User-Agent",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/120.0.0.0 Safari/537.36")
+            ctx = _ssl.create_default_context()
+            with urllib.request.urlopen(req, timeout=10, context=ctx) as resp:
+                data = _json.loads(resp.read().decode("utf-8"))
+                token = (
+                    (data.get("data") or {}).get("token", "")
+                    or data.get("token", "")
+                    or data.get("ssid", "")
+                )
+            if token:
+                break
+        except Exception as e:
+            print(f"[ssid-proxy] ⚠️ {url}: {e}")
+            continue
+
+    if token and len(token) >= 8:
+        # Salva no estado de captura para o polling do frontend
+        with _SSID_CAPTURA_LOCK:
+            _SSID_CAPTURA_STATE["ssid"]   = token
+            _SSID_CAPTURA_STATE["status"] = "capturado"
+            _SSID_CAPTURA_STATE["ts"]     = time.time()
+        print(f"[Quotex] ✅ SSID capturado via proxy! len={len(token)}")
+        resp = jsonify({"ok": True, "token": token})
+    else:
+        resp = jsonify({"ok": False, "erro": "Token não encontrado nos cookies."})
+
+    resp.headers['Access-Control-Allow-Origin']  = '*'
+    resp.headers['Access-Control-Allow-Headers'] = 'Content-Type, X-Qx-Cookies'
+    return resp
+
+
 @app.route('/quotex/ssid-inject')
 def rota_quotex_ssid_inject():
     """
@@ -2396,107 +2457,30 @@ def rota_quotex_ssid_inject():
 </div>
 <script>
 const SRV = "{servidor}";
-let _tentativas = 0;
 
-async function extrairEEnviar() {{
-  let token = '';
+// ══════════════════════════════════════════════════════════════════
+// FLUXO: Esta janela navega para qxbroker.com/pt/trade
+// Quando a Quotex carregar, o JS dela roda no domínio qxbroker.com
+// e pode ler o localStorage/cookies. Para passar o token de volta,
+// a Quotex usa window.opener.postMessage — mas só se o nosso script
+// estiver rodando LÁ. Como não controlamos a Quotex, usamos outro jeito:
+//
+// → Navegamos esta janela para a Quotex
+// → O usuário está logado → Quotex abre normalmente
+// → Exibimos instrução de 1 toque: apertar F12 > Console > colar 1 linha
+//   OU simplesmente mostramos o token direto na tela via API
+// ══════════════════════════════════════════════════════════════════
 
-  // ── 1. API /cabinets/digest com cookies da sessão ─────────────────────
-  try {{
-    const r = await fetch('https://qxbroker.com/api/v1/cabinets/digest', {{
-      credentials: 'include',
-      headers: {{ 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }}
-    }});
-    if (r.ok) {{
-      const j = await r.json();
-      token = (j.data && j.data.token) || j.token || j.ssid || '';
-    }}
-  }} catch(_) {{}}
-
-  // ── 2. localStorage ───────────────────────────────────────────────────
-  if (!token) {{
-    try {{ token = localStorage.getItem('token') || localStorage.getItem('ssid') || ''; }} catch(_) {{}}
-  }}
-
-  // ── 3. document.cookie ────────────────────────────────────────────────
-  if (!token) {{
-    const m = document.cookie.match(/(?:^|;\\s*)(?:token|ssid)=([^;]+)/);
-    if (m) token = decodeURIComponent(m[1]);
-  }}
-
-  // ── 4. /api/v1/profile ────────────────────────────────────────────────
-  if (!token) {{
-    try {{
-      const r = await fetch('https://qxbroker.com/api/v1/profile', {{
-        credentials: 'include', headers: {{ 'Accept': 'application/json' }}
-      }});
-      if (r.ok) {{
-        const j = await r.json();
-        token = (j.data && j.data.token) || j.token || j.ssid || '';
-      }}
-    }} catch(_) {{}}
-  }}
-
-  if (token && token.length >= 8) {{
-    await enviar(token);
-  }} else {{
-    // Não logado — abre a Quotex para login nesta mesma janela
-    notificarFalha();
-    aguardarLogin();
-  }}
-}}
-
-function notificarFalha() {{
-  // Notifica o opener (bot) que precisa de login
-  if (window.opener && !window.opener.closed) {{
-    try {{ window.opener.postMessage({{ type: 'SSID_FALHOU' }}, '*'); }} catch(_) {{}}
-  }}
-}}
-
-function aguardarLogin() {{
-  titulo('🔑 FAÇA LOGIN NA QUOTEX');
-  msg('Clique no botão abaixo para abrir a Quotex e fazer login');
-
-  const btn = document.createElement('button');
-  btn.textContent = '🌐 ABRIR QUOTEX PARA LOGIN';
-  btn.style.cssText = 'margin-top:16px;padding:12px 20px;background:rgba(0,207,255,0.15);' +
-    'border:2px solid #00cfff;color:#00cfff;font-family:monospace;font-size:0.85rem;' +
-    'letter-spacing:2px;cursor:pointer;border-radius:6px;font-weight:bold;width:100%;';
-  btn.onclick = () => {{
-    // Navega esta janela para a Quotex sign-in
-    // Após login, redireciona de volta para ssid-inject via localStorage hint
-    localStorage.setItem('_qx_after_login', SRV + '/quotex/ssid-inject');
-    window.location.href = 'https://qxbroker.com/pt/sign-in';
-  }};
-  document.body.appendChild(btn);
-
-  // Polling: verifica a cada 2s se o login foi feito
-  // (o usuário retorna manualmente após login ou via redirect)
-  const poll = setInterval(async () => {{
-    _tentativas++;
-    if (_tentativas > 150) {{ clearInterval(poll); return; }} // 5min
-
-    let tk = '';
-    try {{
-      const r = await fetch('https://qxbroker.com/api/v1/cabinets/digest', {{
-        credentials: 'include', headers: {{ 'Accept': 'application/json' }}
-      }});
-      if (r.ok) {{
-        const j = await r.json();
-        tk = (j.data && j.data.token) || j.token || '';
-      }}
-    }} catch(_) {{}}
-
-    if (tk && tk.length >= 8) {{
-      clearInterval(poll);
-      await enviar(tk);
-    }}
-  }}, 2000);
-}}
+// Esta janela redireciona para a Quotex, mas antes registra o SRV
+// para que o ssid-bridge possa usar ao retornar
+sessionStorage.setItem('_qxSRV', SRV);
+titulo('⏳ REDIRECIONANDO...');
+msg('Abrindo Quotex — aguarde');
+setTimeout(() => {{
+  window.location.href = 'https://qxbroker.com/pt/trade?_qxbot=1&_srv=' + encodeURIComponent(SRV);
+}}, 200);
 
 async function enviar(token) {{
-  titulo('✅ CAPTURADO!');
-  msg('Enviando ao bot...');
   try {{
     const r = await fetch(SRV + '/quotex/ssid-captura/receber', {{
       method: 'POST',
@@ -2506,29 +2490,19 @@ async function enviar(token) {{
     const d = await r.json();
     if (d.ok) {{
       titulo('✅ SSID CAPTURADO!');
-      msg_ok('Fechando automaticamente...');
+      msg_ok('Fechando...');
       if (window.opener && !window.opener.closed) {{
         try {{ window.opener.postMessage({{ type: 'SSID_OK', ssid: token }}, '*'); }} catch(_) {{}}
       }}
       setTimeout(() => window.close(), 800);
-    }} else {{
-      throw new Error(d.erro || 'falha no servidor');
     }}
-  }} catch(e) {{
-    titulo('❌ ERRO');
-    msg_err('Erro: ' + e.message);
-    if (window.opener && !window.opener.closed) {{
-      try {{ window.opener.postMessage({{ type: 'SSID_FALHOU' }}, '*'); }} catch(_) {{}}
-    }}
-  }}
+  }} catch(_) {{}}
 }}
 
 function titulo(t) {{ const el = document.getElementById('titulo'); if(el) el.textContent = t; }}
 function msg(t)    {{ const el = document.getElementById('msg');    if(el) {{ el.textContent = t; el.className = ''; }} }}
 function msg_ok(t) {{ const el = document.getElementById('msg');    if(el) {{ el.textContent = t; el.className = 'ok'; }} }}
 function msg_err(t){{ const el = document.getElementById('msg');    if(el) {{ el.textContent = t; el.className = 'err'; }} }}
-
-extrairEEnviar();
 </script>
 </body>
 </html>"""
