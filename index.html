@@ -1510,7 +1510,22 @@
         <!-- Campos de login — aba SSID -->
         <div id="qx-form-ssid" style="display:none;">
 
-            <!-- BOTÃO CAPTURA AUTOMÁTICA -->
+            <div style="margin-bottom:8px;">
+                <label style="font-size:0.65rem; color:#888; letter-spacing:1px;">EMAIL DA CONTA</label>
+                <input id="qx-email-ssid" type="email" autocomplete="off" placeholder="seu@email.com"
+                    style="width:100%; background:#0a0a12; border:1px solid rgba(255,107,0,0.5);
+                           color:#ff6b00; padding:8px 10px; font-family:'Share Tech Mono';
+                           font-size:0.8rem; border-radius:4px; outline:none; margin-top:3px;">
+            </div>
+            <div style="margin-bottom:10px;">
+                <label style="font-size:0.65rem; color:#888; letter-spacing:1px;">SENHA DA CONTA</label>
+                <input id="qx-senha-ssid" type="password" autocomplete="off" placeholder="••••••••"
+                    style="width:100%; background:#0a0a12; border:1px solid rgba(255,107,0,0.5);
+                           color:#ff6b00; padding:8px 10px; font-family:'Share Tech Mono';
+                           font-size:0.8rem; border-radius:4px; outline:none; margin-top:3px;">
+            </div>
+
+            <!-- BOTÃO CAPTURA AUTOMÁTICA — servidor faz login HTTP e captura SSID -->
             <button id="qx-btn-capturar" onclick="qxCapturarSsidAuto()"
                 style="width:100%; padding:11px; margin-bottom:10px;
                        background:rgba(0,255,65,0.08); border:1px solid #00ff41;
@@ -1525,9 +1540,9 @@
                 background:rgba(0,0,0,0.3); border:1px solid rgba(0,255,65,0.25);
                 border-radius:4px; font-family:'Share Tech Mono'; font-size:0.7rem;">
                 <div id="qx-hunter-icone" style="font-size:1.6rem; margin-bottom:4px;">⏳</div>
-                <div id="qx-hunter-msg" style="color:#ffbd2e; letter-spacing:1px;">Abrindo Chrome...</div>
+                <div id="qx-hunter-msg" style="color:#ffbd2e; letter-spacing:1px;">Fazendo login...</div>
                 <div id="qx-hunter-sub" style="color:#555; font-size:0.62rem; margin-top:4px;">
-                    Faça login na janela do Chrome que abriu
+                    Aguarde — o servidor está capturando o SSID automaticamente
                 </div>
                 <button onclick="qxCancelarHunter()"
                     style="margin-top:8px; padding:5px 14px; background:transparent;
@@ -1537,21 +1552,32 @@
                 </button>
             </div>
 
-            <div style="text-align:center; margin:6px 0 10px;
-                        font-size:0.6rem; color:#444; letter-spacing:1px;">
-                — ou cole manualmente —
+            <!-- OTP — aparece se Quotex pedir código 2FA -->
+            <div id="qx-auto-otp" style="display:none; margin-bottom:10px;">
+                <label style="font-size:0.65rem; color:#ff9f43; letter-spacing:1px;">CÓDIGO OTP (2FA enviado ao email)</label>
+                <div style="display:flex; gap:6px; margin-top:4px;">
+                    <input id="qx-auto-otp-input" type="text" maxlength="6" placeholder="000000"
+                        style="flex:1; background:#0a0a12; border:1px solid rgba(255,159,67,0.6);
+                               color:#ff9f43; padding:8px 10px; font-family:'Share Tech Mono';
+                               font-size:1rem; border-radius:4px; outline:none; text-align:center; letter-spacing:4px;">
+                    <button onclick="qxEnviarOtpAuto()"
+                        style="padding:8px 14px; background:rgba(255,159,67,0.15);
+                               border:1px solid #ff9f43; color:#ff9f43;
+                               font-family:'Share Tech Mono'; font-size:0.75rem;
+                               cursor:pointer; border-radius:4px;">
+                        ✓ OK
+                    </button>
+                </div>
             </div>
 
-            <div style="margin-bottom:8px;">
-                <label style="font-size:0.65rem; color:#888; letter-spacing:1px;">EMAIL DA CONTA</label>
-                <input id="qx-email-ssid" type="email" autocomplete="off" placeholder="seu@email.com"
-                    style="width:100%; background:#0a0a12; border:1px solid rgba(255,107,0,0.5);
-                           color:#ff6b00; padding:8px 10px; font-family:'Share Tech Mono';
-                           font-size:0.8rem; border-radius:4px; outline:none; margin-top:3px;">
+            <div style="text-align:center; margin:4px 0 8px;
+                        font-size:0.6rem; color:#444; letter-spacing:1px;">
+                — ou cole o SSID manualmente —
             </div>
+
             <div style="margin-bottom:12px;">
                 <label style="font-size:0.65rem; color:#ffbd2e; letter-spacing:1px;">SSID (cookie)</label>
-                <input id="qx-ssid-input" type="text" autocomplete="off" placeholder="Cole aqui ou use captura automática"
+                <input id="qx-ssid-input" type="text" autocomplete="off" placeholder="Preenchido automaticamente ou cole aqui"
                     style="width:100%; background:#0a0a12; border:1px solid rgba(255,189,46,0.5);
                            color:#ffbd2e; padding:8px 10px; font-family:'Share Tech Mono';
                            font-size:0.72rem; border-radius:4px; outline:none; margin-top:3px;">
@@ -26668,27 +26694,109 @@ function qxMostrarAba(aba) {
 // ── SSID Hunter — captura automática ─────────────────────────────────────────
 let _hunterTimer = null;
 
-// ── SSID Captura — nova estratégia sem Selenium ───────────────────────────────
-// Abre /quotex/login-page no dispositivo do usuário.
-// Essa página instrui o login e envia o token de volta ao servidor via fetch.
-// O bot fica em polling em /quotex/ssid-captura/status até receber o token.
+// ── SSID Auto — servidor faz login HTTP e captura SSID sem ação do usuário ───
+// O usuário informa email+senha, o servidor autentica via HTTP na Quotex,
+// extrai o SSID e preenche o campo automaticamente via polling.
 
 function qxCapturarSsidAuto() {
+    const email = (document.getElementById('qx-email-ssid') || {}).value || '';
+    const senha = (document.getElementById('qx-senha-ssid') || {}).value || '';
+    if (!email) { _qxBadge('⚠️ Informe o email antes de capturar', '#ffbd2e'); return; }
+    if (!senha) { _qxBadge('⚠️ Informe a senha antes de capturar', '#ffbd2e'); return; }
+
     const btn    = document.getElementById('qx-btn-capturar');
     const painel = document.getElementById('qx-hunter-status');
     if (btn)    btn.style.display    = 'none';
     if (painel) painel.style.display = 'block';
-    _qxHunterMsg('⏳', 'Abrindo página de captura...', 'Uma nova aba vai abrir — faça login na Quotex', '#ffbd2e');
+    _qxHunterMsg('⏳', 'Fazendo login na Quotex...', 'O servidor está capturando o SSID automaticamente (~10s)', '#ffbd2e');
 
-    // Limpa estado anterior
-    fetch('/quotex/ssid-captura/limpar', { method: 'POST' }).catch(() => {});
+    fetch('/quotex/ssid-auto/iniciar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, senha }),
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (!d.ok) {
+            _qxHunterMsg('❌', 'Erro: ' + (d.erro || 'falha'), '', '#f44');
+            setTimeout(() => {
+                if (painel) painel.style.display = 'none';
+                if (btn)    btn.style.display    = 'block';
+            }, 3000);
+            return;
+        }
+        _qxAutoSsidPoll();
+    })
+    .catch(() => {
+        _qxHunterMsg('❌', 'Sem resposta do servidor', '', '#f44');
+        setTimeout(() => {
+            if (painel) painel.style.display = 'none';
+            if (btn)    btn.style.display    = 'block';
+        }, 3000);
+    });
+}
 
-    // Abre a página de captura no dispositivo do usuário
-    const loginUrl = window.location.origin + '/quotex/login-page';
-    window.open(loginUrl, '_blank', 'width=480,height=620');
+function _qxAutoSsidPoll() {
+    clearInterval(_hunterTimer);
+    _hunterTimer = setInterval(() => {
+        fetch('/quotex/ssid-auto/status')
+            .then(r => r.json())
+            .then(d => {
+                const painel = document.getElementById('qx-hunter-status');
+                const btn    = document.getElementById('qx-btn-capturar');
+                const otpDiv = document.getElementById('qx-auto-otp');
 
-    // Inicia polling aguardando o token chegar
-    _qxCapturaPoll();
+                if (d.status === 'aguardando_login') {
+                    _qxHunterMsg('🔐', 'Autenticando...', 'Aguarde, processando login na Quotex', '#00cfff');
+                    return;
+                }
+
+                // Quotex pediu OTP (2FA)
+                if (d.status === 'aguardando_otp' || d.otp_aguardando) {
+                    _qxHunterMsg('📧', 'Código OTP necessário!', 'Verifique seu email e insira o código abaixo', '#ff9f43');
+                    if (otpDiv) otpDiv.style.display = 'block';
+                    return;
+                }
+
+                if (d.status === 'capturado' && d.ssid) {
+                    clearInterval(_hunterTimer);
+                    if (otpDiv) otpDiv.style.display = 'none';
+                    _qxHunterMsg('✅', 'SSID CAPTURADO!', 'Campo preenchido automaticamente — clique DEMO ou REAL', '#00ff41');
+                    const inp = document.getElementById('qx-ssid-input');
+                    if (inp) inp.value = d.ssid;
+                    setTimeout(() => {
+                        if (painel) painel.style.display = 'none';
+                        if (btn)    btn.style.display    = 'block';
+                        _qxBadge('✅ SSID capturado! Clique DEMO ou REAL para conectar.', '#00ff41');
+                    }, 2000);
+                    return;
+                }
+
+                if (d.status === 'erro') {
+                    clearInterval(_hunterTimer);
+                    if (otpDiv) otpDiv.style.display = 'none';
+                    _qxHunterMsg('❌', 'Erro: ' + (d.erro || 'falha no login'), 'Verifique email/senha e tente novamente', '#f44');
+                    setTimeout(() => {
+                        if (painel) painel.style.display = 'none';
+                        if (btn)    btn.style.display    = 'block';
+                    }, 4000);
+                }
+            }).catch(() => {});
+    }, 1500);
+}
+
+function qxEnviarOtpAuto() {
+    const codigo = (document.getElementById('qx-auto-otp-input') || {}).value || '';
+    if (!codigo) return;
+    fetch('/quotex/otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ codigo }),
+    }).then(() => {
+        const otpDiv = document.getElementById('qx-auto-otp');
+        if (otpDiv) otpDiv.style.display = 'none';
+        _qxHunterMsg('⏳', 'Código enviado...', 'Aguardando confirmação do login', '#ffbd2e');
+    }).catch(() => {});
 }
 
 function _qxHunterMsg(icone, msg, sub, cor) {

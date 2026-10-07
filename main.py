@@ -2148,6 +2148,129 @@ except ImportError as _sh_err:
     def ssid_hunter_status():
         return {"status": "indisponivel", "ssid": "", "erro": "selenium não instalado."}
 
+# ── SSID Auto — login HTTP direto no servidor, sem Selenium nem ação do usuário ─
+# Usa a classe Login do pyquotex para autenticar via HTTP, igual ao processo
+# do navegador real. O servidor extrai o token e devolve ao frontend.
+_SSID_AUTO_STATE: dict = {"ssid": "", "status": "idle", "erro": "", "ts": 0}
+_SSID_AUTO_LOCK = threading.Lock()
+
+def _ssid_auto_thread(email: str, senha: str):
+    """Executa login HTTP no servidor e salva o SSID capturado."""
+    import asyncio as _asyncio
+
+    with _SSID_AUTO_LOCK:
+        _SSID_AUTO_STATE["status"] = "conectando"
+        _SSID_AUTO_STATE["ssid"]   = ""
+        _SSID_AUTO_STATE["erro"]   = ""
+        _SSID_AUTO_STATE["ts"]     = time.time()
+
+    try:
+        from pyquotex.network.login import Login
+
+        loop = _asyncio.new_event_loop()
+        _asyncio.set_event_loop(loop)
+
+        async def _fazer_login():
+            # Cria objeto mínimo compatível com a interface esperada pelo Login
+            class _FakeAPI:
+                lang         = "pt"
+                https_url    = "https://qxbroker.com"
+                username     = email
+                session_data = {"cookies": "", "token": "", "user_agent": ""}
+                # OTP: usa o mesmo callback Flask que o quotex_connector usa
+                on_otp_callback = _otp_callback_flask
+
+            api = _FakeAPI()
+            login_obj = Login(api)
+
+            # Sinaliza que está aguardando possível OTP
+            with _SSID_AUTO_LOCK:
+                _SSID_AUTO_STATE["status"] = "aguardando_login"
+
+            ok, motivo = await login_obj(email, senha)
+            return ok, motivo, api.session_data.get("token", "")
+
+        ok, motivo, token = loop.run_until_complete(_fazer_login())
+        loop.close()
+
+        if ok and token:
+            with _SSID_AUTO_LOCK:
+                _SSID_AUTO_STATE["ssid"]   = token
+                _SSID_AUTO_STATE["status"] = "capturado"
+                _SSID_AUTO_STATE["ts"]     = time.time()
+            # Também salva no estado de captura para o polling do frontend
+            with _SSID_CAPTURA_LOCK:
+                _SSID_CAPTURA_STATE["ssid"]   = token
+                _SSID_CAPTURA_STATE["status"] = "capturado"
+                _SSID_CAPTURA_STATE["ts"]     = time.time()
+            print(f"[Quotex] ✅ SSID capturado via login HTTP! len={len(token)}")
+        else:
+            with _SSID_AUTO_LOCK:
+                _SSID_AUTO_STATE["status"] = "erro"
+                _SSID_AUTO_STATE["erro"]   = motivo or "Login falhou."
+            print(f"[Quotex] ❌ Login HTTP falhou: {motivo}")
+
+    except Exception as exc:
+        msg = str(exc)
+        print(f"[Quotex] ❌ Erro no login HTTP: {msg}")
+        import traceback; traceback.print_exc()
+        with _SSID_AUTO_LOCK:
+            _SSID_AUTO_STATE["status"] = "erro"
+            _SSID_AUTO_STATE["erro"]   = msg
+
+
+@app.route('/quotex/ssid-auto/iniciar', methods=['POST'])
+def rota_ssid_auto_iniciar():
+    """
+    Inicia login HTTP no servidor: autentica com email/senha,
+    captura o SSID automaticamente e disponibiliza via /quotex/ssid-auto/status.
+    O frontend faz polling e preenche o campo automaticamente.
+    """
+    dados = request.get_json(silent=True) or {}
+    email = str(dados.get("email", "")).strip()
+    senha = str(dados.get("senha", "")).strip()
+    if not email or not senha:
+        return jsonify({"ok": False, "erro": "Email e senha são obrigatórios."}), 400
+
+    with _SSID_AUTO_LOCK:
+        st = _SSID_AUTO_STATE["status"]
+        if st == "conectando":
+            return jsonify({"ok": True, "status": "conectando", "msg": "Já em andamento."})
+
+    # Limpa estado anterior
+    with _SSID_AUTO_LOCK:
+        _SSID_AUTO_STATE["ssid"]   = ""
+        _SSID_AUTO_STATE["status"] = "conectando"
+        _SSID_AUTO_STATE["erro"]   = ""
+        _SSID_AUTO_STATE["ts"]     = time.time()
+    with _SSID_CAPTURA_LOCK:
+        _SSID_CAPTURA_STATE["ssid"]   = ""
+        _SSID_CAPTURA_STATE["status"] = "idle"
+        _SSID_CAPTURA_STATE["ts"]     = 0
+
+    t = threading.Thread(
+        target=_ssid_auto_thread,
+        args=(email, senha),
+        daemon=True,
+        name="ssid-auto",
+    )
+    t.start()
+    return jsonify({"ok": True, "status": "conectando",
+                    "msg": "Fazendo login na Quotex... aguarde (~5-10s)"})
+
+
+@app.route('/quotex/ssid-auto/status', methods=['GET'])
+def rota_ssid_auto_status():
+    """Polling: retorna estado atual do login automático."""
+    with _SSID_AUTO_LOCK:
+        return jsonify({
+            "status": _SSID_AUTO_STATE["status"],
+            "ssid":   _SSID_AUTO_STATE["ssid"],
+            "erro":   _SSID_AUTO_STATE["erro"],
+            "ts":     _SSID_AUTO_STATE["ts"],
+        })
+
+
 # ── SSID Captura — recebe token enviado pelo navegador do usuário ─────────────
 # Funciona sem Selenium: o usuário faz login na Quotex no próprio dispositivo,
 # nosso script JS lê o token e envia para o servidor via fetch.
