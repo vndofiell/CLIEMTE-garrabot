@@ -1510,40 +1510,80 @@
         <!-- Campos de login — aba SSID -->
         <div id="qx-form-ssid" style="display:none;">
 
-            <div style="margin-bottom:8px;">
-                <label style="font-size:0.65rem; color:#888; letter-spacing:1px;">EMAIL DA CONTA</label>
-                <input id="qx-email-ssid" type="email" autocomplete="off" placeholder="seu@email.com"
-                    style="width:100%; background:#0a0a12; border:1px solid rgba(255,107,0,0.5);
-                           color:#ff6b00; padding:8px 10px; font-family:'Share Tech Mono';
-                           font-size:0.8rem; border-radius:4px; outline:none; margin-top:3px;">
-            </div>
-            <div style="margin-bottom:10px;">
-                <label style="font-size:0.65rem; color:#888; letter-spacing:1px;">SENHA DA CONTA</label>
-                <input id="qx-senha-ssid" type="password" autocomplete="off" placeholder="••••••••"
-                    style="width:100%; background:#0a0a12; border:1px solid rgba(255,107,0,0.5);
-                           color:#ff6b00; padding:8px 10px; font-family:'Share Tech Mono';
-                           font-size:0.8rem; border-radius:4px; outline:none; margin-top:3px;">
+            <!-- PASSO 1 — Botão para abrir Quotex e capturar SSID no navegador do usuário -->
+            <div id="qx-ssid-passo1" style="margin-bottom:10px;">
+                <div style="font-size:0.62rem; color:#888; letter-spacing:1px; margin-bottom:8px; text-align:center;">
+                    📋 COMO OBTER O SSID
+                </div>
+                <!-- Passo a passo visual -->
+                <div style="background:rgba(0,0,0,0.3); border:1px solid rgba(0,207,255,0.2); border-radius:6px; padding:10px 12px; margin-bottom:10px; font-size:0.63rem; color:#888; line-height:1.9;">
+                    <span style="color:#00cfff;">①</span> Clique em <b style="color:#00ff41;">"ABRIR QUOTEX"</b> abaixo<br>
+                    <span style="color:#00cfff;">②</span> Faça login na janela que abrir<br>
+                    <span style="color:#00cfff;">③</span> Volte aqui e clique <b style="color:#ffbd2e;">"JÁ FIZ LOGIN"</b><br>
+                    <span style="color:#00cfff;">④</span> Copie o código e cole na <b style="color:#f87171;">BARRA DE ENDEREÇOS</b> da aba Quotex<br>
+                    <span style="color:#555; font-size:0.58rem;">⚠ NÃO cole no campo SSID do bot</span>
+                </div>
+                <button onclick="qxAbrirParaLogin()"
+                    style="width:100%; padding:11px; margin-bottom:6px;
+                           background:rgba(0,207,255,0.08); border:2px solid #00cfff;
+                           color:#00cfff; font-family:'Share Tech Mono'; font-size:0.82rem;
+                           letter-spacing:2px; cursor:pointer; border-radius:5px; font-weight:bold;">
+                    🌐 ABRIR QUOTEX
+                </button>
+                <button id="qx-btn-ja-fiz-login" onclick="qxMostrarBookmarklet()" style="display:none;
+                    width:100%; padding:10px; margin-bottom:6px;
+                    background:rgba(0,255,65,0.08); border:2px solid #00ff41;
+                    color:#00ff41; font-family:'Share Tech Mono'; font-size:0.82rem;
+                    letter-spacing:2px; cursor:pointer; border-radius:5px; font-weight:bold;">
+                    ✅ JÁ FIZ LOGIN — CAPTURAR SSID
+                </button>
             </div>
 
-            <!-- BOTÃO CAPTURA AUTOMÁTICA — servidor faz login HTTP e captura SSID -->
-            <button id="qx-btn-capturar" onclick="qxCapturarSsidAuto()"
-                style="width:100%; padding:11px; margin-bottom:10px;
-                       background:rgba(0,255,65,0.08); border:1px solid #00ff41;
-                       color:#00ff41; font-family:'Share Tech Mono'; font-size:0.8rem;
-                       letter-spacing:2px; cursor:pointer; border-radius:4px; font-weight:bold;">
-                🤖 CAPTURAR SSID AUTOMATICAMENTE
-            </button>
+            <!-- PASSO 2 — Bookmarklet para colar na barra de endereços -->
+            <div id="qx-ssid-passo2" style="display:none; margin-bottom:10px;">
+                <div style="background:rgba(255,189,46,0.06); border:1px solid rgba(255,189,46,0.35);
+                            border-radius:6px; padding:10px 12px; margin-bottom:8px;">
+                    <div style="font-size:0.63rem; color:#ffbd2e; letter-spacing:1px; margin-bottom:6px;">
+                        📋 COPIE e cole na BARRA DE ENDEREÇOS da aba Quotex:
+                    </div>
+                    <div id="qx-bookmarklet-box" style="
+                        background:#0a0a12; border:1px solid #333; border-radius:4px;
+                        padding:8px; font-size:0.58rem; color:#888; word-break:break-all;
+                        max-height:60px; overflow:hidden; font-family:monospace; cursor:pointer;"
+                        onclick="qxCopiarBookmarklet()" title="Clique para copiar">
+                        Carregando...
+                    </div>
+                    <button onclick="qxCopiarBookmarklet()"
+                        style="width:100%; margin-top:6px; padding:8px;
+                               background:rgba(255,189,46,0.12); border:1px solid #ffbd2e;
+                               color:#ffbd2e; font-family:'Share Tech Mono'; font-size:0.75rem;
+                               letter-spacing:1px; cursor:pointer; border-radius:4px;">
+                        📋 COPIAR CÓDIGO
+                    </button>
+                    <div id="qx-copy-ok" style="display:none; text-align:center; color:#00ff41; font-size:0.68rem; margin-top:4px;">
+                        ✅ Copiado! Cole na barra de endereços da aba Quotex
+                    </div>
+                </div>
+                <div style="font-size:0.6rem; color:#555; text-align:center; margin-bottom:6px;">
+                    ⏳ Aguardando captura automática...
+                    <span id="qx-captura-dots" style="color:#00cfff;"></span>
+                </div>
+                <button onclick="qxCancelarHunter()"
+                    style="width:100%; padding:6px; background:transparent;
+                           border:1px solid #444; color:#555; font-family:'Share Tech Mono';
+                           font-size:0.65rem; cursor:pointer; border-radius:3px;">
+                    ✕ Cancelar
+                </button>
+            </div>
 
-            <!-- Status da captura automática -->
+            <!-- Status da captura -->
             <div id="qx-hunter-status" style="
                 display:none; text-align:center; padding:10px 8px; margin-bottom:10px;
                 background:rgba(0,0,0,0.3); border:1px solid rgba(0,255,65,0.25);
                 border-radius:4px; font-family:'Share Tech Mono'; font-size:0.7rem;">
                 <div id="qx-hunter-icone" style="font-size:1.6rem; margin-bottom:4px;">⏳</div>
-                <div id="qx-hunter-msg" style="color:#ffbd2e; letter-spacing:1px;">Fazendo login...</div>
-                <div id="qx-hunter-sub" style="color:#555; font-size:0.62rem; margin-top:4px;">
-                    Aguarde — o servidor está capturando o SSID automaticamente
-                </div>
+                <div id="qx-hunter-msg" style="color:#ffbd2e; letter-spacing:1px;">Aguardando...</div>
+                <div id="qx-hunter-sub" style="color:#555; font-size:0.62rem; margin-top:4px;"></div>
                 <button onclick="qxCancelarHunter()"
                     style="margin-top:8px; padding:5px 14px; background:transparent;
                            border:1px solid #f44; color:#f44; font-family:'Share Tech Mono';
@@ -1552,27 +1592,9 @@
                 </button>
             </div>
 
-            <!-- OTP — aparece se Quotex pedir código 2FA -->
-            <div id="qx-auto-otp" style="display:none; margin-bottom:10px;">
-                <label style="font-size:0.65rem; color:#ff9f43; letter-spacing:1px;">CÓDIGO OTP (2FA enviado ao email)</label>
-                <div style="display:flex; gap:6px; margin-top:4px;">
-                    <input id="qx-auto-otp-input" type="text" maxlength="6" placeholder="000000"
-                        style="flex:1; background:#0a0a12; border:1px solid rgba(255,159,67,0.6);
-                               color:#ff9f43; padding:8px 10px; font-family:'Share Tech Mono';
-                               font-size:1rem; border-radius:4px; outline:none; text-align:center; letter-spacing:4px;">
-                    <button onclick="qxEnviarOtpAuto()"
-                        style="padding:8px 14px; background:rgba(255,159,67,0.15);
-                               border:1px solid #ff9f43; color:#ff9f43;
-                               font-family:'Share Tech Mono'; font-size:0.75rem;
-                               cursor:pointer; border-radius:4px;">
-                        ✓ OK
-                    </button>
-                </div>
-            </div>
-
             <div style="text-align:center; margin:4px 0 8px;
                         font-size:0.6rem; color:#444; letter-spacing:1px;">
-                — ou cole o SSID manualmente —
+                — ou cole o SSID manualmente abaixo —
             </div>
 
             <div style="margin-bottom:12px;">
@@ -26698,106 +26720,84 @@ let _hunterTimer = null;
 // O usuário informa email+senha, o servidor autentica via HTTP na Quotex,
 // extrai o SSID e preenche o campo automaticamente via polling.
 
-function qxCapturarSsidAuto() {
-    const email = (document.getElementById('qx-email-ssid') || {}).value || '';
-    const senha = (document.getElementById('qx-senha-ssid') || {}).value || '';
-    if (!email) { _qxBadge('⚠️ Informe o email antes de capturar', '#ffbd2e'); return; }
-    if (!senha) { _qxBadge('⚠️ Informe a senha antes de capturar', '#ffbd2e'); return; }
+// ── Captura SSID via navegador do usuário (bookmarklet) ──────────────────────
+// Fluxo: abre Quotex → usuário faz login → bookmarklet lê token do localStorage
+// e envia para o servidor via fetch → polling detecta e preenche o campo.
+// Isso contorna o bloqueio de IP de data center da Quotex.
 
-    const btn    = document.getElementById('qx-btn-capturar');
-    const painel = document.getElementById('qx-hunter-status');
-    if (btn)    btn.style.display    = 'none';
-    if (painel) painel.style.display = 'block';
-    _qxHunterMsg('⏳', 'Fazendo login na Quotex...', 'O servidor está capturando o SSID automaticamente (~10s)', '#ffbd2e');
+let _qxBookmarkletCode = '';
 
-    fetch('/quotex/ssid-auto/iniciar', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, senha }),
-    })
-    .then(r => r.json())
-    .then(d => {
-        if (!d.ok) {
-            _qxHunterMsg('❌', 'Erro: ' + (d.erro || 'falha'), '', '#f44');
-            setTimeout(() => {
-                if (painel) painel.style.display = 'none';
-                if (btn)    btn.style.display    = 'block';
-            }, 3000);
-            return;
-        }
-        _qxAutoSsidPoll();
-    })
-    .catch(() => {
-        _qxHunterMsg('❌', 'Sem resposta do servidor', '', '#f44');
-        setTimeout(() => {
-            if (painel) painel.style.display = 'none';
-            if (btn)    btn.style.display    = 'block';
-        }, 3000);
+function _qxGerarBookmarklet() {
+    // Obtém a URL base do servidor (funciona local e Render)
+    const base = window.location.origin;
+    // Código que roda na página da Quotex após login:
+    // lê token de todas as fontes conhecidas e envia para o servidor
+    _qxBookmarkletCode = `javascript:void((function(){` +
+        `var t=(window.settings&&window.settings.token)||` +
+        `localStorage.getItem('token')||localStorage.getItem('ssid')||` +
+        `localStorage.getItem('auth_token')||localStorage.getItem('user_token')||` +
+        `(document.cookie.match(/(?:^|;)\\s*token=([^;]+)/)||[])[1]||` +
+        `(document.cookie.match(/(?:^|;)\\s*ssid=([^;]+)/)||[])[1]||'';` +
+        `if(!t){alert('Token não encontrado ainda. Certifique-se de estar logado na Quotex e tente novamente.');return;}` +
+        `fetch('${base}/quotex/ssid-captura/receber',{method:'POST',headers:{'Content-Type':'application/json'},` +
+        `body:JSON.stringify({ssid:t})}).then(r=>r.json()).then(d=>{` +
+        `if(d.ok){alert('✅ SSID capturado com sucesso! Volte ao bot.');}` +
+        `else{alert('Erro: '+d.erro);}}).catch(()=>{alert('Erro de rede. Tente novamente.');});` +
+        `})())`;
+    const box = document.getElementById('qx-bookmarklet-box');
+    if (box) box.textContent = _qxBookmarkletCode;
+}
+
+function qxAbrirParaLogin() {
+    // Inicia o polling de captura ANTES de abrir a janela
+    fetch('/quotex/ssid-captura/limpar', { method: 'POST' }).catch(() => {});
+    _qxGerarBookmarklet();
+    // Mostra botão "já fiz login"
+    const btnJa = document.getElementById('qx-btn-ja-fiz-login');
+    if (btnJa) btnJa.style.display = 'block';
+    // Abre Quotex em nova aba
+    window.open('https://qxbroker.com/pt/sign-in', '_blank');
+    _qxBadge('🌐 Faça login na janela aberta e volte aqui', '#00cfff');
+}
+
+function qxMostrarBookmarklet() {
+    _qxGerarBookmarklet();
+    const p1 = document.getElementById('qx-ssid-passo1');
+    const p2 = document.getElementById('qx-ssid-passo2');
+    if (p1) p1.style.display = 'none';
+    if (p2) p2.style.display = 'block';
+    // Inicia polling para detectar quando o bookmarklet enviar o SSID
+    _qxCapturaPoll();
+    // Animação de pontos
+    let dots = 0;
+    clearInterval(window._qxDotsTimer);
+    window._qxDotsTimer = setInterval(() => {
+        const el = document.getElementById('qx-captura-dots');
+        if (el) { dots = (dots + 1) % 4; el.textContent = '.'.repeat(dots); }
+    }, 500);
+}
+
+function qxCopiarBookmarklet() {
+    if (!_qxBookmarkletCode) _qxGerarBookmarklet();
+    navigator.clipboard.writeText(_qxBookmarkletCode).then(() => {
+        const ok = document.getElementById('qx-copy-ok');
+        if (ok) { ok.style.display = 'block'; setTimeout(() => { ok.style.display = 'none'; }, 3000); }
+    }).catch(() => {
+        // fallback para browsers mais antigos
+        const ta = document.createElement('textarea');
+        ta.value = _qxBookmarkletCode;
+        ta.style.position = 'fixed'; ta.style.opacity = '0';
+        document.body.appendChild(ta); ta.select();
+        document.execCommand('copy'); document.body.removeChild(ta);
+        const ok = document.getElementById('qx-copy-ok');
+        if (ok) { ok.style.display = 'block'; setTimeout(() => { ok.style.display = 'none'; }, 3000); }
     });
 }
 
-function _qxAutoSsidPoll() {
-    clearInterval(_hunterTimer);
-    _hunterTimer = setInterval(() => {
-        fetch('/quotex/ssid-auto/status')
-            .then(r => r.json())
-            .then(d => {
-                const painel = document.getElementById('qx-hunter-status');
-                const btn    = document.getElementById('qx-btn-capturar');
-                const otpDiv = document.getElementById('qx-auto-otp');
-
-                if (d.status === 'aguardando_login') {
-                    _qxHunterMsg('🔐', 'Autenticando...', 'Aguarde, processando login na Quotex', '#00cfff');
-                    return;
-                }
-
-                // Quotex pediu OTP (2FA)
-                if (d.status === 'aguardando_otp' || d.otp_aguardando) {
-                    _qxHunterMsg('📧', 'Código OTP necessário!', 'Verifique seu email e insira o código abaixo', '#ff9f43');
-                    if (otpDiv) otpDiv.style.display = 'block';
-                    return;
-                }
-
-                if (d.status === 'capturado' && d.ssid) {
-                    clearInterval(_hunterTimer);
-                    if (otpDiv) otpDiv.style.display = 'none';
-                    _qxHunterMsg('✅', 'SSID CAPTURADO!', 'Campo preenchido automaticamente — clique DEMO ou REAL', '#00ff41');
-                    const inp = document.getElementById('qx-ssid-input');
-                    if (inp) inp.value = d.ssid;
-                    setTimeout(() => {
-                        if (painel) painel.style.display = 'none';
-                        if (btn)    btn.style.display    = 'block';
-                        _qxBadge('✅ SSID capturado! Clique DEMO ou REAL para conectar.', '#00ff41');
-                    }, 2000);
-                    return;
-                }
-
-                if (d.status === 'erro') {
-                    clearInterval(_hunterTimer);
-                    if (otpDiv) otpDiv.style.display = 'none';
-                    _qxHunterMsg('❌', 'Erro: ' + (d.erro || 'falha no login'), 'Verifique email/senha e tente novamente', '#f44');
-                    setTimeout(() => {
-                        if (painel) painel.style.display = 'none';
-                        if (btn)    btn.style.display    = 'block';
-                    }, 4000);
-                }
-            }).catch(() => {});
-    }, 1500);
-}
-
-function qxEnviarOtpAuto() {
-    const codigo = (document.getElementById('qx-auto-otp-input') || {}).value || '';
-    if (!codigo) return;
-    fetch('/quotex/otp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ codigo }),
-    }).then(() => {
-        const otpDiv = document.getElementById('qx-auto-otp');
-        if (otpDiv) otpDiv.style.display = 'none';
-        _qxHunterMsg('⏳', 'Código enviado...', 'Aguardando confirmação do login', '#ffbd2e');
-    }).catch(() => {});
-}
+// Compatibilidade — mantida para não quebrar chamadas antigas
+function qxCapturarSsidAuto() { qxAbrirParaLogin(); }
+function qxEnviarOtpAuto() {}
+function _qxAutoSsidPoll() { _qxCapturaPoll(); }
 
 function _qxHunterMsg(icone, msg, sub, cor) {
     const ei = document.getElementById('qx-hunter-icone');
@@ -26821,13 +26821,15 @@ function _qxCapturaPoll() {
                     if (inp) inp.value = d.ssid;
                     // Limpa estado para próxima vez
                     fetch('/quotex/ssid-captura/limpar', { method: 'POST' }).catch(() => {});
+                    clearInterval(window._qxDotsTimer);
+                    // Volta para passo 1 e mostra mensagem de sucesso
                     setTimeout(() => {
-                        const painel = document.getElementById('qx-hunter-status');
-                        const btn    = document.getElementById('qx-btn-capturar');
-                        if (painel) painel.style.display = 'none';
-                        if (btn)    btn.style.display    = 'block';
+                        const p1 = document.getElementById('qx-ssid-passo1');
+                        const p2 = document.getElementById('qx-ssid-passo2');
+                        if (p2) p2.style.display = 'none';
+                        if (p1) p1.style.display = 'block';
                         _qxBadge('✅ SSID capturado! Clique DEMO ou REAL para conectar.', '#00ff41');
-                    }, 2000);
+                    }, 1500);
                 }
                 // idle = ainda aguardando — continua polling silenciosamente
             }).catch(() => {});
@@ -26838,18 +26840,20 @@ function _qxHunterPoll() { _qxCapturaPoll(); } // compatibilidade
 
 function qxCancelarHunter() {
     clearInterval(_hunterTimer);
+    clearInterval(window._qxDotsTimer);
     fetch('/quotex/ssid-captura/limpar', { method: 'POST' }).catch(() => {});
+    const p1 = document.getElementById('qx-ssid-passo1');
+    const p2 = document.getElementById('qx-ssid-passo2');
     const painel = document.getElementById('qx-hunter-status');
-    const btn    = document.getElementById('qx-btn-capturar');
+    if (p2)     p2.style.display     = 'none';
+    if (p1)     p1.style.display     = 'block';
     if (painel) painel.style.display = 'none';
-    if (btn)    btn.style.display    = 'block';
 }
 
 // ── Reconectar via SSID direto do painel ─────────────────────────────────────
 function qxChartReconectar() {
     quotexAbrirModal();
     setTimeout(() => qxMostrarAba('ssid'), 150);
-    setTimeout(() => qxCapturarSsidAuto(), 300);
 }
 
 // ── Conectar via email/senha ──────────────────────────────────────────────────
@@ -26872,18 +26876,18 @@ function quotexConectar(tipo) {
 
 // ── Conectar via SSID (sem senha — evita HTTP 403) ───────────────────────────
 function quotexConectarSsid(tipo) {
+    // Email é opcional para SSID — o token já identifica o usuário
     const email = (document.getElementById('qx-email-ssid') || {}).value || '';
     const ssid  = ((document.getElementById('qx-ssid-input')  || {}).value || '').trim();
-    if (!email) { _qxBadge('⚠️ Informe o email da conta', '#ffbd2e'); return; }
-    if (!ssid)  { _qxBadge('⚠️ Cole o valor do cookie ssid', '#ffbd2e'); return; }
+    if (!ssid)  { _qxBadge('⚠️ Capture ou cole o SSID primeiro', '#ffbd2e'); return; }
     // Bloqueia se o usuário colou o bookmarklet no campo por engano
     if (ssid.startsWith('javascript:') || ssid.length < 16) {
         const inp = document.getElementById('qx-ssid-input');
         if (inp) inp.value = '';
-        _qxBadge('⚠️ SSID inválido! Cole o TOKEN da Quotex, não o bookmarklet.', '#f87171');
+        _qxBadge('⚠️ SSID inválido! Use o fluxo de captura acima.', '#f87171');
         return;
     }
-    _qxSalvarEmail(email);   // salva email para próximas conexões
+    if (email) _qxSalvarEmail(email);
     _qxBadge('⏳ CONECTANDO VIA SSID...', '#ffbd2e');
     _qxAtualizarBotao('conectando');
     fetch('/quotex/conectar', {
