@@ -4,3 +4,6 @@ urllib3
 gunicorn
 pillow
 pandas
+pyquotex
+selenium
+websocket-client
