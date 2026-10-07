@@ -2485,9 +2485,8 @@ def rota_quotex_ssid_bridge():
 @app.route('/quotex/ssid-inject')
 def rota_quotex_ssid_inject():
     """
-    Página intermediária que roda NO BROWSER DO USUÁRIO após o login na Quotex.
-    Navega para qxbroker.com/trade com credentials para extrair o token do
-    localStorage/cookies da sessão ativa e enviá-lo ao servidor automaticamente.
+    Página de captura manual do SSID da Quotex.
+    Exibe instruções claras e campo para colar o token + polling automático.
     """
     servidor = _get_base_url()
     html = f"""<!DOCTYPE html>
@@ -2495,83 +2494,128 @@ def rota_quotex_ssid_inject():
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Capturar SSID</title>
+<title>Capturar SSID — Quotex</title>
 <style>
   * {{ box-sizing:border-box; margin:0; padding:0; }}
   body {{ background:#0d0d1a; color:#c8d0e0; font-family:'Courier New',monospace;
          display:flex; align-items:center; justify-content:center;
-         min-height:100vh; padding:16px; text-align:center; }}
-  .card {{ max-width:400px; width:100%; }}
-  h2  {{ color:#00cfff; font-size:1rem; letter-spacing:2px; margin-bottom:8px; }}
-  p   {{ color:#555; font-size:0.68rem; margin-bottom:12px; line-height:1.6; }}
-  .ok  {{ color:#00ff41 !important; }}
-  .btn {{ display:block; width:100%; padding:14px; margin:6px 0; border-radius:6px;
-          font-family:'Courier New'; font-size:0.85rem; letter-spacing:2px;
-          cursor:pointer; font-weight:bold; border:2px solid; }}
-  .btn-cyan  {{ background:rgba(0,207,255,0.12); border-color:#00cfff; color:#00cfff; }}
-  .btn-green {{ background:rgba(0,255,65,0.12);  border-color:#00ff41; color:#00ff41; }}
+         min-height:100vh; padding:16px; }}
+  .card {{ max-width:440px; width:100%; background:#0a0a14;
+           border:1px solid rgba(0,207,255,0.3); border-radius:12px; padding:24px 20px; }}
+  h1  {{ color:#00cfff; font-size:0.95rem; letter-spacing:3px; margin-bottom:4px; text-align:center; }}
+  .sub {{ color:#555; font-size:0.65rem; text-align:center; margin-bottom:18px; }}
+  .steps {{ background:rgba(0,0,0,0.4); border:1px solid rgba(255,255,255,0.06);
+            border-radius:8px; padding:12px 14px; margin-bottom:14px;
+            font-size:0.68rem; line-height:2.2; }}
+  .num {{ color:#00cfff; font-weight:bold; }}
+  .hl  {{ color:#fff; font-weight:bold; }}
+  .hl2 {{ color:#00cfff; font-weight:bold; }}
+  input {{ display:block; width:100%; padding:11px 10px; background:#060610;
+           border:1px solid rgba(0,207,255,0.5); color:#00cfff;
+           font-family:'Courier New'; font-size:0.78rem; border-radius:6px;
+           outline:none; margin:10px 0; }}
+  input::placeholder {{ color:#333; }}
+  .btn {{ display:block; width:100%; padding:13px; border-radius:8px;
+          font-family:'Courier New'; font-size:0.88rem; letter-spacing:2px;
+          cursor:pointer; font-weight:bold; border:2px solid; margin:6px 0; }}
+  .btn-green {{ background:rgba(0,255,65,0.12); border-color:#00ff41; color:#00ff41; }}
+  .btn:disabled {{ opacity:0.4; cursor:default; }}
+  #status {{ margin-top:12px; padding:10px; border-radius:8px; font-size:0.72rem;
+             text-align:center; display:none; border:1px solid #333; }}
+  #status.ok   {{ border-color:#00ff4144; color:#00ff41; background:rgba(0,255,65,0.06); }}
+  #status.err  {{ border-color:#f4444444; color:#f44; background:rgba(255,68,68,0.06); }}
+  #status.inf  {{ border-color:#00cfff44; color:#00cfff; background:rgba(0,207,255,0.06); }}
 </style>
 </head>
 <body>
 <div class="card">
-  <h2 id="titulo">⏳ AGUARDANDO...</h2>
-  <p  id="msg">Clique no botão abaixo para capturar o SSID da Quotex</p>
-  <button id="btn-cap" class="btn btn-green" onclick="capturar()">
-    ⚡ CAPTURAR SSID DA QUOTEX
-  </button>
+  <h1>🔑 CAPTURAR SSID</h1>
+  <div class="sub">Bot Garra — Conexão Quotex</div>
+
+  <div class="steps">
+    <span class="num">① </span>Na aba da Quotex pressione <span class="hl">F12</span><br>
+    <span class="num">② </span>Clique em <span class="hl">Application</span> (ou Armazenamento)<br>
+    <span class="num">③ </span>Vá em <span class="hl">Local Storage → qxbroker.com</span><br>
+    <span class="num">④ </span>Copie o valor da chave <span class="hl2">token</span><br>
+    <span class="num">⑤ </span>Cole abaixo e clique <span class="hl">ENVIAR</span>
+  </div>
+
+  <input id="inp" type="text" placeholder="Cole o token da Quotex aqui..." autocomplete="off" />
+  <button id="btn" class="btn btn-green" onclick="enviar()">📤 ENVIAR TOKEN</button>
+  <div id="status"></div>
 </div>
+
 <script>
 const SRV = "{servidor}";
-const _p   = new URLSearchParams(location.search);
-// Fase 2: retornamos da Quotex com o token
-const _token = _p.get('t') || '';
-if (_token && _token.length >= 8) {{
-  salvarToken(_token);
-}} else {{
-  titulo('🔑 CLIQUE PARA CAPTURAR');
-  msg('Clique abaixo — a janela vai à Quotex, lê o SSID e volta');
+
+// Verifica se chegou token via query string (enviado por outra rota)
+(function() {{
+  const t = new URLSearchParams(location.search).get('t') || '';
+  if (t && t.length >= 8) {{ salvar(t); return; }}
+  // Polling: se o SSID já foi capturado por outra via (ex: ssid-auto), detecta automaticamente
+  iniciarPolling();
+}})();
+
+function iniciarPolling() {{
+  let tentativas = 0;
+  const id = setInterval(async () => {{
+    tentativas++;
+    if (tentativas > 60) {{ clearInterval(id); return; }} // para depois de 2 min
+    try {{
+      const d = await fetch(SRV + '/quotex/ssid-captura/status').then(r => r.json());
+      if (d.status === 'capturado' && d.ssid && d.ssid.length >= 8) {{
+        clearInterval(id);
+        notificarOk(d.ssid);
+      }}
+    }} catch(_) {{}}
+  }}, 2000);
 }}
 
-function capturar() {{
-  titulo('⏳ ABRINDO QUOTEX...');
-  msg('Aguarde — voltará automaticamente em segundos');
-  document.getElementById('btn-cap').disabled = true;
-
-  // Navega esta janela para a Quotex /trade
-  // Quando voltar (history.back após ler o token), estaremos de volta aqui
-  // O truque: a Quotex carrega, nosso script de hash lê o token e navega de volta
-  // Passamos o SRV no hash para que o script de retorno saiba onde enviar
-  const srv_enc = encodeURIComponent(SRV);
-  // Salva SRV no sessionStorage antes de navegar (mesmo origin, persiste)
-  try {{ sessionStorage.setItem('_qxSRV', SRV); }} catch(_) {{}}
-  window.location.href = 'https://qxbroker.com/pt/trade?_qxcap=1&_srv=' + srv_enc;
+async function enviar() {{
+  const v = (document.getElementById('inp').value || '').trim();
+  if (!v || v.length < 16) {{
+    mostrar('Token muito curto — verifique e tente novamente.', 'err');
+    return;
+  }}
+  await salvar(v);
 }}
 
-async function salvarToken(token) {{
-  titulo('✅ CAPTURADO!');
-  msg('Enviando ao bot...');
-  const r = await fetch(SRV + '/quotex/ssid-captura/receber', {{
-    method: 'POST',
-    headers: {{ 'Content-Type': 'application/json' }},
-    body: JSON.stringify({{ ssid: token }}),
-  }}).then(r=>r.json()).catch(()=>({{ok:false}}));
-  if (r.ok) {{
-    titulo('✅ SSID CAPTURADO!');
-    p_ok('Fechando automaticamente...');
-    if (window.opener && !window.opener.closed)
-      window.opener.postMessage({{ type: 'SSID_OK', ssid: token }}, '*');
-    setTimeout(() => window.close(), 800);
-  }} else {{
-    titulo('❌ ERRO');
-    p_err('Falha ao salvar. Tente novamente.');
-    document.getElementById('btn-cap').disabled = false;
+async function salvar(token) {{
+  document.getElementById('btn').disabled = true;
+  mostrar('⏳ Enviando ao bot...', 'inf');
+  try {{
+    const r = await fetch(SRV + '/quotex/ssid-captura/receber', {{
+      method: 'POST',
+      headers: {{ 'Content-Type': 'application/json' }},
+      body: JSON.stringify({{ ssid: token }}),
+    }});
+    const d = await r.json();
+    if (d.ok) {{
+      notificarOk(token);
+    }} else {{
+      mostrar('❌ ' + (d.erro || 'Erro ao salvar.'), 'err');
+      document.getElementById('btn').disabled = false;
+    }}
+  }} catch(e) {{
+    mostrar('❌ Falha de rede: ' + e.message, 'err');
+    document.getElementById('btn').disabled = false;
   }}
 }}
 
-function titulo(t)  {{ const e=document.getElementById('titulo'); if(e) e.textContent=t; }}
-function msg(t)     {{ const e=document.getElementById('msg'); if(e){{ e.textContent=t; e.className=''; }} }}
-function p_ok(t)    {{ const e=document.getElementById('msg'); if(e){{ e.textContent=t; e.className='ok'; }} }}
-function p_err(t)   {{ const e=document.getElementById('msg'); if(e){{ e.textContent=t; e.className='err'; }} }}
+function notificarOk(token) {{
+  mostrar('✅ SSID capturado! Volte ao bot e clique DEMO ou REAL.', 'ok');
+  document.getElementById('btn').disabled = true;
+  if (window.opener && !window.opener.closed)
+    window.opener.postMessage({{ type: 'SSID_OK', ssid: token }}, '*');
+  setTimeout(() => window.close(), 4000);
+}}
+
+function mostrar(msg, tipo) {{
+  const el = document.getElementById('status');
+  el.textContent = msg;
+  el.className = tipo || 'inf';
+  el.style.display = 'block';
+}}
 </script>
 </body>
 </html>"""
@@ -2636,33 +2680,27 @@ def rota_quotex_login_page():
     <div class="step">
       <span class="num">① </span>Clique em <b style="color:#00cfff">ABRIR QUOTEX</b> abaixo<br>
       <span class="num">② </span>Faça login normalmente na Quotex<br>
-      <span class="num">③ </span>O SSID é capturado <b style="color:#00ff41">automaticamente ✅</b>
+      <span class="num">③ </span>Clique em <b style="color:#ffbd2e">JÁ FIZ LOGIN</b> para abrir o guia de captura
     </div>
     <button class="btn btn-blue" onclick="abrirQuotex()">🌐 ABRIR QUOTEX</button>
-    <button id="btn-capturar-manual" class="btn btn-warn"
-            onclick="capturarManual()" style="display:none; font-size:0.72rem;">
-      ⚡ CAPTURAR AGORA (manual)
+    <button id="btn-ja-fiz" class="btn btn-warn" onclick="abrirInject()"
+            style="display:none;">
+      ⚡ JÁ FIZ LOGIN — CAPTURAR SSID
     </button>
   </div>
 
   <div id="tela-aguardando" class="tela-capturando">
     <div id="spinner">⏳</div>
     <div style="color:#00cfff; font-size:0.8rem; letter-spacing:1px; margin:10px 0;">
-      Aguardando login na Quotex...
+      Aguardando captura do SSID...
     </div>
-    <div style="color:#555; font-size:0.62rem;">Faça login na janela aberta — a captura é automática</div>
-    <button class="btn btn-warn" onclick="capturarManual()"
-            style="margin-top:14px; font-size:0.72rem; padding:10px;">
-      ⚡ JÁ FIZ LOGIN — CAPTURAR AGORA
+    <div style="color:#555; font-size:0.62rem; margin-bottom:12px;">
+      Cole o token na janela de instrução que foi aberta
+    </div>
+    <button class="btn btn-warn" onclick="abrirInject()"
+            style="font-size:0.72rem; padding:10px;">
+      🔄 REABRIR JANELA DE CAPTURA
     </button>
-  </div>
-
-  <div id="tela-capturando" class="tela-capturando">
-    <div id="spinner2" style="font-size:1.6rem; animation:spin 1.4s linear infinite; display:inline-block;">⚙️</div>
-    <div style="color:#00cfff; font-size:0.8rem; letter-spacing:1px; margin:10px 0;">
-      Capturando SSID...
-    </div>
-    <div style="color:#555; font-size:0.62rem;">Aguarde alguns segundos</div>
   </div>
 
   <div id="status"></div>
@@ -2670,62 +2708,74 @@ def rota_quotex_login_page():
 
 <script>
 const SRV = "{servidor}";
-let _win = null;
+let _winQx   = null;  // janela da Quotex
+let _winInj  = null;  // janela ssid-inject
 let _pollTimer = null;
-let _msgHandler = null;
+
+// Escuta postMessage do ssid-inject quando o usuário enviar o token com sucesso
+window.addEventListener('message', (e) => {{
+  if (e.data && e.data.type === 'SSID_OK') {{
+    pararPoll();
+    onSsidCapturado();
+  }}
+}});
 
 function abrirQuotex() {{
-  // Abre a Quotex numa nova janela
-  _win = window.open('https://qxbroker.com/pt/sign-in', '_blank',
-                     'width=1000,height=700,left=50,top=50');
-
-  // Mostra tela de aguardo
-  document.getElementById('tela-inicio').style.display    = 'none';
-  document.getElementById('tela-aguardando').style.display = 'block';
-  mostrar('⏳ Faça login na janela da Quotex — a captura será automática', 'inf');
-
-  // Escuta mensagem da página de injeção (quando capturar com sucesso)
-  _msgHandler = (e) => {{
-    if (!e.data) return;
-    if (e.data.type === 'SSID_OK' && e.data.ssid) {{
-      pararPoll();
-      onSsidCapturado();
-    }} else if (e.data.type === 'SSID_FALHOU') {{
-      pararPoll();
-      mostrarFallback();
-    }}
-  }};
-  window.addEventListener('message', _msgHandler);
-
-  // Poll: detecta quando a janela da Quotex chega em /trade e redireciona para ssid-inject
-  iniciarPollJanela();
+  _winQx = window.open('https://qxbroker.com/pt/sign-in', '_blank',
+                       'width=1000,height=700,left=50,top=50');
+  document.getElementById('tela-inicio').style.display = 'none';
+  // Mostra botão "já fiz login" após 3s (tempo de carregar a Quotex)
+  setTimeout(() => {{
+    document.getElementById('tela-inicio').style.display = 'block';
+    document.getElementById('btn-ja-fiz').style.display  = 'block';
+  }}, 3000);
+  mostrar('⏳ Faça login na Quotex e clique em "JÁ FIZ LOGIN"', 'inf');
 }}
 
-function iniciarPollJanela() {{
+function abrirInject() {{
+  // Limpa SSID antigo antes de capturar novo
+  fetch(SRV + '/quotex/ssid-captura/limpar', {{ method: 'POST' }}).catch(() => {{}});
+
+  // Abre (ou foca) a janela de instrução de captura manual
+  if (_winInj && !_winInj.closed) {{
+    _winInj.focus();
+  }} else {{
+    _winInj = window.open(SRV + '/quotex/ssid-inject', '_blank',
+                          'width=460,height=520,left=200,top=100');
+  }}
+
+  document.getElementById('tela-inicio').style.display    = 'none';
+  document.getElementById('tela-aguardando').style.display = 'block';
+  mostrar('⏳ Cole o token na janela que abriu...', 'inf');
+
+  // Polling no servidor: detecta quando o token foi enviado pelo ssid-inject
+  iniciarPollServidor();
+}}
+
+function iniciarPollServidor() {{
   pararPoll();
-  _pollTimer = setInterval(() => {{
-    if (!_win || _win.closed) {{
+  let tentativas = 0;
+  _pollTimer = setInterval(async () => {{
+    tentativas++;
+    if (tentativas > 90) {{  // 3 minutos
       pararPoll();
-      // Janela fechada sem capturar — exibe fallback
-      if (document.getElementById('tela-aguardando').style.display !== 'none') {{
-        mostrarFallback();
-      }}
+      mostrarFallback();
+      return;
+    }}
+    // Verifica se a janela de captura foi fechada sem enviar
+    if (_winInj && _winInj.closed) {{
+      pararPoll();
+      mostrarFallback();
       return;
     }}
     try {{
-      // Tenta ler a URL da janela da Quotex
-      // Isso só funciona quando é mesma origem — vai lançar exceção cross-origin
-      const url = _win.location.href;
-      if (url && url.includes('/trade')) {{
-        // Usuário fez login e está em /trade — injeta captura
+      const d = await fetch(SRV + '/quotex/ssid-captura/status').then(r => r.json());
+      if (d.status === 'capturado' && d.ssid && d.ssid.length >= 8) {{
         pararPoll();
-        injetarCaptura();
+        onSsidCapturado();
       }}
-    }} catch(cross) {{
-      // Cross-origin: janela ainda está na Quotex — normal, continua aguardando
-      // Quando o usuário clicar no botão manual ou a janela fechar, tratamos
-    }}
-  }}, 800);
+    }} catch(_) {{}}
+  }}, 2000);
 }}
 
 function pararPoll() {{
@@ -2733,130 +2783,23 @@ function pararPoll() {{
   _pollTimer = null;
 }}
 
-function injetarCaptura() {{
-  if (!_win || _win.closed) {{ mostrarFallback(); return; }}
-  document.getElementById('tela-aguardando').style.display  = 'none';
-  document.getElementById('tela-capturando').style.display = 'block';
-  mostrar('🔄 Extraindo token... aguarde', 'inf');
-
-  // Navega a janela da Quotex para nossa página de injeção
-  // Essa página roda no contexto do browser do usuário e usa localStorage/cookies
-  // da Quotex (pois o browser já está autenticado) para extrair o token
-  try {{
-    _win.location.href = SRV + '/quotex/ssid-inject';
-  }} catch(e) {{
-    // Não conseguiu navegar (popup blocker ou closed) — fallback manual
-    mostrarFallback();
-  }}
-
-  // Timeout: se em 15s não recebeu o token, mostra fallback
-  setTimeout(() => {{
-    if (document.getElementById('tela-capturando').style.display !== 'none') {{
-      mostrarFallback();
-    }}
-  }}, 15000);
-}}
-
-function capturarManual() {{
-  // Usuário clicou manualmente — força a injeção imediatamente
-  pararPoll();
-  if (_win && !_win.closed) {{
-    injetarCaptura();
-  }} else {{
-    // Janela fechada — abre ssid-inject em nova janela e espera postMessage
-    document.getElementById('tela-aguardando').style.display  = 'none';
-    document.getElementById('tela-capturando').style.display = 'block';
-    mostrar('🔄 Abrindo captura...', 'inf');
-    _win = window.open(SRV + '/quotex/ssid-inject', '_blank',
-                       'width=420,height=320,left=100,top=100');
-    setTimeout(() => {{
-      if (document.getElementById('tela-capturando').style.display !== 'none') {{
-        mostrarFallback();
-      }}
-    }}, 15000);
-  }}
-}}
-
 function onSsidCapturado() {{
-  document.getElementById('tela-aguardando').style.display  = 'none';
-  document.getElementById('tela-capturando').style.display = 'none';
-  document.getElementById('tela-inicio').style.display = 'block';
-  mostrar('✅ SSID capturado com sucesso! Volte ao bot e clique DEMO ou REAL.', 'ok');
-  if (_msgHandler) {{ window.removeEventListener('message', _msgHandler); _msgHandler = null; }}
-  setTimeout(() => window.close(), 6000);
+  if (_winInj && !_winInj.closed) _winInj.close();
+  document.getElementById('tela-aguardando').style.display = 'none';
+  document.getElementById('tela-inicio').style.display     = 'block';
+  mostrar('✅ SSID capturado! Volte ao bot e clique DEMO ou REAL.', 'ok');
+  setTimeout(() => window.close(), 5000);
 }}
 
 function mostrarFallback() {{
-  document.getElementById('tela-aguardando').style.display  = 'none';
-  document.getElementById('tela-capturando').style.display = 'none';
-  document.getElementById('tela-inicio').style.display = 'block';
-  document.getElementById('btn-capturar-manual').style.display = 'block';
-  mostrarFormManual();
-}}
-
-function mostrarFormManual() {{
-  const card = document.querySelector('.card');
-  const old = document.getElementById('form-manual');
-  if (old) old.remove();
-
-  const div = document.createElement('div');
-  div.id = 'form-manual';
-  div.innerHTML = `
-    <div style="margin:14px 0 8px; padding:12px; background:rgba(255,189,46,0.06);
-                border:1px solid rgba(255,189,46,0.3); border-radius:8px;
-                font-size:0.65rem; text-align:left; line-height:2; color:#888;">
-      <b style="color:#ffbd2e;">Como pegar o SSID manualmente:</b><br>
-      <b>1.</b> Na aba da Quotex, aperte <b style="color:#fff;">F12</b><br>
-      <b>2.</b> Clique em <b style="color:#fff;">Application</b> (ou Armazenamento)<br>
-      <b>3.</b> Clique em <b style="color:#fff;">Local Storage → qxbroker.com</b><br>
-      <b>4.</b> Copie o valor da chave <b style="color:#00cfff;">token</b><br>
-      <b>5.</b> Cole abaixo e clique ENVIAR
-    </div>
-    <input id="inp-manual" type="text" placeholder="Cole o token aqui..."
-      style="width:100%; padding:10px; background:#0a0a12;
-             border:1px solid rgba(0,207,255,0.4); color:#00cfff;
-             font-family:'Courier New'; font-size:0.75rem; border-radius:6px;
-             outline:none; margin:6px 0;">
-    <button onclick="enviarManual()" class="btn btn-green" style="margin-top:4px;">
-      📤 ENVIAR TOKEN
-    </button>
-  `;
-  card.appendChild(div);
-  mostrar('Captura automática não disponível. Cole o token manualmente.', 'warn');
-}}
-
-async function enviarManual() {{
-  const v = (document.getElementById('inp-manual') || {{}}).value || '';
-  if (!v || v.length < 16) {{ mostrar('Token muito curto. Verifique e tente novamente.', 'err'); return; }}
-  await enviar(v.trim());
-}}
-
-async function enviar(token) {{
-  document.getElementById('tela-inicio').style.display     = 'none';
-  document.getElementById('tela-capturando').style.display = 'block';
-  const old = document.getElementById('form-manual');
-  if (old) old.remove();
-
-  try {{
-    const r = await fetch(SRV + '/quotex/ssid-captura/receber', {{
-      method: 'POST',
-      headers: {{ 'Content-Type': 'application/json' }},
-      body: JSON.stringify({{ ssid: token }}),
-    }});
-    const d = await r.json();
-    document.getElementById('tela-capturando').style.display = 'none';
-    document.getElementById('tela-inicio').style.display = 'block';
-    if (d.ok) {{
-      mostrar('✅ SSID capturado! Volte ao bot e clique DEMO ou REAL.', 'ok');
-      setTimeout(() => window.close(), 5000);
-    }} else {{
-      mostrar('❌ Erro: ' + (d.erro || 'falha'), 'err');
-    }}
-  }} catch(e) {{
-    document.getElementById('tela-capturando').style.display = 'none';
-    document.getElementById('tela-inicio').style.display = 'block';
-    mostrar('❌ Falha de rede: ' + e.message, 'err');
-  }}
+  if (_winInj && !_winInj.closed) _winInj.focus();
+  else _winInj = window.open(SRV + '/quotex/ssid-inject', '_blank',
+                              'width=460,height=520,left=200,top=100');
+  document.getElementById('tela-aguardando').style.display = 'none';
+  document.getElementById('tela-inicio').style.display     = 'block';
+  document.getElementById('btn-ja-fiz').style.display      = 'block';
+  mostrar('⚠️ Tempo esgotado. Reabra a janela de captura e tente novamente.', 'warn');
+  iniciarPollServidor(); // continua tentando
 }}
 
 function mostrar(msg, tipo) {{
