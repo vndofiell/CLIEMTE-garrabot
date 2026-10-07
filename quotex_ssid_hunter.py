@@ -63,9 +63,8 @@ def _hunter_thread():
         from selenium.webdriver.chrome.service import Service
 
         opts = Options()
-        os.makedirs(_PROFILE_DIR, exist_ok=True)
-        opts.add_argument(f"--user-data-dir={_PROFILE_DIR}")
-        opts.add_argument("--profile-directory=Default")
+        # Aba anônima — sem cookies/sessões anteriores, sem rastros
+        opts.add_argument("--incognito")
         opts.add_argument("--disable-blink-features=AutomationControlled")
         opts.add_experimental_option("excludeSwitches", ["enable-automation"])
         opts.add_experimental_option("useAutomationExtension", False)
