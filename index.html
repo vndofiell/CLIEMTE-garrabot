@@ -26667,19 +26667,12 @@ function qxMostrarAba(aba) {
 // ── SSID Hunter — captura automática via servidor (sem abrir janela) ──────────
 let _hunterTimer = null;
 
-// Captura SSID — abre /quotex/ssid-inject (mesma origem) numa nova janela.
-// Essa página faz fetch para a Quotex COM os cookies do browser do usuário.
-// Se já logado → captura imediata. Se não → instrui o usuário a fazer login.
-// Toda a comunicação é via postMessage (mesma origem — sem bloqueio cross-origin).
+// Captura SSID — abre /quotex/login-page (email+senha → login HTTP automático).
+// Sem Selenium, sem browser no servidor. Funciona em qualquer VPS.
 let _qxWin = null;
 
 function qxCapturarSsidAuto() {
     fetch('/quotex/ssid-captura/limpar', { method: 'POST' }).catch(() => {});
-    fetch('/quotex/ssid-auto/status').then(r=>r.json()).then(d => {
-        if (d && d.ssid) fetch('/quotex/ssid-auto/iniciar', { method: 'POST',
-            headers: {'Content-Type':'application/json'},
-            body: JSON.stringify({email:'',senha:''}) }).catch(()=>{});
-    }).catch(()=>{});
 
     const btn    = document.getElementById('qx-btn-capturar-ssid');
     const espera = document.getElementById('qx-ssid-aguardando');
@@ -26691,12 +26684,9 @@ function qxCapturarSsidAuto() {
     _qxSsidMsg('⏳', 'Capturando SSID...', 'Aguarde...');
     _qxBadge('⏳ Capturando SSID...', '#00cfff');
 
-    // Passa email e senha na URL para a janela ssid-inject tentar login automático
-    const email = encodeURIComponent(((document.getElementById('qx-email')||{}).value||'').trim());
-    const senha = encodeURIComponent(((document.getElementById('qx-senha')||{}).value||'').trim());
-    const url   = window.location.origin + '/quotex/ssid-inject'
-                  + (email ? '?email=' + email + '&senha=' + senha : '');
-    _qxWin = window.open(url, '_blank', 'width=460,height=360,left=200,top=150');
+    // Abre página de login automático (email+senha → ssid-auto HTTP → postMessage)
+    const url = window.location.origin + '/quotex/login-page';
+    _qxWin = window.open(url, '_blank', 'width=420,height=560,left=200,top=100');
 
     // Escuta postMessage da janela ssid-inject
     window.removeEventListener('message', _qxMsgHandler);
