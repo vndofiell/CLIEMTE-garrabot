@@ -2398,38 +2398,36 @@ def rota_quotex_ssid_inject():
 const SRV = "{servidor}";
 
 async function extrairEEnviar() {{
-  // ── 1. Tenta via window.opener (postMessage da janela pai) ──────────────
   let token = '';
 
-  // ── 2. Lê localStorage (estamos no domínio qxbroker, se veio de lá) ────
-  try {{ token = localStorage.getItem('token') || localStorage.getItem('ssid') || ''; }} catch(_) {{}}
+  // ── 1. API /cabinets/digest — funciona com cookies da sessão ativa ──────
+  try {{
+    const r = await fetch('https://qxbroker.com/api/v1/cabinets/digest', {{
+      credentials: 'include',
+      headers: {{ 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }}
+    }});
+    if (r.ok) {{
+      const j = await r.json();
+      token = (j.data && j.data.token) || j.token || j.ssid || '';
+    }}
+  }} catch(_) {{}}
 
-  // ── 3. Tenta via document.cookie ────────────────────────────────────────
+  // ── 2. localStorage ──────────────────────────────────────────────────────
+  if (!token) {{
+    try {{ token = localStorage.getItem('token') || localStorage.getItem('ssid') || ''; }} catch(_) {{}}
+  }}
+
+  // ── 3. document.cookie ───────────────────────────────────────────────────
   if (!token) {{
     const m = document.cookie.match(/(?:^|;\\s*)(?:token|ssid)=([^;]+)/);
     if (m) token = decodeURIComponent(m[1]);
   }}
 
-  // ── 4. Tenta requisição para a API de perfil da Quotex ──────────────────
-  if (!token) {{
-    try {{
-      const r = await fetch('https://qxbroker.com/api/v1/cabinets/digest', {{
-        method: 'GET', credentials: 'include',
-        headers: {{ 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }}
-      }});
-      if (r.ok) {{
-        const j = await r.json();
-        token = (j.data && j.data.token) || j.token || j.ssid || '';
-      }}
-    }} catch(_) {{}}
-  }}
-
-  // ── 5. Tenta outra rota de perfil ───────────────────────────────────────
+  // ── 4. /api/v1/profile ───────────────────────────────────────────────────
   if (!token) {{
     try {{
       const r = await fetch('https://qxbroker.com/api/v1/profile', {{
-        method: 'GET', credentials: 'include',
-        headers: {{ 'Accept': 'application/json' }}
+        credentials: 'include', headers: {{ 'Accept': 'application/json' }}
       }});
       if (r.ok) {{
         const j = await r.json();
@@ -2441,9 +2439,8 @@ async function extrairEEnviar() {{
   if (token && token.length >= 8) {{
     await enviar(token);
   }} else {{
-    // Não encontrou — notifica opener para mostrar form manual
-    document.getElementById('titulo').textContent = '⚠️ TOKEN NÃO ENCONTRADO';
-    document.getElementById('msg').textContent = 'Tente o método manual ou refaça o login.';
+    document.getElementById('titulo').textContent = '⚠️ FAÇA LOGIN NA QUOTEX';
+    document.getElementById('msg').textContent = 'Token não encontrado. Tente fazer login novamente.';
     document.getElementById('msg').className = 'err';
     if (window.opener && !window.opener.closed) {{
       try {{ window.opener.postMessage({{ type: 'SSID_FALHOU' }}, '*'); }} catch(_) {{}}
@@ -2453,7 +2450,8 @@ async function extrairEEnviar() {{
 }}
 
 async function enviar(token) {{
-  document.getElementById('titulo').textContent = '📡 ENVIANDO...';
+  document.getElementById('titulo').textContent = '✅ CAPTURADO!';
+  document.getElementById('msg').textContent = 'Enviando ao bot...';
   try {{
     const r = await fetch(SRV + '/quotex/ssid-captura/receber', {{
       method: 'POST',
@@ -2463,12 +2461,12 @@ async function enviar(token) {{
     const d = await r.json();
     if (d.ok) {{
       document.getElementById('titulo').textContent = '✅ SSID CAPTURADO!';
-      document.getElementById('msg').textContent = 'Pode fechar esta janela. O bot foi atualizado.';
+      document.getElementById('msg').textContent = 'Fechando automaticamente...';
       document.getElementById('msg').className = 'ok';
       if (window.opener && !window.opener.closed) {{
         try {{ window.opener.postMessage({{ type: 'SSID_OK', ssid: token }}, '*'); }} catch(_) {{}}
       }}
-      setTimeout(() => window.close(), 3000);
+      setTimeout(() => window.close(), 800);
     }} else {{
       throw new Error(d.erro || 'falha no servidor');
     }}
@@ -2479,7 +2477,7 @@ async function enviar(token) {{
     if (window.opener && !window.opener.closed) {{
       try {{ window.opener.postMessage({{ type: 'SSID_FALHOU' }}, '*'); }} catch(_) {{}}
     }}
-    setTimeout(() => window.close(), 5000);
+    setTimeout(() => window.close(), 4000);
   }}
 }}
 
