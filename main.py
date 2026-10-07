@@ -2251,45 +2251,45 @@ def rota_quotex_login_page():
 const SERVIDOR = "{servidor}";
 let _qxWin = null;
 let _pollTimer = null;
+let _instrucaoMostrada = false;  // evita duplicar a instrução manual
 
-function mostrarStatus(msg, cor) {{
+// Bookmarklet completo — busca token em todas as fontes conhecidas da Quotex
+const BOOKMARKLET = `javascript:void((function(){{var t=(window.settings&&window.settings.token)||localStorage.token||localStorage.ssid||localStorage.auth_token||localStorage.getItem('token')||localStorage.getItem('ssid')||(document.cookie.match(/(?:^|;)\\s*token=([^;]+)/)||[])[1]||'';if(!t){{alert('❌ Token não encontrado. Certifique-se de estar logado na Quotex.');return;}}fetch('{servidor}/quotex/ssid-captura/receber',{{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{ssid:t}})}}).then(r=>r.json()).then(d=>{{if(d.ok){{alert('✅ SSID capturado! Volte ao bot e clique DEMO ou REAL.');}}else{{alert('❌ Erro: '+d.erro);}}}})}})())`;
+
+function mostrarStatus(msg, cor, html) {{
   const el = document.getElementById('status');
   el.style.display = 'block';
   el.style.color = cor || '#ffbd2e';
-  el.style.borderColor = cor ? cor + '44' : '#33333344';
-  el.textContent = msg;
+  el.style.borderColor = cor ? cor + '55' : '#33333355';
+  if (html) el.innerHTML = msg;
+  else el.textContent = msg;
 }}
 
 function abrirQuotex() {{
   _qxWin = window.open('https://qxbroker.com/pt/sign-in', '_blank');
   document.getElementById('btn-capturar').style.display = 'block';
-  mostrarStatus('⏳ Faça login na janela que abriu...', '#ffbd2e');
-  // Inicia polling automático após 5s
-  setTimeout(() => {{
-    _pollTimer = setInterval(tentarCapturar, 3000);
-  }}, 5000);
+  mostrarStatus('⏳ Faça login na janela que abriu — depois clique "Já fiz login"', '#ffbd2e');
 }}
 
 async function tentarCapturar() {{
-  mostrarStatus('🔍 Tentando capturar token...', '#00cfff');
-  try {{
-    // Tenta ler o localStorage da janela filha (só funciona se mesmo domínio — não vai funcionar por cross-origin)
-    // Usa bookmarklet injetado via URL
-    const ssid = await _tentarViaBookmarklet();
-    if (ssid) {{
-      await enviarSsid(ssid);
-      return;
-    }}
-  }} catch(_) {{}}
-
-  // Fallback: pede ao usuário para copiar manualmente de um bookmarklet
-  mostrarStatus('⚠️ Não foi possível capturar automaticamente. Use o método manual abaixo.', '#f87171');
   clearInterval(_pollTimer);
-  mostrarInstrucaoManual();
+  mostrarStatus('🔍 Verificando token...', '#00cfff');
+
+  // Tenta via postMessage na janela filha (cross-origin não funciona — esperado)
+  const ssid = await _tentarViaPostMessage();
+  if (ssid) {{
+    await enviarSsid(ssid);
+    return;
+  }}
+
+  // Não conseguiu automaticamente — mostra instrução manual UMA VEZ
+  if (!_instrucaoMostrada) {{
+    _instrucaoMostrada = true;
+    mostrarInstrucaoManual();
+  }}
 }}
 
-async function _tentarViaBookmarklet() {{
-  // Injeta script na aba da Quotex via postMessage (funciona se a aba ainda está aberta)
+async function _tentarViaPostMessage() {{
   return new Promise((resolve) => {{
     if (!_qxWin || _qxWin.closed) {{ resolve(''); return; }}
     const handler = (e) => {{
@@ -2299,16 +2299,12 @@ async function _tentarViaBookmarklet() {{
       }}
     }};
     window.addEventListener('message', handler);
-    try {{
-      _qxWin.postMessage({{ type: 'QX_GET_SSID' }}, 'https://qxbroker.com');
-    }} catch(_) {{}}
-    // Timeout de 2s
-    setTimeout(() => {{ window.removeEventListener('message', handler); resolve(''); }}, 2000);
+    try {{ _qxWin.postMessage({{ type: 'QX_GET_SSID' }}, 'https://qxbroker.com'); }} catch(_) {{}}
+    setTimeout(() => {{ window.removeEventListener('message', handler); resolve(''); }}, 1500);
   }});
 }}
 
 async function enviarSsid(ssid) {{
-  clearInterval(_pollTimer);
   mostrarStatus('✅ SSID capturado! Enviando ao servidor...', '#00ff41');
   try {{
     const r = await fetch(SERVIDOR + '/quotex/ssid-captura/receber', {{
@@ -2318,9 +2314,10 @@ async function enviarSsid(ssid) {{
     }});
     const d = await r.json();
     if (d.ok) {{
-      mostrarStatus('✅ Pronto! Volte ao bot — SSID preenchido automaticamente.', '#00ff41');
+      mostrarStatus('✅ Pronto! Volte ao bot e clique DEMO ou REAL para conectar.', '#00ff41');
+      document.getElementById('btn-capturar').style.display = 'none';
       if (_qxWin && !_qxWin.closed) _qxWin.close();
-      setTimeout(() => window.close(), 3000);
+      setTimeout(() => window.close(), 4000);
     }} else {{
       mostrarStatus('❌ Erro: ' + (d.erro || 'falha'), '#f44');
     }}
@@ -2329,20 +2326,36 @@ async function enviarSsid(ssid) {{
   }}
 }}
 
+function copiarBookmarklet() {{
+  navigator.clipboard.writeText(BOOKMARKLET).then(() => {{
+    const btn = document.getElementById('btn-copiar');
+    if (btn) {{ btn.textContent = '✅ Copiado!'; setTimeout(() => btn.textContent = '📋 Copiar', 2000); }}
+  }}).catch(() => {{
+    // Fallback: seleciona o texto
+    const el = document.getElementById('bookmarklet-code');
+    if (el) {{ const r = document.createRange(); r.selectNode(el); window.getSelection().removeAllRanges(); window.getSelection().addRange(r); }}
+  }});
+}}
+
 function mostrarInstrucaoManual() {{
+  const existing = document.getElementById('instrucao-manual');
+  if (existing) return;  // já existe — não duplica
   const card = document.querySelector('.card');
   const div = document.createElement('div');
-  div.style.cssText = 'margin-top:16px;text-align:left;font-size:0.65rem;color:#888;line-height:1.9;border:1px solid #333;border-radius:6px;padding:12px;';
+  div.id = 'instrucao-manual';
+  div.style.cssText = 'margin-top:14px;text-align:left;font-size:0.65rem;color:#888;line-height:1.9;border:1px solid rgba(255,189,46,0.3);border-radius:6px;padding:14px;background:rgba(255,189,46,0.04);';
   div.innerHTML = `
-    <b style="color:#ffbd2e;">📋 Método manual:</b><br>
-    1. Na aba da Quotex aberta, copie a URL da barra de endereços<br>
-    2. Cole o seguinte na barra de endereços da aba Quotex:<br>
-    <code style="color:#00cfff;font-size:0.6rem;word-break:break-all;display:block;margin:6px 0;background:#0a0a12;padding:6px;border-radius:3px;">
-javascript:void(fetch('${{SERVIDOR}}/quotex/ssid-captura/receber',{{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{ssid:(localStorage.token||localStorage.ssid||document.cookie.match(/token=([^;]+)/)?.[1]||'')}})}}).then(r=>r.json()).then(d=>alert(d.ok?'✅ SSID capturado!':'❌ '+d.erro)))
-    </code>
-    3. Pressione Enter — uma mensagem de confirmação vai aparecer
+    <b style="color:#ffbd2e;">📋 Método manual (1 passo só):</b><br><br>
+    1. Certifique-se de estar <b style="color:#fff;">logado</b> na aba da Quotex<br>
+    2. Copie o código abaixo e cole na <b style="color:#fff;">barra de endereços</b> da aba Quotex:<br>
+    <div style="position:relative;margin:8px 0;">
+      <code id="bookmarklet-code" style="color:#00cfff;font-size:0.58rem;word-break:break-all;display:block;background:#0a0a12;padding:8px 10px;border-radius:4px;border:1px solid rgba(0,207,255,0.2);line-height:1.6;cursor:text;user-select:all;">${{BOOKMARKLET}}</code>
+      <button id="btn-copiar" onclick="copiarBookmarklet()" style="margin-top:6px;width:100%;padding:8px;background:rgba(0,207,255,0.1);border:1px solid rgba(0,207,255,0.5);color:#00cfff;font-family:'Share Tech Mono';font-size:0.72rem;cursor:pointer;border-radius:4px;letter-spacing:1px;">📋 Copiar</button>
+    </div>
+    3. Pressione <b style="color:#fff;">Enter</b> — uma mensagem de confirmação vai aparecer ✅
   `;
   card.appendChild(div);
+  mostrarStatus('👆 Siga as instruções abaixo para capturar o SSID', '#ffbd2e');
 }}
 </script>
 </body>
