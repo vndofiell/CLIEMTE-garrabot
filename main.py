@@ -2495,174 +2495,87 @@ def rota_quotex_ssid_inject():
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Capturando SSID...</title>
+<title>Capturar SSID</title>
 <style>
   * {{ box-sizing:border-box; margin:0; padding:0; }}
-  body {{ background:#0d0d1a; color:#c8d0e0;
-         font-family:'Courier New',monospace;
+  body {{ background:#0d0d1a; color:#c8d0e0; font-family:'Courier New',monospace;
          display:flex; align-items:center; justify-content:center;
          min-height:100vh; padding:16px; text-align:center; }}
-  .card {{ max-width:380px; width:100%; }}
-  h2 {{ color:#00cfff; font-size:1rem; letter-spacing:2px; margin-bottom:10px; }}
-  p  {{ color:#555; font-size:0.7rem; margin-bottom:14px; }}
+  .card {{ max-width:400px; width:100%; }}
+  h2  {{ color:#00cfff; font-size:1rem; letter-spacing:2px; margin-bottom:8px; }}
+  p   {{ color:#555; font-size:0.68rem; margin-bottom:12px; line-height:1.6; }}
   .ok  {{ color:#00ff41 !important; }}
-  .err {{ color:#f44 !important; }}
-  .btn {{ display:block; width:100%; padding:13px; margin:6px 0;
-          border-radius:6px; font-family:'Courier New'; font-size:0.82rem;
-          letter-spacing:2px; cursor:pointer; font-weight:bold; border:2px solid; }}
-  .btn-blue  {{ background:rgba(0,207,255,0.12); border-color:#00cfff; color:#00cfff; }}
+  .btn {{ display:block; width:100%; padding:14px; margin:6px 0; border-radius:6px;
+          font-family:'Courier New'; font-size:0.85rem; letter-spacing:2px;
+          cursor:pointer; font-weight:bold; border:2px solid; }}
+  .btn-cyan  {{ background:rgba(0,207,255,0.12); border-color:#00cfff; color:#00cfff; }}
   .btn-green {{ background:rgba(0,255,65,0.12);  border-color:#00ff41; color:#00ff41; }}
-  .btn:disabled {{ opacity:0.4; cursor:not-allowed; }}
 </style>
 </head>
 <body>
 <div class="card">
-  <h2 id="titulo">⏳ VERIFICANDO...</h2>
-  <p id="msg">Aguarde...</p>
-  <div id="btns" style="display:none;">
-    <button id="btn-abrir"    class="btn btn-blue"  onclick="abrirQuotex()">🌐 ABRIR QUOTEX PARA LOGIN</button>
-    <button id="btn-capturar" class="btn btn-green" onclick="capturar()" style="display:none;">⚡ JÁ FIZ LOGIN — CAPTURAR SSID</button>
-  </div>
+  <h2 id="titulo">⏳ AGUARDANDO...</h2>
+  <p  id="msg">Clique no botão abaixo para capturar o SSID da Quotex</p>
+  <button id="btn-cap" class="btn btn-green" onclick="capturar()">
+    ⚡ CAPTURAR SSID DA QUOTEX
+  </button>
 </div>
 <script>
 const SRV = "{servidor}";
-let _win = null;
-let _poll = null;
-
-// Extrai email da URL (passado pelo opener ao abrir esta janela)
-const _urlP = new URLSearchParams(location.search);
-const _email = _urlP.get('email') || '';
-const _senha = _urlP.get('senha') || '';
-
-init();
-
-async function init() {{
-  // Verifica se já tem SSID disponível no servidor
-  const s = await fetch(SRV + '/quotex/ssid-captura/status').then(r=>r.json()).catch(()=>({{}}));
-  if (s.status === 'capturado' && s.ssid && s.ssid.length >= 8) {{
-    salvar(s.ssid);
-    return;
-  }}
-
-  // Se tem email/senha, tenta login automático no servidor
-  if (_email && _senha) {{
-    titulo('⏳ FAZENDO LOGIN...');
-    msg('Autenticando na Quotex — aguarde');
-    const r = await fetch(SRV + '/quotex/ssid-auto/iniciar', {{
-      method: 'POST',
-      headers: {{ 'Content-Type': 'application/json' }},
-      body: JSON.stringify({{ email: _email, senha: _senha }})
-    }}).then(r=>r.json()).catch(()=>({{}}));
-    if (r.ok) {{
-      iniciarPollAuto();
-      return;
-    }}
-  }}
-
-  // Sem credenciais ou login falhou — mostra botões manuais
-  mostrarBotoes();
+const _p   = new URLSearchParams(location.search);
+// Fase 2: retornamos da Quotex com o token
+const _token = _p.get('t') || '';
+if (_token && _token.length >= 8) {{
+  salvarToken(_token);
+}} else {{
+  titulo('🔑 CLIQUE PARA CAPTURAR');
+  msg('Clique abaixo — a janela vai à Quotex, lê o SSID e volta');
 }}
 
-function mostrarBotoes() {{
-  titulo('🔑 CONECTAR QUOTEX');
-  msg('Clique abaixo, faça login e depois clique em CAPTURAR');
-  document.getElementById('btns').style.display = 'block';
+function capturar() {{
+  titulo('⏳ ABRINDO QUOTEX...');
+  msg('Aguarde — voltará automaticamente em segundos');
+  document.getElementById('btn-cap').disabled = true;
+
+  // Navega esta janela para a Quotex /trade
+  // Quando voltar (history.back após ler o token), estaremos de volta aqui
+  // O truque: a Quotex carrega, nosso script de hash lê o token e navega de volta
+  // Passamos o SRV no hash para que o script de retorno saiba onde enviar
+  const srv_enc = encodeURIComponent(SRV);
+  // Salva SRV no sessionStorage antes de navegar (mesmo origin, persiste)
+  try {{ sessionStorage.setItem('_qxSRV', SRV); }} catch(_) {{}}
+  window.location.href = 'https://qxbroker.com/pt/trade?_qxcap=1&_srv=' + srv_enc;
 }}
 
-function abrirQuotex() {{
-  _win = window.open('https://qxbroker.com/pt/sign-in', '_blank',
-                     'width=1000,height=680,left=30,top=30');
-  document.getElementById('btn-abrir').style.display    = 'none';
-  document.getElementById('btn-capturar').style.display = 'block';
-  titulo('⏳ AGUARDANDO LOGIN...');
-  msg('Faça login na Quotex e clique em CAPTURAR abaixo');
-  iniciarPollServidor();
-}}
-
-function iniciarPollAuto() {{
-  titulo('⏳ CAPTURANDO...');
-  msg('Autenticando na Quotex...');
-  clearInterval(_poll);
-  let t = 0;
-  _poll = setInterval(async () => {{
-    t++;
-    const d = await fetch(SRV + '/quotex/ssid-auto/status').then(r=>r.json()).catch(()=>({{}}));
-    if (d.status === 'capturado' && d.ssid) {{
-      clearInterval(_poll);
-      salvar(d.ssid);
-      return;
-    }}
-    if (d.status === 'erro') {{
-      clearInterval(_poll);
-      // Auto falhou — mostra botões manuais
-      titulo('⚠️ LOGIN AUTOMÁTICO FALHOU');
-      msg(d.erro || 'Tente manualmente abaixo');
-      mostrarBotoes();
-      return;
-    }}
-    if (t > 30) {{ clearInterval(_poll); mostrarBotoes(); }}
-  }}, 1500);
-}}
-
-function iniciarPollServidor() {{
-  clearInterval(_poll);
-  let t = 0;
-  _poll = setInterval(async () => {{
-    t++;
-    const d = await fetch(SRV + '/quotex/ssid-captura/status').then(r=>r.json()).catch(()=>({{}}));
-    if (d.status === 'capturado' && d.ssid) {{ clearInterval(_poll); salvar(d.ssid); }}
-    if (t > 200) clearInterval(_poll);
-  }}, 1500);
-}}
-
-async function capturar() {{
-  document.getElementById('btn-capturar').disabled = true;
-  titulo('🔄 VERIFICANDO...');
-  // Tenta iniciar login automático se tiver credenciais
-  if (_email && _senha) {{
-    await fetch(SRV + '/quotex/ssid-auto/iniciar', {{
-      method: 'POST', headers: {{ 'Content-Type': 'application/json' }},
-      body: JSON.stringify({{ email: _email, senha: _senha }})
-    }}).catch(()=>{{}});
-    await new Promise(r => setTimeout(r, 8000));
-  }}
-  const d = await fetch(SRV + '/quotex/ssid-auto/status').then(r=>r.json()).catch(()=>({{}}));
-  if (d.ssid && d.ssid.length >= 8) {{ clearInterval(_poll); salvar(d.ssid); return; }}
-  const d2 = await fetch(SRV + '/quotex/ssid-captura/status').then(r=>r.json()).catch(()=>({{}}));
-  if (d2.status === 'capturado' && d2.ssid) {{ clearInterval(_poll); salvar(d2.ssid); return; }}
-  titulo('⚠️ NÃO CAPTURADO');
-  msg('Verifique o login na Quotex e tente novamente');
-  document.getElementById('btn-capturar').disabled = false;
-}}
-
-async function salvar(token) {{
-  clearInterval(_poll);
+async function salvarToken(token) {{
   titulo('✅ CAPTURADO!');
   msg('Enviando ao bot...');
-  try {{ if (_win && !_win.closed) _win.close(); }} catch(_) {{}}
   const r = await fetch(SRV + '/quotex/ssid-captura/receber', {{
     method: 'POST',
     headers: {{ 'Content-Type': 'application/json' }},
     body: JSON.stringify({{ ssid: token }}),
-  }});
-  const d = await r.json();
-  if (d.ok) {{
+  }}).then(r=>r.json()).catch(()=>({{ok:false}}));
+  if (r.ok) {{
     titulo('✅ SSID CAPTURADO!');
-    msg_ok('Fechando...');
+    p_ok('Fechando automaticamente...');
     if (window.opener && !window.opener.closed)
       window.opener.postMessage({{ type: 'SSID_OK', ssid: token }}, '*');
     setTimeout(() => window.close(), 800);
+  }} else {{
+    titulo('❌ ERRO');
+    p_err('Falha ao salvar. Tente novamente.');
+    document.getElementById('btn-cap').disabled = false;
   }}
 }}
 
-function titulo(t) {{ const el = document.getElementById('titulo'); if(el) el.textContent = t; }}
-function msg(t)    {{ const el = document.getElementById('msg');    if(el) {{ el.textContent = t; el.className = ''; }} }}
-function msg_ok(t) {{ const el = document.getElementById('msg');    if(el) {{ el.textContent = t; el.className = 'ok'; }} }}
-function msg_err(t){{ const el = document.getElementById('msg');    if(el) {{ el.textContent = t; el.className = 'err'; }} }}
+function titulo(t)  {{ const e=document.getElementById('titulo'); if(e) e.textContent=t; }}
+function msg(t)     {{ const e=document.getElementById('msg'); if(e){{ e.textContent=t; e.className=''; }} }}
+function p_ok(t)    {{ const e=document.getElementById('msg'); if(e){{ e.textContent=t; e.className='ok'; }} }}
+function p_err(t)   {{ const e=document.getElementById('msg'); if(e){{ e.textContent=t; e.className='err'; }} }}
 </script>
 </body>
 </html>"""
-    return html, 200, {'Content-Type': 'text/html; charset=utf-8'}
+    return html, 200, {{'Content-Type': 'text/html; charset=utf-8'}}
 
 
 @app.route('/quotex/login-page')
