@@ -2318,6 +2318,164 @@ def rota_ssid_auto_status():
         })
 
 
+@app.route('/quotex/login-proxy', methods=['POST'])
+def rota_quotex_login_proxy():
+    """
+    Faz login na Quotex usando curl_cffi (impersonate Chrome) diretamente
+    no servidor, mas spoofando o IP do usuário via X-Forwarded-For e
+    User-Agent real do browser. Retorna o token SSID em caso de sucesso.
+    """
+    import re as _re
+
+    dados   = request.get_json(silent=True) or {}
+    email   = str(dados.get("email", "")).strip()
+    senha   = str(dados.get("senha", "")).strip()
+    user_ip = request.headers.get("X-Forwarded-For", request.remote_addr or "").split(",")[0].strip()
+    ua      = request.headers.get("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+
+    if not email or not senha:
+        return jsonify({"ok": False, "erro": "Email e senha obrigatórios."}), 400
+
+    try:
+        from curl_cffi import requests as _creqs
+
+        s = _creqs.Session(impersonate="chrome120")
+        s.headers.update({
+            "User-Agent":      ua,
+            "Accept-Language": "pt-BR,pt;q=0.9",
+            "X-Forwarded-For": user_ip,
+            "X-Real-IP":       user_ip,
+        })
+
+        # 1. Obtém CSRF token
+        csrf = ""
+        try:
+            pg = s.get("https://qxbroker.com/pt/sign-in", timeout=15)
+            m  = _re.search(r'name="_token"\s+value="([^"]+)"', pg.text)
+            if m:
+                csrf = m.group(1)
+        except Exception:
+            pass
+
+        # 2. POST de login
+        payload = {"email": email, "password": senha}
+        if csrf:
+            payload["_token"] = csrf
+
+        resp = s.post(
+            "https://qxbroker.com/pt/sign-in",
+            data=payload,
+            headers={
+                "Content-Type": "application/x-www-form-urlencoded",
+                "Referer":      "https://qxbroker.com/pt/sign-in",
+                "Origin":       "https://qxbroker.com",
+            },
+            timeout=20,
+            allow_redirects=True,
+        )
+
+        # 3. Extrai token
+        token = ""
+        # Tenta JSON
+        try:
+            j = resp.json()
+            token = j.get("token") or j.get("ssid") or (j.get("data") or {}).get("token", "")
+        except Exception:
+            pass
+
+        # Tenta HTML da página /trade
+        if not token:
+            try:
+                trade = s.get("https://qxbroker.com/pt/trade", timeout=15)
+                m2 = _re.search(r'"token"\s*:\s*"([^"]{20,})"', trade.text)
+                if m2:
+                    token = m2.group(1)
+            except Exception:
+                pass
+
+        if token and len(token) >= 16:
+            # Salva no estado de captura
+            with _SSID_CAPTURA_LOCK:
+                _SSID_CAPTURA_STATE["ssid"]   = token
+                _SSID_CAPTURA_STATE["status"] = "capturado"
+                _SSID_CAPTURA_STATE["ts"]     = time.time()
+            print(f"[login-proxy] ✅ Token capturado! len={len(token)}")
+            return jsonify({"ok": True, "ssid": token})
+
+        # Verifica se precisa de OTP
+        if "otp" in resp.text.lower() or "two" in resp.text.lower() or resp.status_code == 422:
+            return jsonify({"ok": False, "otp": True, "erro": "2FA necessário."})
+
+        status = resp.status_code
+        return jsonify({"ok": False, "erro": f"Login falhou (HTTP {status}). Verifique email/senha."})
+
+    except ImportError:
+        # curl_cffi não instalado — tenta requests padrão
+        try:
+            import requests as _req
+            s2 = _req.Session()
+            s2.headers.update({"User-Agent": ua, "X-Forwarded-For": user_ip})
+            pg2 = s2.get("https://qxbroker.com/pt/sign-in", timeout=15)
+            csrf2 = ""
+            m3 = _re.search(r'name="_token"\s+value="([^"]+)"', pg2.text)
+            if m3:
+                csrf2 = m3.group(1)
+            payload2 = {"email": email, "password": senha}
+            if csrf2:
+                payload2["_token"] = csrf2
+            r2 = s2.post("https://qxbroker.com/pt/sign-in", data=payload2,
+                         headers={"Content-Type": "application/x-www-form-urlencoded",
+                                  "Referer": "https://qxbroker.com/pt/sign-in"},
+                         timeout=20, allow_redirects=True)
+            trade2 = s2.get("https://qxbroker.com/pt/trade", timeout=15)
+            m4 = _re.search(r'"token"\s*:\s*"([^"]{20,})"', trade2.text)
+            if m4:
+                tok2 = m4.group(1)
+                with _SSID_CAPTURA_LOCK:
+                    _SSID_CAPTURA_STATE["ssid"]   = tok2
+                    _SSID_CAPTURA_STATE["status"] = "capturado"
+                    _SSID_CAPTURA_STATE["ts"]     = time.time()
+                return jsonify({"ok": True, "ssid": tok2})
+            return jsonify({"ok": False, "erro": f"Token não encontrado (HTTP {r2.status_code})."})
+        except Exception as e2:
+            return jsonify({"ok": False, "erro": str(e2)}), 500
+
+    except Exception as exc:
+        print(f"[login-proxy] ❌ {exc}")
+        return jsonify({"ok": False, "erro": str(exc)}), 500
+
+
+@app.route('/quotex/login-proxy/otp', methods=['POST'])
+def rota_quotex_login_proxy_otp():
+    """Envia código OTP após login-proxy pedir 2FA."""
+    import re as _re
+
+    dados  = request.get_json(silent=True) or {}
+    codigo = str(dados.get("codigo", "")).strip()
+    if not codigo:
+        return jsonify({"ok": False, "erro": "Código obrigatório."}), 400
+
+    try:
+        from curl_cffi import requests as _creqs
+        s = _creqs.Session(impersonate="chrome120")
+        r = s.post("https://qxbroker.com/pt/sign-in/otp",
+                   json={"code": codigo},
+                   headers={"X-Requested-With": "XMLHttpRequest"},
+                   timeout=15)
+        trade = s.get("https://qxbroker.com/pt/trade", timeout=15)
+        m = _re.search(r'"token"\s*:\s*"([^"]{20,})"', trade.text)
+        if m:
+            tok = m.group(1)
+            with _SSID_CAPTURA_LOCK:
+                _SSID_CAPTURA_STATE["ssid"]   = tok
+                _SSID_CAPTURA_STATE["status"] = "capturado"
+                _SSID_CAPTURA_STATE["ts"]     = time.time()
+            return jsonify({"ok": True, "ssid": tok})
+        return jsonify({"ok": False, "erro": "Código inválido ou sessão expirada."})
+    except Exception as e:
+        return jsonify({"ok": False, "erro": str(e)}), 500
+
+
 # ── SSID Captura — recebe token enviado pelo navegador do usuário ─────────────
 # Funciona sem Selenium: o usuário faz login na Quotex no próprio dispositivo,
 # nosso script JS lê o token e envia para o servidor via fetch.
@@ -2805,177 +2963,67 @@ def rota_quotex_login_page():
 <script>
 const SRV = "{servidor}";
 
-// ── Login direto do browser do usuário (IP doméstico — sem bloqueio 403) ─────
-// O fetch sai do computador do usuário, não do servidor Oracle.
-// Quotex aceita porque o IP é residencial.
-
+// ── Login via proxy no servidor (usa IP/UA do browser do usuário) ─────────────
 async function conectar() {{
   const email = (document.getElementById('inp-email').value || '').trim();
   const senha = (document.getElementById('inp-senha').value || '').trim();
-  if (!email || !senha) {{
-    mostrar('Preencha email e senha.', 'err');
-    return;
-  }}
+  if (!email || !senha) {{ mostrar('Preencha email e senha.', 'err'); return; }}
+
   document.getElementById('btn-conectar').disabled = true;
   trocarTela('tela-prog');
-  setMsgs('🔄 Autenticando...', 'Fazendo login na Quotex pelo seu navegador...');
+  setMsgs('🔄 Autenticando...', 'Conectando à Quotex — aguarde ~15s...');
   mostrar('', '');
 
+  let d;
   try {{
-    // Passo 1 — obtém o CSRF token da página de login
-    setMsgs('🔄 Passo 1/3', 'Obtendo token CSRF...');
-    let csrfToken = '';
-    try {{
-      const pg = await fetch('https://qxbroker.com/pt/sign-in', {{
-        credentials: 'include',
-        headers: {{ 'Accept': 'text/html' }},
-      }});
-      const txt = await pg.text();
-      const m = txt.match(/name="_token"\s+value="([^"]+)"/);
-      if (m) csrfToken = m[1];
-    }} catch(e) {{
-      // CORS pode bloquear — tenta sem CSRF
-    }}
-
-    // Passo 2 — envia as credenciais
-    setMsgs('🔄 Passo 2/3', 'Enviando credenciais para a Quotex...');
-    const formData = new URLSearchParams();
-    formData.append('email', email);
-    formData.append('password', senha);
-    if (csrfToken) formData.append('_token', csrfToken);
-
-    const loginResp = await fetch('https://qxbroker.com/pt/sign-in', {{
+    const r = await fetch(SRV + '/quotex/login-proxy', {{
       method: 'POST',
-      credentials: 'include',
-      headers: {{
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Accept': 'application/json, text/html, */*',
-        'X-Requested-With': 'XMLHttpRequest',
-        'Referer': 'https://qxbroker.com/pt/sign-in',
-        'Origin': 'https://qxbroker.com',
-      }},
-      body: formData.toString(),
+      headers: {{ 'Content-Type': 'application/json' }},
+      body: JSON.stringify({{ email, senha }}),
     }});
-
-    // Passo 3 — extrai o token da resposta ou da página /trade
-    setMsgs('🔄 Passo 3/3', 'Extraindo SSID...');
-    let ssid = '';
-
-    // Tenta JSON primeiro
-    const ct = loginResp.headers.get('content-type') || '';
-    if (ct.includes('json')) {{
-      const j = await loginResp.json().catch(() => ({{}}));
-      ssid = j.token || j.ssid || j.data?.token || '';
-    }}
-
-    // Se não veio no JSON, vai para /trade e lê window.settings
-    if (!ssid) {{
-      const tradeResp = await fetch('https://qxbroker.com/pt/trade', {{
-        credentials: 'include',
-        headers: {{ 'Accept': 'text/html' }},
-      }});
-      const html = await tradeResp.text();
-      // window.settings = {{ ... "token": "XXXX" ... }}
-      const m2 = html.match(/"token"\s*:\s*"([^"]{20,})"/);
-      if (m2) ssid = m2[1];
-    }}
-
-    if (ssid && ssid.length >= 16) {{
-      await onCapturado(ssid);
-    }} else {{
-      // Pode ser 2FA — verifica se a resposta pede OTP
-      const html2 = await fetch('https://qxbroker.com/pt/trade', {{
-        credentials: 'include', headers: {{ 'Accept': 'text/html' }},
-      }}).then(r => r.text()).catch(() => '');
-
-      if (html2.includes('otp') || html2.includes('2fa') || html2.includes('verificar')) {{
-        trocarTela('tela-otp');
-        setMsgs('🔑 Código 2FA', 'Digite o código do autenticador');
-      }} else {{
-        // Login falhou (senha errada ou CORS bloqueou)
-        // Fallback: abre Quotex em nova aba e faz polling do localStorage
-        trocarTela('tela-form');
-        document.getElementById('btn-conectar').disabled = false;
-        mostrar('⚠️ Login direto bloqueado pelo navegador (CORS). Use o método alternativo abaixo.', 'warn');
-        // Mostra automaticamente o modo abrir Quotex + ler token
-        setTimeout(() => abrirQuotexELer(email, senha), 400);
-      }}
-    }}
-  }} catch(err) {{
+    d = await r.json();
+  }} catch(e) {{
     trocarTela('tela-form');
     document.getElementById('btn-conectar').disabled = false;
-    // CORS bloqueou — usa modo abertura de Quotex
-    mostrar('⚠️ CORS bloqueado. Abrindo modo alternativo...', 'warn');
-    setTimeout(() => abrirQuotexELer(email, senha), 400);
+    mostrar('❌ Falha de rede: ' + e.message, 'err');
+    return;
   }}
-}}
 
-// ── Modo alternativo: abre Quotex + preenche login + lê token ────────────────
-// Abre qxbroker.com/sign-in, injeta email/senha e detecta o redirect para /trade
-let _winQx   = null;
-let _pollQxId = null;
-
-function abrirQuotexELer(email, senha) {{
-  trocarTela('tela-prog');
-  setMsgs('🌐 Abrindo Quotex...', 'Faça login na janela que abrirá. O SSID é capturado automaticamente.');
-
-  // Monta URL com credenciais pré-preenchidas via /quotex/ssid-inject
-  const url = SRV + '/quotex/ssid-inject'
-            + '?email=' + encodeURIComponent(email)
-            + '&senha=' + encodeURIComponent(senha);
-  _winQx = window.open(url, '_blank', 'width=480,height=600,left=150,top=80');
-
-  // Polling: espera postMessage SSID_OK da janela ssid-inject
-  window.addEventListener('message', function handler(e) {{
-    if (e.data && e.data.type === 'SSID_OK' && e.data.ssid) {{
-      window.removeEventListener('message', handler);
-      onCapturado(e.data.ssid);
-    }}
-  }});
-
-  // Polling servidor como backup
-  clearInterval(_pollQxId);
-  let t = 0;
-  _pollQxId = setInterval(async () => {{
-    t++;
-    if (t > 150) {{ clearInterval(_pollQxId); trocarTela('tela-manual'); return; }}
-    const d = await fetch(SRV + '/quotex/ssid-captura/status').then(r=>r.json()).catch(()=>({{}}));
-    if (d.status === 'capturado' && d.ssid && d.ssid.length >= 8) {{
-      clearInterval(_pollQxId);
-      if (_winQx && !_winQx.closed) _winQx.close();
-      onCapturado(d.ssid);
-    }}
-  }}, 2000);
+  if (d.ok && d.ssid) {{
+    await onCapturado(d.ssid);
+    return;
+  }}
+  if (d.otp) {{
+    trocarTela('tela-otp');
+    return;
+  }}
+  // Erro — mostra mensagem e campo manual imediatamente
+  trocarTela('tela-form');
+  document.getElementById('btn-conectar').disabled = false;
+  mostrar('❌ ' + (d.erro || 'Erro no login.'), 'err');
+  // Mostra campo manual automaticamente
+  setTimeout(() => trocarTela('tela-manual'), 800);
 }}
 
 async function enviarOtp() {{
   const codigo = (document.getElementById('inp-otp').value || '').trim();
   if (!codigo) {{ mostrar('Digite o código.', 'err'); return; }}
   document.getElementById('btn-otp').disabled = true;
-  // Envia OTP direto para a Quotex do browser do usuário
   try {{
-    await fetch('https://qxbroker.com/pt/sign-in/otp', {{
+    const r = await fetch(SRV + '/quotex/login-proxy/otp', {{
       method: 'POST',
-      credentials: 'include',
-      headers: {{
-        'Content-Type': 'application/json',
-        'X-Requested-With': 'XMLHttpRequest',
-      }},
-      body: JSON.stringify({{ code: codigo }}),
+      headers: {{ 'Content-Type': 'application/json' }},
+      body: JSON.stringify({{ codigo }}),
     }});
-    trocarTela('tela-prog');
-    setMsgs('🔄 Verificando...', 'Aguarde');
-    document.getElementById('btn-otp').disabled = false;
-    document.getElementById('inp-otp').value = '';
-    // Tenta ler o token após OTP
-    setTimeout(async () => {{
-      const html = await fetch('https://qxbroker.com/pt/trade', {{
-        credentials: 'include', headers: {{ 'Accept': 'text/html' }},
-      }}).then(r => r.text()).catch(() => '');
-      const m = html.match(/"token"\s*:\s*"([^"]{20,})"/);
-      if (m) await onCapturado(m[1]);
-      else {{ trocarTela('tela-otp'); mostrar('Código inválido. Tente novamente.', 'err'); }}
-    }}, 2000);
+    const d = await r.json();
+    if (d.ok && d.ssid) {{
+      document.getElementById('btn-otp').disabled = false;
+      document.getElementById('inp-otp').value = '';
+      await onCapturado(d.ssid);
+    }} else {{
+      mostrar('❌ ' + (d.erro || 'Código inválido.'), 'err');
+      document.getElementById('btn-otp').disabled = false;
+    }}
   }} catch(e) {{
     mostrar('❌ ' + e.message, 'err');
     document.getElementById('btn-otp').disabled = false;
