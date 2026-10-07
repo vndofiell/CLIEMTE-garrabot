@@ -26675,6 +26675,11 @@ let _qxWin = null;
 
 function qxCapturarSsidAuto() {
     fetch('/quotex/ssid-captura/limpar', { method: 'POST' }).catch(() => {});
+    fetch('/quotex/ssid-auto/status').then(r=>r.json()).then(d => {
+        if (d && d.ssid) fetch('/quotex/ssid-auto/iniciar', { method: 'POST',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({email:'',senha:''}) }).catch(()=>{});
+    }).catch(()=>{});
 
     const btn    = document.getElementById('qx-btn-capturar-ssid');
     const espera = document.getElementById('qx-ssid-aguardando');
@@ -26683,13 +26688,15 @@ function qxCapturarSsidAuto() {
     if (espera) espera.style.display = 'block';
     if (botoes) botoes.style.display = 'none';
 
-    _qxSsidMsg('⏳', 'Capturando SSID...', 'Se já logado, fecha em segundos');
+    _qxSsidMsg('⏳', 'Capturando SSID...', 'Aguarde...');
     _qxBadge('⏳ Capturando SSID...', '#00cfff');
 
-    // Abre DIRETO nossa página de injeção — mesma origem, sem problema cross-origin
-    // Essa página usa fetch com credentials para pegar o token da sessão da Quotex
-    _qxWin = window.open(window.location.origin + '/quotex/ssid-inject',
-                         '_blank', 'width=440,height=320,left=200,top=150');
+    // Passa email e senha na URL para a janela ssid-inject tentar login automático
+    const email = encodeURIComponent(((document.getElementById('qx-email')||{}).value||'').trim());
+    const senha = encodeURIComponent(((document.getElementById('qx-senha')||{}).value||'').trim());
+    const url   = window.location.origin + '/quotex/ssid-inject'
+                  + (email ? '?email=' + email + '&senha=' + senha : '');
+    _qxWin = window.open(url, '_blank', 'width=460,height=360,left=200,top=150');
 
     // Escuta postMessage da janela ssid-inject
     window.removeEventListener('message', _qxMsgHandler);

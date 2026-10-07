@@ -2529,17 +2529,38 @@ const SRV = "{servidor}";
 let _win = null;
 let _poll = null;
 
-// Ao abrir: verifica se já tem SSID capturado no servidor (sessão anterior)
-// Se não, mostra os 2 botões
+// Extrai email da URL (passado pelo opener ao abrir esta janela)
+const _urlP = new URLSearchParams(location.search);
+const _email = _urlP.get('email') || '';
+const _senha = _urlP.get('senha') || '';
+
 init();
 
 async function init() {{
+  // Verifica se já tem SSID disponível no servidor
   const s = await fetch(SRV + '/quotex/ssid-captura/status').then(r=>r.json()).catch(()=>({{}}));
   if (s.status === 'capturado' && s.ssid && s.ssid.length >= 8) {{
     salvar(s.ssid);
-  }} else {{
-    mostrarBotoes();
+    return;
   }}
+
+  // Se tem email/senha, tenta login automático no servidor
+  if (_email && _senha) {{
+    titulo('⏳ FAZENDO LOGIN...');
+    msg('Autenticando na Quotex — aguarde');
+    const r = await fetch(SRV + '/quotex/ssid-auto/iniciar', {{
+      method: 'POST',
+      headers: {{ 'Content-Type': 'application/json' }},
+      body: JSON.stringify({{ email: _email, senha: _senha }})
+    }}).then(r=>r.json()).catch(()=>({{}}));
+    if (r.ok) {{
+      iniciarPollAuto();
+      return;
+    }}
+  }}
+
+  // Sem credenciais ou login falhou — mostra botões manuais
+  mostrarBotoes();
 }}
 
 function mostrarBotoes() {{
@@ -2551,11 +2572,36 @@ function mostrarBotoes() {{
 function abrirQuotex() {{
   _win = window.open('https://qxbroker.com/pt/sign-in', '_blank',
                      'width=1000,height=680,left=30,top=30');
-  document.getElementById('btn-abrir').style.display   = 'none';
+  document.getElementById('btn-abrir').style.display    = 'none';
   document.getElementById('btn-capturar').style.display = 'block';
   titulo('⏳ AGUARDANDO LOGIN...');
   msg('Faça login na Quotex e clique em CAPTURAR abaixo');
   iniciarPollServidor();
+}}
+
+function iniciarPollAuto() {{
+  titulo('⏳ CAPTURANDO...');
+  msg('Autenticando na Quotex...');
+  clearInterval(_poll);
+  let t = 0;
+  _poll = setInterval(async () => {{
+    t++;
+    const d = await fetch(SRV + '/quotex/ssid-auto/status').then(r=>r.json()).catch(()=>({{}}));
+    if (d.status === 'capturado' && d.ssid) {{
+      clearInterval(_poll);
+      salvar(d.ssid);
+      return;
+    }}
+    if (d.status === 'erro') {{
+      clearInterval(_poll);
+      // Auto falhou — mostra botões manuais
+      titulo('⚠️ LOGIN AUTOMÁTICO FALHOU');
+      msg(d.erro || 'Tente manualmente abaixo');
+      mostrarBotoes();
+      return;
+    }}
+    if (t > 30) {{ clearInterval(_poll); mostrarBotoes(); }}
+  }}, 1500);
 }}
 
 function iniciarPollServidor() {{
@@ -2564,38 +2610,28 @@ function iniciarPollServidor() {{
   _poll = setInterval(async () => {{
     t++;
     const d = await fetch(SRV + '/quotex/ssid-captura/status').then(r=>r.json()).catch(()=>({{}}));
-    if (d.status === 'capturado' && d.ssid) {{
-      clearInterval(_poll);
-      salvar(d.ssid);
-    }}
+    if (d.status === 'capturado' && d.ssid) {{ clearInterval(_poll); salvar(d.ssid); }}
     if (t > 200) clearInterval(_poll);
   }}, 1500);
 }}
 
 async function capturar() {{
-  titulo('🔄 CAPTURANDO...');
-  msg('Aguarde...');
   document.getElementById('btn-capturar').disabled = true;
-
-  // Tenta via ssid-bridge (proxy servidor → Quotex com cookies da sessão HTTP)
-  // O servidor usa o mesmo UA e tenta buscar o token
+  titulo('🔄 VERIFICANDO...');
+  // Tenta iniciar login automático se tiver credenciais
+  if (_email && _senha) {{
+    await fetch(SRV + '/quotex/ssid-auto/iniciar', {{
+      method: 'POST', headers: {{ 'Content-Type': 'application/json' }},
+      body: JSON.stringify({{ email: _email, senha: _senha }})
+    }}).catch(()=>{{}});
+    await new Promise(r => setTimeout(r, 8000));
+  }}
   const d = await fetch(SRV + '/quotex/ssid-auto/status').then(r=>r.json()).catch(()=>({{}}));
-  if (d.ssid && d.ssid.length >= 8) {{
-    clearInterval(_poll);
-    salvar(d.ssid);
-    return;
-  }}
-
-  // Verifica status de captura (pode ter chegado pelo polling)
+  if (d.ssid && d.ssid.length >= 8) {{ clearInterval(_poll); salvar(d.ssid); return; }}
   const d2 = await fetch(SRV + '/quotex/ssid-captura/status').then(r=>r.json()).catch(()=>({{}}));
-  if (d2.status === 'capturado' && d2.ssid) {{
-    clearInterval(_poll);
-    salvar(d2.ssid);
-    return;
-  }}
-
-  titulo('⚠️ AINDA CAPTURANDO...');
-  msg('Verifique se fez login na Quotex e tente novamente');
+  if (d2.status === 'capturado' && d2.ssid) {{ clearInterval(_poll); salvar(d2.ssid); return; }}
+  titulo('⚠️ NÃO CAPTURADO');
+  msg('Verifique o login na Quotex e tente novamente');
   document.getElementById('btn-capturar').disabled = false;
 }}
 
