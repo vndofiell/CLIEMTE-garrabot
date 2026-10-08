@@ -825,12 +825,16 @@ def quotex_operar(ativo: str, direcao: str, valor: float, duracao: int) -> dict:
         except Exception:
             pass
 
-        fut = asyncio.run_coroutine_threadsafe(
-            client.buy(amount=valor, asset=ativo, direction=direcao_norm, duration=duracao),
-            loop
-        )
-        # Timeout reduzido: 10s é mais que suficiente; 30s bloqueava por WS travado
-        resultado = fut.result(timeout=10)
+        # Usa asyncio.wait_for() DENTRO do loop para cancelar a coroutine corretamente
+        # se o WS travar — evita que a coroutine fique pendente corrompendo operações futuras
+        async def _buy_com_timeout():
+            return await asyncio.wait_for(
+                client.buy(amount=valor, asset=ativo, direction=direcao_norm, duration=duracao),
+                timeout=8.0
+            )
+
+        fut = asyncio.run_coroutine_threadsafe(_buy_com_timeout(), loop)
+        resultado = fut.result(timeout=12)  # 12s > 8s interno — só para garantir
 
         # Resultado None = WebSocket retornou vazio (sessão morta)
         if resultado is None:
