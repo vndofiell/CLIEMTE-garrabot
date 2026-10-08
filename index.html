@@ -30454,9 +30454,9 @@ function _qxHmaQStake(win, est) {
     setInterval(() => {
         if (!_qxHmaQ.pendente) return;
         if (_qx.status !== 'conectado') return;
-        if (bot.rodando && bot.estrategia === '🟠 GARRA AI CORE — HMA QUOTEX') {
+        if (bot.running && bot.estrategia === '🟠 GARRA AI CORE — HMA QUOTEX') {
             _qxHmaQIniciar();
-        } else if (!bot.rodando && _qxHmaQ.rodando) {
+        } else if (!bot.running && _qxHmaQ.rodando) {
             _qxHmaQParar();
         }
     }, 1000);
