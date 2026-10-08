@@ -28442,6 +28442,13 @@ const _qxChart = {
     opAtiva: null, priceLine: null,
 };
 
+// Offset entre relógio local e servidor Quotex (ms)
+// Positivo = servidor está à frente do PC; Negativo = PC está à frente
+let _qxServerOffsetMs = 0;
+
+// Retorna o "agora" sincronizado com o servidor Quotex
+function _qxAgoraMs() { return Date.now() + _qxServerOffsetMs; }
+
 // ── Abrir / fechar modal ──────────────────────────────────────────────────────
 function qxChartAbrir() {
     const m = document.getElementById('modal-qx-chart');
@@ -28637,6 +28644,22 @@ function _qxIniciarRT() {
                     _qxChart.chart.timeScale().scrollToRealTime();
                 }
                 _qxChart.lastPreco = preco; _qxChart.tsAbertura = tsAbertura;
+                // Sincroniza relógio local com servidor Quotex
+                // tsAbertura é o timestamp (segundos) de início da vela atual no servidor
+                // O "agora no servidor" = tsAbertura * 1000 + segundos já decorridos na vela
+                // Mas não sabemos exatamente quantos ms se passaram, então usamos
+                // o tsAbertura para calibrar: se o servidor diz que a vela abriu em tsAb,
+                // e Date.now()/1000 diz que estamos no tsAbLocal, o offset é a diferença
+                if (tsAbertura > 0) {
+                    const periodo = _qxChart.periodo || 60;
+                    // tsAbertura local esperado baseado no relógio do PC
+                    const tsAbLocal = Math.floor(Date.now() / 1000 / periodo) * periodo;
+                    // diferença em ms: positivo = servidor está à frente do PC
+                    const offsetMs = (tsAbertura - tsAbLocal) * 1000;
+                    if (Math.abs(offsetMs) < 120000) {  // ignora diferenças > 2min (dado inválido)
+                        _qxServerOffsetMs = offsetMs;
+                    }
+                }
             }).catch(() => {});
     }, 500);
 }
@@ -29356,8 +29379,8 @@ function _qxAgendarEntrada(melhor) {
     // Função que calcula ms até a virada e dispara a entrada
     const _tentarEntrar = () => {
         if (!_qxModo.rodando || _qxModo.opBloqueada) return;
-        // Usa tsAbertura do chart (atualizado pelo tick RT a cada 500ms)
-        const agora      = Date.now();
+        // Usa relógio sincronizado com o servidor Quotex
+        const agora      = _qxAgoraMs();
         const tsAb       = _qxChart.tsAbertura || Math.floor(agora / 1000 / periodo) * periodo;
         const tsFech_ms  = (tsAb + periodo) * 1000;
         const msAte      = tsFech_ms - agora - ANTEC_MS;
@@ -29383,7 +29406,7 @@ function _qxAgendarEntrada(melhor) {
             let tentativas = 0;
             _qxModo._entradaWatch = setInterval(() => {
                 tentativas++;
-                const agoraW     = Date.now();
+                const agoraW     = _qxAgoraMs();
                 const tsAbW      = _qxChart.tsAbertura || 0;
                 const tsFechW_ms = (tsAbW + periodo) * 1000;
                 const msAteW     = tsFechW_ms - agoraW - ANTEC_MS;
@@ -30000,7 +30023,7 @@ function _qxHmaAgendarEntrada(melhor, direcao) {
 
     const _tentar = () => {
         if (!_qxHma.rodando || _qxHma.opBloqueada) return;
-        const agora     = Date.now();
+        const agora     = _qxAgoraMs();
         const tsAb      = _qxChart.tsAbertura || Math.floor(agora / 1000 / periodo) * periodo;
         const tsFech_ms = (tsAb + periodo) * 1000;
         const msAte     = tsFech_ms - agora - ANTEC_MS;
@@ -30209,7 +30232,7 @@ function _qxHmaQIniciar() {
     _qxHmaQ.timer = setInterval(() => {
         if (!_qxHmaQ.rodando || _qxHmaQ._cicloRodando) return;
         const periodo = (ESTRATEGIAS['🟠 GARRA AI CORE — HMA QUOTEX']?.qhma_periodo || 60);
-        const agora   = Math.floor(Date.now() / 1000);
+        const agora   = Math.floor(_qxAgoraMs() / 1000);
         const tsAb    = Math.floor(agora / periodo) * periodo;
         const seg     = agora - tsAb;
         if (seg >= 0 && seg <= 3 && tsAb !== _qxHmaQ._ultimaVirada) {

@@ -704,20 +704,32 @@ def _quotex_reconectar_bg(email: str, senha: str, tipo_conta: str, ssid: str = "
 def quotex_duracao_alinhada(minutos: int = 1) -> int:
     """
     Calcula a duração em segundos para que a operação expire exatamente
-    na virada do N-ésimo minuto a partir de agora.
-    A entrada é feita faltando 2-3s para o fechamento da vela atual.
-    Garante mínimo de 60s (a Quotex não aceita contratos menores no modo TIME).
+    na virada do N-ésimo minuto, usando o relógio do SERVIDOR Quotex.
+    Isso garante sincronização perfeita com a corretora, independente
+    do horário local do PC.
     """
-    segundos_no_minuto  = time.time() % 60
+    # Usa o timestamp do servidor Quotex se disponível (sincronizado via WS)
+    agora = time.time()
+    try:
+        with _QUOTEX_LOCK:
+            client = _QUOTEX_STATE.get("client")
+        if client and client.api and client.api.timesync:
+            ts_servidor = float(client.api.timesync.server_timestamp or 0)
+            if ts_servidor > 1_000_000_000:   # sanidade: timestamp válido
+                agora = ts_servidor
+                print(f"[Quotex] ⏱ Usando horário do servidor: {ts_servidor:.3f} "
+                      f"(diff local={time.time()-ts_servidor:+.3f}s)")
+    except Exception:
+        pass
+
+    segundos_no_minuto  = agora % 60
     segundos_ate_virada = 60 - segundos_no_minuto
 
     # Janela de segurança: se faltar menos de 3s para a virada, pula para o próximo minuto
-    # Isso garante que a entrada sempre cai nos últimos 2-3s da vela (nunca depois)
     if segundos_ate_virada < 3:
         segundos_ate_virada += 60
 
     duracao_total = int(segundos_ate_virada) + (minutos - 1) * 60
-    # Mínimo absoluto de 60s para o modo TIME da Quotex
     return max(60, duracao_total)
 
 
