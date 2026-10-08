@@ -3304,7 +3304,7 @@ except ImportError as _qx_err:
         ate_virada = 60 - seg
         if ate_virada < 3:
             ate_virada += 60
-        return max(5, int(ate_virada) + (minutos - 1) * 60)
+        return max(60, int(ate_virada) + (minutos - 1) * 60)
     def quotex_capturar_ssid(*a, **kw):
         return {"ok": False, "ssid": "", "erro": "pyquotex não instalado."}
     def quotex_ssid_status():

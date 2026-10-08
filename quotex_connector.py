@@ -666,13 +666,15 @@ def quotex_duracao_alinhada(minutos: int = 1) -> int:
     """
     Calcula a duração em segundos para que a operação expire exatamente
     na virada do N-ésimo minuto a partir de agora.
+    A entrada é feita faltando 2-3s para o fechamento da vela atual.
     Garante mínimo de 60s (a Quotex não aceita contratos menores no modo TIME).
     """
     segundos_no_minuto  = time.time() % 60
     segundos_ate_virada = 60 - segundos_no_minuto
 
-    # Janela de segurança: se faltar menos de 5s para a virada, usa o próximo minuto
-    if segundos_ate_virada < 5:
+    # Janela de segurança: se faltar menos de 3s para a virada, pula para o próximo minuto
+    # Isso garante que a entrada sempre cai nos últimos 2-3s da vela (nunca depois)
+    if segundos_ate_virada < 3:
         segundos_ate_virada += 60
 
     duracao_total = int(segundos_ate_virada) + (minutos - 1) * 60

@@ -29346,7 +29346,7 @@ function _qxAgendarEntrada(melhor) {
     const direcao    = melhor.sinal === 'CALL' ? 'call' : 'put';
     const periodo    = (_qxChart.periodo || 60);
     const periodoMs  = periodo * 1000;
-    const ANTEC_MS   = 1500;   // entra 1.5s antes do fechamento
+    const ANTEC_MS   = 2500;   // entra 2.5s antes do fechamento
 
     clearTimeout(_qxModo._entradaTimer);
     clearInterval(_qxModo._entradaWatch);
@@ -29993,7 +29993,7 @@ function _qxHmaRenderizarLista(resultados) {
 function _qxHmaAgendarEntrada(melhor, direcao) {
     const periodo   = _qxChart.periodo || 60;
     const periodoMs = periodo * 1000;
-    const ANTEC_MS  = 1500;   // entra 1.5s antes do fechamento
+    const ANTEC_MS  = 2500;   // entra 2.5s antes do fechamento
 
     clearTimeout(_qxHma._entradaTimer);
     clearInterval(_qxHma._entradaWatch);
