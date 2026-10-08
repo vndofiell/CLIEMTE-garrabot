@@ -23,6 +23,27 @@ import os
 import re
 import traceback
 
+# ── Monkey-patch pyquotex: garante que offset=None nunca cause timedelta crash ──
+try:
+    import pyquotex.expiration as _qx_exp
+    _orig_get_next_timeframe = _qx_exp.get_next_timeframe
+    _orig_get_server_timer   = _qx_exp.get_server_timer
+
+    def _safe_get_next_timeframe(timestamp, time_zone, timeframe, open_time=None):
+        return _orig_get_next_timeframe(timestamp, time_zone or 0, timeframe, open_time)
+
+    def _safe_get_server_timer(time_offset_seconds):
+        return _orig_get_server_timer(time_offset_seconds or 0)
+
+    _qx_exp.get_next_timeframe = _safe_get_next_timeframe
+    _qx_exp.get_server_timer   = _safe_get_server_timer
+
+    # Também patch no api.py para offset nunca ficar None
+    import pyquotex.api as _qx_api
+    _orig_profile_setter = _qx_api.QuotexAPI.profile if hasattr(_qx_api, 'QuotexAPI') else None
+except Exception:
+    pass
+
 # ── Estado global da conexão ──────────────────────────────────────────────────
 _QUOTEX_STATE: dict = {
     "status":           "desconectado",   # desconectado | conectando | conectado | erro
