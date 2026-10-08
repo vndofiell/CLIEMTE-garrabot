@@ -30308,36 +30308,95 @@ async function _qxHmaQCiclo() {
     _qxHmaQOperar(direcao, melhor, est);
 }
 
-// ── Analisa ativo via candles + /garra-hma/avaliar ───────────────────────────
+// ── Analisa ativo via candles MTF (M1+M5+M15) + /garra-hma/avaliar + /garra-hma/mtf ──
 async function _qxHmaQAnalisarAtivo(ativo, est) {
-    const periodo = est.qhma_periodo || 60;
-    let ticks = [];
-    try {
-        const d = await fetch(`/quotex/candles?ativo=${encodeURIComponent(ativo.id)}&periodo=${periodo}&limite=100`).then(r => r.json());
-        if (!d.ok || !d.candles || d.candles.length < 10) return null;
-        ticks = d.candles.filter(c => c.close > 0).sort((a,b) => a.time - b.time).map(c => c.close);
-    } catch (_e) { return null; }
-    if (ticks.length < 10) return null;
+    // Timeframes a buscar: M1 (operado) + M5 e M15 para confirmação MTF
+    const TFS = [
+        { periodo: 60,  nome: 'M1',  limite: 100 },
+        { periodo: 300, nome: 'M5',  limite: 60  },
+        { periodo: 900, nome: 'M15', limite: 40  },
+    ];
 
+    // Busca candles de cada TF em paralelo
+    const ticksPorTF = {};
+    await Promise.all(TFS.map(async tf => {
+        try {
+            const d = await fetch(`/quotex/candles?ativo=${encodeURIComponent(ativo.id)}&periodo=${tf.periodo}&limite=${tf.limite}`).then(r => r.json());
+            if (d.ok && d.candles && d.candles.length >= 5) {
+                ticksPorTF[tf.nome] = d.candles.filter(c => c.close > 0).sort((a,b) => a.time - b.time).map(c => c.close);
+            }
+        } catch (_e) {}
+    }));
+
+    const ticksM1 = ticksPorTF['M1'] || [];
+    if (ticksM1.length < 10) return null;
+
+    // ── 1) Análise HMA no M1 (sinal principal) ───────────────────────────────
     let hmaRes = null;
     try {
         const resp = await fetch('/garra-hma/avaliar', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                ticks:            ticks,
-                contrato:         'CALL/PUT AUTO',
-                janelas:          null,
-                confianca_minima: est.qhma_confianca || 75,
-                banca:            _qxModo.saldoAtual || 100,
-                stake:            _qxHmaQ.valorAtual || 1,
-                payout:           parseInt(ativo.payout || 80) / 100,
+                ticks:             ticksM1,
+                contrato:          'CALL/PUT AUTO',
+                janelas:           null,
+                confianca_minima:  est.qhma_confianca || 75,
+                banca:             _qxModo.saldoAtual || 100,
+                stake:             _qxHmaQ.valorAtual || 1,
+                payout:            parseInt(ativo.payout || 80) / 100,
                 historico_recente: _qxHmaQ.losses || 0,
             }),
         });
         hmaRes = await resp.json();
     } catch (_e) { return null; }
-    if (!hmaRes) return null;
+    if (!hmaRes || !hmaRes.aprovado) {
+        // Sinal M1 não aprovado — retorna sem MTF
+        const isOtcA = (ativo.id||'').toLowerCase().includes('otc');
+        return {
+            ativoId: ativo.id, ativoNome: ativo.nome || ativo.id, payout: ativo.payout,
+            isOtc: isOtcA, aprovado: false, decisao: hmaRes?.decisao || '',
+            confianca: hmaRes?.confianca || 0, regime: hmaRes?.regime || '',
+            motivo: hmaRes?.motivo || 'sinal M1 fraco', ts: Date.now(),
+            mtf: null,
+        };
+    }
+
+    // ── 2) Confirmação MTF (M5+M15) via /garra-hma/mtf ──────────────────────
+    // Usa todos os ticks disponíveis (M1+M5+M15 concatenados) para simular TFs superiores
+    const ticksParaMTF = [...(ticksPorTF['M15'] || []), ...(ticksPorTF['M5'] || []), ...ticksM1];
+    let mtfRes = null;
+    try {
+        const mtfResp = await fetch('/garra-hma/mtf', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                ticks:     ticksParaMTF,
+                duracao_m: 1,
+                direcao:   hmaRes.decisao,
+            }),
+        });
+        mtfRes = await mtfResp.json();
+    } catch (_e) {}
+
+    // MTF bloqueia entrada se CONTRA (divergência clara entre TFs)
+    const modoMTF  = est.qhma_modo || 'hibrido';
+    let aprovado   = hmaRes.aprovado;
+    let motivoMTF  = '';
+    let confiancaFinal = hmaRes.confianca || 0;
+
+    if (mtfRes) {
+        if (mtfRes.consenso === 'CONTRA' && modoMTF !== 'livre') {
+            aprovado  = false;
+            motivoMTF = `MTF CONTRA (${mtfRes.votos_call}C/${mtfRes.votos_put}P/${mtfRes.votos_lat}L)`;
+        } else if (mtfRes.consenso === 'CONFIRMA') {
+            // Bônus de confiança quando MTF confirma
+            confiancaFinal = Math.min(99, confiancaFinal + 5);
+            motivoMTF = `MTF ✅ (${mtfRes.votos_call}C/${mtfRes.votos_put}P/${mtfRes.votos_lat}L)`;
+        } else {
+            motivoMTF = `MTF neutro (${mtfRes.votos_call}C/${mtfRes.votos_put}P/${mtfRes.votos_lat}L)`;
+        }
+    }
 
     const isOtc = (ativo.id||'').toLowerCase().includes('otc');
     return {
@@ -30345,11 +30404,12 @@ async function _qxHmaQAnalisarAtivo(ativo, est) {
         ativoNome: ativo.nome || ativo.id,
         payout:    ativo.payout,
         isOtc,
-        aprovado:  hmaRes.aprovado,
+        aprovado,
         decisao:   hmaRes.decisao,
-        confianca: hmaRes.confianca || 0,
-        regime:    hmaRes.regime    || '',
-        motivo:    hmaRes.motivo    || '',
+        confianca: confiancaFinal,
+        regime:    hmaRes.regime || '',
+        motivo:    motivoMTF || hmaRes.motivo || '',
+        mtf:       mtfRes,
         ts:        Date.now(),
     };
 }
@@ -30365,7 +30425,14 @@ function _qxHmaQLogLista(resultados, est) {
         const tag   = r.isOtc ? '[OTC]' : '[AB]';
         const sinal = r.aprovado ? `<b style="color:${r.decisao==='CALL'?'#27c93f':'#ef5350'}">${r.decisao}</b>` : 'NO TRADE';
         const bar   = `<span style="color:${r.confianca>=80?'#27c93f':r.confianca>=65?'#ffbd2e':'#555'}">${r.confianca.toFixed(0)}%</span>`;
-        return `  ${tag} ${r.ativoNome||r.ativoId} · ${sinal} · conf ${bar} · pay ${r.payout}%`;
+        // Mostra resultado do MTF se disponível
+        let mtfTag = '';
+        if (r.mtf) {
+            const c = r.mtf.consenso;
+            const cor = c==='CONFIRMA'?'#27c93f':(c==='CONTRA'?'#ef5350':'#888');
+            mtfTag = ` · <span style="color:${cor};font-size:0.8em">MTF:${c} ${r.mtf.votos_call}C/${r.mtf.votos_put}P</span>`;
+        }
+        return `  ${tag} ${r.ativoNome||r.ativoId} · ${sinal} · conf ${bar} · pay ${r.payout}%${mtfTag}`;
     }).join('<br>');
     print(`🟠 HMA QUOTEX — Mercados:<br>${linhas}`, 'log-info');
 }
