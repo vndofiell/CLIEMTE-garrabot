@@ -921,14 +921,26 @@ def quotex_operar(ativo: str, direcao: str, valor: float, duracao: int) -> dict:
     except Exception as e:
         msg = str(e) or repr(e) or type(e).__name__
         print(f"[Quotex] ❌ Exceção em quotex_operar: {msg}")
+
+        # ── Erros transitórios de rede/DNS: NÃO destroem a conexão WS ────────
+        # curl(6) = falha de resolução DNS; curl(7) = conexão recusada;
+        # curl(28) = timeout HTTP. O WebSocket pode ainda estar vivo.
+        _ERROS_TRANSITORIOS = ("curl: (6)", "curl: (7)", "curl: (28)",
+                               "could not resolve host", "name or service not known",
+                               "temporary failure in name resolution",
+                               "network is unreachable", "connection refused")
+        msg_lower = msg.lower()
+        if any(e_t in msg_lower for e_t in _ERROS_TRANSITORIOS):
+            print(f"[Quotex] ⚠️ Erro de rede transitório — NÃO reconectando WS: {msg}")
+            return {"ok": False, "erro": msg, "transitorio": True}
+
+        # ── Demais erros: WS corrompido → reconecta do zero ──────────────────
         traceback.print_exc()
-        # Cancela future pendente
         if fut is not None:
             try:
                 loop.call_soon_threadsafe(fut.cancel)
             except Exception:
                 pass
-        # Força desconexão total: para o loop asyncio corrompido e reconecta do zero
         with _QUOTEX_LOCK:
             _e  = _QUOTEX_STATE.get("email", "")
             _s  = _QUOTEX_STATE.get("senha", "")
@@ -938,13 +950,11 @@ def quotex_operar(ativo: str, direcao: str, valor: float, duracao: int) -> dict:
             _QUOTEX_STATE["erro"]   = msg
             _QUOTEX_STATE["client"] = None
             _QUOTEX_STATE["loop"]   = None
-        # Para o loop (libera o thread de conexão que está em loop.run_forever())
         if loop and loop.is_running():
             try:
                 loop.call_soon_threadsafe(loop.stop)
             except Exception:
                 pass
-        # Fecha o client
         if client:
             try:
                 client.close()
