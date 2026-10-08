@@ -3527,8 +3527,6 @@ def rota_quotex_ativos_payout():
 
     try:
         def _normalizar_payout(v) -> int:
-            """Converte payout para inteiro percentual.
-            pyquotex pode retornar decimal (0.77) ou inteiro (77) ou string."""
             try:
                 v = float(v)
                 if v <= 0:
@@ -3537,41 +3535,68 @@ def rota_quotex_ativos_payout():
             except (TypeError, ValueError):
                 return 0
 
-        # Lê instruments diretamente — estrutura: [id_num, id_interno, nome, ..., open(14), ..., pay(5), ..., turbo(18), ...]
         instr = getattr(client.api, "instruments", None) or []
+        print(f"[Quotex] instruments total={len(instr)}")
 
-        # Log de diagnóstico: mostra o primeiro instrument para entender a estrutura
+        # Log completo do primeiro item para diagnóstico de índices
         if instr:
             primeiro = instr[0]
-            print(f"[Quotex] instruments[0] len={len(primeiro)} val={list(primeiro)[:20]}")
+            print(f"[Quotex] instruments[0] len={len(primeiro)} val={list(primeiro)}")
 
         ativos = []
         for item in instr:
             if not isinstance(item, (list, tuple)) or len(item) < 15:
                 continue
-            id_interno = str(item[1])          # ex: "EURUSD_otc"
+            id_interno = str(item[1])
             nome       = str(item[2]).replace("\n", "").strip()
-            aberto     = bool(item[14])        # campo 14 = open
+            aberto     = bool(item[14])
 
-            # Coleta todos os campos numéricos candidatos a payout (índices 5, 17, 18 e negativos)
+            # Testa TODOS os índices do item em busca de payout válido (>0 e <=100)
             candidatos = []
-            for idx in [5, 17, 18]:
-                if idx < len(item):
-                    candidatos.append(item[idx])
-            # Também tenta índices negativos comuns: -9 (1M), -8 (5M), -10 (24H)
-            for idx in [-10, -9, -8]:
+            for idx in range(len(item)):
                 try:
-                    candidatos.append(item[idx])
+                    v = _normalizar_payout(item[idx])
+                    if 50 <= v <= 100:   # faixa realista de payout Quotex
+                        candidatos.append(v)
                 except Exception:
                     pass
 
-            payout = max((_normalizar_payout(v) for v in candidatos if v is not None), default=0)
+            payout = max(candidatos, default=0)
+            print(f"[Quotex] {nome} | id={id_interno} | aberto={aberto} | payout={payout} | candidatos={candidatos[:5]}")
             if payout > 0 or aberto:
                 ativos.append({"id": id_interno, "nome": nome, "payout": payout, "aberto": aberto})
 
+        # Fallback: se instruments não deu payout, tenta get_payment()
+        if not any(a["payout"] > 0 for a in ativos):
+            print("[Quotex] ⚠️ instruments sem payout — tentando get_payment()")
+            try:
+                dados_pay = client.get_payment()
+                nome_para_id = {str(item[2]).replace("\n","").strip(): str(item[1])
+                                for item in instr if isinstance(item,(list,tuple)) and len(item)>=3}
+                for nome_pay, info in (dados_pay or {}).items():
+                    if not isinstance(info, dict):
+                        continue
+                    aberto_pay = bool(info.get("open", False))
+                    cands_pay  = [info.get("payment"), info.get("turbo_payment"),
+                                  (info.get("profit") or {}).get("1M"),
+                                  (info.get("profit") or {}).get("5M")]
+                    pay = max((_normalizar_payout(v) for v in cands_pay if v is not None), default=0)
+                    id_pay = nome_para_id.get(nome_pay, nome_pay)
+                    print(f"[Quotex][get_payment] {nome_pay} | pay={pay} | aberto={aberto_pay}")
+                    if pay > 0 or aberto_pay:
+                        # Atualiza ou adiciona
+                        existente = next((a for a in ativos if a["nome"] == nome_pay), None)
+                        if existente:
+                            if pay > existente["payout"]:
+                                existente["payout"] = pay
+                        else:
+                            ativos.append({"id": id_pay, "nome": nome_pay, "payout": pay, "aberto": aberto_pay})
+            except Exception as _ep:
+                print(f"[Quotex] get_payment() falhou: {_ep}")
+
         ativos.sort(key=lambda x: (-int(x["aberto"]), -x["payout"], x["nome"]))
         top = [a for a in ativos if a["payout"] > 0][:5]
-        print(f"[Quotex] ativos-payout: {len(ativos)} total | top5: {[(a['nome'], a['payout']) for a in top]}")
+        print(f"[Quotex] ativos-payout FINAL: {len(ativos)} total | top5={[(a['nome'],a['payout']) for a in top]}")
 
         import time as _t
         if top:
@@ -3579,7 +3604,6 @@ def rota_quotex_ativos_payout():
             _payout_cache_ts = _t.time()
             return jsonify({"ok": True, "ativos": ativos})
         else:
-            # Payout zerado — retorna cache se tiver < 90s
             if _payout_cache and (_t.time() - _payout_cache_ts) < 90:
                 print(f"[Quotex] ⚠️ Payout zerado — usando cache ({len(_payout_cache)} ativos)")
                 return jsonify({"ok": True, "ativos": _payout_cache, "cache": True})
