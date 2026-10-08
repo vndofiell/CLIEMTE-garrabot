@@ -3264,6 +3264,7 @@ try:
         quotex_get_ativos,
         quotex_operar,
         quotex_resultado,
+        quotex_resultado_iniciar,
         quotex_cfg_carregar,
         # ── Captura automática de SSID ────────────────────────────
         quotex_capturar_ssid,
@@ -3293,6 +3294,8 @@ except ImportError as _qx_err:
         return {"ok": False, "erro": "pyquotex não instalado."}
     def quotex_resultado(*a, **kw):
         return {"ok": False, "erro": "pyquotex não instalado."}
+    def quotex_resultado_iniciar(*a, **kw):
+        pass
     def quotex_cfg_carregar():
         return {"email": "", "senha": "", "tipo_conta": "DEMO", "ssid": ""}
     def quotex_duracao_alinhada(minutos: int = 1) -> int:
@@ -3669,6 +3672,9 @@ def rota_quotex_operar():
         return jsonify({"ok": False, "erro": "Campo 'valor' deve ser maior que zero."}), 400
 
     resultado = quotex_operar(ativo=ativo, direcao=direcao, valor=valor, duracao=duracao)
+    # Dispara verificação de resultado em background imediatamente após operar
+    if resultado.get("ok") and resultado.get("id"):
+        quotex_resultado_iniciar(resultado["id"])
     return jsonify(resultado)
 
 
@@ -3676,9 +3682,9 @@ def rota_quotex_operar():
 @app.route('/quotex/resultado/<op_id>', methods=['GET'])
 def rota_quotex_resultado(op_id: str):
     """
-    Aguarda e retorna o resultado (win/loss) de uma operação.
-    ATENÇÃO: bloqueia a requisição até o resultado chegar (pode demorar até a duração da operação).
-    Use chamadas assíncronas ou timeout no cliente.
+    Retorna o resultado (win/loss) de uma operação — NÃO bloqueia.
+    O background thread verifica e armazena o resultado no cache.
+    O frontend deve fazer poll até receber ok=True.
 
     Ex.: GET /quotex/resultado/abc123
     """

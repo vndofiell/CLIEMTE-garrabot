@@ -811,21 +811,38 @@ def quotex_operar(ativo: str, direcao: str, valor: float, duracao: int) -> dict:
         return {"ok": False, "erro": str(e)}
 
 
+# Cache de resultados já obtidos: op_id -> dict
+_RESULTADO_CACHE: dict = {}
+_RESULTADO_CACHE_LOCK = threading.Lock()
+
+
 def quotex_resultado(op_id: str) -> dict:
     """
     Verifica o resultado (win/loss) de uma operação pelo ID.
-    Bloqueia até receber o resultado ou timeout de 5 min.
+    NÃO bloqueia — retorna {"ok": False, "pendente": True} se ainda não disponível.
+    O background thread preenche _RESULTADO_CACHE quando o resultado chega.
     """
+    with _RESULTADO_CACHE_LOCK:
+        if op_id in _RESULTADO_CACHE:
+            return _RESULTADO_CACHE.pop(op_id)
+
+    return {"ok": False, "pendente": True, "erro": "Aguardando resultado..."}
+
+
+def _quotex_check_win_bg(op_id: str):
+    """Roda em background thread — chama check_win e salva no cache."""
     with _QUOTEX_LOCK:
         client = _QUOTEX_STATE.get("client")
         loop   = _QUOTEX_STATE.get("loop")
 
     if not client or not loop:
-        return {"ok": False, "erro": "Quotex não conectada."}
+        with _RESULTADO_CACHE_LOCK:
+            _RESULTADO_CACHE[op_id] = {"ok": False, "erro": "Quotex não conectada."}
+        return
 
     try:
         fut       = asyncio.run_coroutine_threadsafe(client.check_win(op_id), loop)
-        resultado = fut.result(timeout=310)
+        resultado = fut.result(timeout=300)
 
         if isinstance(resultado, (list, tuple)) and len(resultado) >= 2:
             res, lucro = resultado[0], resultado[1]
@@ -833,7 +850,17 @@ def quotex_resultado(op_id: str) -> dict:
             res, lucro = "desconhecido", float(resultado or 0)
 
         win = float(lucro or 0) > 0
-        return {"ok": True, "id": op_id, "resultado": res,
-                "lucro": float(lucro or 0), "win": win}
+        with _RESULTADO_CACHE_LOCK:
+            _RESULTADO_CACHE[op_id] = {
+                "ok": True, "id": op_id, "resultado": res,
+                "lucro": float(lucro or 0), "win": win,
+            }
     except Exception as e:
-        return {"ok": False, "erro": str(e)}
+        with _RESULTADO_CACHE_LOCK:
+            _RESULTADO_CACHE[op_id] = {"ok": False, "erro": str(e)}
+
+
+def quotex_resultado_iniciar(op_id: str):
+    """Dispara o check_win em background. Chame logo após operar."""
+    t = threading.Thread(target=_quotex_check_win_bg, args=(op_id,), daemon=True)
+    t.start()
