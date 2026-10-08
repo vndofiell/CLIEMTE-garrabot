@@ -30643,7 +30643,7 @@ function _qxHmaQAgendarEntrada(direcao, contexto, est) {
 
 // ── Executa operação ──────────────────────────────────────────────────────────
 function _qxHmaQOperar(direcao, contexto, est) {
-    if (!_qxHmaQ.rodando || _qxHmaQ.opBloqueada) return;
+    if (!_qxHmaQ.rodando) { _qxHmaQ.opBloqueada = false; return; }
     _qxHmaQ.opBloqueada = true;
 
     // Atualiza stake no input visível
