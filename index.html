@@ -2266,7 +2266,7 @@
     <div class="cmd-panel-title">⚡ PAINEL</div>
 
     <div class="cmd-section">▸ CONEXÃO</div>
-    <button class="cmd-btn" onclick="runCmd('conectar')">
+    <button class="cmd-btn" id="btn-conectar-deriv" onclick="runCmd('conectar')">
         conectar
         <span class="cmd-label">Login na Deriv</span>
     </button>
@@ -6861,6 +6861,7 @@ function _cfgAplicar(cfg) {
             else if (est.tipo === 'hma_core')      lblEst = `conf≥${est.hma_confianca || 68}% | ${est.hma_contrato || 'AUTO'} | ${est.ativo || 'R_100'}`;
             document.getElementById('btn-estrategia').innerHTML =
                 `${cfg.estrategia}<span class="cmd-label">${lblEst}</span>`;
+            _atualizarPainelConexao(est.tipo);
         }
 
         // Gerenciamento — restaura configs de todos os modos
@@ -8587,6 +8588,7 @@ function confirmarEstrategia() {
     document.getElementById('btn-estrategia').innerHTML =
         `${nome}<span class="cmd-label">${resumo.replace(nome,'').substring(0,36) || est.desc.substring(0,28)}</span>`;
 
+    _atualizarPainelConexao(est.tipo);
     fecharModal('modal-cfg-estrategia');
     if (est.tipo === 'hma_quotex') {
         print(`🟠 <b>GARRA AI CORE — HMA QUOTEX</b> ativado | conf≥<b>${est.qhma_confianca || 75}%</b> | tipo=<b>${est.qhma_tipo_mercado || 'ambos'}</b> | pay≥<b>${est.qhma_payout_min || 75}%</b> | modo=<b>${est.qhma_modo || 'hibrido'}</b>`, "log-win");
@@ -26686,6 +26688,17 @@ function _qxAtualizarBotao(status, extra) {
         btn.firstChild.textContent = '🟠 Quotex';
         lbl.style.color = '#57606a';
         lbl.textContent = 'Desconectada';
+    }
+}
+
+// ── Oculta/mostra botão Deriv conforme estratégia ────────────────────────────
+function _atualizarPainelConexao(tipoEstrategia) {
+    const btnDeriv = document.getElementById('btn-conectar-deriv');
+    if (!btnDeriv) return;
+    if (tipoEstrategia === 'hma_quotex') {
+        btnDeriv.style.display = 'none';
+    } else {
+        btnDeriv.style.display = '';
     }
 }
 
