@@ -891,8 +891,11 @@ def quotex_operar(ativo: str, direcao: str, valor: float, duracao: int) -> dict:
         except Exception:
             pass
 
-        timeout_buy = 20  # Quotex confirma ordens em <5s normalmente; 20s é margem segura
-        print(f"[Quotex] ⏳ Aguardando confirmação da ordem por até {timeout_buy}s...")
+        # buy() internamente aguarda: start_realtime_price (até 10s) + buy_confirm (duration+5s)
+        # Total máximo interno: ~75s para duration=60s. Nosso timeout deve ser maior
+        # para deixar o pyquotex terminar por conta própria e reportar erro correto.
+        timeout_buy = int(duracao) + 30  # 30s de folga sobre o timeout interno do buy()
+        print(f"[Quotex] ⏳ Enviando ordem | ativo={ativo} | dir={direcao_norm} | timeout={timeout_buy}s")
         fut = asyncio.run_coroutine_threadsafe(
             client.buy(amount=valor, asset=ativo, direction=direcao_norm, duration=duracao),
             loop
