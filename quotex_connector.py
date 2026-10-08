@@ -666,15 +666,18 @@ def quotex_duracao_alinhada(minutos: int = 1) -> int:
     """
     Calcula a duração em segundos para que a operação expire exatamente
     na virada do N-ésimo minuto a partir de agora.
+    Garante mínimo de 60s (a Quotex não aceita contratos menores no modo TIME).
     """
     segundos_no_minuto  = time.time() % 60
     segundos_ate_virada = 60 - segundos_no_minuto
 
-    if segundos_ate_virada < 3:
+    # Janela de segurança: se faltar menos de 5s para a virada, usa o próximo minuto
+    if segundos_ate_virada < 5:
         segundos_ate_virada += 60
 
     duracao_total = int(segundos_ate_virada) + (minutos - 1) * 60
-    return max(5, duracao_total)
+    # Mínimo absoluto de 60s para o modo TIME da Quotex
+    return max(60, duracao_total)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -793,9 +796,35 @@ def quotex_operar(ativo: str, direcao: str, valor: float, duracao: int) -> dict:
             ok, info = bool(resultado), {}
 
         if not ok:
-            return {"ok": False, "erro": "Ordem rejeitada pela Quotex.", "detalhe": str(info)}
+            detalhe = str(info) if info else "sem detalhe"
+            print(f"[Quotex] ❌ Ordem rejeitada | ativo={ativo} | dir={direcao_norm} | "
+                  f"dur={duracao}s | detalhe={detalhe}")
+            # Retry automático: se rejeitado por timing (vela virou), recalcula duração e tenta 1x
+            detalhe_lower = detalhe.lower()
+            _timing_erros = ("invalid", "time", "expired", "close", "too late", "not allowed")
+            if any(k in detalhe_lower for k in _timing_erros):
+                try:
+                    nova_dur = quotex_duracao_alinhada(minutos=max(1, round(duracao / 60)))
+                    print(f"[Quotex] 🔄 Retry com nova duração: {nova_dur}s")
+                    fut2 = asyncio.run_coroutine_threadsafe(
+                        client.buy(amount=valor, asset=ativo, direction=direcao_norm, duration=nova_dur),
+                        loop
+                    )
+                    resultado2 = fut2.result(timeout=30)
+                    if isinstance(resultado2, (list, tuple)) and len(resultado2) >= 2:
+                        ok2, info2 = bool(resultado2[0]), resultado2[1]
+                    else:
+                        ok2, info2 = bool(resultado2), {}
+                    if ok2:
+                        op_id2 = (info2.get("id") or info2.get("uid") or "") if isinstance(info2, dict) else ""
+                        print(f"[Quotex] ✅ Retry OK | id={op_id2} | dur={nova_dur}s")
+                        return {"ok": True, "id": op_id2, "ativo": ativo, "direcao": direcao_norm,
+                                "valor": valor, "duracao": nova_dur, "info": info2}
+                except Exception as _re:
+                    print(f"[Quotex] ❌ Retry falhou: {_re}")
+            return {"ok": False, "erro": f"Ordem rejeitada: {detalhe}", "detalhe": detalhe}
 
-        op_id = info.get("id") or info.get("uid") or ""
+        op_id = (info.get("id") or info.get("uid") or "") if isinstance(info, dict) else ""
         print(f"[Quotex] 📈 Operação | ativo={ativo} | dir={direcao_norm} | "
               f"val={valor} | dur={duracao}s | id={op_id}")
         return {

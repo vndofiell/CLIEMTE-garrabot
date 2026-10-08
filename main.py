@@ -3671,6 +3671,7 @@ def rota_quotex_operar():
     if valor <= 0:
         return jsonify({"ok": False, "erro": "Campo 'valor' deve ser maior que zero."}), 400
 
+    print(f"[Quotex] 🎯 Tentativa operação | ativo={ativo} | dir={direcao} | val={valor} | dur={duracao}s")
     resultado = quotex_operar(ativo=ativo, direcao=direcao, valor=valor, duracao=duracao)
     # Dispara verificação de resultado em background imediatamente após operar
     if resultado.get("ok") and resultado.get("id"):
