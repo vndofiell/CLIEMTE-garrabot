@@ -9279,6 +9279,10 @@ function processCommand(cmd) {
             bot.mgr = new GerenciadorUnificado(bot.gerenciamento,
                 Object.assign({ stake: bot.initialStake }, (bot._mgrCfgs && bot._mgrCfgs[bot.gerenciamento]) || {}));
             const est = ESTRATEGIAS[bot.estrategia];
+            // ── Quotex: garante que o motor HMA será disparado pelo watcher ──
+            if (est && est.tipo === 'hma_quotex') {
+                _qxHmaQ.pendente = true;
+            }
             if (bot.ws && bot.ws.readyState === WebSocket.OPEN) {
                 const _ativoInic = _resolverAtivo(est && est.ativo);
                 if (_ativoInic !== bot._tickAtivo) {
