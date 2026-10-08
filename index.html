@@ -30260,7 +30260,9 @@ async function _qxHmaQCiclo() {
     if (_qx.status !== 'conectado') {
         _qxHmaQ._cicloRodando = false;  // garante reset para o watcher retomar
         _qxHmaQ.opBloqueada   = false;  // libera operação caso estivesse travada
-        print('🟠 HMA QUOTEX: ⚠️ Quotex não conectada — aguardando...', 'log-info');
+        print('🟠 HMA QUOTEX: ⚠️ Quotex não conectada — aguardando reconexão...', 'log-info');
+        // Verifica novamente em 15s sem travar o timer principal
+        setTimeout(() => { if (_qxHmaQ.rodando) _qxHmaQCiclo(); }, 15000);
         return;
     }
     if (_qxHmaQ._cicloRodando) return;
@@ -30545,10 +30547,26 @@ function _qxHmaQAgendarEntrada(direcao, contexto, est) {
             _qxHmaQ._entradaTimer = setTimeout(() => {
                 _qxHmaQPararPing();
                 if (!_qxHmaQ.rodando || _qxHmaQ.opBloqueada) return;
-                // Verifica conexão no momento exato — aborta se WS caiu
+                // Verifica conexão no momento exato — se WS caiu, aguarda reconexão e retenta
                 if (_qx.status !== 'conectado') {
                     print('🟠 HMA QUOTEX: ⚠️ Conexão perdida antes da entrada — aguardando reconexão', 'log-info');
                     _qxHmaQ.opBloqueada = false;
+                    // Poll de reconexão: tenta de novo quando conexão voltar (até 60s)
+                    let _reconTent = 0;
+                    const _reconPoll = setInterval(() => {
+                        _reconTent++;
+                        if (!_qxHmaQ.rodando) { clearInterval(_reconPoll); return; }
+                        if (_qx.status === 'conectado') {
+                            clearInterval(_reconPoll);
+                            print('🟠 HMA QUOTEX: ✅ Reconectado — reentrando na próxima vela', 'log-info');
+                            _qxHmaQAgendarEntrada(direcao, contexto, est);
+                            return;
+                        }
+                        if (_reconTent >= 12) { // 12 × 5s = 60s máximo
+                            clearInterval(_reconPoll);
+                            print('🟠 HMA QUOTEX: ⚠️ Sem reconexão após 60s — sinal descartado', 'log-info');
+                        }
+                    }, 5000);
                     return;
                 }
                 _qxHmaQOperar(direcao, contexto, est);
@@ -30574,7 +30592,23 @@ function _qxHmaQAgendarEntrada(direcao, contexto, est) {
                         if (!_qxHmaQ.rodando || _qxHmaQ.opBloqueada) return;
                         if (_qx.status !== 'conectado') {
                             _qxHmaQ.opBloqueada = false;
-                            print('🟠 HMA QUOTEX: ⚠️ Conexão perdida antes da entrada — aguardando', 'log-info');
+                            print('🟠 HMA QUOTEX: ⚠️ Conexão perdida antes da entrada — aguardando reconexão', 'log-info');
+                            // Poll de reconexão: retenta quando conexão voltar (até 60s)
+                            let _reconTent2 = 0;
+                            const _reconPoll2 = setInterval(() => {
+                                _reconTent2++;
+                                if (!_qxHmaQ.rodando) { clearInterval(_reconPoll2); return; }
+                                if (_qx.status === 'conectado') {
+                                    clearInterval(_reconPoll2);
+                                    print('🟠 HMA QUOTEX: ✅ Reconectado — reentrando na próxima vela', 'log-info');
+                                    _qxHmaQAgendarEntrada(direcao, contexto, est);
+                                    return;
+                                }
+                                if (_reconTent2 >= 12) {
+                                    clearInterval(_reconPoll2);
+                                    print('🟠 HMA QUOTEX: ⚠️ Sem reconexão após 60s — sinal descartado', 'log-info');
+                                }
+                            }, 5000);
                             return;
                         }
                         _qxHmaQOperar(direcao, contexto, est);
