@@ -22,6 +22,8 @@ import json
 import os
 import re
 import traceback
+import concurrent.futures
+import math
 
 # ── Monkey-patch pyquotex: garante que offset=None nunca cause timedelta crash ──
 try:
@@ -717,36 +719,29 @@ def _quotex_reconectar_bg(email: str, senha: str, tipo_conta: str, ssid: str = "
 # UTILITÁRIOS
 # ═══════════════════════════════════════════════════════════════════════════════
 
+def quotex_aguardar_entrada(antecedencia=3):
+    """
+    Aguarda os últimos segundos antes da virada do minuto.
+    Não dispara a entrada antecipadamente.
+    """
+    antecedencia = max(1, min(int(antecedencia), 5))
+    while True:
+        agora = time.time()
+        restante = 60 - (agora % 60)
+        if restante <= antecedencia:
+            return
+        time.sleep(min(restante - antecedencia, 0.25))
+
+
 def quotex_duracao_alinhada(minutos: int = 1) -> int:
     """
-    Calcula a duração em segundos para que a operação expire exatamente
-    na virada do N-ésimo minuto, usando o relógio do SERVIDOR Quotex.
-    Isso garante sincronização perfeita com a corretora, independente
-    do horário local do PC.
+    Entrada nos últimos 3 segundos da vela atual.
+    Expiração após a quantidade de minutos solicitada
+    a partir da próxima virada M1.
     """
-    # Usa o timestamp do servidor Quotex se disponível (sincronizado via WS)
-    agora = time.time()
-    try:
-        with _QUOTEX_LOCK:
-            client = _QUOTEX_STATE.get("client")
-        if client and client.api and client.api.timesync:
-            ts_servidor = float(client.api.timesync.server_timestamp or 0)
-            if ts_servidor > 1_000_000_000:   # sanidade: timestamp válido
-                agora = ts_servidor
-                print(f"[Quotex] ⏱ Usando horário do servidor: {ts_servidor:.3f} "
-                      f"(diff local={time.time()-ts_servidor:+.3f}s)")
-    except Exception:
-        pass
-
-    segundos_no_minuto  = agora % 60
-    segundos_ate_virada = 60 - segundos_no_minuto
-
-    # Janela de segurança: se faltar menos de 3s para a virada, pula para o próximo minuto
-    if segundos_ate_virada < 3:
-        segundos_ate_virada += 60
-
-    duracao_total = int(segundos_ate_virada) + (minutos - 1) * 60
-    return max(60, duracao_total)
+    minutos = max(1, int(minutos))
+    restante = 60 - (time.time() % 60)
+    return math.ceil(restante) + (minutos * 60)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -890,6 +885,19 @@ def quotex_operar(ativo: str, direcao: str, valor: float, duracao: int) -> dict:
             "valor":   valor,
             "duracao": duracao,
             "info":    info,
+        }
+    except concurrent.futures.TimeoutError:
+        # A ordem pode ter sido aceita mesmo sem resposta.
+        # Não cancelar o future nem enviar outra compra automaticamente.
+        print(
+            f"[Quotex] ALERTA: confirmação pendente | "
+            f"ativo={ativo} | direção={direcao_norm} | valor={valor}"
+        )
+        return {
+            "ok": False,
+            "pendente_confirmacao": True,
+            "nao_reenviar": True,
+            "erro": "Confirmação da compra pendente; verificar estado da ordem."
         }
     except Exception as e:
         msg = str(e) or repr(e) or type(e).__name__

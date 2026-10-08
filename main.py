@@ -3261,6 +3261,7 @@ try:
         quotex_conectado,
         quotex_get_saldo,
         quotex_duracao_alinhada,
+        quotex_aguardar_entrada,
         quotex_get_ativos,
         quotex_operar,
         quotex_resultado,
@@ -3299,12 +3300,19 @@ except ImportError as _qx_err:
     def quotex_cfg_carregar():
         return {"email": "", "senha": "", "tipo_conta": "DEMO", "ssid": ""}
     def quotex_duracao_alinhada(minutos: int = 1) -> int:
+        import time, math
+        minutos = max(1, int(minutos))
+        restante = 60 - (time.time() % 60)
+        return math.ceil(restante) + (minutos * 60)
+    def quotex_aguardar_entrada(antecedencia=3):
         import time
-        seg = time.time() % 60
-        ate_virada = 60 - seg
-        if ate_virada < 3:
-            ate_virada += 60
-        return max(60, int(ate_virada) + (minutos - 1) * 60)
+        antecedencia = max(1, min(int(antecedencia), 5))
+        while True:
+            agora = time.time()
+            restante = 60 - (agora % 60)
+            if restante <= antecedencia:
+                return
+            time.sleep(min(restante - antecedencia, 0.25))
     def quotex_capturar_ssid(*a, **kw):
         return {"ok": False, "ssid": "", "erro": "pyquotex não instalado."}
     def quotex_ssid_status():
@@ -3699,15 +3707,6 @@ def rota_quotex_operar():
     minutos         = int(dados.get("minutos") or 1)
     alinhar_minuto  = dados.get("alinhar_minuto", True)  # padrão: alinhado
 
-    # Calcula duração:
-    # - alinhar_minuto=True  → expira exatamente na virada do N-ésimo minuto
-    # - alinhar_minuto=False → usa o valor fixo de "duracao" (comportamento antigo)
-    if alinhar_minuto:
-        duracao = quotex_duracao_alinhada(minutos=minutos)
-        print(f"[Quotex] ⏱️  Duração alinhada ao minuto: {duracao}s (minutos={minutos})")
-    else:
-        duracao = int(dados.get("duracao") or 60)
-
     if not ativo:
         return jsonify({"ok": False, "erro": "Campo 'ativo' obrigatório."}), 400
     if direcao not in ("call", "put"):
@@ -3722,6 +3721,18 @@ def rota_quotex_operar():
 
     if valor <= 0:
         return jsonify({"ok": False, "erro": "Campo 'valor' deve ser maior que zero."}), 400
+
+    # Sincroniza a entrada: últimos 3 segundos antes da virada M1.
+    if alinhar_minuto:
+        print("[HMA QUOTEX] Aguardando janela de entrada M1...")
+        quotex_aguardar_entrada(antecedencia=3)
+        duracao = quotex_duracao_alinhada(minutos=minutos)
+        print(
+            f"[HMA QUOTEX] Janela de entrada liberada | "
+            f"duração={duracao}s"
+        )
+    else:
+        duracao = int(dados.get("duracao") or 60)
 
     print(f"[Quotex] 🎯 Tentativa operação | ativo={ativo} | dir={direcao} | val={valor} | dur={duracao}s")
     resultado = quotex_operar(ativo=ativo, direcao=direcao, valor=valor, duracao=duracao)
