@@ -891,7 +891,7 @@ def quotex_operar(ativo: str, direcao: str, valor: float, duracao: int) -> dict:
         except Exception:
             pass
 
-        timeout_buy = max(30, int(duracao) + 15)
+        timeout_buy = 20  # Quotex confirma ordens em <5s normalmente; 20s é margem segura
         print(f"[Quotex] ⏳ Aguardando confirmação da ordem por até {timeout_buy}s...")
         fut = asyncio.run_coroutine_threadsafe(
             client.buy(amount=valor, asset=ativo, direction=direcao_norm, duration=duracao),

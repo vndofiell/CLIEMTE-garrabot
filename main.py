@@ -13900,7 +13900,7 @@ def garra_hma_mtf():
 def start_server():
     # Oracle Cloud / Render — porta configurável via variável de ambiente, padrão 5000
     port = int(os.environ.get("PORT", 5000))
-    app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
+    app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False, threaded=True)
 
 
 # ── Inicialização ao importar (gunicorn / Render) ─────────────────────────────
