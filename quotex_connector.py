@@ -49,6 +49,7 @@ _QUOTEX_STATE: dict = {
     "status":           "desconectado",   # desconectado | conectando | conectado | erro
     "email":            "",
     "senha":            "",
+    "ssid":             "",               # último SSID usado (para reconexão automática)
     "tipo_conta":       "DEMO",           # DEMO | REAL
     "saldo":            0.0,
     "moeda":            "USD",
@@ -571,6 +572,7 @@ def _quotex_conectar_thread(email: str, senha: str, tipo_conta: str,
             _QUOTEX_STATE["ts_conectado"]    = time.time()
             _QUOTEX_STATE["erro"]            = ""
             _QUOTEX_STATE["_falhas_balance"] = 0
+            _QUOTEX_STATE["ssid"]            = ssid or ""
 
         print(f"[Quotex] ✅ Conectado | conta={tipo_conta} | saldo={saldo:.2f}")
 
@@ -656,6 +658,43 @@ def quotex_desconectar() -> dict:
 
     print("[Quotex] 🔌 Desconectado.")
     return {"ok": True, "status": "desconectado"}
+
+
+_reconectar_bg_lock = threading.Lock()
+_reconectar_bg_ativo = False
+
+def _quotex_reconectar_bg(email: str, senha: str, tipo_conta: str, ssid: str = "") -> None:
+    """
+    Dispara reconexão automática em background thread.
+    Evita múltiplas reconexões simultâneas com lock de guarda.
+    """
+    global _reconectar_bg_ativo
+    with _reconectar_bg_lock:
+        if _reconectar_bg_ativo:
+            return  # já há uma reconexão em andamento
+        # Só reconecta se tiver credenciais salvas
+        if not email and not ssid:
+            return
+        _reconectar_bg_ativo = True
+
+    def _reconectar():
+        global _reconectar_bg_ativo
+        try:
+            print("[Quotex] 🔄 Reconexão automática em 10s...")
+            time.sleep(10)
+            with _QUOTEX_LOCK:
+                status_atual = _QUOTEX_STATE.get("status")
+            # Só reconecta se ainda estiver desconectado/erro
+            if status_atual in ("erro", "desconectado"):
+                print("[Quotex] 🔄 Reconectando automaticamente...")
+                quotex_conectar(email=email, senha=senha,
+                                tipo_conta=tipo_conta or "DEMO", ssid=ssid)
+        finally:
+            with _reconectar_bg_lock:
+                _reconectar_bg_ativo = False
+
+    t = threading.Thread(target=_reconectar, daemon=True, name="quotex-autorecon")
+    t.start()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -763,9 +802,15 @@ def quotex_operar(ativo: str, direcao: str, valor: float, duracao: int) -> dict:
     with _QUOTEX_LOCK:
         client = _QUOTEX_STATE.get("client")
         loop   = _QUOTEX_STATE.get("loop")
+        email_saved     = _QUOTEX_STATE.get("email", "")
+        senha_saved     = _QUOTEX_STATE.get("senha", "")
+        tipo_saved      = _QUOTEX_STATE.get("tipo_conta", "DEMO")
+        ssid_saved      = _QUOTEX_STATE.get("ssid", "")
 
     if not client or not loop:
-        return {"ok": False, "erro": "Quotex não conectada."}
+        # Conexão perdida — dispara reconexão automática em background
+        _quotex_reconectar_bg(email_saved, senha_saved, tipo_saved, ssid_saved)
+        return {"ok": False, "erro": "Quotex não conectada. Reconectando automaticamente..."}
 
     direcao_norm = direcao.lower().strip()
     if direcao_norm not in ("call", "put"):
@@ -839,7 +884,23 @@ def quotex_operar(ativo: str, direcao: str, valor: float, duracao: int) -> dict:
             "info":    info,
         }
     except Exception as e:
-        return {"ok": False, "erro": str(e)}
+        msg = str(e)
+        # Detecta erros que indicam WebSocket morto/sessão encerrada
+        _conn_erros = ("websocket", "connection", "closed", "connect", "timeout",
+                       "sessão", "session", "socket", "eof", "broken pipe")
+        if any(k in msg.lower() for k in _conn_erros):
+            print(f"[Quotex] ⚠️ Erro de conexão detectado durante operação: {msg}")
+            with _QUOTEX_LOCK:
+                _QUOTEX_STATE["status"] = "erro"
+                _QUOTEX_STATE["erro"]   = msg
+                _QUOTEX_STATE["client"] = None
+            with _QUOTEX_LOCK:
+                _e = _QUOTEX_STATE.get("email", "")
+                _s = _QUOTEX_STATE.get("senha", "")
+                _t = _QUOTEX_STATE.get("tipo_conta", "DEMO")
+                _ss = _QUOTEX_STATE.get("ssid", "")
+            _quotex_reconectar_bg(_e, _s, _t, _ss)
+        return {"ok": False, "erro": msg or "Erro desconhecido ao operar."}
 
 
 # Cache de resultados já obtidos: op_id -> dict

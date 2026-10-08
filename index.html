@@ -30494,7 +30494,27 @@ function _qxHmaQOperar(direcao, contexto, est) {
     .then(d => {
         if (!d.ok) {
             _qxHmaQ.opBloqueada = false;
-            print('🟠 HMA QUOTEX: ⚠️ Erro ao operar: ' + (d.erro || d.detalhe || '?'), 'log-loss');
+            const msgErro = d.erro || d.detalhe || 'Erro desconhecido';
+            print('🟠 HMA QUOTEX: ⚠️ Erro ao operar: ' + msgErro, 'log-loss');
+            // Conexão perdida → atualiza status e agenda recheck em 12s
+            const semConexao = msgErro.toLowerCase().includes('não conectada') ||
+                               msgErro.toLowerCase().includes('nao conectada') ||
+                               msgErro.toLowerCase().includes('reconectando');
+            if (semConexao) {
+                _qx.status = 'desconectado';
+                _qxAtualizarBotao('desconectado');
+                print('🟠 HMA QUOTEX: 🔄 Aguardando reconexão automática...', 'log-info');
+                // Recheck do status após 12s (tempo da reconexão bg no servidor)
+                setTimeout(() => {
+                    fetch('/quotex/status').then(r => r.json()).then(s => {
+                        _qx.status = s.status || 'desconectado';
+                        _qxAtualizarBotao(s.status);
+                        if (s.status === 'conectado') {
+                            print('🟠 HMA QUOTEX: ✅ Reconectado automaticamente!', 'log-win');
+                        }
+                    }).catch(() => {});
+                }, 12000);
+            }
             return;
         }
         const _durSecs = d.duracao || (est.qhma_periodo || 60);
