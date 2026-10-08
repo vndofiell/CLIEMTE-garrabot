@@ -30270,6 +30270,18 @@ async function _qxHmaQCiclo() {
     if (_qx.status !== 'conectado') {
         _qxHmaQ._cicloRodando = false;  // garante reset para o watcher retomar
         _qxHmaQ.opBloqueada   = false;  // libera operação caso estivesse travada
+        // Consulta o servidor para atualizar o status real antes de tentar novamente
+        try {
+            const _st = await fetch('/quotex/status').then(r => r.json());
+            _qx.status = _st.status || 'desconectado';
+            _qxAtualizarBotao(_st.status);
+            if (_st.status === 'conectado') {
+                // Reconectou — continua imediatamente sem aguardar 15s
+                _qxHmaQ._cicloRodando = false;
+                setTimeout(() => { if (_qxHmaQ.rodando) _qxHmaQCiclo(); }, 500);
+                return;
+            }
+        } catch (_e) {}
         print('🟠 HMA QUOTEX: ⚠️ Quotex não conectada — aguardando reconexão...', 'log-info');
         // Verifica novamente em 15s sem travar o timer principal
         setTimeout(() => { if (_qxHmaQ.rodando) _qxHmaQCiclo(); }, 15000);
@@ -30692,15 +30704,24 @@ function _qxHmaQOperar(direcao, contexto, est) {
                 _qx.status = 'desconectado';
                 _qxAtualizarBotao('desconectado');
                 print('🟠 HMA QUOTEX: 🔄 Aguardando reconexão automática...', 'log-info');
-                setTimeout(() => {
+                // Poll contínuo a cada 8s até reconectar (máx 90s = ~11 tentativas)
+                let _rcTent = 0;
+                const _rcPoll = setInterval(() => {
+                    _rcTent++;
                     fetch('/quotex/status').then(r => r.json()).then(s => {
                         _qx.status = s.status || 'desconectado';
                         _qxAtualizarBotao(s.status);
                         if (s.status === 'conectado') {
+                            clearInterval(_rcPoll);
                             print('🟠 HMA QUOTEX: ✅ Reconectado automaticamente!', 'log-win');
+                        } else if (_rcTent >= 11) {
+                            clearInterval(_rcPoll);
+                            print('🟠 HMA QUOTEX: ⚠️ Sem reconexão após 90s — verifique as credenciais', 'log-info');
                         }
-                    }).catch(() => {});
-                }, 12000);
+                    }).catch(() => {
+                        if (_rcTent >= 11) clearInterval(_rcPoll);
+                    });
+                }, 8000);
             }
             return;
         }
