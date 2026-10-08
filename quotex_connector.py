@@ -829,8 +829,53 @@ def quotex_resultado(op_id: str) -> dict:
     return {"ok": False, "pendente": True, "erro": "Aguardando resultado..."}
 
 
-def _quotex_check_win_bg(op_id: str):
-    """Roda em background thread — chama check_win e salva no cache."""
+async def _quotex_buscar_resultado_async(client, op_id: str, duracao_s: int = 75):
+    """
+    Estratégia em 3 camadas para obter o resultado:
+    1. Poll do histórico a cada 3s (resultado disponível quase imediatamente)
+    2. Aguarda evento check_win (evento WebSocket nativo)
+    3. Fallback: lê listinfodata diretamente
+    """
+    # Camada 1 — Poll do histórico a cada 3s por até duracao+15s
+    limite = time.time() + duracao_s + 15
+    while time.time() < limite:
+        try:
+            historico = await client.get_history()
+            for item in (historico or []):
+                if str(item.get("ticket", "")) == str(op_id) or \
+                   str(item.get("id", "")) == str(op_id):
+                    lucro = float(item.get("profitAmount", item.get("profit", 0)) or 0)
+                    win   = lucro > 0
+                    return {"ok": True, "id": op_id, "lucro": lucro, "win": win,
+                            "resultado": "win" if win else "loss"}
+        except Exception:
+            pass
+        await asyncio.sleep(3)
+
+    # Camada 2 — check_win nativo (evento WebSocket) com timeout curto
+    try:
+        res, lucro = await asyncio.wait_for(client.check_win(op_id), timeout=20)
+        win = float(lucro or 0) > 0
+        return {"ok": True, "id": op_id, "lucro": float(lucro or 0),
+                "win": win, "resultado": res}
+    except Exception:
+        pass
+
+    # Camada 3 — listinfodata direto
+    try:
+        cached = client.api.listinfodata.get(op_id)
+        if cached:
+            lucro = float(cached.get("profit", 0) or 0)
+            return {"ok": True, "id": op_id, "lucro": lucro,
+                    "win": lucro > 0, "resultado": "win" if lucro > 0 else "loss"}
+    except Exception:
+        pass
+
+    return {"ok": False, "erro": "Resultado não encontrado após todas as tentativas."}
+
+
+def _quotex_check_win_bg(op_id: str, duracao_s: int = 75):
+    """Roda em background thread — busca resultado via histórico+evento+cache."""
     with _QUOTEX_LOCK:
         client = _QUOTEX_STATE.get("client")
         loop   = _QUOTEX_STATE.get("loop")
@@ -841,26 +886,17 @@ def _quotex_check_win_bg(op_id: str):
         return
 
     try:
-        fut       = asyncio.run_coroutine_threadsafe(client.check_win(op_id), loop)
-        resultado = fut.result(timeout=300)
-
-        if isinstance(resultado, (list, tuple)) and len(resultado) >= 2:
-            res, lucro = resultado[0], resultado[1]
-        else:
-            res, lucro = "desconhecido", float(resultado or 0)
-
-        win = float(lucro or 0) > 0
+        fut       = asyncio.run_coroutine_threadsafe(
+            _quotex_buscar_resultado_async(client, op_id, duracao_s), loop)
+        resultado = fut.result(timeout=duracao_s + 30)
         with _RESULTADO_CACHE_LOCK:
-            _RESULTADO_CACHE[op_id] = {
-                "ok": True, "id": op_id, "resultado": res,
-                "lucro": float(lucro or 0), "win": win,
-            }
+            _RESULTADO_CACHE[op_id] = resultado
     except Exception as e:
         with _RESULTADO_CACHE_LOCK:
             _RESULTADO_CACHE[op_id] = {"ok": False, "erro": str(e)}
 
 
-def quotex_resultado_iniciar(op_id: str):
-    """Dispara o check_win em background. Chame logo após operar."""
-    t = threading.Thread(target=_quotex_check_win_bg, args=(op_id,), daemon=True)
+def quotex_resultado_iniciar(op_id: str, duracao_s: int = 75):
+    """Dispara busca de resultado em background. Chame logo após operar."""
+    t = threading.Thread(target=_quotex_check_win_bg, args=(op_id, duracao_s), daemon=True)
     t.start()

@@ -30357,14 +30357,15 @@ function _qxHmaQOperar(direcao, contexto, est) {
             print('🟠 HMA QUOTEX: ⚠️ Erro ao operar: ' + (d.erro || d.detalhe || '?'), 'log-loss');
             return;
         }
-        print(`🟠 HMA QUOTEX: ✅ Operação enviada | id=${d.id} | ${direcao.toUpperCase()} | $${_qxHmaQ.valorAtual}`, 'log-info');
-        // ── Ativa o widget de trade em tempo real (cronômetro + ganhando/perdendo) ──
         const _durSecs = d.duracao || (est.qhma_periodo || 60);
+        print(`🟠 HMA QUOTEX: ✅ Operação enviada | id=${d.id} | ${direcao.toUpperCase()} | $${_qxHmaQ.valorAtual} | ${_durSecs}s`, 'log-info');
+        // ── Ativa o widget de trade em tempo real (cronômetro + ganhando/perdendo) ──
         if (typeof _tradeAtivarLocal === 'function') {
             _tradeAtivarLocal(direcao, _durSecs, contexto.ativoNome || contexto.ativoId, _qxHmaQ.valorAtual, 'quotex');
         }
-        contexto.stake = _qxHmaQ.valorAtual;
-        _qxHmaQAguardarResultado(d.id, contexto, direcao, est);
+        contexto.stake    = _qxHmaQ.valorAtual;
+        contexto.duracao  = _durSecs;
+        _qxHmaQAguardarResultado(d.id, contexto, direcao, est, _durSecs);
     })
     .catch(e => {
         _qxHmaQ.opBloqueada = false;
@@ -30373,16 +30374,18 @@ function _qxHmaQOperar(direcao, contexto, est) {
 }
 
 // ── Aguarda resultado + gerenciamento de stake ────────────────────────────────
-function _qxHmaQAguardarResultado(opId, contexto, direcao, est) {
+function _qxHmaQAguardarResultado(opId, contexto, direcao, est, durSecs) {
     if (!opId) { _qxHmaQ.opBloqueada = false; return; }
 
-    // Poll não-bloqueante: tenta a cada 2s por até 3 minutos
+    const _dur = durSecs || contexto.duracao || 60;
+    // Poll não-bloqueante: começa após a expiração da operação, tenta a cada 3s por até 2 min extra
     let _tentativas = 0;
-    const _maxTentativas = 90; // 90 × 2s = 3 min
+    const _maxTentativas = 40; // 40 × 3s = 2 min extra após expiração
 
     function _poll() {
         if (_tentativas >= _maxTentativas) {
             _qxHmaQ.opBloqueada = false;
+            if (typeof _tradeEncerrarLocal === 'function') _tradeEncerrarLocal('neutro', 0);
             print('🟠 HMA QUOTEX: ⚠️ Timeout aguardando resultado da operação', 'log-info');
             return;
         }
@@ -30397,8 +30400,8 @@ function _qxHmaQAguardarResultado(opId, contexto, direcao, est) {
         })
         .then(d => {
             if (!d.ok && d.pendente) {
-                // Ainda aguardando — tenta novamente em 2s
-                setTimeout(_poll, 2000);
+                // Ainda aguardando — tenta novamente em 3s
+                setTimeout(_poll, 3000);
                 return;
             }
 
@@ -30488,12 +30491,13 @@ function _qxHmaQAguardarResultado(opId, contexto, direcao, est) {
         })
         .catch(() => {
             // Erro de rede — tenta novamente
-            setTimeout(_poll, 2000);
+            setTimeout(_poll, 3000);
         });
     }
 
-    // Primeira tentativa após 2s (dá tempo da operação ser registrada)
-    setTimeout(_poll, 2000);
+    // Primeira tentativa: aguarda a operação expirar + 3s buffer
+    const _primeiraEspera = Math.max(3000, (_dur * 1000) + 3000);
+    setTimeout(_poll, _primeiraEspera);
 }
 
 // ── Gerenciamento de stake ────────────────────────────────────────────────────

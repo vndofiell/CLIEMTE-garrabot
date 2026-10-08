@@ -3674,7 +3674,7 @@ def rota_quotex_operar():
     resultado = quotex_operar(ativo=ativo, direcao=direcao, valor=valor, duracao=duracao)
     # Dispara verificação de resultado em background imediatamente após operar
     if resultado.get("ok") and resultado.get("id"):
-        quotex_resultado_iniciar(resultado["id"])
+        quotex_resultado_iniciar(resultado["id"], duracao_s=duracao)
     return jsonify(resultado)
 
 
