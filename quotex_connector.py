@@ -825,13 +825,13 @@ def quotex_operar(ativo: str, direcao: str, valor: float, duracao: int) -> dict:
         except Exception:
             pass
 
+        timeout_buy = max(30, int(duracao) + 15)
+        print(f"[Quotex] ⏳ Aguardando confirmação da ordem por até {timeout_buy}s...")
         fut = asyncio.run_coroutine_threadsafe(
             client.buy(amount=valor, asset=ativo, direction=direcao_norm, duration=duracao),
             loop
         )
-        # Timeout de 15s — buy() internamente tem timeout = duration+5 (65s)
-        # Se travar, vamos capturar e forçar reconexão completa
-        resultado = fut.result(timeout=15)
+        resultado = fut.result(timeout=timeout_buy)
 
         # Resultado None = WebSocket retornou vazio (sessão morta)
         if resultado is None:
