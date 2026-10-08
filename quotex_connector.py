@@ -825,16 +825,13 @@ def quotex_operar(ativo: str, direcao: str, valor: float, duracao: int) -> dict:
         except Exception:
             pass
 
-        # Usa asyncio.wait_for() DENTRO do loop para cancelar a coroutine corretamente
-        # se o WS travar — evita que a coroutine fique pendente corrompendo operações futuras
-        async def _buy_com_timeout():
-            return await asyncio.wait_for(
-                client.buy(amount=valor, asset=ativo, direction=direcao_norm, duration=duracao),
-                timeout=8.0
-            )
-
-        fut = asyncio.run_coroutine_threadsafe(_buy_com_timeout(), loop)
-        resultado = fut.result(timeout=12)  # 12s > 8s interno — só para garantir
+        fut = asyncio.run_coroutine_threadsafe(
+            client.buy(amount=valor, asset=ativo, direction=direcao_norm, duration=duracao),
+            loop
+        )
+        # Timeout de 15s — buy() internamente tem timeout = duration+5 (65s)
+        # Se travar, vamos capturar e forçar reconexão completa
+        resultado = fut.result(timeout=15)
 
         # Resultado None = WebSocket retornou vazio (sessão morta)
         if resultado is None:
@@ -849,29 +846,6 @@ def quotex_operar(ativo: str, direcao: str, valor: float, duracao: int) -> dict:
             detalhe = str(info) if info else "sem detalhe"
             print(f"[Quotex] ❌ Ordem rejeitada | ativo={ativo} | dir={direcao_norm} | "
                   f"dur={duracao}s | detalhe={detalhe}")
-            # Retry automático: se rejeitado por timing (vela virou), recalcula duração e tenta 1x
-            detalhe_lower = detalhe.lower()
-            _timing_erros = ("invalid", "time", "expired", "close", "too late", "not allowed")
-            if any(k in detalhe_lower for k in _timing_erros):
-                try:
-                    nova_dur = quotex_duracao_alinhada(minutos=max(1, round(duracao / 60)))
-                    print(f"[Quotex] 🔄 Retry com nova duração: {nova_dur}s")
-                    fut2 = asyncio.run_coroutine_threadsafe(
-                        client.buy(amount=valor, asset=ativo, direction=direcao_norm, duration=nova_dur),
-                        loop
-                    )
-                    resultado2 = fut2.result(timeout=30)
-                    if isinstance(resultado2, (list, tuple)) and len(resultado2) >= 2:
-                        ok2, info2 = bool(resultado2[0]), resultado2[1]
-                    else:
-                        ok2, info2 = bool(resultado2), {}
-                    if ok2:
-                        op_id2 = (info2.get("id") or info2.get("uid") or "") if isinstance(info2, dict) else ""
-                        print(f"[Quotex] ✅ Retry OK | id={op_id2} | dur={nova_dur}s")
-                        return {"ok": True, "id": op_id2, "ativo": ativo, "direcao": direcao_norm,
-                                "valor": valor, "duracao": nova_dur, "info": info2}
-                except Exception as _re:
-                    print(f"[Quotex] ❌ Retry falhou: {_re}")
             return {"ok": False, "erro": f"Ordem rejeitada: {detalhe}", "detalhe": detalhe}
 
         op_id = (info.get("id") or info.get("uid") or "") if isinstance(info, dict) else ""
@@ -887,25 +861,37 @@ def quotex_operar(ativo: str, direcao: str, valor: float, duracao: int) -> dict:
             "info":    info,
         }
     except Exception as e:
-        # Captura mensagem real: usa repr() para pegar tipo quando str() é vazio
         msg = str(e) or repr(e) or type(e).__name__
         print(f"[Quotex] ❌ Exceção em quotex_operar: {msg}")
         traceback.print_exc()
-        # Cancela future pendente para não travar o loop asyncio
+        # Cancela future pendente
         if fut is not None:
             try:
-                fut.cancel()
+                loop.call_soon_threadsafe(fut.cancel)
             except Exception:
                 pass
-        # Qualquer exceção durante buy() indica sessão morta — marca erro e reconecta
+        # Força desconexão total: para o loop asyncio corrompido e reconecta do zero
         with _QUOTEX_LOCK:
-            _QUOTEX_STATE["status"] = "erro"
-            _QUOTEX_STATE["erro"]   = msg
-            _QUOTEX_STATE["client"] = None
             _e  = _QUOTEX_STATE.get("email", "")
             _s  = _QUOTEX_STATE.get("senha", "")
             _t  = _QUOTEX_STATE.get("tipo_conta", "DEMO")
             _ss = _QUOTEX_STATE.get("ssid", "")
+            _QUOTEX_STATE["status"] = "erro"
+            _QUOTEX_STATE["erro"]   = msg
+            _QUOTEX_STATE["client"] = None
+            _QUOTEX_STATE["loop"]   = None
+        # Para o loop (libera o thread de conexão que está em loop.run_forever())
+        if loop and loop.is_running():
+            try:
+                loop.call_soon_threadsafe(loop.stop)
+            except Exception:
+                pass
+        # Fecha o client
+        if client:
+            try:
+                client.close()
+            except Exception:
+                pass
         _quotex_reconectar_bg(_e, _s, _t, _ss)
         return {"ok": False, "erro": msg}
 
