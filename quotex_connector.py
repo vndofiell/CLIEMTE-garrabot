@@ -535,6 +535,14 @@ def _quotex_conectar_thread(email: str, senha: str, tipo_conta: str,
         except Exception as _ste:
             print(f"[Quotex] ⚠️ Aviso na sync de tempo: {_ste}")
 
+        # Garante que profile.offset nunca fique None após o login
+        try:
+            if client.api and client.api.profile and client.api.profile.offset is None:
+                client.api.profile.offset = 0
+                print("[Quotex] ⚠️ profile.offset era None — definido como 0 (UTC)")
+        except Exception:
+            pass
+
         with _QUOTEX_LOCK:
             _QUOTEX_STATE["client"]          = client
             _QUOTEX_STATE["status"]          = "conectado"
@@ -742,6 +750,13 @@ def quotex_operar(ativo: str, direcao: str, valor: float, duracao: int) -> dict:
         try:
             sync_fut = asyncio.run_coroutine_threadsafe(client.get_server_time(), loop)
             sync_fut.result(timeout=8)
+        except Exception:
+            pass
+
+        # Garante que profile.offset nunca seja None (causa timedelta NoneType)
+        try:
+            if client.api and client.api.profile and client.api.profile.offset is None:
+                client.api.profile.offset = 0
         except Exception:
             pass
 
