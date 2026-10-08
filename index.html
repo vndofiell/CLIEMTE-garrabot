@@ -9259,7 +9259,13 @@ function processCommand(cmd) {
         abrirModalConta();
 
     } else if (command === 'iniciar') {
-        if (!bot.token) return print("ACESSO NEGADO: EXECUTE 'conectar' PRIMEIRO", "log-loss");
+        const _estAtual = ESTRATEGIAS[bot.estrategia];
+        const _ehQuotex = _estAtual && _estAtual.tipo === 'hma_quotex';
+        if (_ehQuotex) {
+            if (_qx.status !== 'conectado') return print("ACESSO NEGADO: CONECTE A QUOTEX PRIMEIRO (botão 🟠 Quotex no painel)", "log-loss");
+        } else {
+            if (!bot.token) return print("ACESSO NEGADO: EXECUTE 'conectar' PRIMEIRO (login na Deriv)", "log-loss");
+        }
         if (bot._metaEncerrada) return print("🔒 SISTEMA ENCERRADO — Meta atingida. Use 'resetar placar' para iniciar nova sessão.", "log-loss");
         // ── Se JC ativo: aplica meta do dia como Stop Win ANTES de iniciar ────
         jcAplicarMetaComoStopWin(() => {
