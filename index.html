@@ -27281,12 +27281,15 @@ const _tsLocal = {
     status:          'neutro', // 'ganhando' | 'perdendo' | 'neutro'
     lucro:           null,     // lucro real após resultado (null = ainda aberto)
     _timer:          null,     // setInterval do cronômetro local
+    _timerStatus:    null,     // setInterval do monitor de cor (quotex)
     _timerEncerrando: null,    // setTimeout para sumir após resultado
     _fonte:          '',       // 'deriv' | 'quotex'
+    _ativoId:        '',       // id interno do ativo (ex: EURNZD_otc) para buscar tick
+    _precoEntrada:   0,        // preço no momento da entrada
 };
 
 // Ativa o widget com os dados do trade recém-aberto
-function _tradeAtivarLocal(direcao, durSecs, ativoNome, valor, fonte, precoEntrada) {
+function _tradeAtivarLocal(direcao, durSecs, ativoNome, valor, fonte, precoEntrada, ativoId) {
     // Cancela qualquer encerramento agendado
     if (_tsLocal._timerEncerrando) { clearTimeout(_tsLocal._timerEncerrando); _tsLocal._timerEncerrando = null; }
     // Limpa timers anteriores
@@ -27298,31 +27301,45 @@ function _tradeAtivarLocal(direcao, durSecs, ativoNome, valor, fonte, precoEntra
     _tsLocal.direcao      = (direcao || '').toUpperCase();
     _tsLocal.ativoNome    = ativoNome || '';
     _tsLocal.valor        = parseFloat(valor) || 0;
-    _tsLocal.status       = 'neutro';
-    _tsLocal._fonte       = fonte || 'deriv';
+    _tsLocal.status        = 'neutro';
+    _tsLocal._fonte        = fonte || 'deriv';
     _tsLocal._precoEntrada = parseFloat(precoEntrada) || 0;
+    _tsLocal._ativoId      = ativoId || '';
     _tradeMostrarWidget();
     // Atualiza o cronômetro a cada 500ms localmente (suave e sem flickering)
     _tsLocal._timer = setInterval(_tradeMostrarWidget, 500);
 
-    // ── Para Quotex: monitora preço atual vs entrada para mudar cor ──────────
-    if (fonte === 'quotex') {
+    // ── Para Quotex: busca preço via /quotex/tick a cada 2s e atualiza cor ──
+    if (fonte === 'quotex' && _tsLocal._ativoId) {
+        let _tickBuscando = false;
         _tsLocal._timerStatus = setInterval(() => {
             if (!_tsLocal.ativo) { clearInterval(_tsLocal._timerStatus); _tsLocal._timerStatus = null; return; }
-            // Tenta pegar o preço atual do gráfico Quotex (atualizado pelo tick)
-            const precoAtual = (typeof _qxChart !== 'undefined' && _qxChart.lastPreco)
-                ? _qxChart.lastPreco : 0;
-            const entrada = _tsLocal._precoEntrada;
-            if (precoAtual > 0 && entrada > 0) {
-                const dir = _tsLocal.direcao;
-                if (dir === 'CALL') {
-                    _tsLocal.status = precoAtual > entrada ? 'ganhando' : (precoAtual < entrada ? 'perdendo' : 'neutro');
-                } else if (dir === 'PUT') {
-                    _tsLocal.status = precoAtual < entrada ? 'ganhando' : (precoAtual > entrada ? 'perdendo' : 'neutro');
+            if (_tickBuscando) return; // evita requisições paralelas
+            _tickBuscando = true;
+            fetch(`/quotex/tick?ativo=${encodeURIComponent(_tsLocal._ativoId)}&periodo=60`)
+            .then(r => r.json())
+            .then(t => {
+                _tickBuscando = false;
+                if (!_tsLocal.ativo) return;
+                const precoAtual = parseFloat(t.preco || t.close || 0);
+                // Se preço de entrada ainda não foi capturado, usa o primeiro tick
+                if (_tsLocal._precoEntrada === 0 && precoAtual > 0) {
+                    _tsLocal._precoEntrada = precoAtual;
+                    return; // próxima iteração já compara
                 }
-                _tradeMostrarWidget();
-            }
-        }, 1000);
+                const entrada = _tsLocal._precoEntrada;
+                if (precoAtual > 0 && entrada > 0) {
+                    const dir = _tsLocal.direcao;
+                    if (dir === 'CALL') {
+                        _tsLocal.status = precoAtual > entrada ? 'ganhando' : (precoAtual < entrada ? 'perdendo' : 'neutro');
+                    } else if (dir === 'PUT') {
+                        _tsLocal.status = precoAtual < entrada ? 'ganhando' : (precoAtual > entrada ? 'perdendo' : 'neutro');
+                    }
+                    _tradeMostrarWidget();
+                }
+            })
+            .catch(() => { _tickBuscando = false; });
+        }, 2000);
     }
 
     // Inicia o widget ao vivo no Telegram — apenas quando a conta secundária está operando
@@ -30385,18 +30402,10 @@ function _qxHmaQOperar(direcao, contexto, est) {
         print(`🟠 HMA QUOTEX: ✅ Operação enviada | id=${d.id} | ${direcao.toUpperCase()} | $${_qxHmaQ.valorAtual} | ${_durSecs}s`, 'log-info');
         // ── Ativa o widget de trade em tempo real (cronômetro + ganhando/perdendo) ──
         if (typeof _tradeAtivarLocal === 'function') {
-            // Tenta pegar preço de entrada do gráfico; se não disponível busca via tick
-            let _precoEntr = (typeof _qxChart !== 'undefined' && _qxChart.lastPreco) ? _qxChart.lastPreco : 0;
-            const _ativarWidget = (preco) => _tradeAtivarLocal(direcao, _durSecs, contexto.ativoNome || contexto.ativoId, _qxHmaQ.valorAtual, 'quotex', preco);
-            if (_precoEntr > 0) {
-                _ativarWidget(_precoEntr);
-            } else {
-                // Busca o tick atual do ativo via API
-                fetch(`/quotex/tick?ativo=${encodeURIComponent(contexto.ativoId)}&periodo=60`)
-                .then(r => r.json())
-                .then(t => { _ativarWidget(parseFloat(t.preco || t.close || 0)); })
-                .catch(() => { _ativarWidget(0); });
-            }
+            // Passa o ativoId para o monitorador buscar tick em tempo real
+            // Preço de entrada: 0 → o monitorador captura no primeiro tick
+            _tradeAtivarLocal(direcao, _durSecs, contexto.ativoNome || contexto.ativoId,
+                _qxHmaQ.valorAtual, 'quotex', 0, contexto.ativoId);
         }
         contexto.stake    = _qxHmaQ.valorAtual;
         contexto.duracao  = _durSecs;
