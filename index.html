@@ -11873,6 +11873,7 @@ function initWebSocket(wssUrl) {
                         // _hmaDispararComReanalise: aceita atraso opcional para quando
                         // é chamado com menos de 1min restante (usa o tempo real restante)
                         const _hmaDispararComReanalise = (_atrasoRestante) => {
+                            bot._hmaViradaTimer = null; // limpa referência do timer que nos chamou
                             // Tempo que deve aguardar APÓS o MTF para entrar na virada
                             // Quando chamado imediato (< 1min): usa o atraso real restante
                             // Quando chamado com 1min de antecedência: usa _HMA_REANALISE_MS
@@ -11954,6 +11955,7 @@ function initWebSocket(wssUrl) {
                                     bot._buying          = false;
                                     bot._contratoEmCurso = false;
                                     bot._contratoEmCursoLogado = false;
+                                    bot._hmaViradaTimer  = null; // libera guard da linha 11783
                                     est.contract = _hmaEstOrig.contract;
                                     est.barrier  = _hmaEstOrig.barrier;
                                     bot._hmaSinalPendente = null;
