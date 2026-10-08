@@ -846,6 +846,9 @@ def quotex_operar(ativo: str, direcao: str, valor: float, duracao: int) -> dict:
             detalhe = str(info) if info else "sem detalhe"
             print(f"[Quotex] ❌ Ordem rejeitada | ativo={ativo} | dir={direcao_norm} | "
                   f"dur={duracao}s | detalhe={detalhe}")
+            # Timeout de confirmação WS = WebSocket travado → reconecta
+            if detalhe.lower() in ("timeout", "timeout waiting for buy confirmation"):
+                raise ConnectionError(f"WS timeout na confirmação de compra — reconectando.")
             return {"ok": False, "erro": f"Ordem rejeitada: {detalhe}", "detalhe": detalhe}
 
         op_id = (info.get("id") or info.get("uid") or "") if isinstance(info, dict) else ""
