@@ -30358,6 +30358,12 @@ function _qxHmaQOperar(direcao, contexto, est) {
             return;
         }
         print(`🟠 HMA QUOTEX: ✅ Operação enviada | id=${d.id} | ${direcao.toUpperCase()} | $${_qxHmaQ.valorAtual}`, 'log-info');
+        // ── Ativa o widget de trade em tempo real (cronômetro + ganhando/perdendo) ──
+        const _durSecs = d.duracao || (est.qhma_periodo || 60);
+        if (typeof _tradeAtivarLocal === 'function') {
+            _tradeAtivarLocal(direcao, _durSecs, contexto.ativoNome || contexto.ativoId, _qxHmaQ.valorAtual, 'quotex');
+        }
+        contexto.stake = _qxHmaQ.valorAtual;
         _qxHmaQAguardarResultado(d.id, contexto, direcao, est);
     })
     .catch(e => {
@@ -30419,6 +30425,11 @@ function _qxHmaQAguardarResultado(opId, contexto, direcao, est) {
                 print(`🟠 HMA QUOTEX: ❌ LOSS -$${Math.abs(lucro).toFixed(2)} | ${contexto.ativoNome} | losses: ${_qxHmaQ.losses}`, 'log-loss');
             }
             updateHeader();
+
+            // ── Encerra o widget de trade (mostra resultado por 3s) ──────────
+            if (typeof _tradeEncerrarLocal === 'function') {
+                _tradeEncerrarLocal(win ? 'ganhando' : 'perdendo', lucro);
+            }
 
             // ── Notificação Telegram + WhatsApp (igual à Deriv) ──────────────
             const saldo = parseFloat(document.getElementById('hd-balance')?.textContent?.replace('$','')) || 0;
