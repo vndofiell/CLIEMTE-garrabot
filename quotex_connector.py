@@ -816,14 +816,8 @@ def quotex_operar(ativo: str, direcao: str, valor: float, duracao: int) -> dict:
     if direcao_norm not in ("call", "put"):
         return {"ok": False, "erro": f"Direção inválida: '{direcao}'. Use 'call' ou 'put'."}
 
+    fut = None
     try:
-        # Garante offset do servidor carregado antes de operar
-        try:
-            sync_fut = asyncio.run_coroutine_threadsafe(client.get_server_time(), loop)
-            sync_fut.result(timeout=8)
-        except Exception:
-            pass
-
         # Garante que profile.offset nunca seja None (causa timedelta NoneType)
         try:
             if client.api and client.api.profile and client.api.profile.offset is None:
@@ -835,7 +829,8 @@ def quotex_operar(ativo: str, direcao: str, valor: float, duracao: int) -> dict:
             client.buy(amount=valor, asset=ativo, direction=direcao_norm, duration=duracao),
             loop
         )
-        resultado = fut.result(timeout=30)
+        # Timeout reduzido: 10s é mais que suficiente; 30s bloqueava por WS travado
+        resultado = fut.result(timeout=10)
 
         # Resultado None = WebSocket retornou vazio (sessão morta)
         if resultado is None:
@@ -892,6 +887,12 @@ def quotex_operar(ativo: str, direcao: str, valor: float, duracao: int) -> dict:
         msg = str(e) or repr(e) or type(e).__name__
         print(f"[Quotex] ❌ Exceção em quotex_operar: {msg}")
         traceback.print_exc()
+        # Cancela future pendente para não travar o loop asyncio
+        if fut is not None:
+            try:
+                fut.cancel()
+            except Exception:
+                pass
         # Qualquer exceção durante buy() indica sessão morta — marca erro e reconecta
         with _QUOTEX_LOCK:
             _QUOTEX_STATE["status"] = "erro"
