@@ -30345,7 +30345,8 @@ async function _qxHmaQCiclo() {
     _qxHmaQ.ativoAtual = { id: melhor.ativoId, nome: melhor.ativoNome, payout: melhor.payout };
     const direcao = melhor.decisao === 'CALL' ? 'call' : 'put';
     print(`🟠 HMA QUOTEX: ${melhor.decisao} | ${melhor.ativoNome} | conf <b>${melhor.confianca}%</b> | payout ${melhor.payout}% | $${_qxHmaQ.valorAtual}`, melhor.decisao === 'CALL' ? 'log-win' : 'log-loss');
-    _qxHmaQOperar(direcao, melhor, est);
+    // Agenda entrada para faltando 2.5s da virada da vela atual (nunca no meio da vela)
+    _qxHmaQAgendarEntrada(direcao, melhor, est);
 }
 
 // ── Analisa ativo via candles MTF (M1+M5+M15) + /garra-hma/avaliar + /garra-hma/mtf ──
@@ -30490,6 +30491,66 @@ function _qxHmaQLogLista(resultados, est) {
         return `  ${tag} ${r.ativoNome||r.ativoId} · ${sinal} · conf ${bar} · pay ${r.payout}%${mtfTag}`;
     }).join('<br>');
     print(`🟠 HMA QUOTEX — Mercados:<br>${linhas}`, 'log-info');
+}
+
+// ── Agenda entrada na virada da vela (faltando 2.5s para fechar) ──────────────
+function _qxHmaQAgendarEntrada(direcao, contexto, est) {
+    const periodo   = est.qhma_periodo || 60;
+    const periodoMs = periodo * 1000;
+    const ANTEC_MS  = 2500;  // entra 2.5s antes do fechamento
+
+    clearTimeout(_qxHmaQ._entradaTimer);
+    clearInterval(_qxHmaQ._entradaWatch);
+
+    const _tentar = () => {
+        if (!_qxHmaQ.rodando || _qxHmaQ.opBloqueada) return;
+        const agora     = _qxAgoraMs();
+        const tsAb      = _qxChart.tsAbertura || Math.floor(agora / 1000 / periodo) * periodo;
+        const tsFech_ms = (tsAb + periodo) * 1000;
+        const msAte     = tsFech_ms - agora - ANTEC_MS;
+
+        if (msAte > periodoMs + 5000) {
+            // tsAbertura desatualizado — aguarda tick
+            _qxHmaQ._entradaTimer = setTimeout(_tentar, 600);
+            return;
+        }
+
+        if (msAte > 200) {
+            // Aguarda até o momento exato (2.5s antes da virada)
+            print(`🟠 HMA QUOTEX: ⏱ ${direcao.toUpperCase()} ${contexto.ativoNome} — entrando em ${Math.round(msAte/1000)}s`, 'log-info');
+            _qxHmaQ._entradaTimer = setTimeout(() => {
+                if (!_qxHmaQ.rodando || _qxHmaQ.opBloqueada) return;
+                _qxHmaQOperar(direcao, contexto, est);
+            }, msAte);
+        } else if (msAte > -3000) {
+            // Já estamos na janela — opera agora
+            if (!_qxHmaQ.opBloqueada) _qxHmaQOperar(direcao, contexto, est);
+        } else {
+            // Vela já fechou, aguarda nova vela via watch
+            let tentativas = 0;
+            _qxHmaQ._entradaWatch = setInterval(() => {
+                tentativas++;
+                const aW    = _qxAgoraMs();
+                const tsAbW = _qxChart.tsAbertura || 0;
+                const msAteW = (tsAbW + periodo) * 1000 - aW - ANTEC_MS;
+                if (msAteW > 200 && msAteW < periodoMs) {
+                    clearInterval(_qxHmaQ._entradaWatch);
+                    _qxHmaQ._entradaTimer = setTimeout(() => {
+                        if (!_qxHmaQ.rodando || _qxHmaQ.opBloqueada) return;
+                        _qxHmaQOperar(direcao, contexto, est);
+                    }, msAteW);
+                } else if (msAteW >= -500 && msAteW <= 200) {
+                    clearInterval(_qxHmaQ._entradaWatch);
+                    if (!_qxHmaQ.opBloqueada) _qxHmaQOperar(direcao, contexto, est);
+                } else if (tentativas > 15) {
+                    clearInterval(_qxHmaQ._entradaWatch);
+                    print('🟠 HMA QUOTEX: ⚠️ Timing perdido — aguardando próxima vela', 'log-info');
+                    _qxHmaQ.opBloqueada = false;
+                }
+            }, 400);
+        }
+    };
+    _tentar();
 }
 
 // ── Executa operação ──────────────────────────────────────────────────────────

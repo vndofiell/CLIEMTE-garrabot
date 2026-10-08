@@ -579,6 +579,22 @@ def _quotex_conectar_thread(email: str, senha: str, tipo_conta: str,
         # Salva credenciais + SSID após conexão bem-sucedida
         quotex_cfg_salvar(email, senha, tipo_conta, ssid)
 
+        # ── Keepalive: ping no servidor a cada 20s para evitar timeout do WS ──
+        async def _keepalive():
+            while True:
+                await asyncio.sleep(20)
+                try:
+                    with _QUOTEX_LOCK:
+                        ainda_ativo = _QUOTEX_STATE.get("client") is client
+                    if not ainda_ativo:
+                        break
+                    await client.get_server_time()
+                except Exception as _ke:
+                    print(f"[Quotex] ⚠️ Keepalive falhou: {_ke}")
+                    break
+
+        loop.create_task(_keepalive())
+
         # Mantém o loop vivo para operações futuras
         loop.run_forever()
 
