@@ -3529,18 +3529,32 @@ def rota_quotex_ativos_payout():
             if isinstance(item, (list, tuple)) and len(item) >= 3:
                 nome_para_id[str(item[2])] = str(item[1])
 
+        def _normalizar_payout(v) -> int:
+            """Converte payout para inteiro percentual.
+            pyquotex pode retornar decimal (0.77) ou inteiro (77) ou string."""
+            try:
+                v = float(v)
+                return int(v * 100) if 0 < v <= 1.0 else int(v)
+            except (TypeError, ValueError):
+                return 0
+
         ativos = []
         for nome, info in (dados or {}).items():
             if isinstance(info, dict):
                 aberto = bool(info.get("open", False))
-                raw = info.get("payment") or info.get("turbo_payment") or 0
-                # pyquotex retorna decimal (0.77) — converte para inteiro (77)
-                raw = float(raw)
-                payout = int(raw * 100) if raw <= 1.0 else int(raw)
+                # Tenta múltiplas fontes de payout — pega o maior valor válido
+                candidatos = [
+                    info.get("payment"),
+                    info.get("turbo_payment"),
+                    (info.get("profit") or {}).get("1M"),
+                ]
+                payout = max((_normalizar_payout(v) for v in candidatos if v is not None), default=0)
                 id_interno = nome_para_id.get(nome, nome)
                 ativos.append({"id": id_interno, "nome": nome, "payout": payout, "aberto": aberto})
 
         ativos.sort(key=lambda x: (-int(x["aberto"]), -x["payout"], x["nome"]))
+        top = [a for a in ativos if a["payout"] > 0][:5]
+        print(f"[Quotex] ativos-payout: {len(ativos)} total | top5: {[(a['nome'], a['payout']) for a in top]}")
         return jsonify({"ok": True, "ativos": ativos})
     except Exception as e:
         import traceback; traceback.print_exc()
