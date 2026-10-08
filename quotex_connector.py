@@ -837,6 +837,10 @@ def quotex_operar(ativo: str, direcao: str, valor: float, duracao: int) -> dict:
         )
         resultado = fut.result(timeout=30)
 
+        # Resultado None = WebSocket retornou vazio (sessão morta)
+        if resultado is None:
+            raise ConnectionError("buy() retornou None — sessão Quotex encerrada.")
+
         if isinstance(resultado, (list, tuple)) and len(resultado) >= 2:
             ok, info = bool(resultado[0]), resultado[1]
         else:
@@ -884,23 +888,21 @@ def quotex_operar(ativo: str, direcao: str, valor: float, duracao: int) -> dict:
             "info":    info,
         }
     except Exception as e:
-        msg = str(e)
-        # Detecta erros que indicam WebSocket morto/sessão encerrada
-        _conn_erros = ("websocket", "connection", "closed", "connect", "timeout",
-                       "sessão", "session", "socket", "eof", "broken pipe")
-        if any(k in msg.lower() for k in _conn_erros):
-            print(f"[Quotex] ⚠️ Erro de conexão detectado durante operação: {msg}")
-            with _QUOTEX_LOCK:
-                _QUOTEX_STATE["status"] = "erro"
-                _QUOTEX_STATE["erro"]   = msg
-                _QUOTEX_STATE["client"] = None
-            with _QUOTEX_LOCK:
-                _e = _QUOTEX_STATE.get("email", "")
-                _s = _QUOTEX_STATE.get("senha", "")
-                _t = _QUOTEX_STATE.get("tipo_conta", "DEMO")
-                _ss = _QUOTEX_STATE.get("ssid", "")
-            _quotex_reconectar_bg(_e, _s, _t, _ss)
-        return {"ok": False, "erro": msg or "Erro desconhecido ao operar."}
+        # Captura mensagem real: usa repr() para pegar tipo quando str() é vazio
+        msg = str(e) or repr(e) or type(e).__name__
+        print(f"[Quotex] ❌ Exceção em quotex_operar: {msg}")
+        traceback.print_exc()
+        # Qualquer exceção durante buy() indica sessão morta — marca erro e reconecta
+        with _QUOTEX_LOCK:
+            _QUOTEX_STATE["status"] = "erro"
+            _QUOTEX_STATE["erro"]   = msg
+            _QUOTEX_STATE["client"] = None
+            _e  = _QUOTEX_STATE.get("email", "")
+            _s  = _QUOTEX_STATE.get("senha", "")
+            _t  = _QUOTEX_STATE.get("tipo_conta", "DEMO")
+            _ss = _QUOTEX_STATE.get("ssid", "")
+        _quotex_reconectar_bg(_e, _s, _t, _ss)
+        return {"ok": False, "erro": msg}
 
 
 # Cache de resultados já obtidos: op_id -> dict
