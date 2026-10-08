@@ -581,19 +581,38 @@ def _quotex_conectar_thread(email: str, senha: str, tipo_conta: str,
         # Salva credenciais + SSID após conexão bem-sucedida
         quotex_cfg_salvar(email, senha, tipo_conta, ssid)
 
-        # ── Keepalive: ping no servidor a cada 20s para evitar timeout do WS ──
+        # ── Keepalive: ping a cada 20s + detecção de queda do WebSocket ─────
         async def _keepalive():
+            _falhas = 0
             while True:
                 await asyncio.sleep(20)
                 try:
                     with _QUOTEX_LOCK:
                         ainda_ativo = _QUOTEX_STATE.get("client") is client
                     if not ainda_ativo:
-                        break
+                        break  # outra reconexão já assumiu
                     await client.get_server_time()
+                    _falhas = 0  # ping ok — reseta contador
                 except Exception as _ke:
-                    print(f"[Quotex] ⚠️ Keepalive falhou: {_ke}")
-                    break
+                    _falhas += 1
+                    print(f"[Quotex] ⚠️ Keepalive falhou ({_falhas}/3): {_ke}")
+                    if _falhas >= 3:
+                        # 3 pings seguidos falharam — WS caiu; dispara reconexão
+                        print("[Quotex] 🔄 Keepalive: 3 falhas consecutivas — reconectando...")
+                        with _QUOTEX_LOCK:
+                            _e  = _QUOTEX_STATE.get("email", "")
+                            _s  = _QUOTEX_STATE.get("senha", "")
+                            _t  = _QUOTEX_STATE.get("tipo_conta", "DEMO")
+                            _ss = _QUOTEX_STATE.get("ssid", "")
+                            _QUOTEX_STATE["status"] = "erro"
+                            _QUOTEX_STATE["client"] = None
+                            _QUOTEX_STATE["loop"]   = None
+                        try:
+                            loop.stop()
+                        except Exception:
+                            pass
+                        _quotex_reconectar_bg(_e, _s, _t, _ss)
+                        break
 
         loop.create_task(_keepalive())
 

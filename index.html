@@ -30257,6 +30257,8 @@ function _qxHmaQParar() {
 async function _qxHmaQCiclo() {
     if (!_qxHmaQ.rodando) return;
     if (_qx.status !== 'conectado') {
+        _qxHmaQ._cicloRodando = false;  // garante reset para o watcher retomar
+        _qxHmaQ.opBloqueada   = false;  // libera operação caso estivesse travada
         print('🟠 HMA QUOTEX: ⚠️ Quotex não conectada — aguardando...', 'log-info');
         return;
     }
