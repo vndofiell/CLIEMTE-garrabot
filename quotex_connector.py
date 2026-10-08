@@ -700,32 +700,62 @@ def quotex_desconectar() -> dict:
 _reconectar_bg_lock = threading.Lock()
 _reconectar_bg_ativo = False
 
-def _quotex_reconectar_bg(email: str, senha: str, tipo_conta: str, ssid: str = "") -> None:
+def _quotex_reconectar_bg(
+        email: str,
+        senha: str,
+        tipo_conta: str,
+        ssid: str = "") -> None:
     """
-    Dispara reconexão automática em background thread.
-    Evita múltiplas reconexões simultâneas com lock de guarda.
+    Reconexão automática com novas tentativas.
+    Não envia ordens durante a reconexão.
     """
     global _reconectar_bg_ativo
     with _reconectar_bg_lock:
         if _reconectar_bg_ativo:
-            return  # já há uma reconexão em andamento
-        # Só reconecta se tiver credenciais salvas
+            return
         if not email and not ssid:
+            print(
+                "[Quotex] Reconexão impossível: "
+                "não há credenciais ou SSID salvos."
+            )
             return
         _reconectar_bg_ativo = True
 
     def _reconectar():
         global _reconectar_bg_ativo
+        intervalo = 5
+        max_tentativas = 12
         try:
-            print("[Quotex] 🔄 Reconexão automática em 10s...")
-            time.sleep(10)
-            with _QUOTEX_LOCK:
-                status_atual = _QUOTEX_STATE.get("status")
-            # Só reconecta se ainda estiver desconectado/erro
-            if status_atual in ("erro", "desconectado"):
-                print("[Quotex] 🔄 Reconectando automaticamente...")
-                quotex_conectar(email=email, senha=senha,
-                                tipo_conta=tipo_conta or "DEMO", ssid=ssid)
+            for tentativa in range(1, max_tentativas + 1):
+                with _QUOTEX_LOCK:
+                    status_atual = _QUOTEX_STATE.get("status")
+                if status_atual == "conectado":
+                    print("[Quotex] ✅ Já reconectado — encerrando loop de reconexão.")
+                    return
+                print(
+                    f"[Quotex] 🔄 Tentativa {tentativa}/{max_tentativas} "
+                    f"em {intervalo}s..."
+                )
+                time.sleep(intervalo)
+                # Reconfirma: pode ter reconectado durante o sleep
+                with _QUOTEX_LOCK:
+                    status_atual = _QUOTEX_STATE.get("status")
+                if status_atual == "conectado":
+                    print("[Quotex] ✅ Reconectado durante espera.")
+                    return
+                if status_atual in ("erro", "desconectado"):
+                    print(f"[Quotex] 🔄 Reconectando (tentativa {tentativa})...")
+                    quotex_conectar(
+                        email=email,
+                        senha=senha,
+                        tipo_conta=tipo_conta or "DEMO",
+                        ssid=ssid,
+                    )
+                    # Aguarda a conexão estabelecer antes da próxima tentativa
+                    time.sleep(8)
+                # Backoff suave: aumenta o intervalo até 30s
+                intervalo = min(intervalo + 5, 30)
+            print("[Quotex] ❌ Todas as tentativas de reconexão falharam.")
         finally:
             with _reconectar_bg_lock:
                 _reconectar_bg_ativo = False
@@ -849,10 +879,26 @@ def quotex_operar(ativo: str, direcao: str, valor: float, duracao: int) -> dict:
         tipo_saved      = _QUOTEX_STATE.get("tipo_conta", "DEMO")
         ssid_saved      = _QUOTEX_STATE.get("ssid", "")
 
-    if not client or not loop:
-        # Conexão perdida — dispara reconexão automática em background
-        _quotex_reconectar_bg(email_saved, senha_saved, tipo_saved, ssid_saved)
-        return {"ok": False, "erro": "Quotex não conectada. Reconectando automaticamente..."}
+    if (
+        not client
+        or not loop
+        or not loop.is_running()
+    ):
+        _quotex_reconectar_bg(
+            email_saved,
+            senha_saved,
+            tipo_saved,
+            ssid_saved,
+        )
+        return {
+            "ok": False,
+            "erro": (
+                "Quotex desconectada. "
+                "Reconectando; entrada cancelada."
+            ),
+            "reconectando": True,
+            "nao_reenviar": True,
+        }
 
     direcao_norm = direcao.lower().strip()
     if direcao_norm not in ("call", "put"):

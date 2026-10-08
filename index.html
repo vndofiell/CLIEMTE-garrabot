@@ -30628,6 +30628,15 @@ function _qxHmaQOperar(direcao, contexto, est) {
                 return;
             }
 
+            // Reconectando — entrada cancelada, atualiza status e aguarda
+            if (d.reconectando) {
+                _qxHmaQ.opBloqueada = false;
+                _qx.status = 'desconectado';
+                _qxAtualizarBotao('desconectado');
+                print('🟠 HMA QUOTEX: 🔄 Reconectando — entrada cancelada, aguardando...', 'log-info');
+                return;
+            }
+
             // Confirmação pendente — não reenviar, aguarda resolução
             if (d.pendente_confirmacao || d.nao_reenviar) {
                 _qxHmaQ.opBloqueada = false;
