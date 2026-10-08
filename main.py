@@ -3780,15 +3780,12 @@ def rota_quotex_operar():
     if valor <= 0:
         return jsonify({"ok": False, "erro": "Campo 'valor' deve ser maior que zero."}), 400
 
-    # Sincroniza a entrada: últimos 3 segundos antes da virada M1.
+    # Calcula duração: o frontend (AgendarEntrada) já garante o timing correto.
+    # Não bloquear a thread Flask aguardando a virada — isso muda o loop asyncio
+    # e causa "Future attached to a different loop" no quotex_operar().
     if alinhar_minuto:
-        print("[HMA QUOTEX] Aguardando janela de entrada M1...")
-        quotex_aguardar_entrada(antecedencia=3)
         duracao = quotex_duracao_alinhada(minutos=minutos)
-        print(
-            f"[HMA QUOTEX] Janela de entrada liberada | "
-            f"duração={duracao}s"
-        )
+        print(f"[HMA QUOTEX] Janela de entrada | duração={duracao}s (minutos={minutos})")
     else:
         duracao = int(dados.get("duracao") or 60)
 
