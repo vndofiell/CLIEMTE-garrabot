@@ -3526,59 +3526,66 @@ def rota_quotex_ativos_payout():
         return jsonify({"ok": False, "erro": "Quotex não conectada.", "ativos": []})
 
     try:
-        # get_payment() é síncrono: chave = nome amigável, valor = dict com info
-        dados  = client.get_payment()
-
-        # Monta mapa: nome_amigavel -> id_interno usando client.api.instruments
-        # instruments: lista de [id_num, id_interno, nome_amigavel, ...]
-        nome_para_id: dict = {}
-        instr = getattr(client.api, "instruments", None) or []
-        for item in instr:
-            if isinstance(item, (list, tuple)) and len(item) >= 3:
-                nome_para_id[str(item[2])] = str(item[1])
-
         def _normalizar_payout(v) -> int:
             """Converte payout para inteiro percentual.
             pyquotex pode retornar decimal (0.77) ou inteiro (77) ou string."""
             try:
                 v = float(v)
-                return int(v * 100) if 0 < v <= 1.0 else int(v)
+                if v <= 0:
+                    return 0
+                return int(v * 100) if v <= 1.0 else int(v)
             except (TypeError, ValueError):
                 return 0
 
+        # Lê instruments diretamente — estrutura: [id_num, id_interno, nome, ..., open(14), ..., pay(5), ..., turbo(18), ...]
+        instr = getattr(client.api, "instruments", None) or []
+
+        # Log de diagnóstico: mostra o primeiro instrument para entender a estrutura
+        if instr:
+            primeiro = instr[0]
+            print(f"[Quotex] instruments[0] len={len(primeiro)} val={list(primeiro)[:20]}")
+
         ativos = []
-        for nome, info in (dados or {}).items():
-            if isinstance(info, dict):
-                aberto = bool(info.get("open", False))
-                # Tenta múltiplas fontes de payout — pega o maior valor válido
-                candidatos = [
-                    info.get("payment"),
-                    info.get("turbo_payment"),
-                    (info.get("profit") or {}).get("1M"),
-                ]
-                payout = max((_normalizar_payout(v) for v in candidatos if v is not None), default=0)
-                id_interno = nome_para_id.get(nome, nome)
+        for item in instr:
+            if not isinstance(item, (list, tuple)) or len(item) < 15:
+                continue
+            id_interno = str(item[1])          # ex: "EURUSD_otc"
+            nome       = str(item[2]).replace("\n", "").strip()
+            aberto     = bool(item[14])        # campo 14 = open
+
+            # Coleta todos os campos numéricos candidatos a payout (índices 5, 17, 18 e negativos)
+            candidatos = []
+            for idx in [5, 17, 18]:
+                if idx < len(item):
+                    candidatos.append(item[idx])
+            # Também tenta índices negativos comuns: -9 (1M), -8 (5M), -10 (24H)
+            for idx in [-10, -9, -8]:
+                try:
+                    candidatos.append(item[idx])
+                except Exception:
+                    pass
+
+            payout = max((_normalizar_payout(v) for v in candidatos if v is not None), default=0)
+            if payout > 0 or aberto:
                 ativos.append({"id": id_interno, "nome": nome, "payout": payout, "aberto": aberto})
 
         ativos.sort(key=lambda x: (-int(x["aberto"]), -x["payout"], x["nome"]))
         top = [a for a in ativos if a["payout"] > 0][:5]
         print(f"[Quotex] ativos-payout: {len(ativos)} total | top5: {[(a['nome'], a['payout']) for a in top]}")
 
-        # Atualiza cache apenas quando há ativos com payout > 0
         import time as _t
         if top:
             _payout_cache    = ativos
             _payout_cache_ts = _t.time()
             return jsonify({"ok": True, "ativos": ativos})
         else:
-            # Payout zerado (virada de hora) — retorna cache se tiver < 90s
+            # Payout zerado — retorna cache se tiver < 90s
             if _payout_cache and (_t.time() - _payout_cache_ts) < 90:
                 print(f"[Quotex] ⚠️ Payout zerado — usando cache ({len(_payout_cache)} ativos)")
                 return jsonify({"ok": True, "ativos": _payout_cache, "cache": True})
             return jsonify({"ok": True, "ativos": ativos})
     except Exception as e:
         import traceback; traceback.print_exc()
-        # Em caso de erro, tenta retornar o cache
         import time as _t
         if _payout_cache and (_t.time() - _payout_cache_ts) < 90:
             return jsonify({"ok": True, "ativos": _payout_cache, "cache": True})
