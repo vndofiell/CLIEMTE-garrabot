@@ -3509,9 +3509,14 @@ def rota_quotex_candles():
         return jsonify({"ok": False, "erro": str(e), "candles": []})
 
 
+# Cache do último payout válido — evita falhas na virada de hora
+_payout_cache: list = []
+_payout_cache_ts: float = 0.0
+
 # ── Rota: ativos com payout — usada pelo painel de sinais Quotex ─────────────
 @app.route('/quotex/ativos-payout', methods=['GET'])
 def rota_quotex_ativos_payout():
+    global _payout_cache, _payout_cache_ts
     from quotex_connector import _QUOTEX_STATE, _QUOTEX_LOCK
 
     with _QUOTEX_LOCK:
@@ -3558,9 +3563,25 @@ def rota_quotex_ativos_payout():
         ativos.sort(key=lambda x: (-int(x["aberto"]), -x["payout"], x["nome"]))
         top = [a for a in ativos if a["payout"] > 0][:5]
         print(f"[Quotex] ativos-payout: {len(ativos)} total | top5: {[(a['nome'], a['payout']) for a in top]}")
-        return jsonify({"ok": True, "ativos": ativos})
+
+        # Atualiza cache apenas quando há ativos com payout > 0
+        import time as _t
+        if top:
+            _payout_cache    = ativos
+            _payout_cache_ts = _t.time()
+            return jsonify({"ok": True, "ativos": ativos})
+        else:
+            # Payout zerado (virada de hora) — retorna cache se tiver < 90s
+            if _payout_cache and (_t.time() - _payout_cache_ts) < 90:
+                print(f"[Quotex] ⚠️ Payout zerado — usando cache ({len(_payout_cache)} ativos)")
+                return jsonify({"ok": True, "ativos": _payout_cache, "cache": True})
+            return jsonify({"ok": True, "ativos": ativos})
     except Exception as e:
         import traceback; traceback.print_exc()
+        # Em caso de erro, tenta retornar o cache
+        import time as _t
+        if _payout_cache and (_t.time() - _payout_cache_ts) < 90:
+            return jsonify({"ok": True, "ativos": _payout_cache, "cache": True})
         return jsonify({"ok": False, "erro": str(e), "ativos": []})
 
 

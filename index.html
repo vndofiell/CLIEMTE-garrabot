@@ -30386,9 +30386,24 @@ async function _qxHmaQAnalisarAtivo(ativo, est) {
     let confiancaFinal = hmaRes.confianca || 0;
 
     if (mtfRes) {
-        if (mtfRes.consenso === 'CONTRA' && modoMTF !== 'livre') {
-            aprovado  = false;
-            motivoMTF = `MTF CONTRA (${mtfRes.votos_call}C/${mtfRes.votos_put}P/${mtfRes.votos_lat}L)`;
+        const totalTF   = mtfRes.total_tf || 0;
+        const totalVotos = (mtfRes.votos_call || 0) + (mtfRes.votos_put || 0) + (mtfRes.votos_lat || 0);
+
+        // Se menos de 2 TFs votaram (dados insuficientes), ignora o MTF
+        // Isso ocorre com ativos OTC sintéticos (crypto) que não têm M5/M15
+        if (totalTF < 2 || totalVotos < 2) {
+            motivoMTF = `MTF insuf. dados`;
+            // Mantém aprovado conforme M1
+        } else if (mtfRes.consenso === 'CONTRA' && modoMTF !== 'livre') {
+            // Só bloqueia se CONTRA com maioria clara (diferença > 1 voto)
+            const difVotos = Math.abs((mtfRes.votos_call || 0) - (mtfRes.votos_put || 0));
+            if (difVotos > 1) {
+                aprovado  = false;
+                motivoMTF = `MTF CONTRA (${mtfRes.votos_call}C/${mtfRes.votos_put}P/${mtfRes.votos_lat}L)`;
+            } else {
+                // Empate — não bloqueia, apenas avisa
+                motivoMTF = `MTF ⚠️ divergente (${mtfRes.votos_call}C/${mtfRes.votos_put}P)`;
+            }
         } else if (mtfRes.consenso === 'CONFIRMA') {
             // Bônus de confiança quando MTF confirma
             confiancaFinal = Math.min(99, confiancaFinal + 5);
