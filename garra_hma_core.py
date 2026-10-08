@@ -203,12 +203,12 @@ class MultiTimeframeAnalyzer:
 
         elif contrato_u in ("CALL/PUT AUTO", "CALL_PUT_AUTO", "DIRECIONAL"):
             # ── Regressão linear real: confiança sobe com a força do slope ──
-            # slope_norm: quanto o preço sobe/desce por tick em relação ao nível médio
-            # |slope_norm| = 0.0001 → movimento muito fraco → ~72% confiança
-            # |slope_norm| = 0.001  → movimento forte     → ~80% confiança
-            # Caps em 95% para evitar over-confidence
-            force = min(1.0, abs(slope_norm) * 5000)   # 0..1
-            confianca_base = 72 + force * 23            # 72..95
+            # Para preços forex/OTC (ex: 0.57, 1.35), slope_norm é muito menor
+            # que em ticks de dígitos — calibramos com multiplicador maior.
+            # |slope_norm| ~ 0.00001 (muito fraco) → force~0.05 → conf~75%
+            # |slope_norm| ~ 0.0005  (forte)       → force~1.0  → conf~95%
+            force = min(1.0, abs(slope_norm) * 200000)  # calibrado para forex OTC
+            confianca_base = 75 + force * 20            # 75..95
             direcao   = "CALL" if tendencia_alta else "PUT"
             confianca = confianca_base
 
@@ -436,16 +436,19 @@ class DecisionEngine:
         penalidade_regime = 0
 
         if regime_nome == "INSTABILIDADE":
-            penalidade_regime = 20
+            penalidade_regime = 15
         elif regime_nome == "SEM_VANTAGEM":
-            penalidade_regime = 10
-        elif regime_nome == "EXPANSAO":
             penalidade_regime = 5
+        elif regime_nome == "EXPANSAO":
+            penalidade_regime = 3
         elif regime_nome == "LATERALIZACAO" and melhor_dir in self._DIRECIONAIS:
             # Lateralização é armadilha para CALL/PUT mas neutra para DIGIT
-            penalidade_regime = 15
+            penalidade_regime = 10
 
-        confianca_final = round(consenso_pct * (regime_score / 100) - penalidade_regime, 1)
+        # Fórmula: consenso_pct é a base, regime_score adiciona/penaliza levemente
+        # Sem mais multiplicar pelo score (que cortava demais em CALL/PUT AUTO)
+        bonus_regime = max(0, (regime_score - 50) / 10)   # TENDENCIA(75) → +2.5
+        confianca_final = round(consenso_pct + bonus_regime - penalidade_regime, 1)
         confianca_final = max(0, min(99, confianca_final))
 
         if confianca_final < confianca_minima:
