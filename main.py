@@ -3533,7 +3533,10 @@ def rota_quotex_ativos_payout():
         for nome, info in (dados or {}).items():
             if isinstance(info, dict):
                 aberto = bool(info.get("open", False))
-                payout = int(info.get("payment") or info.get("turbo_payment") or 0)
+                raw = info.get("payment") or info.get("turbo_payment") or 0
+                # pyquotex retorna decimal (0.77) — converte para inteiro (77)
+                raw = float(raw)
+                payout = int(raw * 100) if raw <= 1.0 else int(raw)
                 id_interno = nome_para_id.get(nome, nome)
                 ativos.append({"id": id_interno, "nome": nome, "payout": payout, "aberto": aberto})
 
