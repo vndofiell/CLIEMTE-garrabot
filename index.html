@@ -26823,9 +26823,19 @@ function _qxRenderizarEstado(d) {
     } else if (d.status === 'erro') {
         form.style.display    = 'block';
         painel.style.display  = 'none';
-        if (sub) sub.textContent = 'Informe suas credenciais da Quotex';
-        _qxBadge('❌ ERRO: ' + (d.erro || 'falha na conexão'), '#f44');
-        _qxAtualizarBotao('erro', d.erro ? d.erro.substring(0, 30) : 'Erro');
+        const _erroRaw = (d.erro || '').toLowerCase();
+        const _ssidExpirado = _erroRaw.includes('rejected') || _erroRaw.includes('invalid session') || _erroRaw.includes('session expired') || _erroRaw.includes('401') || _erroRaw.includes('403');
+        if (_ssidExpirado) {
+            if (sub) sub.textContent = 'SSID expirado — use a aba SSID para capturar um novo';
+            _qxBadge('❌ SSID EXPIRADO — capture um novo token', '#f44');
+            _qxAtualizarBotao('erro', 'SSID expirado');
+            // Destaca automaticamente a aba SSID para guiar o usuário
+            if (typeof qxMostrarAba === 'function') qxMostrarAba('ssid');
+        } else {
+            if (sub) sub.textContent = 'Informe suas credenciais da Quotex';
+            _qxBadge('❌ ERRO: ' + (d.erro || 'falha na conexão'), '#f44');
+            _qxAtualizarBotao('erro', d.erro ? d.erro.substring(0, 30) : 'Erro');
+        }
 
     } else {
         form.style.display    = 'block';

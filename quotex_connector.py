@@ -629,12 +629,36 @@ def _quotex_conectar_thread(email: str, senha: str, tipo_conta: str,
         msg = str(e)
         print(f"[Quotex] ❌ Erro na conexão: {msg}")
         traceback.print_exc()
+
+        # ── SSID inválido/expirado: detecta e descarta o SSID ────────────────
+        _msg_lower = msg.lower()
+        _ssid_invalido = any(t in _msg_lower for t in (
+            "connection rejected", "websocket connection rejected",
+            "rejected", "invalid session", "session expired",
+            "401", "403",
+        ))
+        if _ssid_invalido and ssid:
+            print("[Quotex] ⚠️ SSID rejeitado pelo servidor — descartando SSID e aguardando nova credencial.")
+            ssid = ""  # não reutiliza o SSID inválido na reconexão
+            # Atualiza o SSID salvo em disco para vazio
+            try:
+                quotex_cfg_salvar(email, senha, tipo_conta, "")
+            except Exception:
+                pass
+
         with _QUOTEX_LOCK:
             _QUOTEX_STATE["status"] = "erro"
             _QUOTEX_STATE["erro"]   = msg
             _QUOTEX_STATE["client"] = None
+            if _ssid_invalido:
+                _QUOTEX_STATE["ssid"] = ""
 
-        # ── Reconexão automática ──────────────────────────────────────────────
+        # ── Reconexão automática (apenas se não for SSID inválido) ────────────
+        # SSID inválido requer nova autenticação manual — não tentar em loop.
+        if _ssid_invalido:
+            print("[Quotex] ℹ️ Reconexão automática suspensa — informe um novo SSID ou credenciais válidas.")
+            return
+
         time.sleep(15)
         with _QUOTEX_LOCK:
             deve_reconectar = (
