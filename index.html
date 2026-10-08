@@ -30347,6 +30347,8 @@ async function _qxHmaQCiclo() {
     const melhor = aprovados.reduce((a, b) => b.confianca > a.confianca ? b : a);
     if (_qxHmaQ.opBloqueada) { print('🟠 HMA QUOTEX: ⏳ Aguardando resultado anterior...', 'log-info'); return; }
 
+    // Bloqueia imediatamente para evitar que um segundo ciclo cancele o timer agendado
+    _qxHmaQ.opBloqueada = true;
     _qxHmaQ.ativoAtual = { id: melhor.ativoId, nome: melhor.ativoNome, payout: melhor.payout };
     const direcao = melhor.decisao === 'CALL' ? 'call' : 'put';
     print(`🟠 HMA QUOTEX: ${melhor.decisao} | ${melhor.ativoNome} | conf <b>${melhor.confianca}%</b> | payout ${melhor.payout}% | $${_qxHmaQ.valorAtual}`, melhor.decisao === 'CALL' ? 'log-win' : 'log-loss');
@@ -30528,7 +30530,7 @@ function _qxHmaQAgendarEntrada(direcao, contexto, est) {
     clearInterval(_qxHmaQ._entradaWatch);
 
     const _tentar = () => {
-        if (!_qxHmaQ.rodando || _qxHmaQ.opBloqueada) { _qxHmaQPararPing(); return; }
+        if (!_qxHmaQ.rodando) { _qxHmaQPararPing(); _qxHmaQ.opBloqueada = false; return; }
         const agora     = _qxAgoraMs();
         const tsAb      = _qxChart.tsAbertura || Math.floor(agora / 1000 / periodo) * periodo;
         const tsFech_ms = (tsAb + periodo) * 1000;
@@ -30546,7 +30548,7 @@ function _qxHmaQAgendarEntrada(direcao, contexto, est) {
             print(`🟠 HMA QUOTEX: ⏱ ${direcao.toUpperCase()} ${contexto.ativoNome} — entrando em ${Math.round(msAte/1000)}s`, 'log-info');
             _qxHmaQ._entradaTimer = setTimeout(() => {
                 _qxHmaQPararPing();
-                if (!_qxHmaQ.rodando || _qxHmaQ.opBloqueada) return;
+                if (!_qxHmaQ.rodando) { _qxHmaQ.opBloqueada = false; return; }
                 // Verifica conexão no momento exato — se WS caiu, aguarda reconexão e retenta
                 if (_qx.status !== 'conectado') {
                     print('🟠 HMA QUOTEX: ⚠️ Conexão perdida antes da entrada — aguardando reconexão', 'log-info');
@@ -30574,7 +30576,7 @@ function _qxHmaQAgendarEntrada(direcao, contexto, est) {
         } else if (msAte > -3000) {
             // Já estamos na janela — opera agora
             _qxHmaQPararPing();
-            if (!_qxHmaQ.opBloqueada) _qxHmaQOperar(direcao, contexto, est);
+            _qxHmaQOperar(direcao, contexto, est);
         } else {
             // Vela já fechou, aguarda nova vela via watch
             _qxHmaQPararPing();
@@ -30589,7 +30591,7 @@ function _qxHmaQAgendarEntrada(direcao, contexto, est) {
                     _qxHmaQIniciarPing();
                     _qxHmaQ._entradaTimer = setTimeout(() => {
                         _qxHmaQPararPing();
-                        if (!_qxHmaQ.rodando || _qxHmaQ.opBloqueada) return;
+                        if (!_qxHmaQ.rodando) { _qxHmaQ.opBloqueada = false; return; }
                         if (_qx.status !== 'conectado') {
                             _qxHmaQ.opBloqueada = false;
                             print('🟠 HMA QUOTEX: ⚠️ Conexão perdida antes da entrada — aguardando reconexão', 'log-info');
@@ -30616,7 +30618,7 @@ function _qxHmaQAgendarEntrada(direcao, contexto, est) {
                 } else if (msAteW >= -500 && msAteW <= 200) {
                     clearInterval(_qxHmaQ._entradaWatch);
                     _qxHmaQPararPing();
-                    if (!_qxHmaQ.opBloqueada) _qxHmaQOperar(direcao, contexto, est);
+                    _qxHmaQOperar(direcao, contexto, est);
                 } else if (tentativas > 15) {
                     clearInterval(_qxHmaQ._entradaWatch);
                     _qxHmaQPararPing();
