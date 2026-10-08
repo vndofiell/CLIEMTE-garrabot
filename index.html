@@ -30302,19 +30302,43 @@ async function _qxHmaQCiclo() {
 
     // 1) Busca ativos com payout
     let ativos = [];
+    let _tipoMercadoUsado = est.qhma_tipo_mercado || 'ambos';
+    let _payoutMinUsado   = est.qhma_payout_min || 75;
     try {
         const d = await fetch('/quotex/ativos-payout').then(r => r.json());
         if (d.ok && d.ativos) {
-            ativos = d.ativos.filter(a => {
+            const _filtrar = (tipoMercado, payoutMin) => d.ativos.filter(a => {
                 if (!a.id) return false;
-                const pOk = parseInt(a.payout || 0) >= (est.qhma_payout_min || 75);
-                if (!pOk) return false;
+                if (parseInt(a.payout || 0) < payoutMin) return false;
                 const isOtc = (a.id || '').toLowerCase().includes('otc') ||
                               (a.nome || '').toLowerCase().includes('otc');
-                if (est.qhma_tipo_mercado === 'otc')     return isOtc;
-                if (est.qhma_tipo_mercado === 'abertos')  return !isOtc && a.aberto;
+                if (tipoMercado === 'otc')     return isOtc;
+                if (tipoMercado === 'abertos') return !isOtc && a.aberto;
                 return isOtc || a.aberto; // ambos
             });
+
+            ativos = _filtrar(_tipoMercadoUsado, _payoutMinUsado);
+
+            // Fallback 1: OTC sem payout suficiente → tenta mercados abertos
+            if (ativos.length === 0 && _tipoMercadoUsado === 'otc') {
+                const _abertos = _filtrar('abertos', _payoutMinUsado);
+                if (_abertos.length > 0) {
+                    ativos = _abertos;
+                    _tipoMercadoUsado = 'abertos';
+                    print(`🟠 HMA QUOTEX: ⚠️ OTC sem payout ≥ ${_payoutMinUsado}% — usando mercados abertos`, 'log-info');
+                }
+            }
+
+            // Fallback 2: ainda sem ativos → reduz payout mínimo em 5% (piso: 70%)
+            if (ativos.length === 0 && _payoutMinUsado > 70) {
+                const _payoutFallback = Math.max(70, _payoutMinUsado - 5);
+                const _qualquer = _filtrar('ambos', _payoutFallback);
+                if (_qualquer.length > 0) {
+                    ativos = _qualquer;
+                    _payoutMinUsado = _payoutFallback;
+                    print(`🟠 HMA QUOTEX: ⚠️ Sem ativos com payout ≥ ${est.qhma_payout_min || 75}% — usando payout ≥ ${_payoutFallback}%`, 'log-info');
+                }
+            }
         }
     } catch (_e) {
         _qxHmaQ._cicloRodando = false;
@@ -30324,7 +30348,7 @@ async function _qxHmaQCiclo() {
 
     if (ativos.length === 0) {
         _qxHmaQ._cicloRodando = false;
-        print(`🟠 HMA QUOTEX: Nenhum ativo com payout ≥ ${est.qhma_payout_min || 75}% (${est.qhma_tipo_mercado || 'ambos'})`, 'log-info');
+        print(`🟠 HMA QUOTEX: ⚠️ Nenhum ativo com payout ≥ 70% disponível — aguardando próxima vela`, 'log-info');
         return;
     }
 
