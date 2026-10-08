@@ -3521,11 +3521,82 @@ def rota_quotex_candles():
 _payout_cache: list = []
 _payout_cache_ts: float = 0.0
 
+# ── Rota: diagnóstico de payout (GET /quotex/debug-payout) ───────────────────
+@app.route('/quotex/debug-payout', methods=['GET'])
+def rota_quotex_debug_payout():
+    """Inspeciona o client em tempo real para diagnosticar fonte de payout."""
+    import asyncio as _asyncio
+    import inspect as _inspect
+    from quotex_connector import _QUOTEX_STATE, _QUOTEX_LOCK
+
+    with _QUOTEX_LOCK:
+        client = _QUOTEX_STATE.get("client")
+        loop   = _QUOTEX_STATE.get("loop")
+
+    if not client:
+        return jsonify({"erro": "não conectado"})
+
+    info = {}
+
+    # 1) instruments
+    instr = getattr(client.api, "instruments", None) or []
+    info["instruments_count"] = len(instr)
+    if instr:
+        info["instruments_sample"] = [list(instr[0])[:20]]
+
+    # 2) get_payment — testa síncrono
+    try:
+        is_coro = _inspect.iscoroutinefunction(getattr(client, "get_payment", None))
+        info["get_payment_is_async"] = is_coro
+        if is_coro:
+            fut = _asyncio.run_coroutine_threadsafe(client.get_payment(), loop)
+            dados = fut.result(timeout=8) or {}
+        else:
+            dados = client.get_payment() or {}
+        info["get_payment_count"] = len(dados)
+        # Pega as 3 primeiras entradas como amostra
+        sample = {}
+        for k, v in list(dados.items())[:3]:
+            sample[k] = v
+        info["get_payment_sample"] = sample
+    except Exception as _e:
+        info["get_payment_erro"] = str(_e)
+
+    # 3) get_all_assets — testa síncrono
+    try:
+        is_coro2 = _inspect.iscoroutinefunction(getattr(client, "get_all_assets", None))
+        info["get_all_assets_is_async"] = is_coro2
+        if is_coro2:
+            fut2 = _asyncio.run_coroutine_threadsafe(client.get_all_assets(), loop)
+            dados2 = fut2.result(timeout=10) or {}
+        else:
+            dados2 = client.get_all_assets() or {}
+        info["get_all_assets_type"]  = type(dados2).__name__
+        info["get_all_assets_count"] = len(dados2) if dados2 else 0
+        if isinstance(dados2, dict):
+            sample2 = {}
+            for k, v in list(dados2.items())[:3]:
+                sample2[k] = v
+            info["get_all_assets_sample"] = sample2
+        elif isinstance(dados2, list) and dados2:
+            info["get_all_assets_sample"] = dados2[:3]
+    except Exception as _e2:
+        info["get_all_assets_erro"] = str(_e2)
+
+    # 4) métodos disponíveis relacionados a payout/assets
+    metodos = [m for m in dir(client) if any(x in m.lower() for x in
+               ("payment", "asset", "instrument", "payout", "profit"))]
+    info["metodos_relevantes"] = metodos
+
+    return jsonify(info)
+
+
 # ── Rota: ativos com payout — usada pelo painel de sinais Quotex ─────────────
 @app.route('/quotex/ativos-payout', methods=['GET'])
 def rota_quotex_ativos_payout():
     global _payout_cache, _payout_cache_ts
     import asyncio as _asyncio
+    import inspect as _inspect
     import time as _t
     from quotex_connector import _QUOTEX_STATE, _QUOTEX_LOCK
 
@@ -3534,7 +3605,6 @@ def rota_quotex_ativos_payout():
         loop   = _QUOTEX_STATE.get("loop")
 
     if not client or not loop:
-        # Sem conexão — devolve cache se ainda válido (5 min)
         if _payout_cache and (_t.time() - _payout_cache_ts) < 300:
             return jsonify({"ok": True, "ativos": _payout_cache, "cache": True})
         return jsonify({"ok": False, "erro": "Quotex não conectada.", "ativos": []})
@@ -3544,25 +3614,38 @@ def rota_quotex_ativos_payout():
             v = float(v)
             if v <= 0:
                 return 0
-            # pyquotex às vezes retorna fração (0.92) ou inteiro (92)
             return int(v * 100) if v <= 1.0 else int(v)
         except (TypeError, ValueError):
             return 0
 
+    def _chamar_get_payment():
+        """Chama get_payment() como síncrono ou assíncrono conforme a API."""
+        fn = getattr(client, "get_payment", None)
+        if fn is None:
+            return {}
+        if _inspect.iscoroutinefunction(fn):
+            fut = _asyncio.run_coroutine_threadsafe(fn(), loop)
+            return fut.result(timeout=8) or {}
+        return fn() or {}
+
+    def _chamar_get_all_assets():
+        """Chama get_all_assets() como síncrono ou assíncrono conforme a API."""
+        fn = getattr(client, "get_all_assets", None)
+        if fn is None:
+            return {}
+        if _inspect.iscoroutinefunction(fn):
+            fut = _asyncio.run_coroutine_threadsafe(fn(), loop)
+            return fut.result(timeout=10) or {}
+        return fn() or {}
+
     ativos: list = []
 
     try:
-        # ── FONTE 1: get_payment() via WebSocket (assíncrono) ─────────────────
-        # Essa é a fonte mais confiável: retorna payout real por ativo,
-        # incluindo OTC mesmo quando os mercados reais estão fechados.
+        # ── FONTE 1: get_payment() ────────────────────────────────────────────
         try:
-            fut_pay = _asyncio.run_coroutine_threadsafe(
-                client.get_payment(), loop
-            )
-            dados_pay = fut_pay.result(timeout=8) or {}
-            print(f"[Quotex] get_payment() retornou {len(dados_pay)} ativos")
+            dados_pay = _chamar_get_payment()
+            print(f"[Quotex] get_payment() retornou {len(dados_pay)} itens | tipo={type(dados_pay).__name__}")
 
-            # Monta mapa nome→id a partir de instruments (para preencher o campo id)
             instr = getattr(client.api, "instruments", None) or []
             nome_para_id = {
                 str(item[2]).replace("\n", "").strip(): str(item[1])
@@ -3570,50 +3653,55 @@ def rota_quotex_ativos_payout():
                 if isinstance(item, (list, tuple)) and len(item) >= 3
             }
 
-            for nome_pay, info in dados_pay.items():
-                if not isinstance(info, dict):
-                    continue
-                aberto_pay = bool(info.get("open", False))
-                # Tenta todas as chaves de lucro conhecidas
-                cands = [
-                    info.get("payment"),
-                    info.get("turbo_payment"),
-                    (info.get("profit") or {}).get("1M"),
-                    (info.get("profit") or {}).get("5M"),
-                    info.get("percent"),
-                    info.get("payout"),
-                ]
-                pay = max((_normalizar_payout(v) for v in cands if v is not None), default=0)
-                id_pay = nome_para_id.get(nome_pay, nome_pay)
-                if pay > 0 or aberto_pay:
-                    ativos.append({
-                        "id":     id_pay,
-                        "nome":   nome_pay,
-                        "payout": pay,
-                        "aberto": aberto_pay,
-                    })
-                    print(f"[Quotex][get_payment] {nome_pay} | id={id_pay} | pay={pay} | aberto={aberto_pay}")
+            if isinstance(dados_pay, dict):
+                for nome_pay, info in dados_pay.items():
+                    if not isinstance(info, dict):
+                        # Às vezes é diretamente um número (payout em %)
+                        pay_direto = _normalizar_payout(info)
+                        if pay_direto > 0:
+                            id_pay = nome_para_id.get(nome_pay, nome_pay)
+                            ativos.append({"id": id_pay, "nome": nome_pay,
+                                           "payout": pay_direto, "aberto": True})
+                        continue
+                    aberto_pay = bool(info.get("open", False) or info.get("status") == "open")
+                    cands = [
+                        info.get("payment"),
+                        info.get("turbo_payment"),
+                        (info.get("profit") or {}).get("1M"),
+                        (info.get("profit") or {}).get("5M"),
+                        info.get("percent"),
+                        info.get("payout"),
+                    ]
+                    pay = max((_normalizar_payout(v) for v in cands if v is not None), default=0)
+                    id_pay = nome_para_id.get(nome_pay, nome_pay)
+                    if pay > 0 or aberto_pay:
+                        ativos.append({"id": id_pay, "nome": nome_pay,
+                                       "payout": pay, "aberto": aberto_pay})
+                print(f"[Quotex] get_payment() → {len(ativos)} ativos com payout/aberto")
         except Exception as _ep:
-            print(f"[Quotex] get_payment() assíncrono falhou: {_ep}")
+            print(f"[Quotex] get_payment() falhou: {_ep}")
 
-        # ── FONTE 2: instruments já populado no objeto (síncrono, rápido) ─────
-        # Complementa com ativos que não vieram via get_payment()
+        # ── FONTE 2: instruments (síncrono, cache do WS) ─────────────────────
         instr2 = getattr(client.api, "instruments", None) or []
-        ids_ja_presentes = {a["id"] for a in ativos}
-        print(f"[Quotex] instruments total={len(instr2)}")
+        ids_presentes = {a["id"] for a in ativos}
+        nomes_presentes = {a["nome"] for a in ativos}
+        print(f"[Quotex] instruments: {len(instr2)} itens")
         for item in instr2:
-            if not isinstance(item, (list, tuple)) or len(item) < 15:
+            if not isinstance(item, (list, tuple)) or len(item) < 3:
                 continue
-            id_interno = str(item[1])
-            nome       = str(item[2]).replace("\n", "").strip()
-            aberto     = bool(item[14])
-            # Já populado via get_payment() — só atualiza aberto se necessário
-            if id_interno in ids_ja_presentes:
+            id_interno = str(item[1]) if len(item) > 1 else str(item[0])
+            nome       = str(item[2]).replace("\n", "").strip() if len(item) > 2 else id_interno
+            aberto     = bool(item[14]) if len(item) > 14 else False
+
+            if id_interno in ids_presentes or nome in nomes_presentes:
+                # Atualiza flag aberto
                 for a in ativos:
-                    if a["id"] == id_interno and aberto:
-                        a["aberto"] = True
+                    if a["id"] == id_interno or a["nome"] == nome:
+                        if aberto:
+                            a["aberto"] = True
                 continue
-            # Testa todos os índices numéricos em busca de payout válido
+
+            # Varre todos os campos numéricos em busca de payout válido
             candidatos = []
             for idx in range(len(item)):
                 try:
@@ -3624,52 +3712,50 @@ def rota_quotex_ativos_payout():
                     pass
             payout = max(candidatos, default=0)
             if payout > 0 or aberto:
-                ativos.append({"id": id_interno, "nome": nome, "payout": payout, "aberto": aberto})
+                ativos.append({"id": id_interno, "nome": nome,
+                               "payout": payout, "aberto": aberto})
 
         # ── FONTE 3: get_all_assets() — último recurso ────────────────────────
         if not any(a["payout"] > 0 for a in ativos):
-            print("[Quotex] ⚠️ Nenhum payout até agora — tentando get_all_assets()")
+            print("[Quotex] ⚠️ Sem payout — tentando get_all_assets()")
             try:
-                fut_all = _asyncio.run_coroutine_threadsafe(
-                    client.get_all_assets(), loop
-                )
-                dados_all = fut_all.result(timeout=10) or {}
-                ids_presentes = {a["id"] for a in ativos}
+                dados_all = _chamar_get_all_assets()
+                ids_p = {a["id"] for a in ativos}
+                print(f"[Quotex] get_all_assets() → tipo={type(dados_all).__name__} len={len(dados_all) if dados_all else 0}")
                 if isinstance(dados_all, dict):
                     for nome_a, info_a in dados_all.items():
-                        pay_a = 0
-                        ab_a  = False
+                        pay_a, ab_a = 0, False
                         if isinstance(info_a, dict):
-                            ab_a  = bool(info_a.get("open", False))
-                            cands_a = [
-                                info_a.get("payment"), info_a.get("turbo_payment"),
-                                (info_a.get("profit") or {}).get("1M"),
-                            ]
+                            ab_a = bool(info_a.get("open") or info_a.get("status") == "open")
+                            cands_a = [info_a.get("payment"), info_a.get("turbo_payment"),
+                                       (info_a.get("profit") or {}).get("1M")]
                             pay_a = max((_normalizar_payout(v) for v in cands_a if v is not None), default=0)
                         elif isinstance(info_a, (int, float)):
                             pay_a = _normalizar_payout(info_a)
-                        if nome_a not in ids_presentes and (pay_a > 0 or ab_a):
-                            ativos.append({"id": nome_a, "nome": nome_a, "payout": pay_a, "aberto": ab_a})
+                        if nome_a not in ids_p and (pay_a > 0 or ab_a):
+                            ativos.append({"id": nome_a, "nome": nome_a,
+                                           "payout": pay_a, "aberto": ab_a})
                 elif isinstance(dados_all, list):
                     for row in dados_all:
                         if isinstance(row, (list, tuple)) and len(row) >= 1:
                             id_r = str(row[0])
-                            if id_r not in ids_presentes:
+                            if id_r not in ids_p:
                                 pay_r = _normalizar_payout(row[1]) if len(row) > 1 else 0
-                                ativos.append({"id": id_r, "nome": id_r, "payout": pay_r, "aberto": False})
+                                ativos.append({"id": id_r, "nome": id_r,
+                                               "payout": pay_r, "aberto": False})
             except Exception as _ea:
                 print(f"[Quotex] get_all_assets() falhou: {_ea}")
 
         ativos.sort(key=lambda x: (-int(x["aberto"]), -x["payout"], x["nome"]))
         top = [a for a in ativos if a["payout"] > 0][:5]
-        print(f"[Quotex] ativos-payout FINAL: {len(ativos)} total | top5={[(a['nome'],a['payout']) for a in top]}")
+        print(f"[Quotex] ativos-payout FINAL: {len(ativos)} total | "
+              f"top5={[(a['nome'], a['payout']) for a in top]}")
 
         if top:
             _payout_cache    = ativos
             _payout_cache_ts = _t.time()
             return jsonify({"ok": True, "ativos": ativos})
         else:
-            # Cache válido por até 5 minutos
             if _payout_cache and (_t.time() - _payout_cache_ts) < 300:
                 print(f"[Quotex] ⚠️ Payout zerado — usando cache ({len(_payout_cache)} ativos)")
                 return jsonify({"ok": True, "ativos": _payout_cache, "cache": True})
