@@ -31293,7 +31293,7 @@ function _qxHmaQOperar(direcao, contexto, est) {
             // Confirmação pendente — não reenviar, aguarda resolução
             if (d.pendente_confirmacao || d.nao_reenviar) {
                 _qxHmaQ.opBloqueada = false;
-                print('🟠 HMA QUOTEX: ⏳ Confirmação pendente — aguardando próxima vela', 'log-info');
+                print('🟠 HMA QUOTEX: ⏳ ' + (d.erro || 'Confirmação pendente — aguardando próxima vela'), 'log-info');
                 return;
             }
 
