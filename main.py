@@ -3917,11 +3917,9 @@ def rota_quotex_operar():
     if not _QUOTEX_DISPONIVEL or not quotex_conectado():
         _motivo_con = "Módulo Quotex indisponível" if not _QUOTEX_DISPONIVEL else "Quotex desconectada"
         print(f"[HMA QUOTEX] 🚫 ETAPA: SEM CONEXÃO | motivo={_motivo_con} | ordem NÃO enviada")
-        try:
+        if _QUOTEX_DISPONIVEL:
             reconexao = quotex_reconectar_se_preciso()
-            print(f"[HMA QUOTEX] 🔄 Estado da reconexão: {reconexao}")
-        except Exception as exc:
-            print(f"[HMA QUOTEX] ⚠️ Falha ao solicitar reconexão: {exc}")
+            print(f"[HMA QUOTEX] 🔄 Reconexão: {reconexao}")
         return jsonify({
             "ok":            False,
             "etapa":         "sem_conexao",
