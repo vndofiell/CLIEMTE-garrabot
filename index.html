@@ -31160,11 +31160,11 @@ function _qxHmaQPararPing() {
     if (_qxHmaQPingTimer) { clearInterval(_qxHmaQPingTimer); _qxHmaQPingTimer = null; }
 }
 
-// ── Agenda entrada na virada da vela (faltando 2.5s para fechar) ──────────────
+// ── Agenda entrada na virada da vela (faltando 8s para fechar) ───────────────
 function _qxHmaQAgendarEntrada(direcao, contexto, est) {
     const periodo   = est.qhma_periodo || 60;
     const periodoMs = periodo * 1000;
-    const ANTEC_MS  = 2500;  // entra 2.5s antes do fechamento
+    const ANTEC_MS  = 8000;  // entra 8s antes do fechamento — garante chegada ao servidor com >3s de margem
 
     clearTimeout(_qxHmaQ._entradaTimer);
     clearInterval(_qxHmaQ._entradaWatch);
@@ -31296,12 +31296,13 @@ function _qxHmaQOperar(direcao, contexto, est) {
     const _agoraMs   = _qxAgoraMs ? _qxAgoraMs() : Date.now();
     const _segNaVela = (_agoraMs / 1000) % periodo;
     const _restMs    = (periodo - _segNaVela) * 1000;
-    if (_restMs < 2000) {
-        // Menos de 2s para fechar: a ordem chegaria tarde ao servidor
+    if (_restMs < 5000) {
+        // Menos de 5s para fechar: a ordem chegaria ao servidor com <3s de margem
+        // e seria rejeitada pelo filtro de janela do backend
         _qxHmaQ.opBloqueada = false;
         print(
             `🟠 HMA QUOTEX: 🚫 SINAL CANCELADO — janela expirada ` +
-            `(${(_restMs / 1000).toFixed(1)}s restantes na vela; mín 2s)`,
+            `(${(_restMs / 1000).toFixed(1)}s restantes na vela; mín 5s)`,
             'log-info'
         );
         return;
