@@ -4436,6 +4436,83 @@ def rota_pocket_login_page():
     Abre pocketoption.com no browser do usuário e captura o SSID via bookmarklet.
     """
     servidor = _get_base_url()
+
+    # ── Bookmarklet gerado server-side (href estático, nunca falha no arraste) ──
+    import urllib.parse as _up
+    _bkm_js = (
+        "(function(){"
+        f"var SRV='{servidor}';"
+        "var host=location.hostname;"
+        "if(host.indexOf('pocketoption')<0&&host.indexOf('po.trade')<0&&host.indexOf('pocket')<0){"
+          "alert('\\u26a0\\ufe0f ATEN\\u00c7\\u00c3O!\\n\\nClique este favorito NA ABA DA POCKET OPTION!\\n\\n1. V\\u00e1 para a aba da Pocket Option\\n2. Clique GarraBot SSID-PO l\\u00e1');"
+          "return;"
+        "}"
+        "var ok=false;"
+        "function send(s){"
+          "if(ok)return;ok=true;"
+          "fetch(SRV+'/pocket/ssid-captura/receber',{"
+            "method:'POST',"
+            "headers:{'Content-Type':'application/json'},"
+            "body:JSON.stringify({ssid:s})"
+          "}).then(function(r){return r.json();}).then(function(d){"
+            "if(d&&d.ok){alert('\\u2705 SSID capturado! Volte ao Bot Garra.');}"
+            "else{alert('\\u274c Erro: '+(d&&d.erro?d.erro:'falha. Cole manualmente.'));}"
+          "}).catch(function(e){alert('\\u274c Rede: '+e.message);});"
+        "}"
+        # Estratégia 1: cookies
+        "try{"
+          "var ck=document.cookie;"
+          "var cm=ck.match(/(?:^|;)\\s*(?:io|session|ssid|token|po_session)=([^;]{20,})/i);"
+          "if(cm){var tv=decodeURIComponent(cm[1]).trim();"
+            "if(tv.indexOf('auth')>0){send(tv);}"
+            "else{var dm=(ck.indexOf('isDemo=1')>0||ck.indexOf('demo=1')>0)?1:0;"
+              "send('42[\"auth\",{\"session\":\"'+tv+'\",\"isDemo\":'+dm+',\"uid\":0,\"platform\":2}]');}"
+          "}"
+        "}catch(e){}"
+        # Estratégia 2: localStorage chaves diretas
+        "if(!ok){"
+          "var ks=['session','token','ssid','auth','io','po_session','userSession','accessToken','access_token'];"
+          "try{for(var i=0;i<ks.length;i++){"
+            "var v=localStorage.getItem(ks[i])||'';"
+            "if(v.length>20){"
+              "if(v.indexOf('auth')>0){send(v);break;}"
+              "send('42[\"auth\",{\"session\":\"'+v+'\",\"isDemo\":1,\"uid\":0,\"platform\":2}]');break;"
+            "}"
+          "}}catch(e){}"
+        "}"
+        # Estratégia 3: varrer localStorage completo
+        "if(!ok){"
+          "try{for(var i=0;i<localStorage.length;i++){"
+            "var k=localStorage.key(i),v=localStorage.getItem(k)||'';"
+            "if(v.length>30){"
+              "var m=v.match(/\"session\"\\s*:\\s*\"([^\"]{20,})\"/);"
+              "if(m){send('42[\"auth\",{\"session\":\"'+m[1]+'\",\"isDemo\":1,\"uid\":0,\"platform\":2}]');break;}"
+              "if(v[0]==='{'){try{var j=JSON.parse(v);var s2=j.session||j.token||j.ssid||j.auth||j.accessToken||'';"
+                "if(s2.length>20){send('42[\"auth\",{\"session\":\"'+s2+'\",\"isDemo\":1,\"uid\":0,\"platform\":2}]');break;}"
+              "}catch(ex){}}"
+            "}"
+          "}}catch(e){}"
+        "}"
+        # Estratégia 4: interceptar WebSocket
+        "try{"
+          "var _o=WebSocket.prototype.send;"
+          "WebSocket.prototype.send=function(d){"
+            "_o.call(this,d);if(ok)return;"
+            "try{var s=typeof d==='string'?d:'';"
+              "if(s.indexOf('\"session\"')>0&&s.indexOf('auth')>0){"
+                "var m=s.match(/\"session\"\\s*:\\s*\"([^\"]{20,})\"/);"
+                "if(m){var dm=(s.indexOf('isDemo\":1')>0)?1:0;"
+                  "var uid=0;var mu=s.match(/\"uid\"\\s*:\\s*(\\d+)/);if(mu)uid=parseInt(mu[1]);"
+                  "send('42[\"auth\",{\"session\":\"'+m[1]+'\",\"isDemo\":'+dm+',\"uid\":'+uid+',\"platform\":2}]');}"
+              "}"
+            "}catch(ex){}"
+          "};"
+        "}catch(e){}"
+        "if(!ok){alert('\\u26a0\\ufe0f Interceptor ativo! Pressione F5 na Pocket Option para capturar o SSID automaticamente.');}"
+        "})()"
+    )
+    _bkm_href = "javascript:" + _up.quote(_bkm_js, safe="~()*!.'")
+
     html = f"""<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -4507,7 +4584,7 @@ def rota_pocket_login_page():
       <div style="font-size:0.6rem; color:#888; margin-bottom:10px; letter-spacing:1px;">
         ① ARRASTE PARA A BARRA DE FAVORITOS:
       </div>
-      <a id="bkm" href="" style="display:inline-block; padding:11px 22px;
+      <a id="bkm" href="{_bkm_href}" style="display:inline-block; padding:11px 22px;
          background:rgba(0,160,255,0.15); border:2px solid #00a0ff; border-radius:6px;
          color:#00a0ff; font-family:'Courier New'; font-size:0.85rem; font-weight:bold;
          text-decoration:none; cursor:grab; letter-spacing:1px;">
@@ -4678,11 +4755,6 @@ function _bookmarkletCode() {{
 
   '}})()';
 }}
-
-window.addEventListener('load', function() {{
-  var bkm = document.getElementById('bkm');
-  if (bkm) bkm.href = _bookmarkletCode();
-}});
 
 function trocarTela(id) {{
   ['tela-inicio','tela-prog','tela-manual'].forEach(t => {{
