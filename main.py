@@ -4376,6 +4376,313 @@ def rota_pocket_ssid_receber():
     return jsonify({"ok": True, "msg": "SSID registrado com sucesso."})
 
 
+# ── Estado de captura via redirect (bookmarklet do browser do usuário) ────────
+_PO_SSID_CAPTURA_STATE: dict = {"ssid": "", "status": "idle", "ts": 0}
+_PO_SSID_CAPTURA_LOCK = threading.Lock()
+
+
+@app.route('/pocket/ssid-captura/receber', methods=['POST', 'OPTIONS'])
+def rota_pocket_ssid_captura_receber():
+    """Recebe o SSID capturado pelo bookmarklet JS do usuário após login na Pocket Option."""
+    if request.method == 'OPTIONS':
+        resp = jsonify({"ok": True})
+        resp.headers['Access-Control-Allow-Origin']  = '*'
+        resp.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+        return resp
+    dados = request.get_json(silent=True) or {}
+    ssid  = (dados.get("ssid") or "").strip()
+    if not ssid or len(ssid) < 10:
+        return jsonify({"ok": False, "erro": "SSID inválido."}), 400
+
+    with _PO_SSID_CAPTURA_LOCK:
+        _PO_SSID_CAPTURA_STATE.update({"ssid": ssid, "status": "capturado", "ts": time.time()})
+
+    # Propaga para o connector
+    pocket_ssid_definir(ssid)
+    print(f"[PocketOption] 🍪 SSID capturado via bookmarklet! len={len(ssid)}")
+    resp = jsonify({"ok": True})
+    resp.headers['Access-Control-Allow-Origin'] = '*'
+    return resp
+
+
+@app.route('/pocket/ssid-captura/status', methods=['GET'])
+def rota_pocket_ssid_captura_status():
+    """Poll do estado de captura via bookmarklet."""
+    with _PO_SSID_CAPTURA_LOCK:
+        return jsonify(dict(_PO_SSID_CAPTURA_STATE))
+
+
+@app.route('/pocket/ssid-captura/limpar', methods=['POST'])
+def rota_pocket_ssid_captura_limpar():
+    """Limpa o SSID capturado (para forçar nova captura)."""
+    with _PO_SSID_CAPTURA_LOCK:
+        _PO_SSID_CAPTURA_STATE.update({"ssid": "", "status": "idle", "ts": 0})
+    return jsonify({"ok": True})
+
+
+@app.route('/pocket/login-page')
+def rota_pocket_login_page():
+    """
+    Página de conexão Pocket Option — idêntica à da Quotex.
+    Abre pocketoption.com no browser do usuário e captura o SSID via bookmarklet.
+    """
+    servidor = _get_base_url()
+    html = f"""<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Conectar Pocket Option — Bot Garra</title>
+<style>
+  * {{ box-sizing:border-box; margin:0; padding:0; }}
+  body {{ background:#0d0d1a; color:#c8d0e0; font-family:'Courier New',monospace;
+         display:flex; align-items:center; justify-content:center;
+         min-height:100vh; padding:16px; }}
+  .card {{ background:#0a0a14; border:1px solid rgba(0,160,255,0.35);
+           border-radius:12px; padding:28px 22px; max-width:400px; width:100%;
+           text-align:center; }}
+  h1   {{ color:#00a0ff; font-size:0.9rem; letter-spacing:3px; margin-bottom:4px; }}
+  .sub {{ color:#555; font-size:0.62rem; margin-bottom:20px; }}
+  .icone {{ font-size:2.8rem; margin:10px 0 6px; }}
+  @keyframes spin {{ to {{ transform:rotate(360deg); }} }}
+  .girando {{ display:inline-block; animation:spin 1.4s linear infinite; }}
+  .msg-p {{ color:#00a0ff; font-size:0.84rem; letter-spacing:1px; margin:10px 0 4px; }}
+  .msg-s {{ color:#555; font-size:0.62rem; line-height:1.8; }}
+  .barra {{ width:100%; height:3px; background:#111; border-radius:2px; margin:14px 0 10px; overflow:hidden; }}
+  .barra-inner {{ height:100%; background:#00a0ff; border-radius:2px;
+                  animation:ba 2.5s ease-in-out infinite alternate; }}
+  @keyframes ba {{ from {{ width:5%; }} to {{ width:88%; }} }}
+  .btn {{ display:block; width:100%; padding:13px; margin:8px 0 0; border-radius:8px;
+          font-family:'Courier New'; font-size:0.88rem; letter-spacing:2px;
+          cursor:pointer; font-weight:bold; border:2px solid; }}
+  .btn-blue  {{ background:rgba(0,160,255,0.12); border-color:#00a0ff; color:#00a0ff; }}
+  .btn-green {{ background:rgba(0,255,65,0.12);  border-color:#00ff41; color:#00ff41; }}
+  .btn-warn  {{ background:rgba(255,189,46,0.1);  border-color:#ffbd2e; color:#ffbd2e; }}
+  .btn:disabled {{ opacity:0.35; cursor:default; }}
+  #status {{ margin-top:12px; padding:10px; border-radius:8px; font-size:0.72rem;
+             display:none; border:1px solid #333; }}
+  #status.ok   {{ border-color:#00ff4144; color:#00ff41; background:rgba(0,255,65,0.06); }}
+  #status.err  {{ border-color:#f4444444; color:#f44;    background:rgba(255,68,68,0.06); }}
+  #status.inf  {{ border-color:#00a0ff44; color:#00a0ff; background:rgba(0,160,255,0.06); }}
+  #status.warn {{ border-color:#ffbd2e44; color:#ffbd2e; background:rgba(255,189,46,0.06); }}
+  #tela-manual {{ display:none; text-align:left; margin-top:8px; }}
+  .hint {{ font-size:0.62rem; color:#555; line-height:1.9; margin-bottom:8px; }}
+  input {{ display:block; width:100%; padding:11px 10px; background:#060610;
+           border:1px solid rgba(0,160,255,0.4); color:#00a0ff;
+           font-family:'Courier New'; font-size:0.8rem; border-radius:6px;
+           outline:none; margin:8px 0; }}
+  input:focus {{ border-color:#00a0ff; }}
+  input::placeholder {{ color:#333; }}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>🔵 BOT GARRA</h1>
+  <div class="sub">Conectar conta Pocket Option</div>
+
+  <!-- TELA PRINCIPAL -->
+  <div id="tela-inicio">
+    <div class="icone">🌐</div>
+    <div class="msg-p">Captura automática de SSID</div>
+    <div class="msg-s" style="margin-bottom:14px;">
+      <b style="color:#00a0ff;">Passo 1:</b> Arraste o botão abaixo para a barra de favoritos<br>
+      <b style="color:#00a0ff;">Passo 2:</b> Abra a Pocket Option e faça login<br>
+      <b style="color:#00a0ff;">Passo 3:</b> Clique o favorito salvo — SSID capturado! ✅
+    </div>
+
+    <!-- BOOKMARKLET -->
+    <div style="background:rgba(0,160,255,0.06); border:1px dashed rgba(0,160,255,0.4);
+                border-radius:8px; padding:12px; margin-bottom:12px;">
+      <div style="font-size:0.6rem; color:#555; margin-bottom:8px; letter-spacing:1px;">
+        ① ARRASTE ESTE BOTÃO PARA SUA BARRA DE FAVORITOS:
+      </div>
+      <a id="bkm" href="" style="display:inline-block; padding:10px 18px;
+         background:rgba(0,160,255,0.15); border:2px solid #00a0ff; border-radius:6px;
+         color:#00a0ff; font-family:'Courier New'; font-size:0.82rem; font-weight:bold;
+         text-decoration:none; cursor:grab; letter-spacing:1px;">
+        🔵 GarraBot SSID-PO
+      </a>
+      <div style="font-size:0.58rem; color:#555; margin-top:8px;">
+        Depois abra a Pocket Option, faça login e clique este favorito
+      </div>
+    </div>
+
+    <button class="btn btn-blue" onclick="abrirPocketOption()" style="margin-bottom:6px;">
+      🌐 ② ABRIR POCKET OPTION
+    </button>
+    <button class="btn btn-warn" onclick="mostrarManual()"
+            style="font-size:0.68rem; padding:9px;">
+      ✏️ Já tenho o SSID — inserir manualmente
+    </button>
+  </div>
+
+  <!-- TELA AGUARDANDO (polling) -->
+  <div id="tela-prog" style="display:none;">
+    <div class="icone"><span class="girando" id="icone-spin">🔄</span></div>
+    <div class="msg-p" id="msg-p">Aguardando captura...</div>
+    <div class="msg-s" id="msg-s">Clique o favorito "GarraBot SSID-PO" na aba da Pocket Option</div>
+    <div class="barra"><div class="barra-inner"></div></div>
+    <button class="btn btn-warn" onclick="trocarTela('tela-inicio')"
+            style="font-size:0.68rem; padding:9px; margin-top:4px;">
+      ← Voltar
+    </button>
+  </div>
+
+  <!-- TELA MANUAL -->
+  <div id="tela-manual">
+    <div class="hint">
+      <b style="color:#00a0ff;">Como obter o SSID manualmente:</b><br>
+      ① Abra <b>pocketoption.com</b> e faça login<br>
+      ② Pressione <b>F12</b> → aba <b>Network</b> → filtrar <b>WS</b><br>
+      ③ Clique na conexão → aba <b>Messages</b><br>
+      ④ Copie a mensagem <b>42["auth",{{...}}]</b>
+    </div>
+    <input id="inp-ssid" type="text"
+           placeholder='42["auth",{{"session":"...","isDemo":1}}]'
+           autocomplete="off"/>
+    <button id="btn-env" class="btn btn-green" onclick="enviarManual()">
+      📤 ENVIAR SSID
+    </button>
+    <button class="btn btn-warn" onclick="trocarTela('tela-inicio')"
+            style="font-size:0.68rem; padding:9px; margin-top:4px;">
+      ← Voltar
+    </button>
+  </div>
+
+  <div id="status"></div>
+</div>
+
+<script>
+const SRV = "{servidor}";
+
+// ── Gera bookmarklet que captura o SSID do WebSocket da Pocket Option ─────────
+// O bookmarklet intercepta o evento de mensagem WS e envia o SSID ao servidor.
+function _bookmarkletCode() {{
+  return 'javascript:(function(){{' +
+    'var t="";' +
+    // Tenta window.__config / window.po_config
+    'try{{t=(window.__config&&window.__config.session)||"";}}catch(e){{}}' +
+    // Tenta localStorage
+    'if(!t)try{{t=localStorage.getItem("session")||localStorage.getItem("token")||localStorage.getItem("io")||"";}}catch(e){{}}' +
+    // Tenta cookies
+    'if(!t){{var cc=document.cookie.split(";");for(var i=0;i<cc.length;i++){{var p=cc[i].trim().split("=");if(p[0]==="io"||p[0]==="session"||p[0]==="token"){{t=decodeURIComponent(p.slice(1).join("="));break;}}}}}}' +
+    // Tenta window.settings
+    'if(!t)try{{t=(window.settings&&(window.settings.session||window.settings.token))||"";}}catch(e){{}}' +
+    // Tenta extrair do WS interceptando mensagens em fila (para quando já está logado)
+    'if(!t){{var scripts=document.querySelectorAll("script");for(var s of scripts){{var m=s.textContent.match(/[\'"]session[\'"]\s*:\s*[\'"]([a-zA-Z0-9%_\\-\\.~]{{20,}})[\'\"]/);if(m){{t=m[1];break;}}}}}}' +
+    'if(!t||t.length<8){{alert("SSID nao encontrado.\\nCertifique-se de estar logado em pocketoption.com e tente novamente.");return;}}' +
+    'fetch("' + SRV + '/pocket/ssid-captura/receber",{{method:"POST",headers:{{"Content-Type":"application/json"}},body:JSON.stringify({{ssid:t}})}})' +
+    '.then(function(){{alert("✅ SSID enviado ao Bot Garra!\\nVolte ao bot e escolha DEMO ou REAL.");}})' +
+    '.catch(function(){{alert("Erro ao enviar. Tente novamente.");}});' +
+    '}})()';
+}}
+
+window.addEventListener('load', function() {{
+  var bkm = document.getElementById('bkm');
+  if (bkm) bkm.href = _bookmarkletCode();
+}});
+
+function trocarTela(id) {{
+  ['tela-inicio','tela-prog','tela-manual'].forEach(t => {{
+    var el = document.getElementById(t);
+    if (el) el.style.display = (t === id) ? 'block' : 'none';
+  }});
+}}
+
+function mostrar(msg, cls) {{
+  var el = document.getElementById('status');
+  if (!el) return;
+  el.style.display = 'block';
+  el.className = cls || '';
+  el.textContent = msg;
+}}
+
+function msgP(t) {{ var e=document.getElementById('msg-p'); if(e) e.textContent=t; }}
+function msgS(t) {{ var e=document.getElementById('msg-s'); if(e) e.textContent=t; }}
+
+let _polling = false;
+let _polTimer = null;
+
+function abrirPocketOption() {{
+  // Limpa captura anterior
+  fetch(SRV + '/pocket/ssid-captura/limpar', {{method:'POST'}}).catch(()=>{{}});
+  trocarTela('tela-prog');
+  msgP('Aguardando login na Pocket Option...');
+  msgS('Clique o favorito "GarraBot SSID-PO" após fazer login');
+  window.open('https://pocketoption.com/pt/login/', '_blank');
+  iniciarPolling();
+}}
+
+function iniciarPolling() {{
+  if (_polTimer) clearInterval(_polTimer);
+  let n = 0;
+  _polTimer = setInterval(async () => {{
+    n++;
+    if (n > 180) {{  // 6 minutos
+      clearInterval(_polTimer);
+      mostrar('⏰ Tempo esgotado. Use o campo manual abaixo.', 'warn');
+      trocarTela('tela-manual');
+      return;
+    }}
+    try {{
+      const d = await fetch(SRV + '/pocket/ssid-captura/status').then(r=>r.json());
+      if (d.status === 'capturado' && d.ssid && d.ssid.length >= 8) {{
+        clearInterval(_polTimer);
+        await salvarENotificar(d.ssid);
+      }} else {{
+        msgS('Aguardando... (' + n + 's) — Clique o favorito após fazer login');
+      }}
+    }} catch(_) {{}}
+  }}, 2000);
+}}
+
+async function salvarENotificar(ssid) {{
+  msgP('✅ SSID capturado!');
+  msgS('Conectando ao bot...');
+  mostrar('✅ SSID capturado com sucesso!', 'ok');
+  // Notifica a janela pai via postMessage
+  if (window.opener && !window.opener.closed)
+    window.opener.postMessage({{ type: 'PO_SSID_OK', ssid: ssid }}, '*');
+  setTimeout(() => window.close(), 1800);
+}}
+
+function mostrarManual() {{
+  trocarTela('tela-manual');
+  fetch(SRV + '/pocket/ssid-captura/limpar', {{method:'POST'}}).catch(()=>{{}});
+}}
+
+async function enviarManual() {{
+  var v = (document.getElementById('inp-ssid').value || '').trim();
+  if (!v || v.length < 10) {{
+    mostrar('SSID muito curto — verifique e tente novamente.', 'err');
+    return;
+  }}
+  document.getElementById('btn-env').disabled = true;
+  mostrar('⏳ Enviando...', 'inf');
+  try {{
+    var r = await fetch(SRV + '/pocket/ssid-captura/receber', {{
+      method: 'POST',
+      headers: {{'Content-Type': 'application/json'}},
+      body: JSON.stringify({{ssid: v}}),
+    }});
+    var d = await r.json();
+    if (d.ok) {{
+      await salvarENotificar(v);
+    }} else {{
+      mostrar('❌ ' + (d.erro || 'Erro ao salvar.'), 'err');
+      document.getElementById('btn-env').disabled = false;
+    }}
+  }} catch(e) {{
+    mostrar('❌ Erro de rede: ' + e.message, 'err');
+    document.getElementById('btn-env').disabled = false;
+  }}
+}}
+</script>
+</body>
+</html>"""
+    return html
+
+
 # ── Rota: conectar à Pocket Option ───────────────────────────────────────────
 @app.route('/pocket/conectar', methods=['POST'])
 def rota_pocket_conectar():

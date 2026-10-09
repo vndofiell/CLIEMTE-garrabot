@@ -6,7 +6,8 @@ pillow
 pandas
 websocket-client
 git+https://github.com/cleitonleonel/pyquotex.git
-# ── Pocket Option API (dependências da pocketoptionapi_async local) ──────────
+# ── Pocket Option API ─────────────────────────────────────────────────────────
+PocketOptionAPI-main/wheels/pocketoptionapi_async-2.0.1-py3-none-any.whl
 aiohttp>=3.8.0
 websockets>=12.0
 python-dotenv>=1.0.0

@@ -1714,20 +1714,38 @@
             <!-- Divisória -->
             <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
                 <div style="flex:1; height:1px; background:rgba(255,255,255,0.08);"></div>
-                <span style="font-size:0.58rem; color:#444; letter-spacing:1px;">OU COLAR SSID MANUALMENTE</span>
+                <span style="font-size:0.58rem; color:#444; letter-spacing:1px;">OU CAPTURAR VIA BROWSER</span>
                 <div style="flex:1; height:1px; background:rgba(255,255,255,0.08);"></div>
             </div>
 
-            <!-- Instruções SSID manual -->
-            <div style="background:rgba(0,160,255,0.05); border:1px dashed rgba(0,160,255,0.25);
-                        border-radius:5px; padding:8px 10px; margin-bottom:8px;
-                        font-family:'Share Tech Mono'; font-size:0.58rem; color:#555; line-height:1.7;">
-                <b style="color:#00a0ff;">Como obter o SSID:</b><br>
-                ① Abra <b>pocketoption.com</b> e faça login<br>
-                ② Pressione <b>F12</b> → aba <b>Network (Rede)</b><br>
-                ③ Filtre por <b>WS</b> (WebSocket)<br>
-                ④ Clique na conexão → aba <b>Messages</b><br>
-                ⑤ Copie a mensagem que começa com <b>42["auth",...</b>
+            <!-- Botão abrir página de captura (igual Quotex) -->
+            <button onclick="pocketAbrirLoginPage()" id="po-btn-login-page"
+                style="width:100%; padding:11px; margin-bottom:10px;
+                       background:rgba(0,160,255,0.08); border:1px solid rgba(0,160,255,0.5);
+                       color:#00a0ff; font-family:'Share Tech Mono'; font-size:0.76rem;
+                       letter-spacing:2px; cursor:pointer; border-radius:6px;">
+                🌐 ABRIR POCKET OPTION (captura automática)
+            </button>
+
+            <!-- Status da captura via bookmarklet -->
+            <div id="po-captura-aguardando" style="display:none; text-align:center;
+                padding:10px; margin-bottom:10px;
+                background:rgba(0,0,0,0.3); border:1px solid rgba(0,160,255,0.2);
+                border-radius:6px; font-family:'Share Tech Mono'; font-size:0.72rem;">
+                <div style="font-size:1.1rem; margin-bottom:4px;" id="po-captura-icon">⏳</div>
+                <div id="po-captura-msg" style="color:#00a0ff; letter-spacing:1px; margin-bottom:4px;">
+                    Aguardando login na Pocket Option...
+                </div>
+                <div style="color:#555; font-size:0.6rem;">
+                    Clique o favorito "GarraBot SSID-PO" após fazer login
+                </div>
+            </div>
+
+            <!-- Divisória -->
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
+                <div style="flex:1; height:1px; background:rgba(255,255,255,0.08);"></div>
+                <span style="font-size:0.58rem; color:#444; letter-spacing:1px;">OU COLAR SSID MANUALMENTE</span>
+                <div style="flex:1; height:1px; background:rgba(255,255,255,0.08);"></div>
             </div>
 
             <!-- SSID manual -->
@@ -27704,6 +27722,76 @@ function _poIniciarPoll(isDemo) {
             })
             .catch(() => { if (tentativas >= MAX) clearInterval(_po.autoTimer); });
     }, 1000);
+}
+
+// ── Abrir login-page (igual à Quotex — bookmarklet) ─────────────────────────
+let _poLoginWin = null;
+let _poCapTimer = null;
+
+function pocketAbrirLoginPage() {
+    const srv = window.location.origin;
+    fetch('/pocket/ssid-captura/limpar', { method: 'POST' }).catch(() => {});
+
+    _poLoginWin = window.open(srv + '/pocket/login-page', 'po_login',
+        'width=460,height=620,scrollbars=yes');
+
+    const btn  = document.getElementById('po-btn-login-page');
+    const area = document.getElementById('po-captura-aguardando');
+    const msg  = document.getElementById('po-captura-msg');
+    if (area) area.style.display = 'block';
+    if (btn)  btn.style.display  = 'none';
+    if (msg)  msg.textContent    = 'Aguardando login na Pocket Option...';
+
+    if (_poCapTimer) clearInterval(_poCapTimer);
+    let n = 0;
+    _poCapTimer = setInterval(() => {
+        n++;
+        fetch('/pocket/ssid-captura/status')
+            .then(r => r.json())
+            .then(d => {
+                if (d.status === 'capturado' && d.ssid && d.ssid.length >= 8) {
+                    clearInterval(_poCapTimer);
+                    _poOnSsidCapturado(d.ssid);
+                } else if (n > 180) {
+                    clearInterval(_poCapTimer);
+                    if (area) area.style.display = 'none';
+                    if (btn)  btn.style.display  = '';
+                    _poBadge('⏰ Timeout — tente novamente.', '#ffbd2e');
+                }
+            })
+            .catch(() => {});
+    }, 2000);
+}
+
+// Recebe SSID da janela filha via postMessage
+window.addEventListener('message', function(e) {
+    if (e.data && e.data.type === 'PO_SSID_OK' && e.data.ssid) {
+        if (_poCapTimer) clearInterval(_poCapTimer);
+        _poOnSsidCapturado(e.data.ssid);
+    }
+});
+
+// Ação ao receber SSID capturado via browser
+function _poOnSsidCapturado(ssid) {
+    const area = document.getElementById('po-captura-aguardando');
+    const icon = document.getElementById('po-captura-icon');
+    const msg  = document.getElementById('po-captura-msg');
+    const btn  = document.getElementById('po-btn-login-page');
+    if (icon) icon.textContent = '✅';
+    if (msg)  msg.textContent  = 'SSID capturado! Escolha DEMO ou REAL abaixo:';
+
+    // Preenche campo SSID e habilita botões
+    const inp = document.getElementById('po-ssid-inp');
+    if (inp) { inp.value = ssid; poSsidVerificar(ssid); }
+    _poBadge('✅ SSID capturado via browser — escolha DEMO ou REAL', '#00ff41');
+
+    if (_poLoginWin && !_poLoginWin.closed) {
+        try { _poLoginWin.close(); } catch(_) {}
+    }
+    setTimeout(() => {
+        if (area) area.style.display = 'none';
+        if (btn)  btn.style.display  = '';
+    }, 3000);
 }
 
 // ── Desconectar ───────────────────────────────────────────────────────────────
