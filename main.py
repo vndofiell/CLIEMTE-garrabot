@@ -3273,6 +3273,7 @@ try:
         quotex_capturar_ssid,
         quotex_ssid_status,
         quotex_ssid_definir,
+        quotex_reconectar_se_preciso,
     )
     _QUOTEX_DISPONIVEL = True
     print("[Quotex] ✅ Módulo quotex_connector carregado com sucesso.")
@@ -3916,6 +3917,11 @@ def rota_quotex_operar():
     if not _QUOTEX_DISPONIVEL or not quotex_conectado():
         _motivo_con = "Módulo Quotex indisponível" if not _QUOTEX_DISPONIVEL else "Quotex desconectada"
         print(f"[HMA QUOTEX] 🚫 ETAPA: SEM CONEXÃO | motivo={_motivo_con} | ordem NÃO enviada")
+        try:
+            reconexao = quotex_reconectar_se_preciso()
+            print(f"[HMA QUOTEX] 🔄 Estado da reconexão: {reconexao}")
+        except Exception as exc:
+            print(f"[HMA QUOTEX] ⚠️ Falha ao solicitar reconexão: {exc}")
         return jsonify({
             "ok":            False,
             "etapa":         "sem_conexao",

@@ -1028,6 +1028,36 @@ def _quotex_buy_bg(op_key: str, client, loop,
             }
 
 
+def quotex_reconectar_se_preciso() -> dict:
+    """
+    Verifica o estado da conexão e, se não estiver conectado,
+    dispara reconexão automática em background sem enviar ordem.
+    """
+    with _QUOTEX_LOCK:
+        client = _QUOTEX_STATE.get("client")
+        loop   = _QUOTEX_STATE.get("loop")
+        status = _QUOTEX_STATE.get("status")
+        if status == "conectado" and client is not None and loop is not None:
+            return {"ok": True, "status": "conectado"}
+        email = _QUOTEX_STATE.get("email", "")
+        senha = _QUOTEX_STATE.get("senha", "")
+        tipo  = _QUOTEX_STATE.get("tipo_conta", "DEMO")
+        ssid  = _QUOTEX_STATE.get("ssid", "")
+        # Marca como erro para permitir reconexão (não interfere se já estiver conectando)
+        if status != "conectando":
+            _QUOTEX_STATE["status"] = "erro"
+
+    if not email and not ssid:
+        return {
+            "ok":     False,
+            "status": "desconectado",
+            "erro":   "Sem credenciais salvas para reconectar.",
+        }
+
+    _quotex_reconectar_bg(email, senha, tipo, ssid)
+    return {"ok": False, "status": "reconectando"}
+
+
 def quotex_operar(ativo: str, direcao: str, valor: float, duracao: int) -> dict:
     """
     Inicia buy() em background e retorna IMEDIATAMENTE com op_key.
