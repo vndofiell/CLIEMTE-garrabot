@@ -924,40 +924,10 @@ def quotex_operar(ativo: str, direcao: str, valor: float, duracao: int) -> dict:
         except Exception:
             pass
 
-        # Prepara o fluxo de preço antes da compra. Sem isso, o buy() pode gastar
-        # parte da janela de entrada aguardando start_realtime_price e perder a
-        # confirmação do WebSocket. O pré-aquecimento usa o MESMO loop do cliente.
-        try:
-            fut_pre = asyncio.run_coroutine_threadsafe(
-                client.start_realtime_price(ativo, 60), loop
-            )
-            pre_ok = fut_pre.result(timeout=8)
-            print(f"[Quotex] 📡 Pré-aquecimento | ativo={ativo} | retorno={pre_ok!r}")
-            if pre_ok is False:
-                return {
-                    "ok": False,
-                    "erro": "O fluxo de preço não iniciou; ordem não enviada.",
-                    "ordem_enviada": False,
-                    "retry": False,
-                }
-        except concurrent.futures.TimeoutError:
-            print(f"[Quotex] ⚠️ Pré-aquecimento excedeu 8s | ativo={ativo}")
-            return {
-                "ok": False,
-                "erro": "Fluxo de preço não ficou pronto a tempo; ordem não enviada.",
-                "ordem_enviada": False,
-                "retry": False,
-            }
-        except Exception as pre_exc:
-            print(f"[Quotex] ⚠️ Falha no pré-aquecimento | ativo={ativo}: {pre_exc}")
-            return {
-                "ok": False,
-                "erro": f"Falha ao preparar fluxo de preço: {pre_exc}",
-                "ordem_enviada": False,
-                "retry": False,
-            }
-
         # ── ETAPA: ENVIANDO ──────────────────────────────────────────────────────
+        # O pré-aquecimento (start_realtime_price) já foi feito pelo endpoint
+        # /quotex/preaquecer chamado pelo frontend segundos antes desta função.
+        # Não repetir aqui — evita consumir a janela de entrada (até 8s extra).
         # buy() aguarda confirmação WS até duration+5s (interno do pyquotex).
         # Não cancele nem repita se o resultado ficar ambíguo: a corretora pode
         # ter aceitado a ordem sem a resposta chegar ao bot.
@@ -1009,7 +979,6 @@ def quotex_operar(ativo: str, direcao: str, valor: float, duracao: int) -> dict:
                     "ordem_confirmada":  False,
                     "pendente_confirmacao": True,
                     "nao_reenviar":      True,
-                    "transitorio":       True,
                     "erro": (
                         "Timeout aguardando confirmação da Quotex. "
                         "A ordem pode ter sido aceita; consulte a plataforma "
@@ -1068,7 +1037,6 @@ def quotex_operar(ativo: str, direcao: str, valor: float, duracao: int) -> dict:
             "ordem_confirmada":  False,
             "pendente_confirmacao": True,
             "nao_reenviar":      True,
-            "transitorio":       True,
             "erro": (
                 "Timeout aguardando resposta da compra. "
                 "A ordem pode ter sido aceita; verifique a plataforma "

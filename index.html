@@ -31374,22 +31374,26 @@ function _qxHmaQOperar(direcao, contexto, est) {
                 return;
             }
 
-            // Erro transitório de rede (DNS/curl) — WS ainda vivo
-            if (d.transitorio) {
-                _qxHmaQ.opBloqueada = false;
-                print(`🟠 HMA QUOTEX: ⚠️ ERRO DE REDE — retentando na próxima vela: ${msgErro}`, 'log-info');
-                return;
-            }
-
-            // Timeout de confirmação — ordem pode estar ativa; NÃO reenviar
+            // ── Timeout de confirmação — VERIFICAR ANTES de transitorio ──────
+            // pendente_confirmacao=true significa que o buy() foi chamado mas a
+            // Quotex não respondeu no prazo. A ordem pode estar ativa.
+            // NÃO reenviar. transitorio=true nesses casos é informativo, não DNS.
             if (d.pendente_confirmacao || d.nao_reenviar) {
                 _qxHmaQ.opBloqueada = false;
                 const _tipoTimeout = etapa === 'timeout_thread' ? 'TIMEOUT THREAD' : 'TIMEOUT CONFIRMAÇÃO';
                 print(
                     `🟠 HMA QUOTEX: ⏳ ${_tipoTimeout} — ` +
-                    `ordem pode estar ativa na corretora. NÃO reenviar automaticamente.`,
+                    `ordem pode ter sido aceita pela corretora. NÃO reenviar automaticamente. ` +
+                    `Verifique a plataforma.`,
                     'log-info'
                 );
+                return;
+            }
+
+            // Erro transitório de rede (DNS/curl) — ordem NÃO foi enviada, WS ainda vivo
+            if (d.transitorio && !d.ordem_enviada) {
+                _qxHmaQ.opBloqueada = false;
+                print(`🟠 HMA QUOTEX: ⚠️ ERRO DE REDE — retentando na próxima vela: ${msgErro}`, 'log-info');
                 return;
             }
 
