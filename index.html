@@ -31290,11 +31290,34 @@ function _qxHmaQOperar(direcao, contexto, est) {
     if (!_qxHmaQ.rodando) { _qxHmaQ.opBloqueada = false; return; }
     _qxHmaQ.opBloqueada = true;
 
+    // ── Verificação de janela no cliente ─────────────────────────────────────
+    // Cancela entradas atrasadas antes mesmo de chamar o servidor.
+    const periodo    = est.qhma_periodo || 60;
+    const _agoraMs   = _qxAgoraMs ? _qxAgoraMs() : Date.now();
+    const _segNaVela = (_agoraMs / 1000) % periodo;
+    const _restMs    = (periodo - _segNaVela) * 1000;
+    if (_restMs < 2000) {
+        // Menos de 2s para fechar: a ordem chegaria tarde ao servidor
+        _qxHmaQ.opBloqueada = false;
+        print(
+            `🟠 HMA QUOTEX: 🚫 SINAL CANCELADO — janela expirada ` +
+            `(${(_restMs / 1000).toFixed(1)}s restantes na vela; mín 2s)`,
+            'log-info'
+        );
+        return;
+    }
+
     // Atualiza stake no input visível
     const inp = document.getElementById('stake-input');
     if (inp) inp.value = _qxHmaQ.valorAtual.toFixed(2);
 
-    const periodo = est.qhma_periodo || 60;
+    print(
+        `🟠 HMA QUOTEX: 📤 ETAPA: ORDEM ENVIADA | ` +
+        `${direcao.toUpperCase()} ${contexto.ativoNome || contexto.ativoId} | ` +
+        `$${_qxHmaQ.valorAtual} | ${Math.round(_restMs / 1000)}s restantes`,
+        'log-info'
+    );
+
     fetch('/quotex/operar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -31310,33 +31333,41 @@ function _qxHmaQOperar(direcao, contexto, est) {
     .then(d => {
         if (!d.ok) {
             const msgErro = d.erro || d.detalhe || 'Erro desconhecido';
+            const etapa   = d.etapa   || '';
 
-            // Erro transitório de rede (DNS/curl) — WS ainda vivo, tenta na próxima vela
+            // Sinal expirou no servidor (janela < 3s quando chegou)
+            if (d.sinal_expirado || etapa === 'janela_expirada') {
+                _qxHmaQ.opBloqueada = false;
+                print(`🟠 HMA QUOTEX: 🚫 SINAL EXPIRADO NO SERVIDOR — aguardando próxima vela`, 'log-info');
+                return;
+            }
+
+            // Erro transitório de rede (DNS/curl) — WS ainda vivo
             if (d.transitorio) {
                 _qxHmaQ.opBloqueada = false;
-                print('🟠 HMA QUOTEX: ⚠️ Erro de rede transitório — retentando na próxima vela: ' + msgErro, 'log-info');
+                print(`🟠 HMA QUOTEX: ⚠️ ERRO DE REDE — retentando na próxima vela: ${msgErro}`, 'log-info');
                 return;
             }
 
-            // Confirmação pendente — não reenviar, aguarda resolução
+            // Timeout de confirmação — ordem pode estar ativa; NÃO reenviar
             if (d.pendente_confirmacao || d.nao_reenviar) {
                 _qxHmaQ.opBloqueada = false;
-                print('🟠 HMA QUOTEX: ⏳ ' + (d.erro || 'Confirmação pendente — aguardando próxima vela'), 'log-info');
+                const _tipoTimeout = etapa === 'timeout_thread' ? 'TIMEOUT THREAD' : 'TIMEOUT CONFIRMAÇÃO';
+                print(
+                    `🟠 HMA QUOTEX: ⏳ ${_tipoTimeout} — ` +
+                    `ordem pode estar ativa na corretora. NÃO reenviar automaticamente.`,
+                    'log-info'
+                );
                 return;
             }
 
+            // Sem conexão — inicia poll de reconexão
             _qxHmaQ.opBloqueada = false;
-            print('🟠 HMA QUOTEX: ⚠️ Erro ao operar: ' + msgErro, 'log-loss');
-
-            // Conexão perdida → atualiza status e agenda recheck em 12s
-            const semConexao = msgErro.toLowerCase().includes('não conectada') ||
-                               msgErro.toLowerCase().includes('nao conectada') ||
-                               msgErro.toLowerCase().includes('reconectando');
-            if (semConexao) {
+            if (etapa === 'sem_conexao' || msgErro.toLowerCase().includes('desconectada') ||
+                msgErro.toLowerCase().includes('reconectando')) {
                 _qx.status = 'desconectado';
                 _qxAtualizarBotao('desconectado');
-                print('🟠 HMA QUOTEX: 🔄 Aguardando reconexão automática...', 'log-info');
-                // Poll contínuo a cada 8s até reconectar (máx 90s = ~11 tentativas)
+                print('🟠 HMA QUOTEX: 🔄 SEM CONEXÃO — aguardando reconexão automática...', 'log-info');
                 let _rcTent = 0;
                 const _rcPoll = setInterval(() => {
                     _rcTent++;
@@ -31350,29 +31381,35 @@ function _qxHmaQOperar(direcao, contexto, est) {
                             clearInterval(_rcPoll);
                             print('🟠 HMA QUOTEX: ⚠️ Sem reconexão após 90s — verifique as credenciais', 'log-info');
                         }
-                    }).catch(() => {
-                        if (_rcTent >= 11) clearInterval(_rcPoll);
-                    });
+                    }).catch(() => { if (_rcTent >= 11) clearInterval(_rcPoll); });
                 }, 8000);
+                return;
             }
+
+            // Demais erros (ordem rejeitada pela corretora, etc.)
+            print(`🟠 HMA QUOTEX: ❌ ERRO [${etapa}] — ${msgErro}`, 'log-loss');
             return;
         }
-        const _durSecs = d.duracao || (est.qhma_periodo || 60);
-        print(`🟠 HMA QUOTEX: ✅ Operação enviada | id=${d.id} | ${direcao.toUpperCase()} | $${_qxHmaQ.valorAtual} | ${_durSecs}s`, 'log-info');
-        // ── Ativa o widget de trade em tempo real (cronômetro + ganhando/perdendo) ──
+
+        // ── ORDEM CONFIRMADA ──────────────────────────────────────────────────
+        const _durSecs = d.duracao || periodo;
+        print(
+            `🟠 HMA QUOTEX: ✅ ORDEM CONFIRMADA | ` +
+            `id=${d.id || 'sem-id'} | ${direcao.toUpperCase()} | ` +
+            `${contexto.ativoNome || contexto.ativoId} | $${_qxHmaQ.valorAtual} | ${_durSecs}s`,
+            'log-win'
+        );
         if (typeof _tradeAtivarLocal === 'function') {
-            // Passa o ativoId para o monitorador buscar tick em tempo real
-            // Preço de entrada: 0 → o monitorador captura no primeiro tick
             _tradeAtivarLocal(direcao, _durSecs, contexto.ativoNome || contexto.ativoId,
                 _qxHmaQ.valorAtual, 'quotex', 0, contexto.ativoId);
         }
-        contexto.stake    = _qxHmaQ.valorAtual;
-        contexto.duracao  = _durSecs;
+        contexto.stake   = _qxHmaQ.valorAtual;
+        contexto.duracao = _durSecs;
         _qxHmaQAguardarResultado(d.id, contexto, direcao, est, _durSecs);
     })
     .catch(e => {
         _qxHmaQ.opBloqueada = false;
-        print('🟠 HMA QUOTEX: ⚠️ Falha de rede: ' + e.message, 'log-loss');
+        print(`🟠 HMA QUOTEX: ⚠️ FALHA DE REDE AO ENVIAR — ${e.message}`, 'log-loss');
     });
 }
 

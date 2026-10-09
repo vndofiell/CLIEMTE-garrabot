@@ -924,17 +924,56 @@ def quotex_operar(ativo: str, direcao: str, valor: float, duracao: int) -> dict:
         except Exception:
             pass
 
-        # buy() internamente aguarda: start_realtime_price (até 10s) + buy_confirm (duration+5s)
-        # Total máximo interno: ~75s para duration=60s. Nosso timeout deve ser maior
-        # para deixar o pyquotex terminar por conta própria e reportar erro correto.
-        timeout_buy = int(duracao) + 30  # 30s de folga sobre o timeout interno do buy()
-        print(f"[Quotex] ⏳ Enviando ordem | ativo={ativo} | dir={direcao_norm} | timeout={timeout_buy}s")
+        # Prepara o fluxo de preço antes da compra. Sem isso, o buy() pode gastar
+        # parte da janela de entrada aguardando start_realtime_price e perder a
+        # confirmação do WebSocket. O pré-aquecimento usa o MESMO loop do cliente.
+        try:
+            fut_pre = asyncio.run_coroutine_threadsafe(
+                client.start_realtime_price(ativo, 60), loop
+            )
+            pre_ok = fut_pre.result(timeout=8)
+            print(f"[Quotex] 📡 Pré-aquecimento | ativo={ativo} | retorno={pre_ok!r}")
+            if pre_ok is False:
+                return {
+                    "ok": False,
+                    "erro": "O fluxo de preço não iniciou; ordem não enviada.",
+                    "ordem_enviada": False,
+                    "retry": False,
+                }
+        except concurrent.futures.TimeoutError:
+            print(f"[Quotex] ⚠️ Pré-aquecimento excedeu 8s | ativo={ativo}")
+            return {
+                "ok": False,
+                "erro": "Fluxo de preço não ficou pronto a tempo; ordem não enviada.",
+                "ordem_enviada": False,
+                "retry": False,
+            }
+        except Exception as pre_exc:
+            print(f"[Quotex] ⚠️ Falha no pré-aquecimento | ativo={ativo}: {pre_exc}")
+            return {
+                "ok": False,
+                "erro": f"Falha ao preparar fluxo de preço: {pre_exc}",
+                "ordem_enviada": False,
+                "retry": False,
+            }
+
+        # ── ETAPA: ENVIANDO ──────────────────────────────────────────────────────
+        # buy() aguarda confirmação WS até duration+5s (interno do pyquotex).
+        # Não cancele nem repita se o resultado ficar ambíguo: a corretora pode
+        # ter aceitado a ordem sem a resposta chegar ao bot.
+        timeout_buy = max(35, int(duracao) + 20)
+        print(
+            f"[Quotex] 📤 ETAPA: ENVIANDO | "
+            f"ativo={ativo} | dir={direcao_norm} | val={valor:.2f} | "
+            f"dur={duracao}s | timeout_interno={timeout_buy}s"
+        )
         fut = asyncio.run_coroutine_threadsafe(
             client.buy(amount=valor, asset=ativo, direction=direcao_norm, duration=duracao),
             loop
         )
         resultado = fut.result(timeout=timeout_buy)
 
+        # ── ETAPA: RESPOSTA RECEBIDA ─────────────────────────────────────────────
         # Resultado None = WebSocket retornou vazio (sessão morta)
         if resultado is None:
             raise ConnectionError("buy() retornou None — sessão Quotex encerrada.")
@@ -946,46 +985,85 @@ def quotex_operar(ativo: str, direcao: str, valor: float, duracao: int) -> dict:
 
         if not ok:
             detalhe = str(info) if info else "sem detalhe"
-            print(f"[Quotex] ❌ Ordem rejeitada | ativo={ativo} | dir={direcao_norm} | "
-                  f"dur={duracao}s | detalhe={detalhe}")
-            # Timeout de confirmação WS — a ordem pode ter sido aceita; NÃO reconectar
-            _TIMEOUTS_BUY = ("timeout", "timeout waiting for buy confirmation",
-                             "buy timeout", "confirmation timeout")
+            # ── Timeout de confirmação WS ────────────────────────────────────────
+            # A ordem FOI enviada ao WebSocket mas a confirmação não chegou no prazo.
+            # Não reconectar nem reenviar — a corretora pode ter executado a ordem.
+            _TIMEOUTS_BUY = (
+                "timeout", "timeout waiting for buy confirmation",
+                "buy timeout", "confirmation timeout",
+            )
             if any(t in detalhe.lower() for t in _TIMEOUTS_BUY):
-                print(f"[Quotex] ⚠️ Timeout na confirmação de compra — ordem pode estar ativa, "
-                      f"NÃO reconectando. ativo={ativo} dir={direcao_norm}")
+                print(
+                    f"[Quotex] ⚠️ ETAPA: TIMEOUT CONFIRMAÇÃO | "
+                    f"ativo={ativo} | dir={direcao_norm} | dur={duracao}s | "
+                    f"detalhe={detalhe} | "
+                    f"AÇÃO: ordem pode estar ativa na corretora — NÃO reenviar"
+                )
                 return {
-                    "ok": False,
+                    "ok":                  False,
+                    "etapa":               "timeout_confirmacao",
                     "pendente_confirmacao": True,
-                    "nao_reenviar": True,
-                    "erro": f"WS timeout na confirmação de compra — aguardando próxima vela.",
+                    "nao_reenviar":        True,
+                    "ordem_enviada":       True,
+                    "erro": (
+                        "Timeout aguardando confirmação WebSocket. "
+                        "A ordem pode ter sido aceita pela corretora. "
+                        "Não reenviar automaticamente."
+                    ),
                 }
-            return {"ok": False, "erro": f"Ordem rejeitada: {detalhe}", "detalhe": detalhe}
+            # ── Ordem rejeitada pela corretora ───────────────────────────────────
+            print(
+                f"[Quotex] ❌ ETAPA: REJEITADA | "
+                f"ativo={ativo} | dir={direcao_norm} | dur={duracao}s | "
+                f"detalhe={detalhe}"
+            )
+            return {
+                "ok":           False,
+                "etapa":        "rejeitada",
+                "ordem_enviada": True,
+                "erro":         f"Ordem rejeitada pela corretora: {detalhe}",
+                "detalhe":      detalhe,
+            }
 
+        # ── ETAPA: CONFIRMADA ────────────────────────────────────────────────────
         op_id = (info.get("id") or info.get("uid") or "") if isinstance(info, dict) else ""
-        print(f"[Quotex] 📈 Operação | ativo={ativo} | dir={direcao_norm} | "
-              f"val={valor} | dur={duracao}s | id={op_id}")
-        return {
-            "ok":      True,
-            "id":      op_id,
-            "ativo":   ativo,
-            "direcao": direcao_norm,
-            "valor":   valor,
-            "duracao": duracao,
-            "info":    info,
-        }
-    except concurrent.futures.TimeoutError:
-        # A ordem pode ter sido aceita mesmo sem resposta.
-        # Não cancelar o future nem enviar outra compra automaticamente.
         print(
-            f"[Quotex] ALERTA: confirmação pendente | "
-            f"ativo={ativo} | direção={direcao_norm} | valor={valor}"
+            f"[Quotex] ✅ ETAPA: CONFIRMADA | "
+            f"ativo={ativo} | dir={direcao_norm} | "
+            f"val={valor:.2f} | dur={duracao}s | id={op_id}"
         )
         return {
-            "ok": False,
+            "ok":            True,
+            "etapa":         "confirmada",
+            "ordem_enviada": True,
+            "id":            op_id,
+            "ativo":         ativo,
+            "direcao":       direcao_norm,
+            "valor":         valor,
+            "duracao":       duracao,
+            "info":          info,
+        }
+    except concurrent.futures.TimeoutError:
+        # Thread-level timeout: o future não respondeu em timeout_buy segundos.
+        # Situação idêntica ao timeout interno do buy(): a ordem pode ter sido
+        # aceita. Não cancelar o future nem reenviar.
+        print(
+            f"[Quotex] ⚠️ ETAPA: TIMEOUT THREAD | "
+            f"ativo={ativo} | dir={direcao_norm} | val={valor:.2f} | "
+            f"timeout={timeout_buy}s | "
+            f"AÇÃO: ordem pode estar ativa na corretora — NÃO reenviar"
+        )
+        return {
+            "ok":                  False,
+            "etapa":               "timeout_thread",
             "pendente_confirmacao": True,
-            "nao_reenviar": True,
-            "erro": "Confirmação da compra pendente; verificar estado da ordem."
+            "nao_reenviar":        True,
+            "ordem_enviada":       True,
+            "erro": (
+                "Timeout aguardando resposta do conector. "
+                "A ordem pode ter sido aceita pela corretora. "
+                "Não reenviar automaticamente."
+            ),
         }
     except Exception as e:
         msg = str(e) or repr(e) or type(e).__name__

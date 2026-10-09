@@ -3869,86 +3869,140 @@ def rota_quotex_operar():
     if valor <= 0:
         return jsonify({"ok": False, "erro": "Campo 'valor' deve ser maior que zero."}), 400
 
-    # Calcula duração: o frontend (AgendarEntrada) já garante o timing correto.
-    # Não bloquear a thread Flask aguardando a virada — isso muda o loop asyncio
-    # e causa "Future attached to a different loop" no quotex_operar().
+    # ── ETAPA: CALCULANDO DURAÇÃO ────────────────────────────────────────────────
+    # O frontend já garante o timing correto antes de chamar esta rota.
+    # Não bloqueamos a thread Flask aguardando virada de vela — isso corromperia
+    # o loop asyncio do conector ("Future attached to a different loop").
     if alinhar_minuto:
         duracao = quotex_duracao_alinhada(minutos=minutos)
-        print(f"[HMA QUOTEX] Janela de entrada | duração={duracao}s (minutos={minutos})")
+        print(
+            f"[HMA QUOTEX] 📐 ETAPA: DURAÇÃO CALCULADA | "
+            f"duracao={duracao}s | minutos={minutos}"
+        )
     else:
         duracao = int(dados.get("duracao") or 60)
 
+    # ── ETAPA: VERIFICAÇÃO DE JANELA ─────────────────────────────────────────────
+    # Garante que a operação ainda cabe na vela atual.
+    # Se a duração calculada for menor que 5s a vela já fechou — sinal inválido.
+    import time as _time
+    _ts_agora   = _time.time()
+    _seg_na_vela = _ts_agora % 60          # posição dentro do minuto atual
+    _restante_vela = 60 - _seg_na_vela     # segundos até a virada
+    if alinhar_minuto and _restante_vela < 3:
+        _motivo = (
+            f"Janela de entrada expirada: restam apenas {_restante_vela:.1f}s "
+            f"na vela atual — sinal descartado para evitar entrada fora do tempo."
+        )
+        print(f"[HMA QUOTEX] 🚫 ETAPA: JANELA EXPIRADA | {_motivo}")
+        return jsonify({
+            "ok":             False,
+            "etapa":          "janela_expirada",
+            "ordem_enviada":  False,
+            "sinal_expirado": True,
+            "erro":           _motivo,
+        }), 409
+
     print(
-        f"[Quotex] 🎯 Tentativa de operação | "
-        f"ativo={ativo} | direção={direcao} | "
-        f"valor={valor:.2f} | duração={duracao}s"
+        f"[HMA QUOTEX] 🎯 ETAPA: SINAL APROVADO | "
+        f"ativo={ativo} | dir={direcao} | val={valor:.2f} | "
+        f"dur={duracao}s | restante_vela={_restante_vela:.1f}s"
     )
 
-    # Verifica a conexão antes de enviar a ordem.
+    # ── ETAPA: VERIFICAÇÃO DE CONEXÃO ────────────────────────────────────────────
     if not _QUOTEX_DISPONIVEL or not quotex_conectado():
+        _motivo_con = "Módulo Quotex indisponível" if not _QUOTEX_DISPONIVEL else "Quotex desconectada"
+        print(f"[HMA QUOTEX] 🚫 ETAPA: SEM CONEXÃO | motivo={_motivo_con} | ordem NÃO enviada")
         return jsonify({
-            "ok": False,
-            "erro": "Quotex desconectada. Ordem não enviada.",
-            "retry": True
+            "ok":            False,
+            "etapa":         "sem_conexao",
+            "ordem_enviada": False,
+            "erro":          f"{_motivo_con}. Ordem não enviada.",
+            "retry":         True,
         }), 503
+
+    # ── ETAPA: ENVIANDO PARA O CONECTOR ─────────────────────────────────────────
+    print(
+        f"[HMA QUOTEX] 📤 ETAPA: ENVIANDO PARA CONECTOR | "
+        f"ativo={ativo} | dir={direcao} | val={valor:.2f} | dur={duracao}s"
+    )
 
     try:
         resultado = quotex_operar(
             ativo=ativo,
             direcao=direcao,
             valor=valor,
-            duracao=duracao
+            duracao=duracao,
         )
 
         if not isinstance(resultado, dict):
+            print(f"[HMA QUOTEX] ❌ ETAPA: RESPOSTA INVÁLIDA | tipo={type(resultado)}")
             return jsonify({
-                "ok": False,
-                "erro": "Resposta inválida do conector Quotex.",
-                "retry": False
+                "ok":            False,
+                "etapa":         "resposta_invalida",
+                "ordem_enviada": False,
+                "erro":          "Resposta inválida do conector Quotex.",
+                "retry":         False,
             }), 502
+
+        # ── ETAPA: RESPOSTA DO CONECTOR ──────────────────────────────────────────
+        etapa    = resultado.get("etapa", "desconhecida")
+        op_id    = resultado.get("id", "")
+        enviada  = resultado.get("ordem_enviada", False)
 
         if not resultado.get("ok"):
-            print(
-                f"[Quotex] ❌ Ordem não confirmada: "
-                f"{resultado.get('erro', 'Erro desconhecido')}"
-            )
+            # Classifica o motivo para o log ficar claro
+            if resultado.get("pendente_confirmacao") or resultado.get("nao_reenviar"):
+                _classe = "TIMEOUT_CONFIRMAÇÃO"
+            elif resultado.get("transitorio"):
+                _classe = "ERRO_REDE_TRANSITÓRIO"
+            elif resultado.get("sinal_expirado"):
+                _classe = "SINAL_EXPIRADO"
+            else:
+                _classe = "ERRO"
 
-            # Não repetir a compra automaticamente:
-            # um timeout pode ocorrer depois de a corretora
-            # já ter recebido a ordem.
+            print(
+                f"[HMA QUOTEX] ⚠️ ETAPA: {_classe} | "
+                f"etapa_conector={etapa} | "
+                f"ordem_enviada={enviada} | "
+                f"motivo={resultado.get('erro', 'sem detalhe')}"
+            )
+            # HTTP 502 apenas quando a ordem NÃO foi enviada (erro antes do buy)
+            # HTTP 200 com ok=False quando foi enviada mas não confirmada
+            # (evita que o frontend interprete 4xx/5xx como "pode reenviar")
+            _status = 200 if enviada else 502
             return jsonify({
                 **resultado,
-                "ok": False,
-                "ordem_confirmada": False
-            }), 502
+                "ok":             False,
+                "ordem_confirmada": False,
+            }), _status
 
-        op_id = resultado.get("id")
-
+        # ── ETAPA: ORDEM CONFIRMADA ──────────────────────────────────────────────
         if op_id:
-            quotex_resultado_iniciar(
-                op_id,
-                duracao_s=duracao
-            )
+            quotex_resultado_iniciar(op_id, duracao_s=duracao)
 
         print(
-            f"[Quotex] ✅ Ordem confirmada | "
-            f"ID={op_id or 'não informado'}"
+            f"[HMA QUOTEX] ✅ ETAPA: ORDEM CONFIRMADA | "
+            f"id={op_id or 'não informado'} | "
+            f"ativo={ativo} | dir={direcao} | val={valor:.2f} | dur={duracao}s"
         )
-
         return jsonify({
             **resultado,
-            "ok": True,
-            "ordem_confirmada": True
+            "ok":             True,
+            "ordem_confirmada": True,
         })
 
     except Exception as exc:
-        print(f"[Quotex] ❌ Erro ao executar ordem: {exc}")
-
+        import traceback as _tb
+        _tb.print_exc()
+        print(f"[HMA QUOTEX] ❌ ETAPA: EXCEÇÃO NO SERVIDOR | erro={exc}")
         return jsonify({
-            "ok": False,
-            "erro": str(exc),
+            "ok":             False,
+            "etapa":          "excecao_servidor",
+            "ordem_enviada":  False,
             "ordem_confirmada": False,
-            "retry": False
+            "erro":           str(exc),
+            "retry":          False,
         }), 500
 
 
