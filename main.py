@@ -4,6 +4,7 @@ from digit_matrix_sniper import register_digit_matrix
 from memory_time_engine import get_mte, mte_pode_operar, mte_registrar, mte_status
 from masaniello import Masaniello
 from garra_hma_core import hma_avaliar, _hma_hist_salvar, _hma_hist_ler
+from garra_hma_quotex import quotex_hma_avaliar
 import threading
 import time
 import json
@@ -14598,6 +14599,47 @@ def garra_hma_avaliar():
         f"regime={resultado['regime']} aprovado={resultado['aprovado']}"
     )
 
+    return jsonify(resultado)
+
+
+@app.route('/garra-hma/quotex/avaliar', methods=['POST'])
+def garra_hma_quotex_avaliar():
+    """
+    Motor OHLC dedicado para Quotex.
+    Usa TrendEngine (EMA) + CandleEngine + MomentumEngine (RSI) + RegimeEngine (ATR).
+    Não usa lógica de dígitos.
+
+    Body JSON:
+        candles           : list[{open,high,low,close,time}]  mín. 15 velas
+        confianca_minima  : float   threshold de aprovação (padrão 75)
+        payout            : float   ex. 0.85
+        losses_seq        : int     losses seguidos (Risk Gate)
+    """
+    dados = request.get_json(force=True, silent=True) or {}
+    candles          = dados.get("candles", [])
+    confianca_minima = float(dados.get("confianca_minima", 75.0))
+    payout           = float(dados.get("payout", 0.85))
+    losses_seq       = int(dados.get("losses_seq", 0))
+
+    if not isinstance(candles, list) or len(candles) < 5:
+        return jsonify({
+            "aprovado": False, "decisao": "NO_TRADE",
+            "confianca": 0, "motivo": "candles insuficientes (mín. 5)",
+        }), 400
+
+    resultado = quotex_hma_avaliar(
+        candles          = candles,
+        confianca_minima = confianca_minima,
+        payout           = payout,
+        losses_seq       = losses_seq,
+    )
+
+    print(
+        f"[HMA-QUOTEX] decisao={resultado['decisao']} "
+        f"conf={resultado['confianca']}% "
+        f"regime={resultado['regime']} "
+        f"aprovado={resultado['aprovado']}"
+    )
     return jsonify(resultado)
 
 
