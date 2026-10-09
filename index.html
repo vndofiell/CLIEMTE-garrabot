@@ -27730,10 +27730,11 @@ let _poCapTimer = null;
 
 function pocketAbrirLoginPage() {
     const srv = window.location.origin;
-    fetch('/pocket/ssid-captura/limpar', { method: 'POST' }).catch(() => {});
-
+    // Abre a janela PRIMEIRO (síncrono no clique) para evitar bloqueio de popup
     _poLoginWin = window.open(srv + '/pocket/login-page', 'po_login',
         'width=460,height=620,scrollbars=yes');
+    // Limpa captura anterior depois
+    fetch('/pocket/ssid-captura/limpar', { method: 'POST' }).catch(() => {});
 
     const btn  = document.getElementById('po-btn-login-page');
     const area = document.getElementById('po-captura-aguardando');
