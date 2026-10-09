@@ -3480,7 +3480,7 @@ def rota_quotex_ativos():
 @app.route('/quotex/candles', methods=['GET'])
 def rota_quotex_candles():
     import asyncio as _asyncio
-    from quotex_connector import _QUOTEX_STATE, _QUOTEX_LOCK
+    from quotex_connector import _QUOTEX_STATE, _QUOTEX_LOCK, _ORDEM_BG_CACHE, _ORDEM_BG_LOCK
 
     ativo   = request.args.get("ativo", "EURUSD_otc")
     periodo = int(request.args.get("periodo", 60))
@@ -3495,6 +3495,16 @@ def rota_quotex_candles():
 
     if not client or not loop:
         return jsonify({"ok": False, "erro": "Quotex não conectada.", "candles": []})
+
+    # ── Bloqueia candles enquanto buy está em andamento ───────────────────────
+    # Evita que get_historical_candles() dispute o loop asyncio com o buy().
+    with _ORDEM_BG_LOCK:
+        _buy_ativo = any(
+            v.get("etapa") == "enviando"
+            for v in _ORDEM_BG_CACHE.values()
+        )
+    if _buy_ativo:
+        return jsonify({"ok": False, "erro": "buy em andamento", "candles": []})
 
     try:
         # get_historical_candles retorna 100+ velas via abordagem paralela
@@ -3605,7 +3615,7 @@ def rota_quotex_ativos_payout():
     import asyncio as _asyncio
     import inspect as _inspect
     import time as _t
-    from quotex_connector import _QUOTEX_STATE, _QUOTEX_LOCK
+    from quotex_connector import _QUOTEX_STATE, _QUOTEX_LOCK, _ORDEM_BG_CACHE, _ORDEM_BG_LOCK
 
     with _QUOTEX_LOCK:
         client = _QUOTEX_STATE.get("client")
@@ -3615,6 +3625,17 @@ def rota_quotex_ativos_payout():
         if _payout_cache and (_t.time() - _payout_cache_ts) < 300:
             return jsonify({"ok": True, "ativos": _payout_cache, "cache": True})
         return jsonify({"ok": False, "erro": "Quotex não conectada.", "ativos": []})
+
+    # ── Se há buy em andamento, retorna cache sem tocar no loop asyncio ──────
+    # O loop está ocupado aguardando a confirmação do buy(); chamadas concorrentes
+    # via run_coroutine_threadsafe bloqueiam o processamento da resposta → timeout.
+    with _ORDEM_BG_LOCK:
+        _buy_ativo = any(
+            v.get("etapa") == "enviando"
+            for v in _ORDEM_BG_CACHE.values()
+        )
+    if _buy_ativo and _payout_cache:
+        return jsonify({"ok": True, "ativos": _payout_cache, "cache": True})
 
     def _normalizar_payout(v) -> int:
         try:
