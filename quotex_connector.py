@@ -900,7 +900,7 @@ def _quotex_buy_bg(op_key: str, client, loop,
     Executa buy() em background thread e armazena o resultado em
     _ORDEM_BG_CACHE[op_key]. Chamado por quotex_operar().
     """
-    timeout_buy = max(35, int(duracao) + 20)
+    timeout_buy = 20  # Quotex confirma buy em <5s; 20s é margem segura
     print(
         f"[Quotex] 📤 BG BUY | ativo={ativo} | dir={direcao_norm} | "
         f"val={valor:.2f} | dur={duracao}s | timeout={timeout_buy}s"

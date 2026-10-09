@@ -30980,7 +30980,12 @@ async function _qxHmaQCiclo() {
 
     print(`🟠 HMA QUOTEX: 🔍 Analisando ${top.length} ativos (${top.map(a => (a.nome||a.id).split(' ')[0]).join(', ')})...`, 'log-info');
 
-    // 4) Analisa cada ativo
+    // 4) Analisa cada ativo (não analisa se já há operação em curso)
+    if (_qxHmaQ.opBloqueada) {
+        _qxHmaQ._cicloRodando = false;
+        print('🟠 HMA QUOTEX: ⏳ Aguardando resultado anterior...', 'log-info');
+        return;
+    }
     const resultados = [];
     for (const ativo of top) {
         try {
@@ -31357,8 +31362,8 @@ function _qxHmaQOperar(direcao, contexto, est) {
             ativo:           contexto.ativoId,
             direcao:         direcao,
             valor:           _qxHmaQ.valorAtual,
-            alinhar_minuto:  true,
-            minutos:         Math.max(1, Math.round(periodo / 60)),
+            alinhar_minuto:  false,
+            duracao:         periodo,
         }),
     })
     .then(r => r.json())
@@ -31405,9 +31410,9 @@ function _qxHmaQOperar(direcao, contexto, est) {
             'log-info'
         );
 
-        // Poll a cada 2s por até 90s aguardando confirmação do buy()
+        // Poll a cada 2s por até 30s aguardando confirmação do buy()
         let _pollTent = 0;
-        const _pollMax = 45;
+        const _pollMax = 15;
         const _pollTimer = setInterval(() => {
             _pollTent++;
             if (!_qxHmaQ.rodando || _pollTent > _pollMax) {

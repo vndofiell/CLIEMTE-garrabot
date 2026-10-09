@@ -3501,7 +3501,7 @@ def rota_quotex_candles():
             client.get_historical_candles(ativo, qtd_segundos, periodo),
             loop
         )
-        candles = fut.result(timeout=45) or []
+        candles = fut.result(timeout=10) or []
 
         result = []
         for c in candles[-limite:]:
