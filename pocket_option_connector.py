@@ -128,6 +128,13 @@ _PO_CABINET_URLS = [
     "https://pocketoption.com/pt/cabinet/",
 ]
 
+# URLs da página de trading — é aqui que o cookie "io" (Socket.IO) é setado
+_PO_TRADE_URLS = [
+    "https://pocketoption.com/en/cabinet/demo-quick-high-low/",
+    "https://pocketoption.com/pt/cabinet/demo-quick-high-low/",
+    "https://pocketoption.com/en/cabinet/quick-high-low/",
+]
+
 
 def _po_extrair_ssid_do_html(html: str) -> str:
     """
@@ -171,25 +178,75 @@ def _po_extrair_ssid_do_html(html: str) -> str:
 def _po_extrair_ssid_dos_cookies(session_obj) -> str:
     """
     Extrai o SSID do cookie de sessão da Pocket Option.
-    O cookie pode se chamar 'io', '_session', 'PHPSESSID', 'po_session', etc.
+    Prioriza o cookie 'io' (Socket.IO token) que é o SSID real do WebSocket.
     """
-    # Nomes conhecidos do cookie de sessão da PocketOption
-    nomes_cookie = ["io", "po_session", "session", "_session", "PHPSESSID",
-                    "pocket_session", "laravel_session", "remember_web"]
+    # 'io' é o cookie Socket.IO — é o SSID real da Pocket Option
+    # Os demais são fallback (sessão HTTP, não WebSocket)
+    nomes_prioritarios = ["io"]
+    nomes_fallback     = ["po_session", "session", "_session", "pocket_session",
+                          "laravel_session", "remember_web", "PHPSESSID"]
     try:
         jar = session_obj.cookies
-        # Tenta pelo nome
-        for nome in nomes_cookie:
-            val = jar.get(nome)
+        # Prioridade máxima: cookie "io"
+        for nome in nomes_prioritarios:
+            try:
+                val = jar.get(nome)
+            except Exception:
+                val = None
             if val and len(val) >= 20:
+                print(f"[PocketOption] 🍪 Cookie '{nome}' encontrado! len={len(val)}")
                 return val
-        # Pega qualquer cookie que pareça um token (>= 20 chars alfanuméricos)
+        # Fallback: outros cookies de sessão
+        for nome in nomes_fallback:
+            try:
+                val = jar.get(nome)
+            except Exception:
+                val = None
+            if val and len(val) >= 20:
+                print(f"[PocketOption] 🍪 Cookie fallback '{nome}' encontrado! len={len(val)}")
+                return val
+        # Último recurso: qualquer cookie longo que pareça token
         for c in jar:
-            v = c.value if hasattr(c, 'value') else str(c)
-            if v and len(v) >= 32 and re.match(r'^[a-zA-Z0-9%_\-\.~]+$', v):
-                return v
+            try:
+                cname = c.name if hasattr(c, 'name') else ''
+                v = c.value if hasattr(c, 'value') else str(c)
+                if v and len(v) >= 32 and re.match(r'^[a-zA-Z0-9%_\-\.~]+$', v):
+                    print(f"[PocketOption] 🍪 Cookie genérico '{cname}' encontrado! len={len(v)}")
+                    return v
+            except Exception:
+                continue
     except Exception:
         pass
+    return ""
+
+
+def _po_extrair_io_do_html(html: str) -> str:
+    """
+    Extrai o token 'io' / Socket.IO diretamente do HTML da página de trading.
+    A Pocket Option injeta o token no HTML como variável JS ou meta tag.
+    """
+    padroes = [
+        # Socket.IO token injetado como variável JS
+        r'["\']io["\']\s*:\s*["\']([a-zA-Z0-9%_\-\.~]{20,})["\']',
+        r'io\s*=\s*["\']([a-zA-Z0-9%_\-\.~]{20,})["\']',
+        r'socketToken\s*[:=]\s*["\']([a-zA-Z0-9%_\-\.~]{20,})["\']',
+        r'wsToken\s*[:=]\s*["\']([a-zA-Z0-9%_\-\.~]{20,})["\']',
+        r'wssid\s*[:=]\s*["\']([a-zA-Z0-9%_\-\.~]{20,})["\']',
+        # Formato completo do SSID WebSocket
+        r'42\["auth",\{"session":"([a-zA-Z0-9%_\-\.~]{20,})"',
+        r'"session"\s*:\s*"([a-zA-Z0-9%_\-\.~]{30,})"',
+    ]
+    for pat in padroes:
+        m = re.search(pat, html)
+        if m:
+            tok = m.group(1)
+            try:
+                import urllib.parse
+                tok = urllib.parse.unquote(tok)
+            except Exception:
+                pass
+            if len(tok) >= 20:
+                return tok
     return ""
 
 
@@ -336,11 +393,28 @@ def _po_capturar_curl_cffi(email: str, senha: str) -> tuple:
         if not login_url_usado:
             return False, "", 0, "Falha ao carregar página de login."
 
-        # ── 4. Cookie de sessão após login ────────────────────────────────────
-        tok_cookie = _po_extrair_ssid_dos_cookies(s)
-        if tok_cookie:
-            print(f"[PocketOption] 🍪 SSID extraído do cookie! len={len(tok_cookie)}")
-            return True, tok_cookie, uid, ""
+        # ── 4. Página de trading (é aqui que o cookie "io" é setado) ──────────
+        for trade_url in _PO_TRADE_URLS:
+            try:
+                trade = s.get(trade_url, timeout=20)
+                # Tenta extrair io do HTML da página de trading
+                tok_io = _po_extrair_io_do_html(trade.text)
+                if tok_io:
+                    print(f"[PocketOption] ✅ io token extraído do HTML da página de trading!")
+                    m_uid = re.search(r'["\']uid["\']\s*:\s*(\d+)', trade.text)
+                    if m_uid:
+                        uid = int(m_uid.group(1))
+                    return True, tok_io, uid, ""
+                # Cookie "io" setado após carregar página de trading
+                tok_cookie = _po_extrair_ssid_dos_cookies(s)
+                if tok_cookie:
+                    return True, tok_cookie, uid, ""
+                # HTML genérico
+                tok_html = _po_extrair_ssid_do_html(trade.text)
+                if tok_html:
+                    return True, tok_html, uid, ""
+            except Exception:
+                continue
 
         # ── 5. HTML do /cabinet ───────────────────────────────────────────────
         for cab_url in _PO_CABINET_URLS:
@@ -352,33 +426,26 @@ def _po_capturar_curl_cffi(email: str, senha: str) -> tuple:
                     if m_uid:
                         uid = int(m_uid.group(1))
                     return True, tok, uid, ""
-                # Tenta extrair cookie após carregar /cabinet
                 tok_cookie = _po_extrair_ssid_dos_cookies(s)
                 if tok_cookie:
                     return True, tok_cookie, uid, ""
             except Exception:
                 continue
 
-        # ── 6. Último fallback: página de trade ───────────────────────────────
-        try:
-            trade = s.get("https://pocketoption.com/en/cabinet/demo-quick-high-low/", timeout=15)
-            tok = _po_extrair_ssid_do_html(trade.text)
-            if tok:
-                return True, tok, uid, ""
-            tok_cookie = _po_extrair_ssid_dos_cookies(s)
-            if tok_cookie:
-                return True, tok_cookie, uid, ""
-        except Exception:
-            pass
+        # ── 6. Cookie de sessão após todos os carregamentos ───────────────────
+        tok_cookie = _po_extrair_ssid_dos_cookies(s)
+        if tok_cookie:
+            print(f"[PocketOption] 🍪 SSID extraído do cookie final! len={len(tok_cookie)}")
+            return True, tok_cookie, uid, ""
 
         # Debug: loga os cookies disponíveis para diagnóstico
         try:
             cookies_nomes = [c.name for c in s.cookies] if hasattr(s.cookies, '__iter__') else list(s.cookies.keys())
-            print(f"[PocketOption] 🔍 Cookies disponíveis: {cookies_nomes}")
+            print(f"[PocketOption] 🔍 Cookies disponíveis após todas as tentativas: {cookies_nomes}")
         except Exception:
             pass
 
-        return False, "", 0, "Token não encontrado. Tente colar o SSID manualmente."
+        return False, "", 0, "Token não encontrado. A Pocket Option pode estar bloqueando logins automáticos — use o bookmarklet ou cole o SSID manualmente."
 
     except ImportError:
         return False, "", 0, "curl_cffi_indisponivel"
@@ -437,10 +504,21 @@ def _po_capturar_requests(email: str, senha: str) -> tuple:
             except Exception:
                 continue
 
-        # Cookie
-        tok_c = _po_extrair_ssid_dos_cookies(s)
-        if tok_c:
-            return True, tok_c, uid, ""
+        # Página de trading (cookie "io")
+        for trade_url in _PO_TRADE_URLS:
+            try:
+                trade = s.get(trade_url, timeout=20)
+                tok_io = _po_extrair_io_do_html(trade.text)
+                if tok_io:
+                    return True, tok_io, uid, ""
+                tok_c = _po_extrair_ssid_dos_cookies(s)
+                if tok_c:
+                    return True, tok_c, uid, ""
+                tok_h = _po_extrair_ssid_do_html(trade.text)
+                if tok_h:
+                    return True, tok_h, uid, ""
+            except Exception:
+                continue
 
         # HTML cabinet
         for cab_url in _PO_CABINET_URLS:
@@ -455,7 +533,12 @@ def _po_capturar_requests(email: str, senha: str) -> tuple:
             except Exception:
                 continue
 
-        return False, "", 0, "Token não encontrado. Tente colar o SSID manualmente."
+        # Cookie final
+        tok_c = _po_extrair_ssid_dos_cookies(s)
+        if tok_c:
+            return True, tok_c, uid, ""
+
+        return False, "", 0, "Token não encontrado. A Pocket Option pode estar bloqueando logins automáticos."
 
     except Exception as e:
         return False, "", 0, str(e)
