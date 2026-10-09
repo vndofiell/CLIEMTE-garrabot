@@ -3878,12 +3878,78 @@ def rota_quotex_operar():
     else:
         duracao = int(dados.get("duracao") or 60)
 
-    print(f"[Quotex] 🎯 Tentativa operação | ativo={ativo} | dir={direcao} | val={valor} | dur={duracao}s")
-    resultado = quotex_operar(ativo=ativo, direcao=direcao, valor=valor, duracao=duracao)
-    # Dispara verificação de resultado em background imediatamente após operar
-    if resultado.get("ok") and resultado.get("id"):
-        quotex_resultado_iniciar(resultado["id"], duracao_s=duracao)
-    return jsonify(resultado)
+    print(
+        f"[Quotex] 🎯 Tentativa de operação | "
+        f"ativo={ativo} | direção={direcao} | "
+        f"valor={valor:.2f} | duração={duracao}s"
+    )
+
+    # Verifica a conexão antes de enviar a ordem.
+    if not _QUOTEX_DISPONIVEL or not quotex_conectado():
+        return jsonify({
+            "ok": False,
+            "erro": "Quotex desconectada. Ordem não enviada.",
+            "retry": True
+        }), 503
+
+    try:
+        resultado = quotex_operar(
+            ativo=ativo,
+            direcao=direcao,
+            valor=valor,
+            duracao=duracao
+        )
+
+        if not isinstance(resultado, dict):
+            return jsonify({
+                "ok": False,
+                "erro": "Resposta inválida do conector Quotex.",
+                "retry": False
+            }), 502
+
+        if not resultado.get("ok"):
+            print(
+                f"[Quotex] ❌ Ordem não confirmada: "
+                f"{resultado.get('erro', 'Erro desconhecido')}"
+            )
+
+            # Não repetir a compra automaticamente:
+            # um timeout pode ocorrer depois de a corretora
+            # já ter recebido a ordem.
+            return jsonify({
+                **resultado,
+                "ok": False,
+                "ordem_confirmada": False
+            }), 502
+
+        op_id = resultado.get("id")
+
+        if op_id:
+            quotex_resultado_iniciar(
+                op_id,
+                duracao_s=duracao
+            )
+
+        print(
+            f"[Quotex] ✅ Ordem confirmada | "
+            f"ID={op_id or 'não informado'}"
+        )
+
+        return jsonify({
+            **resultado,
+            "ok": True,
+            "ordem_confirmada": True
+        })
+
+    except Exception as exc:
+        print(f"[Quotex] ❌ Erro ao executar ordem: {exc}")
+
+        return jsonify({
+            "ok": False,
+            "erro": str(exc),
+            "ordem_confirmada": False,
+            "retry": False
+        }), 500
 
 
 # ── Rota: pré-aquecer streaming de ativo (evita timeout na confirmação de buy) ─
