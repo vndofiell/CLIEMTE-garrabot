@@ -3762,27 +3762,23 @@ def rota_quotex_ativos_payout():
             return jsonify({"ok": True, "ativos": _payout_cache, "cache": True})
 
         # Fallback final: ativos OTC padrão da Quotex com payout estimado 80%
-        # Usado quando a pyquotex ainda não populou os dados de pagamento no WS
+        # IDs exatos usados pela pyquotex para buscar candles
         _OTC_FALLBACK = [
             {"id": "USDIDR_otc",  "nome": "USD/IDR (OTC)",  "payout": 80, "aberto": True},
             {"id": "USDEGP_otc",  "nome": "USD/EGP (OTC)",  "payout": 80, "aberto": True},
             {"id": "USDBRL_otc",  "nome": "USD/BRL (OTC)",  "payout": 80, "aberto": True},
-            {"id": "USDZAR_otc",  "nome": "USD/ZAR (OTC)",  "payout": 80, "aberto": True},
             {"id": "USDDZD_otc",  "nome": "USD/DZD (OTC)",  "payout": 80, "aberto": True},
             {"id": "USDNGN_otc",  "nome": "USD/NGN (OTC)",  "payout": 80, "aberto": True},
             {"id": "USDPHP_otc",  "nome": "USD/PHP (OTC)",  "payout": 80, "aberto": True},
             {"id": "USDBDT_otc",  "nome": "USD/BDT (OTC)",  "payout": 80, "aberto": True},
             {"id": "USDCOP_otc",  "nome": "USD/COP (OTC)",  "payout": 80, "aberto": True},
             {"id": "NZDUSD_otc",  "nome": "NZD/USD (OTC)",  "payout": 80, "aberto": True},
+            {"id": "AUDCAD_otc",  "nome": "AUD/CAD (OTC)",  "payout": 80, "aberto": True},
         ]
-        # Complementa com ativos que vieram da API mas sem payout
-        ids_fallback = {a["id"] for a in _OTC_FALLBACK}
-        for a in ativos:
-            if a["id"] not in ids_fallback:
-                a["payout"] = 80  # assume 80% para não bloquear
-                _OTC_FALLBACK.append(a)
-
-        print(f"[Quotex] ⚠️ Usando fallback OTC com {len(_OTC_FALLBACK)} ativos (payout=80%)")
+        # Salva no cache para as próximas chamadas não precisarem do fallback
+        _payout_cache    = _OTC_FALLBACK
+        _payout_cache_ts = _t.time()
+        print(f"[Quotex] ⚠️ Usando fallback OTC com {len(_OTC_FALLBACK)} ativos (payout=80%) — salvo em cache")
         return jsonify({"ok": True, "ativos": _OTC_FALLBACK, "fallback": True})
 
     except Exception as e:

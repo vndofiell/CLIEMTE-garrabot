@@ -288,7 +288,7 @@ class RegimeEngine:
     """
 
     def analisar(self, candles: List[dict]) -> dict:
-        if len(candles) < 15:
+        if len(candles) < 10:
             return {"regime": "DESCONHECIDO", "atr_norm": 0.0, "penalidade": 0}
 
         atr_norm = _atr(candles, 14)
@@ -489,11 +489,11 @@ def quotex_hma_avaliar(
     ]
     candles_ok.sort(key=lambda c: c.get("time", 0))
 
-    if len(candles_ok) < 15:
+    if len(candles_ok) < 10:
         return {
             "aprovado": False, "decisao": "NO_TRADE",
             "confianca": 0.0,
-            "motivo": f"dados insuficientes: {len(candles_ok)} velas (mín. 15)",
+            "motivo": f"dados insuficientes: {len(candles_ok)} velas (mín. 10)",
             "regime": "DESCONHECIDO",
             "detalhes": [],
             "risk_gate": {"aprovado": False, "vetos": ["dados insuficientes"]},

@@ -31019,7 +31019,10 @@ async function _qxHmaQAnalisarAtivo(ativo, est) {
     }));
 
     const candlesM1 = candlesPorTF['M1'] || [];
-    if (candlesM1.length < 15) return null;
+    if (candlesM1.length < 10) {
+        console.warn('[HMAq] candles insuficientes para', ativo.id, '— M1:', candlesM1.length);
+        return null;
+    }
 
     const isOtc = (ativo.id||'').toLowerCase().includes('otc');
 
