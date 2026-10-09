@@ -4705,12 +4705,13 @@ let _polling = false;
 let _polTimer = null;
 
 function abrirPocketOption() {{
-  // Limpa captura anterior
+  // Abre a corretora PRIMEIRO (sincronamente no clique) para evitar bloqueio de popup
+  window.open('https://pocketoption.com/pt/login/', '_blank');
+  // Limpa captura anterior e troca tela depois
   fetch(SRV + '/pocket/ssid-captura/limpar', {{method:'POST'}}).catch(()=>{{}});
   trocarTela('tela-prog');
   msgP('Aguardando login na Pocket Option...');
   msgS('Clique o favorito "GarraBot SSID-PO" após fazer login');
-  window.open('https://pocketoption.com/pt/login/', '_blank');
   iniciarPolling();
 }}
 
