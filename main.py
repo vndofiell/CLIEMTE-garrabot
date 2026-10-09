@@ -3495,10 +3495,12 @@ def rota_quotex_candles():
             client.get_historical_candles(ativo, qtd_segundos, periodo),
             loop
         )
-        candles = fut.result(timeout=45) or []
+        candles_raw = fut.result(timeout=45) or []
+        print(f"[Quotex/candles] ativo={ativo} periodo={periodo} raw={len(candles_raw)} tipo={type(candles_raw).__name__}"
+              + (f" exemplo={candles_raw[0]}" if candles_raw else " VAZIO"))
 
         result = []
-        for c in candles[-limite:]:
+        for c in candles_raw[-limite:]:
             if not isinstance(c, dict):
                 continue
             ts = int(c.get("time") or 0)
@@ -3509,11 +3511,13 @@ def rota_quotex_candles():
             if ts > 0 and o > 0:
                 result.append({"time": ts, "open": o, "high": h, "low": l, "close": cl})
 
+        print(f"[Quotex/candles] ativo={ativo} resultado={len(result)} velas válidas")
         result.sort(key=lambda x: x["time"])
         return jsonify({"ok": True, "candles": result, "ativo": ativo, "periodo": periodo,
                         "total": len(result)})
     except Exception as e:
         import traceback; traceback.print_exc()
+        print(f"[Quotex/candles] ERRO ativo={ativo}: {e}")
         return jsonify({"ok": False, "erro": str(e), "candles": []})
 
 
