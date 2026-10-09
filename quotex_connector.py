@@ -994,21 +994,26 @@ def quotex_operar(ativo: str, direcao: str, valor: float, duracao: int) -> dict:
             )
             if any(t in detalhe.lower() for t in _TIMEOUTS_BUY):
                 print(
-                    f"[Quotex] ⚠️ ETAPA: TIMEOUT CONFIRMAÇÃO | "
-                    f"ativo={ativo} | dir={direcao_norm} | dur={duracao}s | "
-                    f"detalhe={detalhe} | "
-                    f"AÇÃO: ordem pode estar ativa na corretora — NÃO reenviar"
+                    f"[Quotex] ⚠️ CONFIRMAÇÃO PENDENTE | "
+                    f"ativo={ativo} | direção={direcao_norm} | "
+                    f"valor={valor} | duração={duracao}s"
+                )
+                print(
+                    "[Quotex] ⚠️ Não é possível confirmar se a ordem foi aceita. "
+                    "Não reenviar automaticamente."
                 )
                 return {
-                    "ok":                  False,
-                    "etapa":               "timeout_confirmacao",
+                    "ok":                False,
+                    "etapa":             "confirmacao_pendente",
+                    "ordem_enviada":     True,
+                    "ordem_confirmada":  False,
                     "pendente_confirmacao": True,
-                    "nao_reenviar":        True,
-                    "ordem_enviada":       True,
+                    "nao_reenviar":      True,
+                    "transitorio":       True,
                     "erro": (
-                        "Timeout aguardando confirmação WebSocket. "
-                        "A ordem pode ter sido aceita pela corretora. "
-                        "Não reenviar automaticamente."
+                        "Timeout aguardando confirmação da Quotex. "
+                        "A ordem pode ter sido aceita; consulte a plataforma "
+                        "antes de qualquer nova tentativa."
                     ),
                 }
             # ── Ordem rejeitada pela corretora ───────────────────────────────────
@@ -1048,21 +1053,26 @@ def quotex_operar(ativo: str, direcao: str, valor: float, duracao: int) -> dict:
         # Situação idêntica ao timeout interno do buy(): a ordem pode ter sido
         # aceita. Não cancelar o future nem reenviar.
         print(
-            f"[Quotex] ⚠️ ETAPA: TIMEOUT THREAD | "
-            f"ativo={ativo} | dir={direcao_norm} | val={valor:.2f} | "
-            f"timeout={timeout_buy}s | "
-            f"AÇÃO: ordem pode estar ativa na corretora — NÃO reenviar"
+            f"[Quotex] ⚠️ CONFIRMAÇÃO PENDENTE (timeout thread) | "
+            f"ativo={ativo} | direção={direcao_norm} | "
+            f"valor={valor} | duração={duracao}s | timeout={timeout_buy}s"
+        )
+        print(
+            "[Quotex] ⚠️ Não é possível confirmar se a ordem foi aceita. "
+            "Não reenviar automaticamente."
         )
         return {
-            "ok":                  False,
-            "etapa":               "timeout_thread",
+            "ok":                False,
+            "etapa":             "confirmacao_pendente",
+            "ordem_enviada":     True,
+            "ordem_confirmada":  False,
             "pendente_confirmacao": True,
-            "nao_reenviar":        True,
-            "ordem_enviada":       True,
+            "nao_reenviar":      True,
+            "transitorio":       True,
             "erro": (
-                "Timeout aguardando resposta do conector. "
-                "A ordem pode ter sido aceita pela corretora. "
-                "Não reenviar automaticamente."
+                "Timeout aguardando resposta da compra. "
+                "A ordem pode ter sido aceita; verifique a plataforma "
+                "antes de qualquer nova tentativa."
             ),
         }
     except Exception as e:
