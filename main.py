@@ -4520,9 +4520,11 @@ def rota_pocket_login_page():
       </div>
     </div>
 
-    <button class="btn btn-blue" onclick="abrirPocketOption()" style="margin-bottom:6px;">
+    <a id="btn-abrir-po" href="https://pocketoption.com/pt/login/" target="_blank" rel="noopener"
+       class="btn btn-blue" style="margin-bottom:6px; text-decoration:none; display:block;"
+       onclick="_onClicarAbrirPO(event)">
       🌐 ② ABRIR POCKET OPTION
-    </button>
+    </a>
     <button class="btn btn-warn" onclick="mostrarManual()"
             style="font-size:0.68rem; padding:9px;">
       ✏️ Já tenho o SSID — colar manualmente
@@ -4704,14 +4706,18 @@ let _polling = false;
 let _polTimer = null;
 
 function abrirPocketOption() {{
-  // Abre a corretora PRIMEIRO (sincronamente no clique) para evitar bloqueio de popup
-  window.open('https://pocketoption.com/pt/login/', '_blank');
-  // Limpa captura anterior e troca tela depois
+  // Limpa captura anterior e inicia polling
   fetch(SRV + '/pocket/ssid-captura/limpar', {{method:'POST'}}).catch(()=>{{}});
   trocarTela('tela-prog');
   msgP('Aguardando login na Pocket Option...');
   msgS('Clique o favorito "GarraBot SSID-PO" após fazer login');
   iniciarPolling();
+}}
+
+function _onClicarAbrirPO(evt) {{
+  // O <a href> já abre a PO nativamente (nunca bloqueado)
+  // Só inicia o polling e troca a tela
+  abrirPocketOption();
 }}
 
 function iniciarPolling() {{
