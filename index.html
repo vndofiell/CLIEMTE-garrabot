@@ -9418,9 +9418,10 @@ function processCommand(cmd) {
     } else if (command === 'iniciar') {
         const _estAtual = ESTRATEGIAS[bot.estrategia];
         const _ehQuotex = _estAtual && _estAtual.tipo === 'hma_quotex';
+        const _quotexConectada = _qx.status === 'conectado';
         if (_ehQuotex) {
-            if (_qx.status !== 'conectado') return print("ACESSO NEGADO: CONECTE A QUOTEX PRIMEIRO (botão 🟠 Quotex no painel)", "log-loss");
-        } else {
+            if (!_quotexConectada) return print("ACESSO NEGADO: CONECTE A QUOTEX PRIMEIRO (botão 🟠 Quotex no painel)", "log-loss");
+        } else if (!_quotexConectada) {
             if (!bot.token) return print("ACESSO NEGADO: EXECUTE 'conectar' PRIMEIRO (login na Deriv)", "log-loss");
         }
         if (bot._metaEncerrada) return print("🔒 SISTEMA ENCERRADO — Meta atingida. Use 'resetar placar' para iniciar nova sessão.", "log-loss");
