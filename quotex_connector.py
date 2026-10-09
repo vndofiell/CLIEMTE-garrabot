@@ -582,11 +582,11 @@ def _quotex_conectar_thread(email: str, senha: str, tipo_conta: str,
         # Salva credenciais + SSID após conexão bem-sucedida
         quotex_cfg_salvar(email, senha, tipo_conta, ssid)
 
-        # ── Keepalive: ping a cada 20s + detecção de queda do WebSocket ─────
+        # ── Keepalive: ping a cada 10s + detecção de queda do WebSocket ─────
         async def _keepalive():
             _falhas = 0
             while True:
-                await asyncio.sleep(20)
+                await asyncio.sleep(10)
                 try:
                     with _QUOTEX_LOCK:
                         ainda_ativo = _QUOTEX_STATE.get("client") is client
@@ -596,10 +596,10 @@ def _quotex_conectar_thread(email: str, senha: str, tipo_conta: str,
                     _falhas = 0  # ping ok — reseta contador
                 except Exception as _ke:
                     _falhas += 1
-                    print(f"[Quotex] ⚠️ Keepalive falhou ({_falhas}/3): {_ke}")
-                    if _falhas >= 3:
-                        # 3 pings seguidos falharam — WS caiu; dispara reconexão
-                        print("[Quotex] 🔄 Keepalive: 3 falhas consecutivas — reconectando...")
+                    print(f"[Quotex] ⚠️ Keepalive falhou ({_falhas}/2): {_ke}")
+                    if _falhas >= 2:
+                        # 2 pings seguidos falharam — WS caiu; dispara reconexão
+                        print("[Quotex] 🔄 Keepalive: 2 falhas consecutivas — reconectando...")
                         with _QUOTEX_LOCK:
                             _e  = _QUOTEX_STATE.get("email", "")
                             _s  = _QUOTEX_STATE.get("senha", "")
@@ -742,8 +742,8 @@ def _quotex_reconectar_bg(email: str, senha: str, tipo_conta: str, ssid: str = "
     def _reconectar():
         global _reconectar_bg_ativo
         try:
-            print("[Quotex] 🔄 Reconexão automática em 10s...")
-            time.sleep(10)
+            print("[Quotex] 🔄 Reconexão automática em 3s...")
+            time.sleep(3)
             with _QUOTEX_LOCK:
                 status_atual = _QUOTEX_STATE.get("status")
             # Só reconecta se ainda estiver desconectado/erro

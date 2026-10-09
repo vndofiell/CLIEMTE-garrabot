@@ -30863,8 +30863,8 @@ async function _qxHmaQCiclo() {
             }
         } catch (_e) {}
         print('🟠 HMA QUOTEX: ⚠️ Quotex não conectada — aguardando reconexão...', 'log-info');
-        // Verifica novamente em 15s sem travar o timer principal
-        setTimeout(() => { if (_qxHmaQ.rodando) _qxHmaQCiclo(); }, 15000);
+        // Verifica novamente em 5s sem travar o timer principal
+        setTimeout(() => { if (_qxHmaQ.rodando) _qxHmaQCiclo(); }, 5000);
         return;
     }
     if (_qxHmaQ._cicloRodando) return;
@@ -31387,7 +31387,7 @@ function _qxHmaQOperar(direcao, contexto, est) {
                         if (s.status === 'conectado') { clearInterval(_rcPoll); print('🟠 HMA QUOTEX: ✅ Reconectado!', 'log-win'); }
                         else if (_rcTent >= 11) { clearInterval(_rcPoll); print('🟠 HMA QUOTEX: ⚠️ Sem reconexão após 90s', 'log-info'); }
                     }).catch(() => { if (_rcTent >= 11) clearInterval(_rcPoll); });
-                }, 8000);
+                }, 5000);
                 return;
             }
             _qxHmaQ.opBloqueada = false;
