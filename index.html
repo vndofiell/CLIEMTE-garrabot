@@ -1662,6 +1662,126 @@
 </div>
 
 <!-- ══════════════════════════════════════
+     MODAL — POCKET OPTION
+════════════════════════════════════════ -->
+<div id="modal-pocket" class="modal-overlay" style="display:none;">
+    <div class="modal-box" style="max-width:380px;">
+        <div class="modal-title" style="color:#00a0ff;">🔵 CONECTAR POCKET OPTION</div>
+        <div class="modal-sub" id="po-modal-sub">Informe suas credenciais da Pocket Option</div>
+
+        <!-- Status badge -->
+        <div id="po-status-badge" style="
+            display:none; margin:8px 0 4px; padding:6px 10px; border-radius:4px;
+            font-family:'Share Tech Mono'; font-size:0.72rem;
+            letter-spacing:1px; text-align:center;
+        "></div>
+
+        <!-- Campos de login — email + senha (captura automática de SSID) -->
+        <div id="po-form-fields">
+            <div style="margin-bottom:8px;">
+                <label style="font-size:0.65rem; color:#888; letter-spacing:1px;">EMAIL</label>
+                <input id="po-email" type="email" autocomplete="off" placeholder="seu@email.com"
+                    style="width:100%; background:#0a0a12; border:1px solid rgba(0,160,255,0.5);
+                           color:#00a0ff; padding:8px 10px; font-family:'Share Tech Mono';
+                           font-size:0.8rem; border-radius:4px; outline:none; margin-top:3px;
+                           box-sizing:border-box;">
+            </div>
+            <div style="margin-bottom:12px;">
+                <label style="font-size:0.65rem; color:#888; letter-spacing:1px;">SENHA</label>
+                <input id="po-senha" type="password" autocomplete="off" placeholder="••••••••"
+                    style="width:100%; background:#0a0a12; border:1px solid rgba(0,160,255,0.5);
+                           color:#00a0ff; padding:8px 10px; font-family:'Share Tech Mono';
+                           font-size:0.8rem; border-radius:4px; outline:none; margin-top:3px;
+                           box-sizing:border-box;">
+            </div>
+            <div style="display:flex; gap:8px; margin-bottom:12px;">
+                <button onclick="pocketConectar('DEMO')"
+                    style="flex:1; padding:9px; background:rgba(0,160,255,0.08);
+                           border:1px solid #00a0ff; color:#00a0ff;
+                           font-family:'Share Tech Mono'; font-size:0.75rem;
+                           letter-spacing:1px; cursor:pointer; border-radius:4px;">
+                    🧪 DEMO
+                </button>
+                <button onclick="pocketConectar('REAL')"
+                    style="flex:1; padding:9px; background:rgba(0,160,255,0.08);
+                           border:1px solid #0066ff; color:#0066ff;
+                           font-family:'Share Tech Mono'; font-size:0.75rem;
+                           letter-spacing:1px; cursor:pointer; border-radius:4px;">
+                    💰 REAL
+                </button>
+            </div>
+
+            <!-- Divisória -->
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
+                <div style="flex:1; height:1px; background:rgba(255,255,255,0.08);"></div>
+                <span style="font-size:0.58rem; color:#444; letter-spacing:1px;">OU COLAR SSID MANUALMENTE</span>
+                <div style="flex:1; height:1px; background:rgba(255,255,255,0.08);"></div>
+            </div>
+
+            <!-- SSID manual -->
+            <div style="margin-bottom:12px;">
+                <input id="po-ssid-inp" type="text" autocomplete="off"
+                    placeholder='42["auth",{"session":"..."}]'
+                    style="width:100%; background:#0a0a12;
+                           border:1px solid rgba(0,207,255,0.4);
+                           color:#00cfff; padding:8px 10px;
+                           font-family:'Share Tech Mono'; font-size:0.72rem;
+                           border-radius:4px; outline:none; margin-bottom:8px;
+                           box-sizing:border-box;"
+                    oninput="poSsidVerificar(this.value)">
+                <div style="display:flex; gap:8px;">
+                    <button id="po-btn-ssid-demo" onclick="pocketConectarSsid('DEMO')" disabled
+                        style="flex:1; padding:9px; background:rgba(0,160,255,0.08);
+                               border:1px solid #00a0ff; color:#00a0ff;
+                               font-family:'Share Tech Mono'; font-size:0.75rem;
+                               letter-spacing:1px; cursor:default; border-radius:4px; opacity:0.35;">
+                        🧪 DEMO
+                    </button>
+                    <button id="po-btn-ssid-real" onclick="pocketConectarSsid('REAL')" disabled
+                        style="flex:1; padding:9px; background:rgba(0,160,255,0.08);
+                               border:1px solid #0066ff; color:#0066ff;
+                               font-family:'Share Tech Mono'; font-size:0.75rem;
+                               letter-spacing:1px; cursor:default; border-radius:4px; opacity:0.35;">
+                        💰 REAL
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Progresso do login automático -->
+        <div id="po-progress" style="display:none; text-align:center;
+            padding:14px 10px; margin-bottom:10px;
+            background:rgba(0,0,0,0.3); border:1px solid rgba(0,160,255,0.25);
+            border-radius:6px; font-family:'Share Tech Mono'; font-size:0.72rem;">
+            <div id="po-progress-icon" style="font-size:1.2rem; margin-bottom:4px;">⏳</div>
+            <div id="po-progress-msg" style="color:#00a0ff; letter-spacing:1px; margin-bottom:4px;">
+                Fazendo login na Pocket Option...
+            </div>
+            <div id="po-progress-sub" style="color:#555; font-size:0.6rem;">
+                Aguarde (~10-20s)
+            </div>
+        </div>
+
+        <!-- Painel conectado -->
+        <div id="po-painel-conectado" style="display:none; text-align:center; padding:4px 0;">
+            <div style="font-size:1.8rem; margin-bottom:6px;">🟢</div>
+            <div style="font-family:'Share Tech Mono'; color:#00ff41; font-size:0.8rem; letter-spacing:2px;">CONECTADA</div>
+            <div style="color:#aaa; font-size:0.7rem; margin:6px 0 2px;" id="po-info-conta"></div>
+            <div style="color:#00a0ff; font-size:1rem; font-weight:bold; margin:8px 0;" id="po-info-saldo"></div>
+            <button onclick="pocketDesconectar()"
+                style="width:100%; padding:9px; margin-top:6px;
+                       background:rgba(255,68,68,0.08); border:1px solid #f44;
+                       color:#f44; font-family:'Share Tech Mono';
+                       font-size:0.75rem; letter-spacing:1px; cursor:pointer; border-radius:4px;">
+                🔌 DESCONECTAR
+            </button>
+        </div>
+
+        <button class="modal-cancel" onclick="fecharModal('modal-pocket')" style="margin-top:4px;">✕ Fechar</button>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════
      MODAL — ESTRATÉGIA (lista)
 ════════════════════════════════════════ -->
 <div id="modal-estrategia" class="modal-overlay">
@@ -2274,6 +2394,11 @@
         style="border-color:rgba(255,80,0,0.55); color:#ff6b00;">
         🟠 Quotex
         <span class="cmd-label" id="lbl-quotex-status" style="color:#57606a;">Desconectada</span>
+    </button>
+    <button class="cmd-btn" id="btn-pocket-conectar" onclick="pocketAbrirModal()"
+        style="border-color:rgba(0,160,255,0.55); color:#00a0ff;">
+        🔵 Pocket Option
+        <span class="cmd-label" id="lbl-pocket-status" style="color:#57606a;">Desconectada</span>
     </button>
     <button class="cmd-btn" id="btn-trocar-conta" onclick="trocarContaPrincipal()"
         style="display:none; border-color:rgba(251,191,36,0.5); color:#fbbf24;">
@@ -27291,6 +27416,348 @@ setInterval(() => {
         })
         .catch(() => {});
 }, 1000);
+
+// ════════════════════════════════════════════════════════════════════════════
+// POCKET OPTION — Integração frontend
+// ════════════════════════════════════════════════════════════════════════════
+
+const _po = {
+    status:  'desconectado',  // desconectado | conectando | conectado | erro
+    isDemo:  true,
+    saldo:   0,
+    pollTimer: null,
+    autoTimer: null,
+};
+
+// ── Helpers UI ───────────────────────────────────────────────────────────────
+function _poBadge(msg, cor) {
+    const el = document.getElementById('po-status-badge');
+    if (!el) return;
+    el.style.display    = 'block';
+    el.style.color      = cor || '#aaa';
+    el.style.border     = '1px solid ' + (cor || '#333');
+    el.style.background = 'rgba(0,0,0,0.4)';
+    el.textContent      = msg;
+}
+
+function _poAtualizarBotao(status, extra) {
+    const btn = document.getElementById('btn-pocket-conectar');
+    const lbl = document.getElementById('lbl-pocket-status');
+    if (!btn || !lbl) return;
+    if (status === 'conectado') {
+        btn.style.borderColor = 'rgba(0,255,65,0.6)';
+        btn.style.color       = '#00ff41';
+        btn.firstChild.textContent = '🟢 Pocket Option';
+        lbl.style.color       = '#00ff41';
+        lbl.textContent       = extra || 'Conectada';
+    } else if (status === 'conectando') {
+        btn.style.borderColor = 'rgba(255,189,46,0.6)';
+        btn.style.color       = '#ffbd2e';
+        btn.firstChild.textContent = '🟡 Pocket Option';
+        lbl.style.color       = '#ffbd2e';
+        lbl.textContent       = 'Conectando...';
+    } else if (status === 'erro') {
+        btn.style.borderColor = 'rgba(255,68,68,0.6)';
+        btn.style.color       = '#f44';
+        btn.firstChild.textContent = '🔴 Pocket Option';
+        lbl.style.color       = '#f44';
+        lbl.textContent       = extra || 'Erro';
+    } else {
+        btn.style.borderColor = 'rgba(0,160,255,0.55)';
+        btn.style.color       = '#00a0ff';
+        btn.firstChild.textContent = '🔵 Pocket Option';
+        lbl.style.color       = '#57606a';
+        lbl.textContent       = 'Desconectada';
+    }
+}
+
+// ── Mostra/oculta seções internas do modal ───────────────────────────────────
+function _poMostrarSecao(secao) {
+    // secao: 'form' | 'progress' | 'conectado'
+    const form   = document.getElementById('po-form-fields');
+    const prog   = document.getElementById('po-progress');
+    const painel = document.getElementById('po-painel-conectado');
+    if (form)   form.style.display   = (secao === 'form')      ? 'block' : 'none';
+    if (prog)   prog.style.display   = (secao === 'progress')  ? 'block' : 'none';
+    if (painel) painel.style.display = (secao === 'conectado') ? 'block' : 'none';
+}
+
+// ── Renderiza estado atual no modal ──────────────────────────────────────────
+function _poRenderizarEstado(d) {
+    if (!d) return;
+    _po.status = d.status || 'desconectado';
+    const sub = document.getElementById('po-modal-sub');
+
+    if (d.status === 'conectado') {
+        _poMostrarSecao('conectado');
+        if (sub) sub.textContent = 'Sessão ativa na Pocket Option';
+        const infoConta = document.getElementById('po-info-conta');
+        const infoSaldo = document.getElementById('po-info-saldo');
+        const tipo = d.is_demo ? 'DEMO' : 'REAL';
+        if (infoConta) infoConta.textContent = tipo;
+        if (infoSaldo) infoSaldo.textContent = 'Saldo: $' + parseFloat(d.saldo || 0).toFixed(2);
+        _poBadge('✅ CONECTADA — ' + tipo, '#00ff41');
+        _poAtualizarBotao('conectado', tipo + ' • $' + parseFloat(d.saldo || 0).toFixed(2));
+        _po.saldo  = parseFloat(d.saldo || 0);
+        _po.isDemo = !!d.is_demo;
+        if (_po.saldo > 0 && typeof updateHeader === 'function') updateHeader(_po.saldo);
+
+    } else if (d.status === 'conectando') {
+        _poMostrarSecao('progress');
+        if (sub) sub.textContent = 'Aguardando autenticação...';
+        _poBadge('⏳ CONECTANDO...', '#ffbd2e');
+        _poAtualizarBotao('conectando');
+
+    } else if (d.status === 'erro') {
+        _poMostrarSecao('form');
+        if (sub) sub.textContent = 'Informe suas credenciais da Pocket Option';
+        _poBadge('❌ ERRO: ' + (d.erro || 'falha na conexão').substring(0, 60), '#f44');
+        _poAtualizarBotao('erro', d.erro ? d.erro.substring(0, 30) : 'Erro');
+
+    } else {
+        _poMostrarSecao('form');
+        if (sub) sub.textContent = 'Informe suas credenciais da Pocket Option';
+        const badge = document.getElementById('po-status-badge');
+        if (badge) badge.style.display = 'none';
+        _poAtualizarBotao('desconectado');
+    }
+}
+
+// ── Abrir modal ───────────────────────────────────────────────────────────────
+const _PO_EMAIL_KEY = 'po_ultimo_email';
+
+function pocketAbrirModal() {
+    // Pré-preenche email salvo
+    try {
+        const email = localStorage.getItem(_PO_EMAIL_KEY) || '';
+        const f = document.getElementById('po-email');
+        if (f && !f.value && email) f.value = email;
+    } catch(_) {}
+
+    // Consulta estado atual
+    fetch('/pocket/status')
+        .then(r => r.json())
+        .then(d => _poRenderizarEstado(d))
+        .catch(() => {});
+
+    const m = document.getElementById('modal-pocket');
+    if (m) m.style.display = 'flex';
+}
+
+// ── Habilita botões SSID manual quando campo tem conteúdo ────────────────────
+function poSsidVerificar(val) {
+    const ok  = val && val.trim().length >= 10;
+    const bd  = document.getElementById('po-btn-ssid-demo');
+    const br  = document.getElementById('po-btn-ssid-real');
+    if (bd) { bd.disabled = !ok; bd.style.opacity = ok ? '1' : '0.35'; bd.style.cursor = ok ? 'pointer' : 'default'; }
+    if (br) { br.disabled = !ok; br.style.opacity = ok ? '1' : '0.35'; br.style.cursor = ok ? 'pointer' : 'default'; }
+}
+
+// ── Conectar com email + senha (captura SSID automaticamente) ────────────────
+function pocketConectar(tipo) {
+    const email = (document.getElementById('po-email')?.value || '').trim();
+    const senha = (document.getElementById('po-senha')?.value || '').trim();
+    if (!email || !senha) {
+        _poBadge('⚠️ Preencha email e senha.', '#ffbd2e');
+        return;
+    }
+
+    // Salva email para próxima vez
+    try { localStorage.setItem(_PO_EMAIL_KEY, email); } catch(_) {}
+
+    const isDemo = (tipo !== 'REAL');
+    _poBadge('⏳ Fazendo login automático... (~10-20s)', '#ffbd2e');
+    _poAtualizarBotao('conectando');
+    _poMostrarSecao('progress');
+
+    const progMsg = document.getElementById('po-progress-msg');
+    const progSub = document.getElementById('po-progress-sub');
+    if (progMsg) progMsg.textContent = 'Fazendo login na Pocket Option...';
+    if (progSub) progSub.textContent = 'Capturando SSID automaticamente (~10-20s)';
+
+    // Inicia o processo em background no servidor
+    fetch('/pocket/ssid-auto/iniciar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, senha, is_demo: isDemo }),
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (!d.ok) {
+            _poBadge('❌ ' + (d.erro || 'Falha ao iniciar.'), '#f44');
+            _poAtualizarBotao('erro', d.erro || 'Falha');
+            _poMostrarSecao('form');
+            return;
+        }
+        // Inicia poll de status
+        _poIniciarPoll(isDemo);
+    })
+    .catch(e => {
+        _poBadge('❌ Erro de rede: ' + e.message, '#f44');
+        _poAtualizarBotao('erro', 'Erro de rede');
+        _poMostrarSecao('form');
+    });
+}
+
+// ── Conectar com SSID colado manualmente ────────────────────────────────────
+function pocketConectarSsid(tipo) {
+    const ssid = (document.getElementById('po-ssid-inp')?.value || '').trim();
+    if (!ssid || ssid.length < 10) {
+        _poBadge('⚠️ Cole um SSID válido.', '#ffbd2e');
+        return;
+    }
+    const isDemo = (tipo !== 'REAL');
+    _poBadge('⏳ Conectando com SSID...', '#ffbd2e');
+    _poAtualizarBotao('conectando');
+    _poMostrarSecao('progress');
+    const progMsg = document.getElementById('po-progress-msg');
+    if (progMsg) progMsg.textContent = 'Conectando via WebSocket...';
+
+    fetch('/pocket/conectar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ssid, is_demo: isDemo }),
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (d.ok) {
+            _poRenderizarEstado({ status: 'conectado', is_demo: isDemo, saldo: d.saldo || 0 });
+            fecharModal('modal-pocket');
+            if (typeof print === 'function')
+                print('🔵 POCKET OPTION conectada (' + (isDemo ? 'DEMO' : 'REAL') + ') via SSID.', 'log-info');
+        } else {
+            _poBadge('❌ ' + (d.erro || 'Falha na conexão.'), '#f44');
+            _poAtualizarBotao('erro', d.erro || 'Erro');
+            _poMostrarSecao('form');
+        }
+    })
+    .catch(e => {
+        _poBadge('❌ Erro: ' + e.message, '#f44');
+        _poAtualizarBotao('erro', 'Erro de rede');
+        _poMostrarSecao('form');
+    });
+}
+
+// ── Poll de status do login automático ───────────────────────────────────────
+function _poIniciarPoll(isDemo) {
+    if (_po.autoTimer) clearInterval(_po.autoTimer);
+    let tentativas = 0;
+    const MAX = 60; // 60 × 1s = 60s de timeout
+
+    _po.autoTimer = setInterval(() => {
+        tentativas++;
+        fetch('/pocket/ssid-auto/status')
+            .then(r => r.json())
+            .then(d => {
+                const progMsg = document.getElementById('po-progress-msg');
+                const progSub = document.getElementById('po-progress-sub');
+                const progIco = document.getElementById('po-progress-icon');
+
+                if (d.status === 'conectado') {
+                    clearInterval(_po.autoTimer);
+                    _poRenderizarEstado({ status: 'conectado', is_demo: isDemo, saldo: d.saldo || 0 });
+                    fecharModal('modal-pocket');
+                    if (typeof print === 'function')
+                        print('🔵 POCKET OPTION conectada (' + (isDemo ? 'DEMO' : 'REAL') + ')!', 'log-info');
+
+                } else if (d.status === 'capturado') {
+                    if (progMsg) progMsg.textContent = '✅ SSID capturado! Conectando ao WebSocket...';
+                    if (progIco) progIco.textContent = '🔗';
+
+                } else if (d.status === 'erro') {
+                    clearInterval(_po.autoTimer);
+                    _poBadge('❌ ' + (d.erro || 'Falha no login.'), '#f44');
+                    _poAtualizarBotao('erro', d.erro || 'Erro');
+                    _poMostrarSecao('form');
+                    const sub = document.getElementById('po-modal-sub');
+                    if (sub) sub.textContent = d.erro || 'Falha ao conectar.';
+
+                } else if (d.status === 'otp_necessario') {
+                    clearInterval(_po.autoTimer);
+                    _poBadge('🔐 OTP/2FA necessário — verifique seu e-mail.', '#ffbd2e');
+                    _poMostrarSecao('form');
+
+                } else {
+                    // capturando
+                    const dots = '.'.repeat((tentativas % 3) + 1);
+                    if (progMsg) progMsg.textContent = 'Fazendo login na Pocket Option' + dots;
+                    if (progSub) progSub.textContent = `Aguarde... (${tentativas}s)`;
+                    if (tentativas >= MAX) {
+                        clearInterval(_po.autoTimer);
+                        _poBadge('❌ Timeout — tente novamente.', '#f44');
+                        _poAtualizarBotao('erro', 'Timeout');
+                        _poMostrarSecao('form');
+                    }
+                }
+            })
+            .catch(() => { if (tentativas >= MAX) clearInterval(_po.autoTimer); });
+    }, 1000);
+}
+
+// ── Desconectar ───────────────────────────────────────────────────────────────
+function pocketDesconectar() {
+    fetch('/pocket/desconectar', { method: 'POST' })
+        .then(r => r.json())
+        .then(() => {
+            _poRenderizarEstado({ status: 'desconectado' });
+            if (typeof print === 'function')
+                print('🔌 POCKET OPTION desconectada.', 'log-info');
+        })
+        .catch(() => {});
+}
+
+// ── Poll periódico de saldo (a cada 8s) ──────────────────────────────────────
+let _poUltimoSaldo = 0;
+setInterval(() => {
+    if (_po.status !== 'conectado' && _poUltimoSaldo === 0) return;
+    fetch('/pocket/saldo')
+        .then(r => r.json())
+        .then(d => {
+            if (!d.ok || !d.saldo) return;
+            const v = parseFloat(d.saldo || 0);
+            if (v <= 0) return;
+            _poUltimoSaldo = v;
+            _po.saldo = v;
+            const lbl = document.getElementById('lbl-pocket-status');
+            if (lbl) lbl.textContent = (_po.isDemo ? 'DEMO' : 'REAL') + ' • $' + v.toFixed(2);
+            const infoSaldo = document.getElementById('po-info-saldo');
+            if (infoSaldo) infoSaldo.textContent = 'Saldo: $' + v.toFixed(2);
+            if (typeof updateHeader === 'function') updateHeader(v);
+        })
+        .catch(() => {});
+}, 8000);
+
+// ── Poll de resultados Pocket Option (a cada 1.5s) ───────────────────────────
+setInterval(() => {
+    if (_po.status !== 'conectado' && _poUltimoSaldo === 0) return;
+    fetch('/pocket/resultados-pendentes')
+        .then(r => r.json())
+        .then(d => {
+            if (!d.resultados || d.resultados.length === 0) return;
+            d.resultados.forEach(r => {
+                // Reutiliza o mesmo handler de resultado da Quotex se disponível
+                if (typeof _qxProcessarResultado === 'function') _qxProcessarResultado(r);
+            });
+        })
+        .catch(() => {});
+}, 1500);
+
+// ── Verifica status ao carregar a página (restaura sessão salva) ─────────────
+(function _poRestaurarSessao() {
+    fetch('/pocket/status')
+        .then(r => r.json())
+        .then(d => {
+            if (d.status === 'conectado') {
+                _po.status = 'conectado';
+                _po.saldo  = parseFloat(d.saldo || 0);
+                _po.isDemo = !!d.is_demo;
+                _poAtualizarBotao('conectado',
+                    (d.is_demo ? 'DEMO' : 'REAL') + ' • $' + _po.saldo.toFixed(2));
+                if (_po.saldo > 0 && typeof updateHeader === 'function') updateHeader(_po.saldo);
+            }
+        })
+        .catch(() => {});
+})();
 
 // ════════════════════════════════════════════════════════════════════════════
 // TRADE STATUS EM TEMPO REAL — Cronômetro regressivo + ícone Ganhando/Perdendo
