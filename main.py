@@ -4384,15 +4384,23 @@ _PO_SSID_CAPTURA_LOCK = threading.Lock()
 @app.route('/pocket/ssid-captura/receber', methods=['POST', 'OPTIONS'])
 def rota_pocket_ssid_captura_receber():
     """Recebe o SSID capturado pelo bookmarklet JS do usuário após login na Pocket Option."""
+    _cors_headers = {
+        'Access-Control-Allow-Origin':  '*',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    }
     if request.method == 'OPTIONS':
         resp = jsonify({"ok": True})
-        resp.headers['Access-Control-Allow-Origin']  = '*'
-        resp.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+        for k, v in _cors_headers.items():
+            resp.headers[k] = v
         return resp
     dados = request.get_json(silent=True) or {}
     ssid  = (dados.get("ssid") or "").strip()
     if not ssid or len(ssid) < 10:
-        return jsonify({"ok": False, "erro": "SSID inválido."}), 400
+        resp = jsonify({"ok": False, "erro": "SSID inválido."})
+        for k, v in _cors_headers.items():
+            resp.headers[k] = v
+        return resp, 400
 
     with _PO_SSID_CAPTURA_LOCK:
         _PO_SSID_CAPTURA_STATE.update({"ssid": ssid, "status": "capturado", "ts": time.time()})
@@ -4401,7 +4409,8 @@ def rota_pocket_ssid_captura_receber():
     pocket_ssid_definir(ssid)
     print(f"[PocketOption] 🍪 SSID capturado via bookmarklet! len={len(ssid)}")
     resp = jsonify({"ok": True})
-    resp.headers['Access-Control-Allow-Origin'] = '*'
+    for k, v in _cors_headers.items():
+        resp.headers[k] = v
     return resp
 
 
@@ -4487,8 +4496,9 @@ def rota_pocket_login_page():
     <div class="msg-s" style="margin-bottom:14px; text-align:left;">
       <b style="color:#00a0ff;">① ARRASTE</b> o botão abaixo para a barra de favoritos<br>
       <b style="color:#00a0ff;">② ABRA</b> a Pocket Option e faça login<br>
-      <b style="color:#00a0ff;">③ CLIQUE</b> o favorito na aba da Pocket Option<br>
-      <span style="color:#ffbd2e;">⚡ Se nada aparecer: recarregue a página da PO (F5)</span>
+      <b style="color:#00a0ff;">③ VÁ para a aba da Pocket Option</b><br>
+      <b style="color:#00ff41;">④ CLIQUE</b> <b style="color:#fff;">o favorito</b> <b style="color:#00ff41;">NA ABA DA POCKET OPTION</b><br>
+      <span style="color:#ffbd2e;">⚡ Se nada capturar: pressione F5 na PO e clique novamente</span>
     </div>
 
     <!-- BOOKMARKLET -->
@@ -4505,8 +4515,8 @@ def rota_pocket_login_page():
       </a>
       <div style="font-size:0.6rem; color:#555; margin-top:8px; line-height:1.6;">
         Arraste ↑ para a barra do navegador<br>
-        Depois clique na aba da Pocket Option e clique este favorito<br>
-        <span style="color:#ffbd2e;">Se nada acontecer: recarregue a Pocket Option (F5) primeiro</span>
+        <span style="color:#00ff41; font-weight:bold;">⚠️ Clique este favorito NA ABA DA POCKET OPTION, não aqui!</span><br>
+        <span style="color:#ffbd2e;">Se não capturar: F5 na Pocket Option e clique novamente</span>
       </div>
     </div>
 
@@ -4558,14 +4568,18 @@ def rota_pocket_login_page():
 <script>
 const SRV = "{servidor}";
 
-// ── Bookmarklet: captura o SSID interceptando o WebSocket da Pocket Option ────
-// Funciona em pocketoption.com, m.pocketoption.com e po.trade
-// Estratégia: monkey-patch WebSocket.prototype.send para capturar 42["auth",...]
+// ── Bookmarklet: captura SSID da Pocket Option ────────────────────────────────
+// IMPORTANTE: deve ser clicado NA ABA DA POCKET OPTION, não na aba do bot
 function _bookmarkletCode() {{
   var srv = SRV;
   return 'javascript:(function(){{' +
-    '"use strict";' +
     'var SRV="' + srv + '";' +
+    'var host=location.hostname;' +
+    // Verifica se está na página certa
+    'if(host.indexOf("pocketoption")<0&&host.indexOf("po.trade")<0&&host.indexOf("pocket")<0){{' +
+      'alert("⚠️ ATENÇÃO!\\n\\nEste favorito deve ser clicado NA ABA DA POCKET OPTION!\\n\\n1. Vá para a aba onde a Pocket Option está aberta\\n2. Clique neste favorito GarraBot SSID-PO lá");' +
+      'return;' +
+    '}}' +
     'var encontrado=false;' +
 
     // Função de envio ao bot
@@ -4576,14 +4590,65 @@ function _bookmarkletCode() {{
         'method:"POST",' +
         'headers:{{"Content-Type":"application/json"}},' +
         'body:JSON.stringify({{ssid:ssid}})' +
-      '}}).then(function(){{' +
-        'alert("✅ SSID capturado e enviado ao Bot Garra!\\n\\nVolte ao bot e clique DEMO ou REAL.");' +
+      '}}).then(function(r){{return r.json();}}).then(function(d){{' +
+        'if(d&&d.ok){{alert("✅ SSID capturado!\\n\\nVolte ao Bot Garra — a conexão será feita automaticamente.");}}' +
+        'else{{alert("❌ Erro: "+(d&&d.erro?d.erro:"falha ao enviar. Tente colar manualmente."));}}' +
       '}}).catch(function(e){{' +
-        'alert("Erro ao enviar: "+e.message);' +
+        'alert("❌ Erro de rede: "+e.message+"\\n\\nTente colar o SSID manualmente no Bot Garra.");' +
       '}});' +
     '}}' +
 
-    // ── Estratégia 1: Intercepta WebSocket.send (mais confiável) ──────────────
+    // ── Estratégia 1: Varre cookies (mais confiável para PO) ──────────────────
+    'try{{' +
+      'var ck=document.cookie;' +
+      'var cm=ck.match(/(?:^|;)\\s*(?:io|session|ssid|token|po_session)=([^;]{{20,}})/i);' +
+      'if(cm){{' +
+        'var tv=decodeURIComponent(cm[1]).trim();' +
+        'if(tv.indexOf("auth")>0){{enviar(tv);}}' +
+        'else{{' +
+          'var isDemo=(ck.indexOf("isDemo=1")>0||ck.indexOf("demo=1")>0)?1:0;' +
+          'var ssid=\'42["\'+\'auth\'+"\\",{{\\"session\\":\\""+tv+"\\"",isDemo?\',"isDemo":1\':\',\\"isDemo\\":0\']+\',"uid":0,"platform":2}}]\';' +
+          'enviar(ssid);' +
+        '}}' +
+      '}}' +
+    '}}catch(e){{}}' +
+
+    // ── Estratégia 2: localStorage — chaves comuns da PO ─────────────────────
+    'if(!encontrado){{' +
+      'var chaves=["session","token","ssid","auth","io","po_session","userSession","accessToken","access_token"];' +
+      'try{{' +
+        'for(var i=0;i<chaves.length;i++){{' +
+          'var v=localStorage.getItem(chaves[i])||"";' +
+          'if(v.length>20){{' +
+            'if(v.indexOf("auth")>0){{enviar(v);break;}}' +
+            'var ssid2=\'42["\'+\'auth\'+\'",{{\'+\'"session":"\'+v+\'","isDemo":1,"uid":0,"platform":2}}]\';' +
+            'enviar(ssid2);break;' +
+          '}}' +
+        '}}' +
+      '}}catch(e){{}}' +
+    '}}' +
+
+    // ── Estratégia 3: varre TODO o localStorage ───────────────────────────────
+    'if(!encontrado){{' +
+      'try{{' +
+        'for(var i=0;i<localStorage.length;i++){{' +
+          'var k=localStorage.key(i),v=localStorage.getItem(k)||"";' +
+          'if(v.length>30){{' +
+            'if(v.indexOf(\'"\'+\'session\'"\'+ \'"\')>0){{' +
+              'var m=v.match(/"session"\\s*:\\s*"([^"]{{20,}})"/);' +
+              'if(m){{var ssid3=\'42["\'+\'auth\'+\'",{{\'+\'"session":"\'+m[1]+\'","isDemo":1,"uid":0,"platform":2}}]\';enviar(ssid3);break;}}' +
+            '}}' +
+            'if(v[0]==="{{"||v[0]==="["){{' +
+              'try{{var j=JSON.parse(v);var s2=(j.session||j.token||j.ssid||j.auth||j.accessToken||"");' +
+              'if(s2&&s2.length>20){{var ssid4=\'42["\'+\'auth\'+\'",{{\'+\'"session":"\'+s2+\'","isDemo":1,"uid":0,"platform":2}}]\';enviar(ssid4);break;}}' +
+              '}}catch(ex){{}}' +
+            '}}' +
+          '}}' +
+        '}}' +
+      '}}catch(e){{}}' +
+    '}}' +
+
+    // ── Estratégia 4: Intercepta WebSocket.send para próxima reconexão ────────
     'try{{' +
       'var _orig=WebSocket.prototype.send;' +
       'WebSocket.prototype.send=function(data){{' +
@@ -4591,7 +4656,6 @@ function _bookmarkletCode() {{
         'if(encontrado)return;' +
         'try{{' +
           'var s=typeof data==="string"?data:"";' +
-          // Mensagem de auth: 42["auth",{{"session":"...","isDemo":...}}]
           'if(s.indexOf(\'"session"\')>0&&s.indexOf("auth")>0){{' +
             'var m=s.match(/"session"\\s*:\\s*"([^"]{{20,}})"/);' +
             'if(m){{' +
@@ -4601,78 +4665,13 @@ function _bookmarkletCode() {{
               'enviar(ssid);' +
             '}}' +
           '}}' +
-        '}}catch(e){{}}' +
-      '}};' +
-      // Intercepta também onmessage para capturar da resposta do servidor
-      'var _origAdd=WebSocket.prototype.addEventListener;' +
-      'WebSocket.prototype.addEventListener=function(evt,fn,opt){{' +
-        'if(evt==="message"&&!encontrado){{' +
-          'var _fn=function(e){{' +
-            'fn.call(this,e);' +
-            'if(encontrado)return;' +
-            'try{{' +
-              'var s=typeof e.data==="string"?e.data:"";' +
-              'if(s.indexOf(\'"session"\')>0){{' +
-                'var m=s.match(/"session"\\s*:\\s*"([^"]{{20,}})"/);' +
-                'if(m){{' +
-                  'var isDemo=(s.indexOf(\'isDemo":1\')>0||s.indexOf(\'isDemo": 1\')>0)?1:0;' +
-                  'var uid=0;var mu=s.match(/"uid"\\s*:\\s*(\\d+)/);if(mu)uid=parseInt(mu[1]);' +
-                  'var ssid=\'42["\'+\'auth\'+\'",{{\'+\'"session":"\'+m[1]+\'","isDemo\'+"\":"+isDemo+\',"uid":\'+uid+\',"platform":2}}]\';' +
-                  'enviar(ssid);' +
-                '}}' +
-              '}}' +
-            '}}catch(e){{}}' +
-          '}};' +
-          '_origAdd.call(this,evt,_fn,opt);' +
-          'return;' +
-        '}}' +
-        '_origAdd.call(this,evt,fn,opt);' +
+        '}}catch(ex){{}}' +
       '}};' +
     '}}catch(e){{}}' +
 
-    // ── Estratégia 2: Varre localStorage e sessionStorage ─────────────────────
+    // ── Fallback final ─────────────────────────────────────────────────────────
     'if(!encontrado){{' +
-      'var t="";' +
-      'try{{' +
-        'for(var i=0;i<localStorage.length;i++){{' +
-          'var k=localStorage.key(i),v=localStorage.getItem(k)||"";' +
-          'if(v.length>20&&(k==="session"||k==="token"||k==="io"||k==="ssid"||k==="auth")){{t=v;break;}}' +
-          // Tenta JSON dentro do localStorage
-          'if(v[0]==="{{" ||v[0]==="["){{' +
-            'try{{var j=JSON.parse(v);' +
-              'var s2=(j.session||j.token||j.ssid||j.auth||"");' +
-              'if(s2&&s2.length>20){{t=s2;break;}}' +
-            '}}catch(e){{}}' +
-          '}}' +
-        '}}' +
-      '}}catch(e){{}}' +
-      // Monta o SSID se achou um token puro
-      'if(t&&t.length>20&&t.indexOf("auth")<0){{' +
-        'var ssid=\'42["\'+\'auth\'+\'",{{\'+\'"session":"\'+t+\'","isDemo":1,"uid":0,"platform":2}}]\';' +
-        'enviar(ssid);' +
-      '}} else if(t&&t.indexOf("auth")>0){{' +
-        'enviar(t);' +
-      '}}' +
-    '}}' +
-
-    // ── Estratégia 3: Varre scripts inline ────────────────────────────────────
-    'if(!encontrado){{' +
-      'var scripts=document.querySelectorAll("script");' +
-      'for(var i=0;i<scripts.length;i++){{' +
-        'var txt=scripts[i].textContent;' +
-        'if(txt&&txt.indexOf("session")>0){{' +
-          'var m=txt.match(/"session"\\s*:\\s*"([a-zA-Z0-9%_\\-\\.~]{{20,}})"/);' +
-          'if(m){{' +
-            'var ssid=\'42["\'+\'auth\'+\'",{{\'+\'"session":"\'+m[1]+\'","isDemo":1,"uid":0,"platform":2}}]\';' +
-            'enviar(ssid);break;' +
-          '}}' +
-        '}}' +
-      '}}' +
-    '}}' +
-
-    // ── Fallback: instrui o usuário ────────────────────────────────────────────
-    'if(!encontrado){{' +
-      'alert("⚠️ SSID interceptado!\\nO bookmarklet foi instalado com sucesso.\\n\\nAgora RECARREGUE a página da Pocket Option (F5) enquanto esta aba do Bot Garra ainda está aberta — o SSID será capturado automaticamente ao reconectar.");' +
+      'alert("⚠️ Bookmarklet ativo!\\n\\nO interceptor foi instalado.\\nAgora pressione F5 para recarregar a Pocket Option — o SSID será capturado automaticamente na reconexão.\\n\\nNão feche esta aba!");' +
     '}}' +
 
   '}})()';
