@@ -4055,6 +4055,546 @@ def rota_quotex_notificar_resultado():
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# POCKET OPTION — Integração com a corretora Pocket Option
+# ═══════════════════════════════════════════════════════════════════════════════
+
+try:
+    from pocket_option_connector import (
+        pocket_conectar,
+        pocket_desconectar,
+        pocket_status,
+        pocket_conectado,
+        pocket_get_saldo,
+        pocket_operar,
+        pocket_resultado,
+        pocket_resultado_iniciar,
+        pocket_cfg_carregar,
+        pocket_cfg_salvar,
+        pocket_capturar_ssid,
+        pocket_ssid_status,
+        pocket_ssid_definir,
+    )
+    _POCKET_DISPONIVEL = True
+    print("[PocketOption] ✅ Módulo pocket_option_connector carregado com sucesso.")
+except ImportError as _po_err:
+    _POCKET_DISPONIVEL = False
+    print(f"[PocketOption] ⚠️  Módulo pocket_option_connector não disponível: {_po_err}")
+
+    # Stubs para não quebrar as rotas se a API não estiver instalada
+    def pocket_conectar(*a, **kw):
+        return {"ok": False, "erro": "pocketoptionapi_async não instalado."}
+    def pocket_desconectar():
+        return {"ok": False, "erro": "pocketoptionapi_async não instalado."}
+    def pocket_status():
+        return {"status": "indisponivel", "erro": "pocketoptionapi_async não instalado."}
+    def pocket_conectado():
+        return False
+    def pocket_get_saldo():
+        return {"ok": False, "erro": "pocketoptionapi_async não instalado."}
+    def pocket_operar(*a, **kw):
+        return {"ok": False, "erro": "pocketoptionapi_async não instalado."}
+    def pocket_resultado(*a, **kw):
+        return {"ok": False, "pendente": False, "erro": "pocketoptionapi_async não instalado."}
+    def pocket_resultado_iniciar(*a, **kw):
+        pass
+    def pocket_cfg_carregar():
+        return {"email": "", "senha": "", "ssid": "", "is_demo": True}
+    def pocket_cfg_salvar(*a, **kw):
+        pass
+    def pocket_capturar_ssid(*a, **kw):
+        return {"ok": False, "erro": "pocketoptionapi_async não instalado."}
+    def pocket_ssid_status():
+        return {"status": "indisponivel", "ssid": "", "erro": "pocketoptionapi_async não instalado.", "ts": 0}
+    def pocket_ssid_definir(ssid: str):
+        pass
+
+
+# Fila de resultados Pocket Option para o frontend processar o gerenciamento
+_pocket_resultados_fila = []
+_pocket_resultados_lock = threading.Lock()
+
+
+# ── Rota: conectar à Pocket Option ───────────────────────────────────────────
+# Estado do login automático em background (thread dedicada)
+_PO_AUTO_STATE: dict = {"status": "idle", "ssid": "", "erro": "", "ts": 0}
+_PO_AUTO_LOCK = threading.Lock()
+
+
+def _po_auto_thread(email: str, senha: str, is_demo: bool):
+    """Roda em background: captura SSID e conecta automaticamente."""
+    with _PO_AUTO_LOCK:
+        _PO_AUTO_STATE.update({"status": "capturando", "ssid": "", "erro": "", "ts": time.time()})
+    try:
+        resultado = pocket_capturar_ssid(email, senha)
+        if resultado.get("ok") and resultado.get("ssid"):
+            ssid = resultado["ssid"]
+            with _PO_AUTO_LOCK:
+                _PO_AUTO_STATE.update({"status": "capturado", "ssid": ssid, "ts": time.time()})
+            print(f"[PocketOption] ✅ SSID capturado via {resultado.get('metodo')}. Conectando...")
+            # Persiste config com is_demo antes de conectar
+            pocket_cfg_salvar(email=email, senha=senha, ssid=ssid, is_demo=is_demo)
+            res = pocket_conectar(ssid=ssid, is_demo=is_demo)
+            if res.get("ok"):
+                with _PO_AUTO_LOCK:
+                    _PO_AUTO_STATE["status"] = "conectado"
+            else:
+                with _PO_AUTO_LOCK:
+                    _PO_AUTO_STATE.update({"status": "erro", "erro": res.get("erro", "Falha na conexão.")})
+        elif resultado.get("otp"):
+            with _PO_AUTO_LOCK:
+                _PO_AUTO_STATE.update({"status": "otp_necessario", "erro": "OTP/2FA necessário.", "ts": time.time()})
+        else:
+            erro = resultado.get("erro", "Falha na captura do SSID.")
+            with _PO_AUTO_LOCK:
+                _PO_AUTO_STATE.update({"status": "erro", "erro": erro, "ts": time.time()})
+    except Exception as e:
+        import traceback as _tb; _tb.print_exc()
+        with _PO_AUTO_LOCK:
+            _PO_AUTO_STATE.update({"status": "erro", "erro": str(e), "ts": time.time()})
+
+
+# ── Rota: captura automática de SSID (só captura, não conecta) ───────────────
+@app.route('/pocket/capturar-ssid', methods=['POST'])
+def rota_pocket_capturar_ssid():
+    """
+    Faz login na Pocket Option e captura o SSID automaticamente.
+    Usa cascata: curl_cffi → requests.
+
+    Payload JSON:
+      { "email": "...", "senha": "...", "is_demo": true }
+
+    Retorna { ok, ssid, metodo, erro }.
+    """
+    dados   = request.get_json(silent=True) or {}
+    email   = str(dados.get("email", "")).strip()
+    senha   = str(dados.get("senha", "")).strip()
+    is_demo = bool(dados.get("is_demo", True))
+
+    if not email or not senha:
+        return jsonify({"ok": False, "erro": "Email e senha são obrigatórios."}), 400
+
+    # Persiste is_demo antes da captura (a função usa para montar o SSID)
+    pocket_cfg_salvar(email=email, senha=senha, is_demo=is_demo)
+
+    resultado = pocket_capturar_ssid(email, senha)
+    if resultado.get("otp"):
+        return jsonify({"ok": False, "otp": True, "erro": "OTP/2FA necessário."})
+    return jsonify(resultado)
+
+
+# ── Rota: captura de SSID + status (poll) ────────────────────────────────────
+@app.route('/pocket/capturar-ssid/status', methods=['GET'])
+def rota_pocket_capturar_ssid_status():
+    """Retorna o estado atual da captura de SSID."""
+    return jsonify(pocket_ssid_status())
+
+
+# ── Rota: login automático em background (captura + conecta) ─────────────────
+@app.route('/pocket/ssid-auto/iniciar', methods=['POST'])
+def rota_pocket_ssid_auto_iniciar():
+    """
+    Inicia login na Pocket Option em background:
+    captura o SSID automaticamente e conecta via WebSocket.
+    O frontend faz polling em /pocket/ssid-auto/status.
+
+    Payload JSON:
+      { "email": "...", "senha": "...", "is_demo": true }
+    """
+    dados   = request.get_json(silent=True) or {}
+    email   = str(dados.get("email", "")).strip()
+    senha   = str(dados.get("senha", "")).strip()
+    is_demo = bool(dados.get("is_demo", True))
+
+    if not email or not senha:
+        return jsonify({"ok": False, "erro": "Email e senha são obrigatórios."}), 400
+
+    with _PO_AUTO_LOCK:
+        if _PO_AUTO_STATE["status"] == "capturando":
+            return jsonify({"ok": True, "status": "capturando", "msg": "Já em andamento."})
+        _PO_AUTO_STATE.update({"status": "capturando", "ssid": "", "erro": "", "ts": time.time()})
+
+    # Persiste is_demo antes de iniciar
+    pocket_cfg_salvar(email=email, senha=senha, is_demo=is_demo)
+
+    t = threading.Thread(
+        target=_po_auto_thread,
+        args=(email, senha, is_demo),
+        daemon=True,
+        name="pocket-ssid-auto",
+    )
+    t.start()
+    return jsonify({"ok": True, "status": "capturando",
+                    "msg": "Fazendo login na Pocket Option... aguarde (~10-20s)"})
+
+
+# ── Rota: polling do login automático ────────────────────────────────────────
+@app.route('/pocket/ssid-auto/status', methods=['GET'])
+def rota_pocket_ssid_auto_status():
+    """Retorna o estado atual do login automático (poll)."""
+    with _PO_AUTO_LOCK:
+        return jsonify(dict(_PO_AUTO_STATE))
+
+
+# ── Rota: login-proxy (captura via servidor, spoofando IP do browser) ─────────
+@app.route('/pocket/login-proxy', methods=['POST'])
+def rota_pocket_login_proxy():
+    """
+    Faz login na Pocket Option no servidor usando curl_cffi,
+    spoofando o IP do usuário via X-Forwarded-For.
+    Retorna o SSID em caso de sucesso.
+
+    Payload JSON:
+      { "email": "...", "senha": "...", "is_demo": true }
+    """
+    import re as _re
+
+    dados   = request.get_json(silent=True) or {}
+    email   = str(dados.get("email", "")).strip()
+    senha   = str(dados.get("senha", "")).strip()
+    is_demo = bool(dados.get("is_demo", True))
+    user_ip = request.headers.get("X-Forwarded-For", request.remote_addr or "").split(",")[0].strip()
+    ua      = request.headers.get("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+
+    if not email or not senha:
+        return jsonify({"ok": False, "erro": "Email e senha obrigatórios."}), 400
+
+    try:
+        from curl_cffi import requests as _creqs
+
+        s = _creqs.Session(impersonate="chrome124")
+        s.headers.update({
+            "User-Agent":      ua,
+            "Accept-Language": "pt-BR,pt;q=0.9",
+            "X-Forwarded-For": user_ip,
+            "X-Real-IP":       user_ip,
+            "Origin":          "https://pocketoption.com",
+            "Referer":         "https://pocketoption.com/pt/login/",
+        })
+
+        # CSRF
+        csrf = ""
+        try:
+            pg = s.get("https://pocketoption.com/pt/login/", timeout=15)
+            m  = _re.search(r'name="_token"\s+value="([^"]+)"', pg.text)
+            if m:
+                csrf = m.group(1)
+        except Exception:
+            pass
+
+        payload = {"email": email, "password": senha, "remember": "1"}
+        if csrf:
+            payload["_token"] = csrf
+
+        resp = s.post(
+            "https://pocketoption.com/pt/login/",
+            data=payload,
+            headers={"Content-Type": "application/x-www-form-urlencoded",
+                     "Referer": "https://pocketoption.com/pt/login/"},
+            timeout=20,
+            allow_redirects=True,
+        )
+
+        text_lower = resp.text.lower()
+        if "two-factor" in text_lower or "2fa" in text_lower or resp.status_code == 422:
+            return jsonify({"ok": False, "otp": True, "erro": "OTP/2FA necessário."})
+
+        # Tenta extrair token do cabinet
+        from pocket_option_connector import _po_extrair_ssid_do_html, _po_montar_ssid_completo
+        uid = 0
+        try:
+            cab = s.get("https://pocketoption.com/pt/cabinet/", timeout=15)
+            tok = _po_extrair_ssid_do_html(cab.text)
+            if tok:
+                m_uid = _re.search(r'"uid"\s*:\s*(\d+)', cab.text)
+                if m_uid:
+                    uid = int(m_uid.group(1))
+                ssid = _po_montar_ssid_completo(tok, is_demo, uid)
+                pocket_ssid_definir(ssid)
+                pocket_cfg_salvar(email=email, senha=senha, ssid=ssid, is_demo=is_demo)
+                print(f"[pocket/login-proxy] ✅ Token capturado! session_len={len(tok)}")
+                return jsonify({"ok": True, "ssid": ssid})
+        except Exception:
+            pass
+
+        return jsonify({"ok": False, "erro": f"Token não encontrado (HTTP {resp.status_code})."})
+
+    except ImportError:
+        # Fallback: requests padrão
+        try:
+            import requests as _req
+            s2 = _req.Session()
+            s2.headers.update({"User-Agent": ua, "X-Forwarded-For": user_ip,
+                                "Origin": "https://pocketoption.com"})
+            pg2  = s2.get("https://pocketoption.com/pt/login/", timeout=15)
+            csrf2 = ""
+            m3 = _re.search(r'name="_token"\s+value="([^"]+)"', pg2.text)
+            if m3:
+                csrf2 = m3.group(1)
+            payload2 = {"email": email, "password": senha, "remember": "1"}
+            if csrf2:
+                payload2["_token"] = csrf2
+            s2.post("https://pocketoption.com/pt/login/", data=payload2,
+                    headers={"Content-Type": "application/x-www-form-urlencoded"},
+                    timeout=20, allow_redirects=True)
+            from pocket_option_connector import _po_extrair_ssid_do_html, _po_montar_ssid_completo
+            cab2 = s2.get("https://pocketoption.com/pt/cabinet/", timeout=15)
+            tok2 = _po_extrair_ssid_do_html(cab2.text)
+            if tok2:
+                ssid2 = _po_montar_ssid_completo(tok2, is_demo, 0)
+                pocket_ssid_definir(ssid2)
+                pocket_cfg_salvar(email=email, senha=senha, ssid=ssid2, is_demo=is_demo)
+                return jsonify({"ok": True, "ssid": ssid2})
+            return jsonify({"ok": False, "erro": "Token não encontrado."})
+        except Exception as e2:
+            return jsonify({"ok": False, "erro": str(e2)}), 500
+
+    except Exception as exc:
+        print(f"[pocket/login-proxy] ❌ {exc}")
+        return jsonify({"ok": False, "erro": str(exc)}), 500
+
+
+# ── Rota: definir SSID manualmente (capturado pelo usuário no browser) ────────
+@app.route('/pocket/ssid-receber', methods=['POST'])
+def rota_pocket_ssid_receber():
+    """
+    Recebe um SSID já capturado pelo usuário e armazena no sistema.
+    Útil quando o usuário copia manualmente o SSID do browser.
+
+    Payload JSON:
+      { "ssid": "42[\"auth\",{...}]", "is_demo": true }
+    """
+    dados   = request.get_json(silent=True) or {}
+    ssid    = (dados.get("ssid") or "").strip()
+    is_demo = bool(dados.get("is_demo", True))
+
+    if not ssid or len(ssid) < 10:
+        return jsonify({"ok": False, "erro": "SSID inválido ou muito curto."}), 400
+
+    pocket_ssid_definir(ssid)
+    pocket_cfg_salvar(ssid=ssid, is_demo=is_demo)
+    print(f"[PocketOption] 📥 SSID recebido manualmente. len={len(ssid)}")
+    return jsonify({"ok": True, "msg": "SSID registrado com sucesso."})
+
+
+# ── Rota: conectar à Pocket Option ───────────────────────────────────────────
+@app.route('/pocket/conectar', methods=['POST'])
+def rota_pocket_conectar():
+    """
+    Conecta à Pocket Option. Aceita:
+
+    1. Apenas email+senha → captura SSID automaticamente e conecta
+    2. Apenas ssid        → conecta diretamente com o SSID fornecido
+    3. email+senha+ssid   → usa o SSID fornecido (ignora captura)
+
+    Payload JSON:
+      {
+        "email":    "usuario@email.com",   # opcional se ssid fornecido
+        "senha":    "minhasenha",          # opcional se ssid fornecido
+        "ssid":     "42[\"auth\",{...}]",  # opcional se email+senha fornecidos
+        "is_demo":  true | false           # true = conta demo (padrão)
+      }
+    """
+    dados   = request.get_json(silent=True) or {}
+    email   = (dados.get("email")   or "").strip()
+    senha   = (dados.get("senha")   or "").strip()
+    ssid    = (dados.get("ssid")    or "").strip()
+    is_demo = bool(dados.get("is_demo", True))
+
+    if not ssid and not (email and senha):
+        return jsonify({"ok": False, "erro": "Forneça email+senha ou ssid."}), 400
+
+    resultado = pocket_conectar(ssid=ssid, is_demo=is_demo, email=email, senha=senha)
+    return jsonify(resultado)
+
+
+# ── Rota: desconectar da Pocket Option ───────────────────────────────────────
+@app.route('/pocket/desconectar', methods=['POST'])
+def rota_pocket_desconectar():
+    """Encerra a conexão WebSocket com a Pocket Option."""
+    return jsonify(pocket_desconectar())
+
+
+# ── Rota: status da conexão ──────────────────────────────────────────────────
+@app.route('/pocket/status', methods=['GET'])
+def rota_pocket_status():
+    """Retorna o estado atual da conexão com a Pocket Option."""
+    cfg = pocket_cfg_carregar()
+    st  = pocket_status()
+    st["ssid_salvo"] = bool(cfg.get("ssid"))
+    st["is_demo_cfg"] = cfg.get("is_demo", True)
+    return jsonify(st)
+
+
+# ── Rota: saldo ──────────────────────────────────────────────────────────────
+@app.route('/pocket/saldo', methods=['GET'])
+def rota_pocket_saldo():
+    """Retorna o saldo atual da conta Pocket Option."""
+    return jsonify(pocket_get_saldo())
+
+
+# ── Rota: executar operação ──────────────────────────────────────────────────
+@app.route('/pocket/operar', methods=['POST'])
+def rota_pocket_operar():
+    """
+    Executa uma operação binária na Pocket Option.
+
+    Payload JSON:
+      {
+        "ativo":    "EURUSD_otc",   # símbolo do ativo
+        "direcao":  "call" | "put",
+        "valor":    1.00,
+        "duracao":  60              # duração em segundos (mínimo 5s)
+      }
+    """
+    dados   = request.get_json(silent=True) or {}
+    ativo   = (dados.get("ativo") or "").strip()
+    direcao = (dados.get("direcao") or "").strip().lower()
+    valor   = dados.get("valor")
+    duracao = int(dados.get("duracao") or 60)
+
+    if not ativo:
+        return jsonify({"ok": False, "erro": "Campo 'ativo' obrigatório."}), 400
+    if direcao not in ("call", "put"):
+        return jsonify({"ok": False, "erro": "Campo 'direcao' deve ser 'call' ou 'put'."}), 400
+    if valor is None:
+        return jsonify({"ok": False, "erro": "Campo 'valor' obrigatório."}), 400
+
+    try:
+        valor = float(valor)
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "erro": "Campo 'valor' deve ser numérico."}), 400
+
+    if valor <= 0:
+        return jsonify({"ok": False, "erro": "Campo 'valor' deve ser maior que zero."}), 400
+
+    print(f"[PocketOption] 🎯 Tentativa operação | ativo={ativo} | dir={direcao} | val={valor} | dur={duracao}s")
+    resultado = pocket_operar(ativo=ativo, direcao=direcao, valor=valor, duracao=duracao)
+
+    # Inicia verificação do resultado em background
+    if resultado.get("ok") and resultado.get("id"):
+        pocket_resultado_iniciar(resultado["id"], duracao_s=duracao)
+
+    return jsonify(resultado)
+
+
+# ── Rota: verificar resultado de operação ────────────────────────────────────
+@app.route('/pocket/resultado/<op_id>', methods=['GET'])
+def rota_pocket_resultado(op_id: str):
+    """
+    Retorna o resultado (win/loss) de uma operação — NÃO bloqueia.
+    Faz poll até receber ok=True.
+
+    Ex.: GET /pocket/resultado/abc123
+    """
+    if not op_id:
+        return jsonify({"ok": False, "erro": "ID da operação obrigatório."}), 400
+    return jsonify(pocket_resultado(op_id))
+
+
+# ── Rota: notificar resultado externo (Tampermonkey / frontend) ──────────────
+@app.route('/pocket/notificar-resultado', methods=['POST'])
+def rota_pocket_notificar_resultado():
+    """
+    Recebe resultado de operação da Pocket Option e envia notificação Telegram.
+
+    Payload JSON:
+      {
+        "win":          true | false,
+        "lucro":        12.50,
+        "saldo":        1234.56,
+        "ativo":        "EURUSD_otc",
+        "direcao":      "call" | "put",
+        "modo":         "real" | "demo",
+        "estrategia":   "Garra M1",
+        "wins":         5,
+        "losses":       2,
+        "profit_total": 47.30,
+        "prox_stake":   5.0
+      }
+    """
+    dados = request.get_json(silent=True) or {}
+
+    win          = dados.get("win", False)
+    lucro        = dados.get("lucro", 0.0)
+    saldo        = dados.get("saldo")
+    ativo        = dados.get("ativo", "—")
+    direcao      = dados.get("direcao", "—").upper()
+    modo         = dados.get("modo", "demo").upper()
+    estrategia   = dados.get("estrategia", "Pocket Option")
+    wins         = int(dados.get("wins", 0))
+    losses       = int(dados.get("losses", 0))
+    profit_total = dados.get("profit_total", 0.0)
+    prox_stake   = dados.get("prox_stake")
+
+    # Encerra trade ativo
+    try:
+        with _TRADE_LOCK:
+            _TRADE_ATIVO["ativo"] = False
+    except Exception:
+        pass
+
+    # Enfileira resultado para o frontend processar o gerenciamento
+    with _pocket_resultados_lock:
+        _pocket_resultados_fila.append({
+            "win":          bool(win),
+            "lucro":        float(lucro),
+            "saldo":        float(saldo) if saldo is not None else None,
+            "ativo":        ativo,
+            "direcao":      direcao,
+            "modo":         modo,
+            "estrategia":   estrategia,
+            "wins":         wins,
+            "losses":       losses,
+            "profit_total": float(profit_total),
+            "prox_stake":   float(prox_stake) if prox_stake is not None else None,
+        })
+
+    # Monta mensagem Telegram
+    emoji_res   = "✅" if win else "❌"
+    emoji_dir   = "🟢" if direcao == "CALL" else "🔴"
+    sinal_lucro = "+" if lucro >= 0 else ""
+    saldo_fmt   = f"${float(saldo):.2f}" if saldo is not None else "—"
+
+    linhas = [
+        f"{emoji_res} <b>{'WIN' if win else 'LOSS'}</b>  {emoji_dir} {direcao}",
+        f"📊 Ativo: <code>{ativo}</code>  |  Modo: {modo}",
+        f"💰 Resultado: <b>{sinal_lucro}${float(lucro):.2f}</b>",
+        f"🏦 Saldo: <b>{saldo_fmt}</b>",
+        f"📈 Profit total: {'+' if profit_total >= 0 else ''}${float(profit_total):.2f}",
+        f"🏆 Wins: {wins}  💔 Losses: {losses}",
+    ]
+    if prox_stake is not None:
+        linhas.append(f"🎯 Próxima entrada: <b>${float(prox_stake):.2f}</b>")
+    linhas.append(f"\n🤖 <i>{estrategia} — Pocket Option</i>")
+    mensagem = "\n".join(linhas)
+
+    try:
+        cfg     = _tg_carregar()
+        token   = cfg.get("token", "")
+        chat_id = cfg.get("chat_id", "")
+        if cfg.get("enabled") and cfg.get("resultados") and token and chat_id:
+            _tg_dispatch(lambda t=token, c=chat_id, m=mensagem: _tg_enviar_texto(t, c, m))
+            print(f"[PocketOption→TG] resultado {'WIN' if win else 'LOSS'} de {ativo} enviado ao Telegram.")
+    except Exception as e:
+        print(f"[PocketOption→TG] erro ao enviar Telegram: {e}")
+
+    return jsonify({"ok": True})
+
+
+# ── Rota: poll de resultados pendentes para o frontend ───────────────────────
+@app.route('/pocket/resultados-pendentes', methods=['GET'])
+def rota_pocket_resultados_pendentes():
+    """
+    Retorna e limpa a fila de resultados de trades Pocket Option.
+    O frontend faz poll a cada 1s e processa cada resultado com bot.mgr.updateResult().
+    """
+    with _pocket_resultados_lock:
+        pendentes = list(_pocket_resultados_fila)
+        _pocket_resultados_fila.clear()
+    return jsonify({"resultados": pendentes})
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # TRADE STATUS EM TEMPO REAL — Cronômetro + Status (Ganhando/Perdendo)
 # ═══════════════════════════════════════════════════════════════════════════════
 _TRADE_ATIVO: dict = {

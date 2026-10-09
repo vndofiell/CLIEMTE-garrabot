@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Quickstart - PocketOptionAPI Async Docs</title>
+  <link rel="stylesheet" href="style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+</head>
+<body>
+  <header>
+    <h1>PocketOptionAPI Async</h1>
+    <nav>
+      <a href="index.html">Home</a>
+      <a href="quickstart.html">Quickstart</a>
+      <a href="api.html">API Reference</a>
+      <a href="examples.html">Examples</a>
+      <a href="assets-timeframes.html">Assets & Timeframes</a>
+      <a href="termux-setup.html">Termux Setup</a>
+      <a href="faq.html">FAQ</a>
+    </nav>
+  </header>
+  <main>
+    <h2>Quickstart</h2>
+    <div class="card">
+      <ol>
+        <li><b>Install the library:</b>
+          <pre><code>pip install pocketoptionapi-async</code></pre>
+        </li>
+        <li><b>Get your Pocket Option SSID:</b> <br>Log in to Pocket Option, open DevTools, and copy your SSID cookie value.</li>
+        <li><b>Basic usage example:</b>
+          <pre><code>from pocketoptionapi_async import AsyncPocketOptionClient
+import asyncio
+
+async def main():
+    SSID = "your-ssid-here"
+    client = AsyncPocketOptionClient(SSID, is_demo=True)
+    await client.connect()
+    balance = await client.get_balance()
+    print(balance)
+    await client.disconnect()
+
+asyncio.run(main())
+</code></pre>
+        </li>
+      </ol>
+    </div>
+    <div class="advert">
+      Want a custom trading bot? <a href="https://chipatrade.com/services/bot-development" target="_blank">Let us build it for you!</a>
+    </div>
+    <div class="links-bar">
+      <a href="https://u3.shortink.io/smart/SDIaxbeamcYYqB" target="_blank" class="link-btn signup-btn">Sign up for Pocket Option</a>
+      <a href="https://discord.gg/PHHfh6UyCb" target="_blank" class="link-btn discord-btn">Join our Discord</a>
+    </div>
+  </main>
+</body>
+<script src="codeblock.js"></script>
+</html>
