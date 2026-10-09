@@ -3267,6 +3267,7 @@ try:
         quotex_resultado,
         quotex_resultado_iniciar,
         quotex_cfg_carregar,
+        quotex_preaquecer_ativo,
         # ── Captura automática de SSID ────────────────────────────
         quotex_capturar_ssid,
         quotex_ssid_status,
@@ -3319,6 +3320,8 @@ except ImportError as _qx_err:
         return {"status": "indisponivel", "ssid": "", "erro": "pyquotex não instalado.", "ts": 0}
     def quotex_ssid_definir(ssid: str):
         pass
+    def quotex_preaquecer_ativo(ativo: str):
+        return {"ok": False, "erro": "pyquotex não instalado."}
 
 
 # Contador de versão — incrementado toda vez que o saldo é atualizado via frontend.
@@ -3880,6 +3883,24 @@ def rota_quotex_operar():
     # Dispara verificação de resultado em background imediatamente após operar
     if resultado.get("ok") and resultado.get("id"):
         quotex_resultado_iniciar(resultado["id"], duracao_s=duracao)
+    return jsonify(resultado)
+
+
+# ── Rota: pré-aquecer streaming de ativo (evita timeout na confirmação de buy) ─
+@app.route('/quotex/preaquecer', methods=['POST'])
+def rota_quotex_preaquecer():
+    """
+    Inicia o streaming de preço em tempo real para um ativo antes da entrada.
+    Deve ser chamado alguns segundos antes de /quotex/operar para garantir que
+    o buy() não fique travado aguardando start_realtime_price (até 10s).
+
+    Payload JSON: { "ativo": "EURUSD_otc" }
+    """
+    dados = request.get_json(silent=True) or {}
+    ativo = (dados.get("ativo") or "").strip()
+    if not ativo:
+        return jsonify({"ok": False, "erro": "Campo 'ativo' obrigatório."}), 400
+    resultado = quotex_preaquecer_ativo(ativo)
     return jsonify(resultado)
 
 

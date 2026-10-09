@@ -31186,6 +31186,14 @@ function _qxHmaQAgendarEntrada(direcao, contexto, est) {
             // Espera longa: inicia ping para manter WS do servidor vivo
             _qxHmaQIniciarPing();
             print(`🟠 HMA QUOTEX: ⏱ ${direcao.toUpperCase()} ${contexto.ativoNome} — entrando em ${Math.round(msAte/1000)}s`, 'log-info');
+            // Pré-aquece o streaming do ativo para evitar timeout na confirmação do buy()
+            if (msAte > 5000) {
+                fetch('/quotex/preaquecer', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ativo: contexto.ativoId }),
+                }).catch(() => {});
+            }
             _qxHmaQ._entradaTimer = setTimeout(() => {
                 _qxHmaQPararPing();
                 if (!_qxHmaQ.rodando) { _qxHmaQ.opBloqueada = false; return; }
@@ -31228,6 +31236,14 @@ function _qxHmaQAgendarEntrada(direcao, contexto, est) {
                 if (msAteW > 200 && msAteW < periodoMs) {
                     clearInterval(_qxHmaQ._entradaWatch);
                     _qxHmaQIniciarPing();
+                    // Pré-aquece o streaming do ativo para evitar timeout na confirmação do buy()
+                    if (msAteW > 5000) {
+                        fetch('/quotex/preaquecer', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ ativo: contexto.ativoId }),
+                        }).catch(() => {});
+                    }
                     _qxHmaQ._entradaTimer = setTimeout(() => {
                         _qxHmaQPararPing();
                         if (!_qxHmaQ.rodando) { _qxHmaQ.opBloqueada = false; return; }

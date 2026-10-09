@@ -853,6 +853,38 @@ def quotex_get_ativos() -> dict:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# PRÉ-AQUECIMENTO DE ATIVO
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def quotex_preaquecer_ativo(ativo: str) -> dict:
+    """
+    Inicia o streaming de preço em tempo real para um ativo antes da entrada.
+    Isso evita que o buy() fique aguardando start_realtime_price (até 10s),
+    garantindo que na hora da operação o dado já esteja em cache.
+    """
+    with _QUOTEX_LOCK:
+        client = _QUOTEX_STATE.get("client")
+        loop   = _QUOTEX_STATE.get("loop")
+
+    if not client or not loop:
+        return {"ok": False, "erro": "Quotex não conectada."}
+
+    async def _preaquecer():
+        try:
+            await client.start_realtime_price(ativo, 60)
+            return True
+        except Exception:
+            return False
+
+    try:
+        fut = asyncio.run_coroutine_threadsafe(_preaquecer(), loop)
+        ok = fut.result(timeout=12)
+        return {"ok": bool(ok)}
+    except Exception as e:
+        return {"ok": False, "erro": str(e)}
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # OPERAÇÕES
 # ═══════════════════════════════════════════════════════════════════════════════
 
