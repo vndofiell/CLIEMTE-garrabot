@@ -87,7 +87,7 @@ def _hunter_thread():
             _HUNTER_STATE["status"] = "aguardando_login"
 
         # ── Abre página de login ──────────────────────────────────────────────
-        driver.get("https://qxbroker.com/pt/sign-in")
+        driver.get("https://quotex.com/pt/sign-in")
         time.sleep(2)
 
         print("[SSID Hunter] 🌐 Chrome aberto — aguardando login do usuário...")

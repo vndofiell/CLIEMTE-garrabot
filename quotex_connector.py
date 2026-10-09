@@ -175,7 +175,7 @@ def _ssid_capturar_curl_cffi(email: str, senha: str,
         # 1. Obtém CSRF token
         csrf = ""
         try:
-            pg   = s.get("https://qxbroker.com/pt/sign-in", timeout=15)
+            pg   = s.get("https://quotex.com/pt/sign-in", timeout=15)
             m    = re.search(r'name="_token"\s+value="([^"]+)"', pg.text)
             if m:
                 csrf = m.group(1)
@@ -188,12 +188,12 @@ def _ssid_capturar_curl_cffi(email: str, senha: str,
             payload["_token"] = csrf
 
         resp = s.post(
-            "https://qxbroker.com/pt/sign-in",
+            "https://quotex.com/pt/sign-in",
             data=payload,
             headers={
                 "Content-Type": "application/x-www-form-urlencoded",
-                "Referer":      "https://qxbroker.com/pt/sign-in",
-                "Origin":       "https://qxbroker.com",
+                "Referer":      "https://quotex.com/pt/sign-in",
+                "Origin":       "https://quotex.com",
             },
             timeout=20,
             allow_redirects=True,
@@ -215,7 +215,7 @@ def _ssid_capturar_curl_cffi(email: str, senha: str,
 
         # 5. Acessa /trade e extrai token do HTML
         try:
-            trade = s.get("https://qxbroker.com/pt/trade", timeout=15)
+            trade = s.get("https://quotex.com/pt/trade", timeout=15)
             tok   = _ssid_extrair_do_html(trade.text)
             if tok:
                 return True, tok, ""
@@ -247,7 +247,7 @@ def _ssid_capturar_requests(email: str, senha: str) -> tuple[bool, str, str]:
         # CSRF
         csrf = ""
         try:
-            pg   = s.get("https://qxbroker.com/pt/sign-in", timeout=15)
+            pg   = s.get("https://quotex.com/pt/sign-in", timeout=15)
             m    = re.search(r'name="_token"\s+value="([^"]+)"', pg.text)
             if m:
                 csrf = m.group(1)
@@ -259,12 +259,12 @@ def _ssid_capturar_requests(email: str, senha: str) -> tuple[bool, str, str]:
             payload["_token"] = csrf
 
         resp = s.post(
-            "https://qxbroker.com/pt/sign-in",
+            "https://quotex.com/pt/sign-in",
             data=payload,
             headers={
                 "Content-Type": "application/x-www-form-urlencoded",
-                "Referer":      "https://qxbroker.com/pt/sign-in",
-                "Origin":       "https://qxbroker.com",
+                "Referer":      "https://quotex.com/pt/sign-in",
+                "Origin":       "https://quotex.com",
             },
             timeout=20,
             allow_redirects=True,
@@ -275,7 +275,7 @@ def _ssid_capturar_requests(email: str, senha: str) -> tuple[bool, str, str]:
             return False, "", "OTP_REQUIRED"
 
         # Tenta /trade
-        trade = s.get("https://qxbroker.com/pt/trade", timeout=15)
+        trade = s.get("https://quotex.com/pt/trade", timeout=15)
         tok   = _ssid_extrair_do_html(trade.text)
         if tok:
             return True, tok, ""
@@ -311,7 +311,7 @@ def _ssid_capturar_pyquotex(email: str, senha: str,
 
         async def _run():
             api = QuotexAPI(
-                host="qxbroker.com",
+                host="quotex.com",
                 username=email,
                 password=senha,
                 lang="pt",

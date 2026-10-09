@@ -27038,7 +27038,7 @@ function _qxBookmarkletCode() {
         'try{t=(window.settings&&window.settings.token)||"";}catch(e){}' +
         'if(!t)try{t=localStorage.getItem("token")||localStorage.getItem("ssid")||"";}catch(e){}' +
         'if(!t){var cc=document.cookie.split(";");for(var i=0;i<cc.length;i++){var p=cc[i].trim().split("=");if(p[0]==="token"||p[0]==="ssid"){t=decodeURIComponent(p[1]||"");break;}}}' +
-        'if(!t||t.length<8){alert("SSID nao encontrado. Certifique-se de estar em qxbroker.com/pt/trade e logado.");return;}' +
+        'if(!t||t.length<8){alert("SSID nao encontrado. Certifique-se de estar em quotex.com/pt/trade e logado.");return;}' +
         'fetch("' + srv + '/quotex/ssid-captura/receber",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ssid:t})})' +
         '.then(function(){alert("✅ SSID enviado ao Bot Garra! Volte ao bot e clique DEMO ou REAL.");})' +
         '.catch(function(){alert("Erro ao enviar. Tente novamente.");});' +
@@ -27067,7 +27067,7 @@ function qxCapturarSsidAuto() {
     _qxBadge('🌐 Abra a Quotex e clique o favorito "GarraBot SSID"', '#00cfff');
 
     // Abre a Quotex diretamente no browser do usuário
-    _qxWin = window.open('https://qxbroker.com/pt/trade', '_blank',
+    _qxWin = window.open('https://quotex.com/pt/trade', '_blank',
                          'width=1100,height=720,left=50,top=30');
 
     // Escuta postMessage (caso o bookmarklet envie via window.opener)
