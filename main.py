@@ -3693,8 +3693,15 @@ def rota_quotex_ativos_payout():
             nome       = str(item[2]).replace("\n", "").strip() if len(item) > 2 else id_interno
             aberto     = bool(item[14]) if len(item) > 14 else False
 
+            # Aceita apenas ativos forex/OTC — ignora crypto, ações, índices
+            # IDs válidos: terminam em _otc ou são pares forex puros (6 letras como EURUSD)
+            _id_lower = id_interno.lower()
+            _eh_otc   = _id_lower.endswith("_otc")
+            _eh_forex = len(id_interno.replace("_otc","")) == 6 and id_interno.replace("_otc","").isalpha()
+            if not (_eh_otc or _eh_forex):
+                continue  # ignora Axie, crypto, ações, etc.
+
             if id_interno in ids_presentes or nome in nomes_presentes:
-                # Atualiza flag aberto
                 for a in ativos:
                     if a["id"] == id_interno or a["nome"] == nome:
                         if aberto:
