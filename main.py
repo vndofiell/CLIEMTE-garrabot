@@ -3264,6 +3264,7 @@ try:
         quotex_aguardar_entrada,
         quotex_get_ativos,
         quotex_operar,
+        quotex_ordem_status,
         quotex_resultado,
         quotex_resultado_iniciar,
         quotex_cfg_carregar,
@@ -3322,6 +3323,8 @@ except ImportError as _qx_err:
         pass
     def quotex_preaquecer_ativo(ativo: str):
         return {"ok": False, "erro": "pyquotex não instalado."}
+    def quotex_ordem_status(op_key: str):
+        return {"ok": False, "etapa": "nao_encontrada", "erro": "pyquotex não instalado."}
 
 
 # Contador de versão — incrementado toda vez que o saldo é atualizado via frontend.
@@ -3921,9 +3924,11 @@ def rota_quotex_operar():
             "retry":         True,
         }), 503
 
-    # ── ETAPA: ENVIANDO PARA O CONECTOR ─────────────────────────────────────────
+    # ── ETAPA: DISPARANDO BUY EM BACKGROUND ─────────────────────────────────────
+    # quotex_operar() retorna IMEDIATAMENTE com op_key — o buy() roda em thread.
+    # O Flask não bloqueia; o frontend faz poll em /quotex/ordem-status/<op_key>.
     print(
-        f"[HMA QUOTEX] 📤 ETAPA: ENVIANDO PARA CONECTOR | "
+        f"[HMA QUOTEX] 📤 DISPARANDO BUY | "
         f"ativo={ativo} | dir={direcao} | val={valor:.2f} | dur={duracao}s"
     )
 
@@ -3935,67 +3940,33 @@ def rota_quotex_operar():
             duracao=duracao,
         )
 
-        if not isinstance(resultado, dict):
-            print(f"[HMA QUOTEX] ❌ ETAPA: RESPOSTA INVÁLIDA | tipo={type(resultado)}")
+        if not isinstance(resultado, dict) or not resultado.get("ok"):
+            print(f"[HMA QUOTEX] ❌ Falha ao iniciar buy: {resultado}")
             return jsonify({
                 "ok":            False,
-                "etapa":         "resposta_invalida",
+                "etapa":         resultado.get("etapa", "erro") if isinstance(resultado, dict) else "erro",
                 "ordem_enviada": False,
-                "erro":          "Resposta inválida do conector Quotex.",
-                "retry":         False,
+                "erro":          resultado.get("erro", "Falha ao iniciar compra.") if isinstance(resultado, dict) else "Resposta inválida.",
+                "retry":         True,
             }), 502
 
-        # ── ETAPA: RESPOSTA DO CONECTOR ──────────────────────────────────────────
-        etapa    = resultado.get("etapa", "desconhecida")
-        op_id    = resultado.get("id", "")
-        enviada  = resultado.get("ordem_enviada", False)
-
-        if not resultado.get("ok"):
-            # Classifica o motivo para o log ficar claro
-            if resultado.get("pendente_confirmacao") or resultado.get("nao_reenviar"):
-                _classe = "TIMEOUT_CONFIRMAÇÃO"
-            elif resultado.get("transitorio"):
-                _classe = "ERRO_REDE_TRANSITÓRIO"
-            elif resultado.get("sinal_expirado"):
-                _classe = "SINAL_EXPIRADO"
-            else:
-                _classe = "ERRO"
-
-            print(
-                f"[HMA QUOTEX] ⚠️ ETAPA: {_classe} | "
-                f"etapa_conector={etapa} | "
-                f"ordem_enviada={enviada} | "
-                f"motivo={resultado.get('erro', 'sem detalhe')}"
-            )
-            # HTTP 502 apenas quando a ordem NÃO foi enviada (erro antes do buy)
-            # HTTP 200 com ok=False quando foi enviada mas não confirmada
-            # (evita que o frontend interprete 4xx/5xx como "pode reenviar")
-            _status = 200 if enviada else 502
-            return jsonify({
-                **resultado,
-                "ok":             False,
-                "ordem_confirmada": False,
-            }), _status
-
-        # ── ETAPA: ORDEM CONFIRMADA ──────────────────────────────────────────────
-        if op_id:
-            quotex_resultado_iniciar(op_id, duracao_s=duracao)
-
+        op_key = resultado.get("op_key", "")
         print(
-            f"[HMA QUOTEX] ✅ ETAPA: ORDEM CONFIRMADA | "
-            f"id={op_id or 'não informado'} | "
+            f"[HMA QUOTEX] ✅ BUY INICIADO | op_key={op_key} | "
             f"ativo={ativo} | dir={direcao} | val={valor:.2f} | dur={duracao}s"
         )
+        # Retorna imediatamente — frontend faz poll para confirmar
         return jsonify({
             **resultado,
-            "ok":             True,
-            "ordem_confirmada": True,
+            "ok":              True,
+            "etapa":           "enviando",
+            "ordem_confirmada": False,   # ainda aguardando confirmação bg
         })
 
     except Exception as exc:
         import traceback as _tb
         _tb.print_exc()
-        print(f"[HMA QUOTEX] ❌ ETAPA: EXCEÇÃO NO SERVIDOR | erro={exc}")
+        print(f"[HMA QUOTEX] ❌ EXCEÇÃO AO DISPARAR BUY | erro={exc}")
         return jsonify({
             "ok":             False,
             "etapa":          "excecao_servidor",
@@ -4022,6 +3993,25 @@ def rota_quotex_preaquecer():
         return jsonify({"ok": False, "erro": "Campo 'ativo' obrigatório."}), 400
     resultado = quotex_preaquecer_ativo(ativo)
     return jsonify(resultado)
+
+
+# ── Rota: status da ordem em background ──────────────────────────────────────
+@app.route('/quotex/ordem-status/<op_key>', methods=['GET'])
+def rota_quotex_ordem_status(op_key: str):
+    """
+    Retorna o estado da ordem iniciada em background por /quotex/operar.
+    O frontend faz poll a cada 2s até etapa != 'enviando'.
+
+    etapa='enviando'            → buy() ainda em andamento
+    etapa='confirmada'          → ordem aceita pela corretora (id disponível)
+    etapa='confirmacao_pendente'→ timeout WS, ordem pode estar ativa
+    etapa='rejeitada'           → corretora rejeitou
+    etapa='erro_rede'           → falha DNS/curl antes do buy
+    etapa='ws_corrompido'       → WS caiu, reconexão iniciada
+    """
+    if not op_key:
+        return jsonify({"ok": False, "erro": "op_key obrigatório."}), 400
+    return jsonify(quotex_ordem_status(op_key))
 
 
 # ── Rota: verificar resultado de operação ────────────────────────────────────

@@ -888,65 +888,33 @@ def quotex_preaquecer_ativo(ativo: str) -> dict:
 # OPERAÇÕES
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def quotex_operar(ativo: str, direcao: str, valor: float, duracao: int) -> dict:
+# Cache da ordem em andamento: op_key -> dict com estado
+_ORDEM_BG_CACHE: dict = {}
+_ORDEM_BG_LOCK  = threading.Lock()
+
+
+def _quotex_buy_bg(op_key: str, client, loop,
+                   ativo: str, direcao_norm: str,
+                   valor: float, duracao: int) -> None:
     """
-    Executa uma operação binária na Quotex.
-
-    Parâmetros:
-        ativo    — ex.: "EURUSD", "EURUSD_otc"
-        direcao  — "call" | "put"  (alta | baixa)
-        valor    — valor da entrada em USD
-        duracao  — duração em segundos (ex.: 60 = 1 min)
+    Executa buy() em background thread e armazena o resultado em
+    _ORDEM_BG_CACHE[op_key]. Chamado por quotex_operar().
     """
-    with _QUOTEX_LOCK:
-        client = _QUOTEX_STATE.get("client")
-        loop   = _QUOTEX_STATE.get("loop")
-        email_saved     = _QUOTEX_STATE.get("email", "")
-        senha_saved     = _QUOTEX_STATE.get("senha", "")
-        tipo_saved      = _QUOTEX_STATE.get("tipo_conta", "DEMO")
-        ssid_saved      = _QUOTEX_STATE.get("ssid", "")
-
-    if not client or not loop:
-        # Conexão perdida — dispara reconexão automática em background
-        _quotex_reconectar_bg(email_saved, senha_saved, tipo_saved, ssid_saved)
-        return {"ok": False, "erro": "Quotex não conectada. Reconectando automaticamente..."}
-
-    direcao_norm = direcao.lower().strip()
-    if direcao_norm not in ("call", "put"):
-        return {"ok": False, "erro": f"Direção inválida: '{direcao}'. Use 'call' ou 'put'."}
-
-    fut = None
+    timeout_buy = max(35, int(duracao) + 20)
+    print(
+        f"[Quotex] 📤 BG BUY | ativo={ativo} | dir={direcao_norm} | "
+        f"val={valor:.2f} | dur={duracao}s | timeout={timeout_buy}s"
+    )
     try:
-        # Garante que profile.offset nunca seja None (causa timedelta NoneType)
-        try:
-            if client.api and client.api.profile and client.api.profile.offset is None:
-                client.api.profile.offset = 0
-        except Exception:
-            pass
-
-        # ── ETAPA: ENVIANDO ──────────────────────────────────────────────────────
-        # O pré-aquecimento (start_realtime_price) já foi feito pelo endpoint
-        # /quotex/preaquecer chamado pelo frontend segundos antes desta função.
-        # Não repetir aqui — evita consumir a janela de entrada (até 8s extra).
-        # buy() aguarda confirmação WS até duration+5s (interno do pyquotex).
-        # Não cancele nem repita se o resultado ficar ambíguo: a corretora pode
-        # ter aceitado a ordem sem a resposta chegar ao bot.
-        timeout_buy = max(35, int(duracao) + 20)
-        print(
-            f"[Quotex] 📤 ETAPA: ENVIANDO | "
-            f"ativo={ativo} | dir={direcao_norm} | val={valor:.2f} | "
-            f"dur={duracao}s | timeout_interno={timeout_buy}s"
-        )
         fut = asyncio.run_coroutine_threadsafe(
-            client.buy(amount=valor, asset=ativo, direction=direcao_norm, duration=duracao),
-            loop
+            client.buy(amount=valor, asset=ativo,
+                       direction=direcao_norm, duration=duracao),
+            loop,
         )
         resultado = fut.result(timeout=timeout_buy)
 
-        # ── ETAPA: RESPOSTA RECEBIDA ─────────────────────────────────────────────
-        # Resultado None = WebSocket retornou vazio (sessão morta)
         if resultado is None:
-            raise ConnectionError("buy() retornou None — sessão Quotex encerrada.")
+            raise ConnectionError("buy() retornou None — sessão encerrada.")
 
         if isinstance(resultado, (list, tuple)) and len(resultado) >= 2:
             ok, info = bool(resultado[0]), resultado[1]
@@ -955,117 +923,85 @@ def quotex_operar(ativo: str, direcao: str, valor: float, duracao: int) -> dict:
 
         if not ok:
             detalhe = str(info) if info else "sem detalhe"
-            # ── Timeout de confirmação WS ────────────────────────────────────────
-            # A ordem FOI enviada ao WebSocket mas a confirmação não chegou no prazo.
-            # Não reconectar nem reenviar — a corretora pode ter executado a ordem.
             _TIMEOUTS_BUY = (
                 "timeout", "timeout waiting for buy confirmation",
                 "buy timeout", "confirmation timeout",
             )
             if any(t in detalhe.lower() for t in _TIMEOUTS_BUY):
                 print(
-                    f"[Quotex] ⚠️ CONFIRMAÇÃO PENDENTE | "
-                    f"ativo={ativo} | direção={direcao_norm} | "
-                    f"valor={valor} | duração={duracao}s"
+                    f"[Quotex] ⚠️ CONFIRMAÇÃO PENDENTE | ativo={ativo} | "
+                    f"dir={direcao_norm} | detalhe={detalhe}"
                 )
-                print(
-                    "[Quotex] ⚠️ Não é possível confirmar se a ordem foi aceita. "
-                    "Não reenviar automaticamente."
-                )
-                return {
-                    "ok":                False,
-                    "etapa":             "confirmacao_pendente",
-                    "ordem_enviada":     True,
-                    "ordem_confirmada":  False,
-                    "pendente_confirmacao": True,
-                    "nao_reenviar":      True,
-                    "erro": (
-                        "Timeout aguardando confirmação da Quotex. "
-                        "A ordem pode ter sido aceita; consulte a plataforma "
-                        "antes de qualquer nova tentativa."
-                    ),
+                with _ORDEM_BG_LOCK:
+                    _ORDEM_BG_CACHE[op_key] = {
+                        "ok": False, "etapa": "confirmacao_pendente",
+                        "ordem_enviada": True, "ordem_confirmada": False,
+                        "pendente_confirmacao": True, "nao_reenviar": True,
+                        "erro": (
+                            "Timeout aguardando confirmação da Quotex. "
+                            "A ordem pode ter sido aceita; consulte a plataforma."
+                        ),
+                    }
+                return
+            print(f"[Quotex] ❌ REJEITADA | ativo={ativo} | detalhe={detalhe}")
+            with _ORDEM_BG_LOCK:
+                _ORDEM_BG_CACHE[op_key] = {
+                    "ok": False, "etapa": "rejeitada",
+                    "ordem_enviada": True,
+                    "erro": f"Ordem rejeitada: {detalhe}", "detalhe": detalhe,
                 }
-            # ── Ordem rejeitada pela corretora ───────────────────────────────────
-            print(
-                f"[Quotex] ❌ ETAPA: REJEITADA | "
-                f"ativo={ativo} | dir={direcao_norm} | dur={duracao}s | "
-                f"detalhe={detalhe}"
-            )
-            return {
-                "ok":           False,
-                "etapa":        "rejeitada",
-                "ordem_enviada": True,
-                "erro":         f"Ordem rejeitada pela corretora: {detalhe}",
-                "detalhe":      detalhe,
-            }
+            return
 
-        # ── ETAPA: CONFIRMADA ────────────────────────────────────────────────────
         op_id = (info.get("id") or info.get("uid") or "") if isinstance(info, dict) else ""
         print(
-            f"[Quotex] ✅ ETAPA: CONFIRMADA | "
-            f"ativo={ativo} | dir={direcao_norm} | "
+            f"[Quotex] ✅ CONFIRMADA | ativo={ativo} | dir={direcao_norm} | "
             f"val={valor:.2f} | dur={duracao}s | id={op_id}"
         )
-        return {
-            "ok":            True,
-            "etapa":         "confirmada",
-            "ordem_enviada": True,
-            "id":            op_id,
-            "ativo":         ativo,
-            "direcao":       direcao_norm,
-            "valor":         valor,
-            "duracao":       duracao,
-            "info":          info,
-        }
+        with _ORDEM_BG_LOCK:
+            _ORDEM_BG_CACHE[op_key] = {
+                "ok": True, "etapa": "confirmada",
+                "ordem_enviada": True, "ordem_confirmada": True,
+                "id": op_id, "ativo": ativo, "direcao": direcao_norm,
+                "valor": valor, "duracao": duracao, "info": info,
+            }
+        # Dispara busca de resultado em background
+        quotex_resultado_iniciar(op_id, duracao_s=duracao)
+
     except concurrent.futures.TimeoutError:
-        # Thread-level timeout: o future não respondeu em timeout_buy segundos.
-        # Situação idêntica ao timeout interno do buy(): a ordem pode ter sido
-        # aceita. Não cancelar o future nem reenviar.
         print(
-            f"[Quotex] ⚠️ CONFIRMAÇÃO PENDENTE (timeout thread) | "
-            f"ativo={ativo} | direção={direcao_norm} | "
-            f"valor={valor} | duração={duracao}s | timeout={timeout_buy}s"
+            f"[Quotex] ⚠️ TIMEOUT THREAD | ativo={ativo} | "
+            f"dir={direcao_norm} | timeout={timeout_buy}s"
         )
-        print(
-            "[Quotex] ⚠️ Não é possível confirmar se a ordem foi aceita. "
-            "Não reenviar automaticamente."
-        )
-        return {
-            "ok":                False,
-            "etapa":             "confirmacao_pendente",
-            "ordem_enviada":     True,
-            "ordem_confirmada":  False,
-            "pendente_confirmacao": True,
-            "nao_reenviar":      True,
-            "erro": (
-                "Timeout aguardando resposta da compra. "
-                "A ordem pode ter sido aceita; verifique a plataforma "
-                "antes de qualquer nova tentativa."
-            ),
-        }
+        with _ORDEM_BG_LOCK:
+            _ORDEM_BG_CACHE[op_key] = {
+                "ok": False, "etapa": "confirmacao_pendente",
+                "ordem_enviada": True, "ordem_confirmada": False,
+                "pendente_confirmacao": True, "nao_reenviar": True,
+                "erro": (
+                    "Timeout aguardando resposta da compra. "
+                    "A ordem pode ter sido aceita; verifique a plataforma."
+                ),
+            }
     except Exception as e:
         msg = str(e) or repr(e) or type(e).__name__
-        print(f"[Quotex] ❌ Exceção em quotex_operar: {msg}")
-
-        # ── Erros transitórios de rede/DNS: NÃO destroem a conexão WS ────────
-        # curl(6) = falha de resolução DNS; curl(7) = conexão recusada;
-        # curl(28) = timeout HTTP. O WebSocket pode ainda estar vivo.
-        _ERROS_TRANSITORIOS = ("curl: (6)", "curl: (7)", "curl: (28)",
-                               "could not resolve host", "name or service not known",
-                               "temporary failure in name resolution",
-                               "network is unreachable", "connection refused")
-        msg_lower = msg.lower()
-        if any(e_t in msg_lower for e_t in _ERROS_TRANSITORIOS):
-            print(f"[Quotex] ⚠️ Erro de rede transitório — NÃO reconectando WS: {msg}")
-            return {"ok": False, "erro": msg, "transitorio": True}
-
-        # ── Demais erros: WS corrompido → reconecta do zero ──────────────────
+        print(f"[Quotex] ❌ Exceção no buy bg: {msg}")
         traceback.print_exc()
-        if fut is not None:
-            try:
-                loop.call_soon_threadsafe(fut.cancel)
-            except Exception:
-                pass
+
+        _ERROS_TRANSITORIOS = (
+            "curl: (6)", "curl: (7)", "curl: (28)",
+            "could not resolve host", "name or service not known",
+            "temporary failure in name resolution",
+            "network is unreachable", "connection refused",
+        )
+        if any(t in msg.lower() for t in _ERROS_TRANSITORIOS):
+            with _ORDEM_BG_LOCK:
+                _ORDEM_BG_CACHE[op_key] = {
+                    "ok": False, "etapa": "erro_rede",
+                    "ordem_enviada": False, "transitorio": True, "erro": msg,
+                }
+            return
+
+        # WS corrompido — reconecta
         with _QUOTEX_LOCK:
             _e  = _QUOTEX_STATE.get("email", "")
             _s  = _QUOTEX_STATE.get("senha", "")
@@ -1080,13 +1016,88 @@ def quotex_operar(ativo: str, direcao: str, valor: float, duracao: int) -> dict:
                 loop.call_soon_threadsafe(loop.stop)
             except Exception:
                 pass
-        if client:
-            try:
-                client.close()
-            except Exception:
-                pass
+        try:
+            client.close()
+        except Exception:
+            pass
         _quotex_reconectar_bg(_e, _s, _t, _ss)
-        return {"ok": False, "erro": msg}
+        with _ORDEM_BG_LOCK:
+            _ORDEM_BG_CACHE[op_key] = {
+                "ok": False, "etapa": "ws_corrompido",
+                "ordem_enviada": False, "erro": msg,
+            }
+
+
+def quotex_operar(ativo: str, direcao: str, valor: float, duracao: int) -> dict:
+    """
+    Inicia buy() em background e retorna IMEDIATAMENTE com op_key.
+    O Flask não bloqueia — a resposta HTTP chega em <1s ao frontend.
+    O frontend faz poll em /quotex/ordem-status/<op_key> para o resultado.
+    """
+    with _QUOTEX_LOCK:
+        client     = _QUOTEX_STATE.get("client")
+        loop       = _QUOTEX_STATE.get("loop")
+        email_s    = _QUOTEX_STATE.get("email", "")
+        senha_s    = _QUOTEX_STATE.get("senha", "")
+        tipo_s     = _QUOTEX_STATE.get("tipo_conta", "DEMO")
+        ssid_s     = _QUOTEX_STATE.get("ssid", "")
+
+    if not client or not loop:
+        _quotex_reconectar_bg(email_s, senha_s, tipo_s, ssid_s)
+        return {"ok": False, "erro": "Quotex não conectada. Reconectando automaticamente..."}
+
+    direcao_norm = direcao.lower().strip()
+    if direcao_norm not in ("call", "put"):
+        return {"ok": False, "erro": f"Direção inválida: '{direcao}'. Use 'call' ou 'put'."}
+
+    # Garante que profile.offset nunca seja None
+    try:
+        if client.api and client.api.profile and client.api.profile.offset is None:
+            client.api.profile.offset = 0
+    except Exception:
+        pass
+
+    # Gera chave única para esta ordem
+    op_key = f"{ativo}_{direcao_norm}_{int(time.time()*1000)}"
+
+    # Inicializa estado como "enviando"
+    with _ORDEM_BG_LOCK:
+        _ORDEM_BG_CACHE[op_key] = {"ok": None, "etapa": "enviando"}
+
+    # Dispara buy() em background — Flask retorna imediatamente
+    t = threading.Thread(
+        target=_quotex_buy_bg,
+        args=(op_key, client, loop, ativo, direcao_norm, valor, duracao),
+        daemon=True,
+    )
+    t.start()
+
+    print(
+        f"[Quotex] 🚀 BUY INICIADO EM BG | ativo={ativo} | dir={direcao_norm} | "
+        f"val={valor:.2f} | dur={duracao}s | op_key={op_key}"
+    )
+    return {
+        "ok":      True,
+        "etapa":   "enviando",
+        "op_key":  op_key,
+        "ativo":   ativo,
+        "direcao": direcao_norm,
+        "valor":   valor,
+        "duracao": duracao,
+    }
+
+
+def quotex_ordem_status(op_key: str) -> dict:
+    """
+    Retorna o estado atual da ordem em background.
+    etapa='enviando' → ainda aguardando confirmação
+    etapa='confirmada' / 'rejeitada' / 'confirmacao_pendente' → finalizado
+    """
+    with _ORDEM_BG_LOCK:
+        return dict(_ORDEM_BG_CACHE.get(op_key, {
+            "ok": False, "etapa": "nao_encontrada",
+            "erro": "op_key não encontrado.",
+        }))
 
 
 # Cache de resultados já obtidos: op_id -> dict

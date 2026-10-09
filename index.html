@@ -31365,42 +31365,16 @@ function _qxHmaQOperar(direcao, contexto, est) {
     .then(d => {
         if (!d.ok) {
             const msgErro = d.erro || d.detalhe || 'Erro desconhecido';
-            const etapa   = d.etapa   || '';
+            const etapa   = d.etapa || '';
 
-            // Sinal expirou no servidor (janela < 3s quando chegou)
             if (d.sinal_expirado || etapa === 'janela_expirada') {
                 _qxHmaQ.opBloqueada = false;
                 print(`🟠 HMA QUOTEX: 🚫 SINAL EXPIRADO NO SERVIDOR — aguardando próxima vela`, 'log-info');
                 return;
             }
-
-            // ── Timeout de confirmação — VERIFICAR ANTES de transitorio ──────
-            // pendente_confirmacao=true significa que o buy() foi chamado mas a
-            // Quotex não respondeu no prazo. A ordem pode estar ativa.
-            // NÃO reenviar. transitorio=true nesses casos é informativo, não DNS.
-            if (d.pendente_confirmacao || d.nao_reenviar) {
-                _qxHmaQ.opBloqueada = false;
-                const _tipoTimeout = etapa === 'timeout_thread' ? 'TIMEOUT THREAD' : 'TIMEOUT CONFIRMAÇÃO';
-                print(
-                    `🟠 HMA QUOTEX: ⏳ ${_tipoTimeout} — ` +
-                    `ordem pode ter sido aceita pela corretora. NÃO reenviar automaticamente. ` +
-                    `Verifique a plataforma.`,
-                    'log-info'
-                );
-                return;
-            }
-
-            // Erro transitório de rede (DNS/curl) — ordem NÃO foi enviada, WS ainda vivo
-            if (d.transitorio && !d.ordem_enviada) {
-                _qxHmaQ.opBloqueada = false;
-                print(`🟠 HMA QUOTEX: ⚠️ ERRO DE REDE — retentando na próxima vela: ${msgErro}`, 'log-info');
-                return;
-            }
-
-            // Sem conexão — inicia poll de reconexão
-            _qxHmaQ.opBloqueada = false;
             if (etapa === 'sem_conexao' || msgErro.toLowerCase().includes('desconectada') ||
                 msgErro.toLowerCase().includes('reconectando')) {
+                _qxHmaQ.opBloqueada = false;
                 _qx.status = 'desconectado';
                 _qxAtualizarBotao('desconectado');
                 print('🟠 HMA QUOTEX: 🔄 SEM CONEXÃO — aguardando reconexão automática...', 'log-info');
@@ -31410,38 +31384,81 @@ function _qxHmaQOperar(direcao, contexto, est) {
                     fetch('/quotex/status').then(r => r.json()).then(s => {
                         _qx.status = s.status || 'desconectado';
                         _qxAtualizarBotao(s.status);
-                        if (s.status === 'conectado') {
-                            clearInterval(_rcPoll);
-                            print('🟠 HMA QUOTEX: ✅ Reconectado automaticamente!', 'log-win');
-                        } else if (_rcTent >= 11) {
-                            clearInterval(_rcPoll);
-                            print('🟠 HMA QUOTEX: ⚠️ Sem reconexão após 90s — verifique as credenciais', 'log-info');
-                        }
+                        if (s.status === 'conectado') { clearInterval(_rcPoll); print('🟠 HMA QUOTEX: ✅ Reconectado!', 'log-win'); }
+                        else if (_rcTent >= 11) { clearInterval(_rcPoll); print('🟠 HMA QUOTEX: ⚠️ Sem reconexão após 90s', 'log-info'); }
                     }).catch(() => { if (_rcTent >= 11) clearInterval(_rcPoll); });
                 }, 8000);
                 return;
             }
-
-            // Demais erros (ordem rejeitada pela corretora, etc.)
-            print(`🟠 HMA QUOTEX: ❌ ERRO [${etapa}] — ${msgErro}`, 'log-loss');
+            _qxHmaQ.opBloqueada = false;
+            print(`🟠 HMA QUOTEX: ❌ ERRO AO INICIAR BUY [${etapa}] — ${msgErro}`, 'log-loss');
             return;
         }
 
-        // ── ORDEM CONFIRMADA ──────────────────────────────────────────────────
+        // ── BUY INICIADO EM BACKGROUND — fazer poll do status ─────────────────
+        const _opKey   = d.op_key || '';
         const _durSecs = d.duracao || periodo;
         print(
-            `🟠 HMA QUOTEX: ✅ ORDEM CONFIRMADA | ` +
-            `id=${d.id || 'sem-id'} | ${direcao.toUpperCase()} | ` +
-            `${contexto.ativoNome || contexto.ativoId} | $${_qxHmaQ.valorAtual} | ${_durSecs}s`,
-            'log-win'
+            `🟠 HMA QUOTEX: ⏳ BUY ENVIADO | ` +
+            `${direcao.toUpperCase()} ${contexto.ativoNome || contexto.ativoId} | ` +
+            `$${_qxHmaQ.valorAtual} | aguardando confirmação...`,
+            'log-info'
         );
-        if (typeof _tradeAtivarLocal === 'function') {
-            _tradeAtivarLocal(direcao, _durSecs, contexto.ativoNome || contexto.ativoId,
-                _qxHmaQ.valorAtual, 'quotex', 0, contexto.ativoId);
-        }
-        contexto.stake   = _qxHmaQ.valorAtual;
-        contexto.duracao = _durSecs;
-        _qxHmaQAguardarResultado(d.id, contexto, direcao, est, _durSecs);
+
+        // Poll a cada 2s por até 90s aguardando confirmação do buy()
+        let _pollTent = 0;
+        const _pollMax = 45;
+        const _pollTimer = setInterval(() => {
+            _pollTent++;
+            if (!_qxHmaQ.rodando || _pollTent > _pollMax) {
+                clearInterval(_pollTimer);
+                _qxHmaQ.opBloqueada = false;
+                if (_pollTent > _pollMax) print(`🟠 HMA QUOTEX: ⚠️ Timeout aguardando confirmação do buy — verifique a plataforma`, 'log-info');
+                return;
+            }
+            fetch(`/quotex/ordem-status/${encodeURIComponent(_opKey)}`)
+                .then(r => r.json())
+                .then(s => {
+                    const _etapa = s.etapa || '';
+                    if (_etapa === 'enviando') return; // ainda aguardando
+
+                    clearInterval(_pollTimer);
+
+                    if (_etapa === 'confirmada' && s.ok) {
+                        const _opId = s.id || '';
+                        print(
+                            `🟠 HMA QUOTEX: ✅ ORDEM CONFIRMADA | ` +
+                            `id=${_opId || 'sem-id'} | ${direcao.toUpperCase()} | ` +
+                            `${contexto.ativoNome || contexto.ativoId} | ` +
+                            `$${_qxHmaQ.valorAtual} | ${_durSecs}s`,
+                            'log-win'
+                        );
+                        if (typeof _tradeAtivarLocal === 'function') {
+                            _tradeAtivarLocal(direcao, _durSecs,
+                                contexto.ativoNome || contexto.ativoId,
+                                _qxHmaQ.valorAtual, 'quotex', 0, contexto.ativoId);
+                        }
+                        contexto.stake   = _qxHmaQ.valorAtual;
+                        contexto.duracao = _durSecs;
+                        _qxHmaQAguardarResultado(_opId, contexto, direcao, est, _durSecs);
+                    } else if (s.pendente_confirmacao || s.nao_reenviar || _etapa === 'confirmacao_pendente') {
+                        _qxHmaQ.opBloqueada = false;
+                        print(
+                            `🟠 HMA QUOTEX: ⏳ TIMEOUT CONFIRMAÇÃO — ` +
+                            `ordem pode ter sido aceita pela corretora. ` +
+                            `NÃO reenviar. Verifique a plataforma.`,
+                            'log-info'
+                        );
+                    } else if (s.transitorio && !s.ordem_enviada || _etapa === 'erro_rede') {
+                        _qxHmaQ.opBloqueada = false;
+                        print(`🟠 HMA QUOTEX: ⚠️ ERRO DE REDE — retentando na próxima vela: ${s.erro}`, 'log-info');
+                    } else {
+                        _qxHmaQ.opBloqueada = false;
+                        print(`🟠 HMA QUOTEX: ❌ ERRO [${_etapa}] — ${s.erro || 'sem detalhe'}`, 'log-loss');
+                    }
+                })
+                .catch(() => {}); // ignora erros de rede no poll
+        }, 2000);
     })
     .catch(e => {
         _qxHmaQ.opBloqueada = false;
