@@ -4,7 +4,6 @@ from digit_matrix_sniper import register_digit_matrix
 from memory_time_engine import get_mte, mte_pode_operar, mte_registrar, mte_status
 from masaniello import Masaniello
 from garra_hma_core import hma_avaliar, _hma_hist_salvar, _hma_hist_ler
-from garra_hma_quotex import quotex_hma_avaliar
 import threading
 import time
 import json
@@ -2195,7 +2194,7 @@ def _ssid_auto_thread(email: str, senha: str):
             # QuotexAPI é o objeto de baixo nível que Login espera como `api`
             # (tem https_url, username, session_data, lang, on_otp_callback)
             api = QuotexAPI(
-                host="quotex.com",
+                host="qxbroker.com",
                 username=email,
                 password=senha,
                 lang="pt",
@@ -2351,7 +2350,7 @@ def rota_quotex_login_proxy():
         # 1. Obtém CSRF token
         csrf = ""
         try:
-            pg = s.get("https://quotex.com/pt/sign-in", timeout=15)
+            pg = s.get("https://qxbroker.com/pt/sign-in", timeout=15)
             m  = _re.search(r'name="_token"\s+value="([^"]+)"', pg.text)
             if m:
                 csrf = m.group(1)
@@ -2364,12 +2363,12 @@ def rota_quotex_login_proxy():
             payload["_token"] = csrf
 
         resp = s.post(
-            "https://quotex.com/pt/sign-in",
+            "https://qxbroker.com/pt/sign-in",
             data=payload,
             headers={
                 "Content-Type": "application/x-www-form-urlencoded",
-                "Referer":      "https://quotex.com/pt/sign-in",
-                "Origin":       "https://quotex.com",
+                "Referer":      "https://qxbroker.com/pt/sign-in",
+                "Origin":       "https://qxbroker.com",
             },
             timeout=20,
             allow_redirects=True,
@@ -2387,7 +2386,7 @@ def rota_quotex_login_proxy():
         # Tenta HTML da página /trade
         if not token:
             try:
-                trade = s.get("https://quotex.com/pt/trade", timeout=15)
+                trade = s.get("https://qxbroker.com/pt/trade", timeout=15)
                 m2 = _re.search(r'"token"\s*:\s*"([^"]{20,})"', trade.text)
                 if m2:
                     token = m2.group(1)
@@ -2416,7 +2415,7 @@ def rota_quotex_login_proxy():
             import requests as _req
             s2 = _req.Session()
             s2.headers.update({"User-Agent": ua, "X-Forwarded-For": user_ip})
-            pg2 = s2.get("https://quotex.com/pt/sign-in", timeout=15)
+            pg2 = s2.get("https://qxbroker.com/pt/sign-in", timeout=15)
             csrf2 = ""
             m3 = _re.search(r'name="_token"\s+value="([^"]+)"', pg2.text)
             if m3:
@@ -2424,11 +2423,11 @@ def rota_quotex_login_proxy():
             payload2 = {"email": email, "password": senha}
             if csrf2:
                 payload2["_token"] = csrf2
-            r2 = s2.post("https://quotex.com/pt/sign-in", data=payload2,
+            r2 = s2.post("https://qxbroker.com/pt/sign-in", data=payload2,
                          headers={"Content-Type": "application/x-www-form-urlencoded",
-                                  "Referer": "https://quotex.com/pt/sign-in"},
+                                  "Referer": "https://qxbroker.com/pt/sign-in"},
                          timeout=20, allow_redirects=True)
-            trade2 = s2.get("https://quotex.com/pt/trade", timeout=15)
+            trade2 = s2.get("https://qxbroker.com/pt/trade", timeout=15)
             m4 = _re.search(r'"token"\s*:\s*"([^"]{20,})"', trade2.text)
             if m4:
                 tok2 = m4.group(1)
@@ -2459,11 +2458,11 @@ def rota_quotex_login_proxy_otp():
     try:
         from curl_cffi import requests as _creqs
         s = _creqs.Session(impersonate="chrome120")
-        r = s.post("https://quotex.com/pt/sign-in/otp",
+        r = s.post("https://qxbroker.com/pt/sign-in/otp",
                    json={"code": codigo},
                    headers={"X-Requested-With": "XMLHttpRequest"},
                    timeout=15)
-        trade = s.get("https://quotex.com/pt/trade", timeout=15)
+        trade = s.get("https://qxbroker.com/pt/trade", timeout=15)
         m = _re.search(r'"token"\s*:\s*"([^"]{20,})"', trade.text)
         if m:
             tok = m.group(1)
@@ -2531,7 +2530,7 @@ def rota_ssid_captura_limpar():
 def rota_quotex_ssid_proxy():
     """
     Proxy: o browser do usuário envia os cookies da Quotex via parâmetro,
-    o servidor faz o request autenticado para quotex.com e extrai o token.
+    o servidor faz o request autenticado para qxbroker.com e extrai o token.
     Retorna JSON com o token para o frontend.
     """
     import urllib.request, urllib.error, json as _json, ssl as _ssl
@@ -2543,8 +2542,8 @@ def rota_quotex_ssid_proxy():
         return jsonify({"ok": False, "erro": "Nenhum cookie enviado."}), 400
 
     urls_tentar = [
-        "https://quotex.com/api/v1/cabinets/digest",
-        "https://quotex.com/api/v1/profile",
+        "https://qxbroker.com/api/v1/cabinets/digest",
+        "https://qxbroker.com/api/v1/profile",
     ]
 
     token = ""
@@ -2606,7 +2605,7 @@ def rota_quotex_ssid_bridge():
 
     token = ""
     try:
-        req = urllib.request.Request("https://quotex.com/pt/trade")
+        req = urllib.request.Request("https://qxbroker.com/pt/trade")
         req.add_header("Cookie", cookies_str)
         req.add_header("User-Agent",
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -2971,9 +2970,9 @@ def rota_quotex_login_page():
   <div id="tela-manual">
     <p class="hint">
       <b style="color:#ffbd2e;">Como pegar o SSID:</b><br>
-      1. Abra <b style="color:#fff">quotex.com</b> e faça login<br>
+      1. Abra <b style="color:#fff">qxbroker.com</b> e faça login<br>
       2. Pressione <b style="color:#fff">F12</b> → Application<br>
-      3. Local Storage → quotex.com<br>
+      3. Local Storage → qxbroker.com<br>
       4. Copie o valor de <b style="color:#00cfff">token</b>
     </p>
     <input id="inp-ssid" type="text" placeholder="Cole o SSID/token aqui..." autocomplete="off"/>
@@ -2999,7 +2998,7 @@ let _pollId = null;
     '  try{{t=(window.settings&&window.settings.token)||"";}}catch(e){{}}',
     '  if(!t)try{{t=localStorage.getItem("token")||localStorage.getItem("ssid")||"";}}catch(e){{}}',
     '  if(!t){{var cc=document.cookie.split(";");for(var i=0;i<cc.length;i++){{var p=cc[i].trim().split("=");if(p[0]==="token"||p[0]==="ssid"){{t=decodeURIComponent(p[1]||"");break;}}}}}}',
-    '  if(!t||t.length<8){{alert("SSID nao encontrado. Certifique-se de estar logado em quotex.com/pt/trade");return;}}',
+    '  if(!t||t.length<8){{alert("SSID nao encontrado. Certifique-se de estar logado em qxbroker.com/pt/trade");return;}}',
     '  fetch("{servidor}/quotex/ssid-captura/receber",{{method:"POST",headers:{{"Content-Type":"application/json"}},body:JSON.stringify({{ssid:t}})}}).then(function(){{alert("SSID capturado! Volte ao Bot Garra.");}}).catch(function(){{alert("Erro ao enviar SSID. Tente novamente.");}});',
     '}})()'
   ].join('');
@@ -3022,7 +3021,7 @@ function iniciar() {{
 }}
 
 function abrirQuotex() {{
-  _winQx = window.open('https://quotex.com/pt/sign-in', '_blank',
+  _winQx = window.open('https://qxbroker.com/pt/sign-in', '_blank',
                        'width=1100,height=720,left=50,top=30');
 }}
 
@@ -3046,7 +3045,7 @@ function iniciarPolling() {{
     // ── Tenta detectar URL da janela (só funciona se estiver no mesmo domínio) ──
     try {{
       const url = _winQx && _winQx.location && _winQx.location.href;
-      if (url && url.includes('quotex.com/pt/trade')) {{
+      if (url && url.includes('qxbroker.com/pt/trade')) {{
         // Está em /trade — lê o token via execute script na janela
         clearInterval(_pollId);
         capturarDaJanela();
@@ -3756,11 +3755,35 @@ def rota_quotex_ativos_payout():
             _payout_cache    = ativos
             _payout_cache_ts = _t.time()
             return jsonify({"ok": True, "ativos": ativos})
-        else:
-            if _payout_cache and (_t.time() - _payout_cache_ts) < 300:
-                print(f"[Quotex] ⚠️ Payout zerado — usando cache ({len(_payout_cache)} ativos)")
-                return jsonify({"ok": True, "ativos": _payout_cache, "cache": True})
-            return jsonify({"ok": True, "ativos": ativos})
+
+        # Sem payout da API — tenta cache recente
+        if _payout_cache and (_t.time() - _payout_cache_ts) < 300:
+            print(f"[Quotex] ⚠️ Payout zerado — usando cache ({len(_payout_cache)} ativos)")
+            return jsonify({"ok": True, "ativos": _payout_cache, "cache": True})
+
+        # Fallback final: ativos OTC padrão da Quotex com payout estimado 80%
+        # Usado quando a pyquotex ainda não populou os dados de pagamento no WS
+        _OTC_FALLBACK = [
+            {"id": "USDIDR_otc",  "nome": "USD/IDR (OTC)",  "payout": 80, "aberto": True},
+            {"id": "USDEGP_otc",  "nome": "USD/EGP (OTC)",  "payout": 80, "aberto": True},
+            {"id": "USDBRL_otc",  "nome": "USD/BRL (OTC)",  "payout": 80, "aberto": True},
+            {"id": "USDZAR_otc",  "nome": "USD/ZAR (OTC)",  "payout": 80, "aberto": True},
+            {"id": "USDDZD_otc",  "nome": "USD/DZD (OTC)",  "payout": 80, "aberto": True},
+            {"id": "USDNGN_otc",  "nome": "USD/NGN (OTC)",  "payout": 80, "aberto": True},
+            {"id": "USDPHP_otc",  "nome": "USD/PHP (OTC)",  "payout": 80, "aberto": True},
+            {"id": "USDBDT_otc",  "nome": "USD/BDT (OTC)",  "payout": 80, "aberto": True},
+            {"id": "USDCOP_otc",  "nome": "USD/COP (OTC)",  "payout": 80, "aberto": True},
+            {"id": "NZDUSD_otc",  "nome": "NZD/USD (OTC)",  "payout": 80, "aberto": True},
+        ]
+        # Complementa com ativos que vieram da API mas sem payout
+        ids_fallback = {a["id"] for a in _OTC_FALLBACK}
+        for a in ativos:
+            if a["id"] not in ids_fallback:
+                a["payout"] = 80  # assume 80% para não bloquear
+                _OTC_FALLBACK.append(a)
+
+        print(f"[Quotex] ⚠️ Usando fallback OTC com {len(_OTC_FALLBACK)} ativos (payout=80%)")
+        return jsonify({"ok": True, "ativos": _OTC_FALLBACK, "fallback": True})
 
     except Exception as e:
         import traceback; traceback.print_exc()
@@ -14599,47 +14622,6 @@ def garra_hma_avaliar():
         f"regime={resultado['regime']} aprovado={resultado['aprovado']}"
     )
 
-    return jsonify(resultado)
-
-
-@app.route('/garra-hma/quotex/avaliar', methods=['POST'])
-def garra_hma_quotex_avaliar():
-    """
-    Motor OHLC dedicado para Quotex.
-    Usa TrendEngine (EMA) + CandleEngine + MomentumEngine (RSI) + RegimeEngine (ATR).
-    Não usa lógica de dígitos.
-
-    Body JSON:
-        candles           : list[{open,high,low,close,time}]  mín. 15 velas
-        confianca_minima  : float   threshold de aprovação (padrão 75)
-        payout            : float   ex. 0.85
-        losses_seq        : int     losses seguidos (Risk Gate)
-    """
-    dados = request.get_json(force=True, silent=True) or {}
-    candles          = dados.get("candles", [])
-    confianca_minima = float(dados.get("confianca_minima", 75.0))
-    payout           = float(dados.get("payout", 0.85))
-    losses_seq       = int(dados.get("losses_seq", 0))
-
-    if not isinstance(candles, list) or len(candles) < 5:
-        return jsonify({
-            "aprovado": False, "decisao": "NO_TRADE",
-            "confianca": 0, "motivo": "candles insuficientes (mín. 5)",
-        }), 400
-
-    resultado = quotex_hma_avaliar(
-        candles          = candles,
-        confianca_minima = confianca_minima,
-        payout           = payout,
-        losses_seq       = losses_seq,
-    )
-
-    print(
-        f"[HMA-QUOTEX] decisao={resultado['decisao']} "
-        f"conf={resultado['confianca']}% "
-        f"regime={resultado['regime']} "
-        f"aprovado={resultado['aprovado']}"
-    )
     return jsonify(resultado)
 
 
