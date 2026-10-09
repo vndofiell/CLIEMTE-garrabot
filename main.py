@@ -4439,79 +4439,119 @@ def rota_pocket_login_page():
 
     # ── Bookmarklet gerado server-side (href estático, nunca falha no arraste) ──
     import urllib.parse as _up
-    _bkm_js = (
-        "(function(){"
-        f"var SRV='{servidor}';"
-        "var host=location.hostname;"
-        "if(host.indexOf('pocketoption')<0&&host.indexOf('po.trade')<0&&host.indexOf('pocket')<0){"
-          "alert('\\u26a0\\ufe0f ATEN\\u00c7\\u00c3O!\\n\\nClique este favorito NA ABA DA POCKET OPTION!\\n\\n1. V\\u00e1 para a aba da Pocket Option\\n2. Clique GarraBot SSID-PO l\\u00e1');"
-          "return;"
-        "}"
-        "var ok=false;"
-        "function send(s){"
-          "if(ok)return;ok=true;"
-          "fetch(SRV+'/pocket/ssid-captura/receber',{"
-            "method:'POST',"
-            "headers:{'Content-Type':'application/json'},"
-            "body:JSON.stringify({ssid:s})"
-          "}).then(function(r){return r.json();}).then(function(d){"
-            "if(d&&d.ok){alert('\\u2705 SSID capturado! Volte ao Bot Garra.');}"
-            "else{alert('\\u274c Erro: '+(d&&d.erro?d.erro:'falha. Cole manualmente.'));}"
-          "}).catch(function(e){alert('\\u274c Rede: '+e.message);});"
-        "}"
-        # Estratégia 1: cookies
-        "try{"
-          "var ck=document.cookie;"
-          "var cm=ck.match(/(?:^|;)\\s*(?:io|session|ssid|token|po_session)=([^;]{20,})/i);"
-          "if(cm){var tv=decodeURIComponent(cm[1]).trim();"
-            "if(tv.indexOf('auth')>0){send(tv);}"
-            "else{var dm=(ck.indexOf('isDemo=1')>0||ck.indexOf('demo=1')>0)?1:0;"
-              "send('42[\"auth\",{\"session\":\"'+tv+'\",\"isDemo\":'+dm+',\"uid\":0,\"platform\":2}]');}"
-          "}"
-        "}catch(e){}"
-        # Estratégia 2: localStorage chaves diretas
-        "if(!ok){"
-          "var ks=['session','token','ssid','auth','io','po_session','userSession','accessToken','access_token'];"
-          "try{for(var i=0;i<ks.length;i++){"
-            "var v=localStorage.getItem(ks[i])||'';"
-            "if(v.length>20){"
-              "if(v.indexOf('auth')>0){send(v);break;}"
-              "send('42[\"auth\",{\"session\":\"'+v+'\",\"isDemo\":1,\"uid\":0,\"platform\":2}]');break;"
-            "}"
-          "}}catch(e){}"
-        "}"
-        # Estratégia 3: varrer localStorage completo
-        "if(!ok){"
-          "try{for(var i=0;i<localStorage.length;i++){"
-            "var k=localStorage.key(i),v=localStorage.getItem(k)||'';"
-            "if(v.length>30){"
-              "var m=v.match(/\"session\"\\s*:\\s*\"([^\"]{20,})\"/);"
-              "if(m){send('42[\"auth\",{\"session\":\"'+m[1]+'\",\"isDemo\":1,\"uid\":0,\"platform\":2}]');break;}"
-              "if(v[0]==='{'){try{var j=JSON.parse(v);var s2=j.session||j.token||j.ssid||j.auth||j.accessToken||'';"
-                "if(s2.length>20){send('42[\"auth\",{\"session\":\"'+s2+'\",\"isDemo\":1,\"uid\":0,\"platform\":2}]');break;}"
-              "}catch(ex){}}"
-            "}"
-          "}}catch(e){}"
-        "}"
-        # Estratégia 4: interceptar WebSocket
-        "try{"
-          "var _o=WebSocket.prototype.send;"
-          "WebSocket.prototype.send=function(d){"
-            "_o.call(this,d);if(ok)return;"
-            "try{var s=typeof d==='string'?d:'';"
-              "if(s.indexOf('\"session\"')>0&&s.indexOf('auth')>0){"
-                "var m=s.match(/\"session\"\\s*:\\s*\"([^\"]{20,})\"/);"
-                "if(m){var dm=(s.indexOf('isDemo\":1')>0)?1:0;"
-                  "var uid=0;var mu=s.match(/\"uid\"\\s*:\\s*(\\d+)/);if(mu)uid=parseInt(mu[1]);"
-                  "send('42[\"auth\",{\"session\":\"'+m[1]+'\",\"isDemo\":'+dm+',\"uid\":'+uid+',\"platform\":2}]');}"
-              "}"
-            "}catch(ex){}"
-          "};"
-        "}catch(e){}"
-        "if(!ok){alert('\\u26a0\\ufe0f Interceptor ativo! Pressione F5 na Pocket Option para capturar o SSID automaticamente.');}"
-        "})()"
-    )
-    _bkm_href = "javascript:" + _up.quote(_bkm_js, safe="~()*!.'")
+
+    # Constrói o código JS do bookmarklet como string Python pura
+    # Usa aspas simples internamente para não conflitar com f-string
+    _bkm_js = r"""(function(){
+var SRV='""" + servidor + r"""';
+var host=location.hostname;
+if(host.indexOf('pocketoption')<0&&host.indexOf('po.trade')<0&&host.indexOf('pocket')<0){
+  alert('\u26a0\ufe0f ATEN\u00c7\u00c3O!\n\nClique este favorito NA ABA DA POCKET OPTION!\n\n1. V\u00e1 para a aba da Pocket Option\n2. Clique GarraBot SSID-PO l\u00e1');
+  return;
+}
+var ok=false;
+function montaSsid(sess,isDemo,uid){
+  return '42["auth",{"session":"'+sess+'","isDemo":'+(isDemo?1:0)+',"uid":'+(uid||0)+',"platform":2}]';
+}
+function enviar(ssid){
+  if(ok)return;ok=true;
+  fetch(SRV+'/pocket/ssid-captura/receber',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({ssid:ssid})
+  }).then(function(r){return r.json();}).then(function(d){
+    if(d&&d.ok){alert('\u2705 SSID capturado!\n\nVolte ao Bot Garra e conecte DEMO ou REAL.');}
+    else{alert('\u274c Erro: '+(d&&d.erro?d.erro:'falha. Cole manualmente.'));}
+  }).catch(function(e){alert('\u274c Erro de rede: '+e.message);});
+}
+function tentarCaptura(txt){
+  if(ok)return;
+  if(!txt||typeof txt!=='string')return;
+  // Formato completo 42["auth",{...}]
+  if(txt.indexOf('auth')>=0&&txt.indexOf('session')>=0){
+    var m=txt.match(/"session"\s*:\s*"([^"]{20,})"/);
+    if(m){
+      var dm=txt.indexOf('"isDemo":1')>=0||txt.indexOf('"isDemo": 1')>=0?1:0;
+      var uid=0;var mu=txt.match(/"uid"\s*:\s*(\d+)/);if(mu)uid=parseInt(mu[1]);
+      enviar(montaSsid(m[1],dm,uid));return;
+    }
+  }
+  // Token puro (só a string da sessão)
+  if(txt.length>30&&txt.indexOf(' ')<0&&txt.indexOf('"')<0&&txt.indexOf('{')!==0){
+    enviar(montaSsid(txt,1,0));
+  }
+}
+// Estrategia 1: varrer todo o localStorage
+try{
+  for(var i=0;i<localStorage.length;i++){
+    var k=localStorage.key(i);
+    var v=localStorage.getItem(k)||'';
+    tentarCaptura(v);
+    if(ok)break;
+    // tentar parsear JSON
+    if(v.length>10&&(v[0]==='{' || v[0]==='[')){
+      try{
+        var j=JSON.parse(v);
+        var campos=['session','token','ssid','auth','accessToken','access_token','userSession','io'];
+        for(var c=0;c<campos.length;c++){
+          if(j[campos[c]]&&String(j[campos[c]]).length>20){
+            tentarCaptura(String(j[campos[c]]));
+            if(ok)break;
+          }
+        }
+      }catch(ex){}
+    }
+    if(ok)break;
+  }
+}catch(e){}
+// Estrategia 2: varrer cookies
+if(!ok){
+  try{
+    var ck=document.cookie;
+    var partes=ck.split(';');
+    for(var p=0;p<partes.length;p++){
+      var par=partes[p].trim();
+      var idx=par.indexOf('=');
+      if(idx<0)continue;
+      var vv=decodeURIComponent(par.substring(idx+1)).trim();
+      tentarCaptura(vv);
+      if(ok)break;
+    }
+  }catch(e){}
+}
+// Estrategia 3: interceptar WebSocket.send E onmessage (para F5)
+try{
+  var _WS=window.WebSocket;
+  window.WebSocket=function(url,protos){
+    var ws=protos?new _WS(url,protos):new _WS(url);
+    var _send=ws.send.bind(ws);
+    ws.send=function(d){
+      _send(d);
+      if(!ok&&typeof d==='string')tentarCaptura(d);
+    };
+    ws.addEventListener('message',function(e){
+      if(!ok&&typeof e.data==='string')tentarCaptura(e.data);
+    });
+    return ws;
+  };
+  window.WebSocket.prototype=_WS.prototype;
+  window.WebSocket.CONNECTING=_WS.CONNECTING;
+  window.WebSocket.OPEN=_WS.OPEN;
+  window.WebSocket.CLOSING=_WS.CLOSING;
+  window.WebSocket.CLOSED=_WS.CLOSED;
+  // Interceptar tambem WebSocket.prototype.send para conexoes ja abertas
+  var _proto_send=_WS.prototype.send;
+  _WS.prototype.send=function(d){
+    _proto_send.call(this,d);
+    if(!ok&&typeof d==='string')tentarCaptura(d);
+  };
+}catch(e){}
+if(!ok){
+  alert('\u26a0\ufe0f Interceptor instalado!\n\nAgora pressione F5 nesta p\u00e1gina da Pocket Option.\nO SSID ser\u00e1 capturado automaticamente ao reconectar.\n\nN\u00e3o feche esta aba do Bot Garra!');
+}
+})()"""
+
+    _bkm_href = "javascript:" + _up.quote(_bkm_js, safe="~()*!.'\"")
 
     html = f"""<!DOCTYPE html>
 <html lang="pt-BR">
