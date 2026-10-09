@@ -30998,109 +30998,110 @@ async function _qxHmaQCiclo() {
 
 // ── Analisa ativo via candles MTF (M1+M5+M15) + /garra-hma/avaliar + /garra-hma/mtf ──
 async function _qxHmaQAnalisarAtivo(ativo, est) {
-    // ── Motor OHLC dedicado para Quotex ──────────────────────────────────────
-    // Busca candles M1 (principal) + M5 e M15 (confirmação MTF) em paralelo
+    // Timeframes a buscar: M1 (operado) + M5 e M15 para confirmação MTF
     const TFS = [
         { periodo: 60,  nome: 'M1',  limite: 100 },
         { periodo: 300, nome: 'M5',  limite: 60  },
         { periodo: 900, nome: 'M15', limite: 40  },
     ];
 
-    const candlesPorTF = {};
+    // Busca candles de cada TF em paralelo
+    const ticksPorTF = {};
     await Promise.all(TFS.map(async tf => {
         try {
             const d = await fetch(`/quotex/candles?ativo=${encodeURIComponent(ativo.id)}&periodo=${tf.periodo}&limite=${tf.limite}`).then(r => r.json());
             if (d.ok && d.candles && d.candles.length >= 5) {
-                candlesPorTF[tf.nome] = d.candles
-                    .filter(c => c.close > 0 && c.open > 0)
-                    .sort((a, b) => a.time - b.time);
+                ticksPorTF[tf.nome] = d.candles.filter(c => c.close > 0).sort((a,b) => a.time - b.time).map(c => c.close);
             }
         } catch (_e) {}
     }));
 
-    const candlesM1 = candlesPorTF['M1'] || [];
-    if (candlesM1.length < 10) {
-        console.warn('[HMAq] candles insuficientes para', ativo.id, '— M1:', candlesM1.length);
-        return null;
-    }
+    const ticksM1 = ticksPorTF['M1'] || [];
+    if (ticksM1.length < 10) return null;
 
-    const isOtc = (ativo.id||'').toLowerCase().includes('otc');
-
-    // ── 1) Motor OHLC principal (M1) — EMA + Candle + RSI + ATR ─────────────
+    // ── 1) Análise HMA no M1 (sinal principal) ───────────────────────────────
     let hmaRes = null;
     try {
-        const resp = await fetch('/garra-hma/quotex/avaliar', {
+        const resp = await fetch('/garra-hma/avaliar', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                candles:          candlesM1,
-                confianca_minima: est.qhma_confianca || 75,
-                payout:           parseInt(ativo.payout || 80) / 100,
-                losses_seq:       _qxHmaQ.losses || 0,
+                ticks:             ticksM1,
+                contrato:          'CALL/PUT AUTO',
+                janelas:           null,
+                confianca_minima:  est.qhma_confianca || 75,
+                banca:             _qxModo.saldoAtual || 100,
+                stake:             _qxHmaQ.valorAtual || 1,
+                payout:            parseInt(ativo.payout || 80) / 100,
+                historico_recente: _qxHmaQ.losses || 0,
             }),
         });
         hmaRes = await resp.json();
     } catch (_e) { return null; }
-
     if (!hmaRes || !hmaRes.aprovado) {
+        // Sinal M1 não aprovado — retorna sem MTF
+        const isOtcA = (ativo.id||'').toLowerCase().includes('otc');
         return {
-            ativoId:   ativo.id, ativoNome: ativo.nome || ativo.id, payout: ativo.payout,
-            isOtc,     aprovado: false, decisao: hmaRes?.decisao || '',
+            ativoId: ativo.id, ativoNome: ativo.nome || ativo.id, payout: ativo.payout,
+            isOtc: isOtcA, aprovado: false, decisao: hmaRes?.decisao || '',
             confianca: hmaRes?.confianca || 0, regime: hmaRes?.regime || '',
-            motivo:    hmaRes?.motivo || 'sinal OHLC fraco', ts: Date.now(),
+            motivo: hmaRes?.motivo || 'sinal M1 fraco', ts: Date.now(),
             mtf: null,
         };
     }
 
-    // ── 2) Confirmação MTF via /garra-hma/mtf (usa closes reais dos TFs) ─────
-    // Concatena closes M15 + M5 + M1 para que o MTF veja a tendência macro → micro
-    const closesM15 = (candlesPorTF['M15'] || []).map(c => c.close);
-    const closesM5  = (candlesPorTF['M5']  || []).map(c => c.close);
-    const closesM1  = candlesM1.map(c => c.close);
-    const ticksParaMTF = [...closesM15, ...closesM5, ...closesM1];
-
+    // ── 2) Confirmação MTF (M5+M15) via /garra-hma/mtf ──────────────────────
+    // Usa todos os ticks disponíveis (M1+M5+M15 concatenados) para simular TFs superiores
+    const ticksParaMTF = [...(ticksPorTF['M15'] || []), ...(ticksPorTF['M5'] || []), ...ticksM1];
     let mtfRes = null;
-    const modoMTF = est.qhma_modo || 'hibrido';
-    if (modoMTF !== 'livre' && ticksParaMTF.length >= 20) {
-        try {
-            const mtfResp = await fetch('/garra-hma/mtf', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    ticks:     ticksParaMTF,
-                    duracao_m: 1,
-                    direcao:   hmaRes.decisao,
-                }),
-            });
-            mtfRes = await mtfResp.json();
-        } catch (_e) {}
-    }
+    try {
+        const mtfResp = await fetch('/garra-hma/mtf', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                ticks:     ticksParaMTF,
+                duracao_m: 1,
+                direcao:   hmaRes.decisao,
+            }),
+        });
+        mtfRes = await mtfResp.json();
+    } catch (_e) {}
 
-    // ── 3) Aplica consenso MTF sobre o resultado do motor OHLC ───────────────
-    let aprovado       = hmaRes.aprovado;
-    let motivoMTF      = '';
+    // MTF bloqueia entrada se CONTRA (divergência clara entre TFs)
+    const modoMTF  = est.qhma_modo || 'hibrido';
+    let aprovado   = hmaRes.aprovado;
+    let motivoMTF  = '';
     let confiancaFinal = hmaRes.confianca || 0;
 
     if (mtfRes) {
+        const totalTF   = mtfRes.total_tf || 0;
         const totalVotos = (mtfRes.votos_call || 0) + (mtfRes.votos_put || 0) + (mtfRes.votos_lat || 0);
-        if (totalVotos < 2) {
-            motivoMTF = 'MTF:dados insuf.';
-        } else if (mtfRes.consenso === 'CONTRA') {
+
+        // Se menos de 2 TFs votaram (dados insuficientes), ignora o MTF
+        // Isso ocorre com ativos OTC sintéticos (crypto) que não têm M5/M15
+        if (totalTF < 2 || totalVotos < 2) {
+            motivoMTF = `MTF insuf. dados`;
+            // Mantém aprovado conforme M1
+        } else if (mtfRes.consenso === 'CONTRA' && modoMTF !== 'livre') {
+            // Só bloqueia se CONTRA com maioria clara (diferença > 1 voto)
             const difVotos = Math.abs((mtfRes.votos_call || 0) - (mtfRes.votos_put || 0));
             if (difVotos > 1) {
                 aprovado  = false;
-                motivoMTF = `MTF:CONTRA (${mtfRes.votos_call}C/${mtfRes.votos_put}P)`;
+                motivoMTF = `MTF CONTRA (${mtfRes.votos_call}C/${mtfRes.votos_put}P/${mtfRes.votos_lat}L)`;
             } else {
-                motivoMTF = `MTF:divergente`;
+                // Empate — não bloqueia, apenas avisa
+                motivoMTF = `MTF ⚠️ divergente (${mtfRes.votos_call}C/${mtfRes.votos_put}P)`;
             }
         } else if (mtfRes.consenso === 'CONFIRMA') {
-            confiancaFinal = Math.min(99, confiancaFinal + 4);
-            motivoMTF = `MTF:CONFIRMA ${mtfRes.votos_call}C/${mtfRes.votos_put}P`;
+            // Bônus de confiança quando MTF confirma
+            confiancaFinal = Math.min(99, confiancaFinal + 5);
+            motivoMTF = `MTF ✅ (${mtfRes.votos_call}C/${mtfRes.votos_put}P/${mtfRes.votos_lat}L)`;
         } else {
-            motivoMTF = `MTF:NEUTRO`;
+            motivoMTF = `MTF neutro (${mtfRes.votos_call}C/${mtfRes.votos_put}P/${mtfRes.votos_lat}L)`;
         }
     }
 
+    const isOtc = (ativo.id||'').toLowerCase().includes('otc');
     return {
         ativoId:   ativo.id,
         ativoNome: ativo.nome || ativo.id,

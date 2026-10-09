@@ -2194,7 +2194,7 @@ def _ssid_auto_thread(email: str, senha: str):
             # QuotexAPI é o objeto de baixo nível que Login espera como `api`
             # (tem https_url, username, session_data, lang, on_otp_callback)
             api = QuotexAPI(
-                host="qxbroker.com",
+                host="quotex.com",
                 username=email,
                 password=senha,
                 lang="pt",
@@ -2350,7 +2350,7 @@ def rota_quotex_login_proxy():
         # 1. Obtém CSRF token
         csrf = ""
         try:
-            pg = s.get("https://qxbroker.com/pt/sign-in", timeout=15)
+            pg = s.get("https://quotex.com/pt/sign-in", timeout=15)
             m  = _re.search(r'name="_token"\s+value="([^"]+)"', pg.text)
             if m:
                 csrf = m.group(1)
@@ -2363,12 +2363,12 @@ def rota_quotex_login_proxy():
             payload["_token"] = csrf
 
         resp = s.post(
-            "https://qxbroker.com/pt/sign-in",
+            "https://quotex.com/pt/sign-in",
             data=payload,
             headers={
                 "Content-Type": "application/x-www-form-urlencoded",
-                "Referer":      "https://qxbroker.com/pt/sign-in",
-                "Origin":       "https://qxbroker.com",
+                "Referer":      "https://quotex.com/pt/sign-in",
+                "Origin":       "https://quotex.com",
             },
             timeout=20,
             allow_redirects=True,
@@ -2386,7 +2386,7 @@ def rota_quotex_login_proxy():
         # Tenta HTML da página /trade
         if not token:
             try:
-                trade = s.get("https://qxbroker.com/pt/trade", timeout=15)
+                trade = s.get("https://quotex.com/pt/trade", timeout=15)
                 m2 = _re.search(r'"token"\s*:\s*"([^"]{20,})"', trade.text)
                 if m2:
                     token = m2.group(1)
@@ -2415,7 +2415,7 @@ def rota_quotex_login_proxy():
             import requests as _req
             s2 = _req.Session()
             s2.headers.update({"User-Agent": ua, "X-Forwarded-For": user_ip})
-            pg2 = s2.get("https://qxbroker.com/pt/sign-in", timeout=15)
+            pg2 = s2.get("https://quotex.com/pt/sign-in", timeout=15)
             csrf2 = ""
             m3 = _re.search(r'name="_token"\s+value="([^"]+)"', pg2.text)
             if m3:
@@ -2423,11 +2423,11 @@ def rota_quotex_login_proxy():
             payload2 = {"email": email, "password": senha}
             if csrf2:
                 payload2["_token"] = csrf2
-            r2 = s2.post("https://qxbroker.com/pt/sign-in", data=payload2,
+            r2 = s2.post("https://quotex.com/pt/sign-in", data=payload2,
                          headers={"Content-Type": "application/x-www-form-urlencoded",
-                                  "Referer": "https://qxbroker.com/pt/sign-in"},
+                                  "Referer": "https://quotex.com/pt/sign-in"},
                          timeout=20, allow_redirects=True)
-            trade2 = s2.get("https://qxbroker.com/pt/trade", timeout=15)
+            trade2 = s2.get("https://quotex.com/pt/trade", timeout=15)
             m4 = _re.search(r'"token"\s*:\s*"([^"]{20,})"', trade2.text)
             if m4:
                 tok2 = m4.group(1)
@@ -2458,11 +2458,11 @@ def rota_quotex_login_proxy_otp():
     try:
         from curl_cffi import requests as _creqs
         s = _creqs.Session(impersonate="chrome120")
-        r = s.post("https://qxbroker.com/pt/sign-in/otp",
+        r = s.post("https://quotex.com/pt/sign-in/otp",
                    json={"code": codigo},
                    headers={"X-Requested-With": "XMLHttpRequest"},
                    timeout=15)
-        trade = s.get("https://qxbroker.com/pt/trade", timeout=15)
+        trade = s.get("https://quotex.com/pt/trade", timeout=15)
         m = _re.search(r'"token"\s*:\s*"([^"]{20,})"', trade.text)
         if m:
             tok = m.group(1)
@@ -2530,7 +2530,7 @@ def rota_ssid_captura_limpar():
 def rota_quotex_ssid_proxy():
     """
     Proxy: o browser do usuário envia os cookies da Quotex via parâmetro,
-    o servidor faz o request autenticado para qxbroker.com e extrai o token.
+    o servidor faz o request autenticado para quotex.com e extrai o token.
     Retorna JSON com o token para o frontend.
     """
     import urllib.request, urllib.error, json as _json, ssl as _ssl
@@ -2542,8 +2542,8 @@ def rota_quotex_ssid_proxy():
         return jsonify({"ok": False, "erro": "Nenhum cookie enviado."}), 400
 
     urls_tentar = [
-        "https://qxbroker.com/api/v1/cabinets/digest",
-        "https://qxbroker.com/api/v1/profile",
+        "https://quotex.com/api/v1/cabinets/digest",
+        "https://quotex.com/api/v1/profile",
     ]
 
     token = ""
@@ -2605,7 +2605,7 @@ def rota_quotex_ssid_bridge():
 
     token = ""
     try:
-        req = urllib.request.Request("https://qxbroker.com/pt/trade")
+        req = urllib.request.Request("https://quotex.com/pt/trade")
         req.add_header("Cookie", cookies_str)
         req.add_header("User-Agent",
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -2970,9 +2970,9 @@ def rota_quotex_login_page():
   <div id="tela-manual">
     <p class="hint">
       <b style="color:#ffbd2e;">Como pegar o SSID:</b><br>
-      1. Abra <b style="color:#fff">qxbroker.com</b> e faça login<br>
+      1. Abra <b style="color:#fff">quotex.com</b> e faça login<br>
       2. Pressione <b style="color:#fff">F12</b> → Application<br>
-      3. Local Storage → qxbroker.com<br>
+      3. Local Storage → quotex.com<br>
       4. Copie o valor de <b style="color:#00cfff">token</b>
     </p>
     <input id="inp-ssid" type="text" placeholder="Cole o SSID/token aqui..." autocomplete="off"/>
@@ -2998,7 +2998,7 @@ let _pollId = null;
     '  try{{t=(window.settings&&window.settings.token)||"";}}catch(e){{}}',
     '  if(!t)try{{t=localStorage.getItem("token")||localStorage.getItem("ssid")||"";}}catch(e){{}}',
     '  if(!t){{var cc=document.cookie.split(";");for(var i=0;i<cc.length;i++){{var p=cc[i].trim().split("=");if(p[0]==="token"||p[0]==="ssid"){{t=decodeURIComponent(p[1]||"");break;}}}}}}',
-    '  if(!t||t.length<8){{alert("SSID nao encontrado. Certifique-se de estar logado em qxbroker.com/pt/trade");return;}}',
+    '  if(!t||t.length<8){{alert("SSID nao encontrado. Certifique-se de estar logado em quotex.com/pt/trade");return;}}',
     '  fetch("{servidor}/quotex/ssid-captura/receber",{{method:"POST",headers:{{"Content-Type":"application/json"}},body:JSON.stringify({{ssid:t}})}}).then(function(){{alert("SSID capturado! Volte ao Bot Garra.");}}).catch(function(){{alert("Erro ao enviar SSID. Tente novamente.");}});',
     '}})()'
   ].join('');
@@ -3021,7 +3021,7 @@ function iniciar() {{
 }}
 
 function abrirQuotex() {{
-  _winQx = window.open('https://qxbroker.com/pt/sign-in', '_blank',
+  _winQx = window.open('https://quotex.com/pt/sign-in', '_blank',
                        'width=1100,height=720,left=50,top=30');
 }}
 
@@ -3045,7 +3045,7 @@ function iniciarPolling() {{
     // ── Tenta detectar URL da janela (só funciona se estiver no mesmo domínio) ──
     try {{
       const url = _winQx && _winQx.location && _winQx.location.href;
-      if (url && url.includes('qxbroker.com/pt/trade')) {{
+      if (url && url.includes('quotex.com/pt/trade')) {{
         // Está em /trade — lê o token via execute script na janela
         clearInterval(_pollId);
         capturarDaJanela();
@@ -3495,12 +3495,10 @@ def rota_quotex_candles():
             client.get_historical_candles(ativo, qtd_segundos, periodo),
             loop
         )
-        candles_raw = fut.result(timeout=45) or []
-        print(f"[Quotex/candles] ativo={ativo} periodo={periodo} raw={len(candles_raw)} tipo={type(candles_raw).__name__}"
-              + (f" exemplo={candles_raw[0]}" if candles_raw else " VAZIO"))
+        candles = fut.result(timeout=45) or []
 
         result = []
-        for c in candles_raw[-limite:]:
+        for c in candles[-limite:]:
             if not isinstance(c, dict):
                 continue
             ts = int(c.get("time") or 0)
@@ -3511,13 +3509,11 @@ def rota_quotex_candles():
             if ts > 0 and o > 0:
                 result.append({"time": ts, "open": o, "high": h, "low": l, "close": cl})
 
-        print(f"[Quotex/candles] ativo={ativo} resultado={len(result)} velas válidas")
         result.sort(key=lambda x: x["time"])
         return jsonify({"ok": True, "candles": result, "ativo": ativo, "periodo": periodo,
                         "total": len(result)})
     except Exception as e:
         import traceback; traceback.print_exc()
-        print(f"[Quotex/candles] ERRO ativo={ativo}: {e}")
         return jsonify({"ok": False, "erro": str(e), "candles": []})
 
 
@@ -3697,15 +3693,8 @@ def rota_quotex_ativos_payout():
             nome       = str(item[2]).replace("\n", "").strip() if len(item) > 2 else id_interno
             aberto     = bool(item[14]) if len(item) > 14 else False
 
-            # Aceita apenas ativos forex/OTC — ignora crypto, ações, índices
-            # IDs válidos: terminam em _otc ou são pares forex puros (6 letras como EURUSD)
-            _id_lower = id_interno.lower()
-            _eh_otc   = _id_lower.endswith("_otc")
-            _eh_forex = len(id_interno.replace("_otc","")) == 6 and id_interno.replace("_otc","").isalpha()
-            if not (_eh_otc or _eh_forex):
-                continue  # ignora Axie, crypto, ações, etc.
-
             if id_interno in ids_presentes or nome in nomes_presentes:
+                # Atualiza flag aberto
                 for a in ativos:
                     if a["id"] == id_interno or a["nome"] == nome:
                         if aberto:
@@ -3766,31 +3755,11 @@ def rota_quotex_ativos_payout():
             _payout_cache    = ativos
             _payout_cache_ts = _t.time()
             return jsonify({"ok": True, "ativos": ativos})
-
-        # Sem payout da API — tenta cache recente
-        if _payout_cache and (_t.time() - _payout_cache_ts) < 300:
-            print(f"[Quotex] ⚠️ Payout zerado — usando cache ({len(_payout_cache)} ativos)")
-            return jsonify({"ok": True, "ativos": _payout_cache, "cache": True})
-
-        # Fallback final: ativos OTC padrão da Quotex com payout estimado 80%
-        # IDs exatos usados pela pyquotex para buscar candles
-        _OTC_FALLBACK = [
-            {"id": "USDIDR_otc",  "nome": "USD/IDR (OTC)",  "payout": 80, "aberto": True},
-            {"id": "USDEGP_otc",  "nome": "USD/EGP (OTC)",  "payout": 80, "aberto": True},
-            {"id": "USDBRL_otc",  "nome": "USD/BRL (OTC)",  "payout": 80, "aberto": True},
-            {"id": "USDDZD_otc",  "nome": "USD/DZD (OTC)",  "payout": 80, "aberto": True},
-            {"id": "USDNGN_otc",  "nome": "USD/NGN (OTC)",  "payout": 80, "aberto": True},
-            {"id": "USDPHP_otc",  "nome": "USD/PHP (OTC)",  "payout": 80, "aberto": True},
-            {"id": "USDBDT_otc",  "nome": "USD/BDT (OTC)",  "payout": 80, "aberto": True},
-            {"id": "USDCOP_otc",  "nome": "USD/COP (OTC)",  "payout": 80, "aberto": True},
-            {"id": "NZDUSD_otc",  "nome": "NZD/USD (OTC)",  "payout": 80, "aberto": True},
-            {"id": "AUDCAD_otc",  "nome": "AUD/CAD (OTC)",  "payout": 80, "aberto": True},
-        ]
-        # Salva no cache para as próximas chamadas não precisarem do fallback
-        _payout_cache    = _OTC_FALLBACK
-        _payout_cache_ts = _t.time()
-        print(f"[Quotex] ⚠️ Usando fallback OTC com {len(_OTC_FALLBACK)} ativos (payout=80%) — salvo em cache")
-        return jsonify({"ok": True, "ativos": _OTC_FALLBACK, "fallback": True})
+        else:
+            if _payout_cache and (_t.time() - _payout_cache_ts) < 300:
+                print(f"[Quotex] ⚠️ Payout zerado — usando cache ({len(_payout_cache)} ativos)")
+                return jsonify({"ok": True, "ativos": _payout_cache, "cache": True})
+            return jsonify({"ok": True, "ativos": ativos})
 
     except Exception as e:
         import traceback; traceback.print_exc()
