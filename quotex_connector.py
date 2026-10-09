@@ -517,6 +517,7 @@ def _quotex_conectar_thread(email: str, senha: str, tipo_conta: str,
         client = Quotex(
             email=email,
             password=senha,
+            host="quotex.com",
             lang="pt",
             on_otp_callback=otp_callback,
         )
