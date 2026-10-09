@@ -1718,6 +1718,18 @@
                 <div style="flex:1; height:1px; background:rgba(255,255,255,0.08);"></div>
             </div>
 
+            <!-- Instruções SSID manual -->
+            <div style="background:rgba(0,160,255,0.05); border:1px dashed rgba(0,160,255,0.25);
+                        border-radius:5px; padding:8px 10px; margin-bottom:8px;
+                        font-family:'Share Tech Mono'; font-size:0.58rem; color:#555; line-height:1.7;">
+                <b style="color:#00a0ff;">Como obter o SSID:</b><br>
+                ① Abra <b>pocketoption.com</b> e faça login<br>
+                ② Pressione <b>F12</b> → aba <b>Network (Rede)</b><br>
+                ③ Filtre por <b>WS</b> (WebSocket)<br>
+                ④ Clique na conexão → aba <b>Messages</b><br>
+                ⑤ Copie a mensagem que começa com <b>42["auth",...</b>
+            </div>
+
             <!-- SSID manual -->
             <div style="margin-bottom:12px;">
                 <input id="po-ssid-inp" type="text" autocomplete="off"

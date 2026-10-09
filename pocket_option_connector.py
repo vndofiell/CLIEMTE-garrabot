@@ -103,42 +103,93 @@ def pocket_cfg_salvar(email: str = "", senha: str = "",
 # ═══════════════════════════════════════════════════════════════════════════════
 # CAPTURA AUTOMÁTICA DO SSID — Login HTTP (sem Selenium)
 # ═══════════════════════════════════════════════════════════════════════════════
+#
+# A Pocket Option usa:
+#   1. POST /login  (form ou JSON) → seta cookie de sessão
+#   2. O cookie "io" ou "_session" contém o SSID para o WebSocket
+#   3. A página /cabinet/user-settings tem o campo "token" no HTML
+#
+# ═══════════════════════════════════════════════════════════════════════════════
 
-_PO_URL_LOGIN    = "https://pocketoption.com/pt/login/"
-_PO_URL_CABINET  = "https://pocketoption.com/pt/cabinet/"
-_PO_URL_TRADE    = "https://pocketoption.com/pt/cabinet/demo-quick-high-low/"
 _PO_UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
     "Chrome/124.0.0.0 Safari/537.36"
 )
 
+# URLs de login que a PocketOption usa (tenta em ordem)
+_PO_LOGIN_URLS = [
+    "https://pocketoption.com/en/login/",
+    "https://pocketoption.com/pt/login/",
+    "https://po.trade/en/login/",
+]
+_PO_CABINET_URLS = [
+    "https://pocketoption.com/en/cabinet/",
+    "https://pocketoption.com/pt/cabinet/",
+]
+
 
 def _po_extrair_ssid_do_html(html: str) -> str:
     """
-    Tenta extrair o token/SSID de uma página HTML da Pocket Option.
-    O SSID é o valor do campo 'session' dentro do JSON de autenticação WS
-    embutido na página, ou o token de sessão da conta.
+    Extrai o token/SSID de HTML da Pocket Option.
+    Tenta múltiplos padrões em ordem de confiabilidade.
     """
-    # 1. window.settings / window.__initial_data com "session" ou "token"
-    for pattern in [
-        r'"session"\s*:\s*"([a-zA-Z0-9_\-\.]{20,})"',
-        r'"token"\s*:\s*"([a-zA-Z0-9_\-\.]{20,})"',
-        r'"user_token"\s*:\s*"([a-zA-Z0-9_\-\.]{20,})"',
-        r'"ssid"\s*:\s*"([a-zA-Z0-9_\-\.]{20,})"',
-        r'42\["auth",\{[^}]*"session"\s*:\s*"([a-zA-Z0-9_\-\.]{20,})"',
-    ]:
-        m = re.search(pattern, html)
+    padroes = [
+        # Padrão principal: objeto JS com chave "session"
+        r'["\']session["\']\s*:\s*["\']([a-zA-Z0-9%_\-\.~]{20,})["\']',
+        # Variantes de nome
+        r'["\']token["\']\s*:\s*["\']([a-zA-Z0-9%_\-\.~]{20,})["\']',
+        r'["\']user_token["\']\s*:\s*["\']([a-zA-Z0-9%_\-\.~]{20,})["\']',
+        r'["\']auth_token["\']\s*:\s*["\']([a-zA-Z0-9%_\-\.~]{20,})["\']',
+        r'["\']ssid["\']\s*:\s*["\']([a-zA-Z0-9%_\-\.~]{20,})["\']',
+        # Formato completo do SSID WebSocket embutido na página
+        r'42\[.auth.,\{[^}]*session["\']\s*:\s*["\']([a-zA-Z0-9%_\-\.~]{20,})["\']',
+        # data-attributes
+        r'data-session=["\']([a-zA-Z0-9%_\-\.~]{20,})["\']',
+        r'data-token=["\']([a-zA-Z0-9%_\-\.~]{20,})["\']',
+        # window.settings
+        r'window\.settings\s*=\s*\{[^}]*["\']session["\']\s*:\s*["\']([a-zA-Z0-9%_\-\.~]{20,})["\']',
+        # Variável JS simples
+        r'var\s+session\s*=\s*["\']([a-zA-Z0-9%_\-\.~]{20,})["\']',
+        r'let\s+session\s*=\s*["\']([a-zA-Z0-9%_\-\.~]{20,})["\']',
+    ]
+    for pat in padroes:
+        m = re.search(pat, html)
         if m:
             tok = m.group(1)
+            # Remove URL-encoding se necessário
+            try:
+                import urllib.parse
+                tok = urllib.parse.unquote(tok)
+            except Exception:
+                pass
             if len(tok) >= 20:
                 return tok
+    return ""
 
-    # 2. Cookies de sessão embutidos em data-attributes
-    m2 = re.search(r'data-session="([a-zA-Z0-9_\-\.]{20,})"', html)
-    if m2:
-        return m2.group(1)
 
+def _po_extrair_ssid_dos_cookies(session_obj) -> str:
+    """
+    Extrai o SSID do cookie de sessão da Pocket Option.
+    O cookie pode se chamar 'io', '_session', 'PHPSESSID', 'po_session', etc.
+    """
+    # Nomes conhecidos do cookie de sessão da PocketOption
+    nomes_cookie = ["io", "po_session", "session", "_session", "PHPSESSID",
+                    "pocket_session", "laravel_session", "remember_web"]
+    try:
+        jar = session_obj.cookies
+        # Tenta pelo nome
+        for nome in nomes_cookie:
+            val = jar.get(nome)
+            if val and len(val) >= 20:
+                return val
+        # Pega qualquer cookie que pareça um token (>= 20 chars alfanuméricos)
+        for c in jar:
+            v = c.value if hasattr(c, 'value') else str(c)
+            if v and len(v) >= 32 and re.match(r'^[a-zA-Z0-9%_\-\.~]+$', v):
+                return v
+    except Exception:
+        pass
     return ""
 
 
@@ -149,9 +200,9 @@ def _po_montar_ssid_completo(session: str, is_demo: bool, uid: int = 0) -> str:
     """
     return json.dumps(
         ["auth", {
-            "session": session,
-            "isDemo":  1 if is_demo else 0,
-            "uid":     uid,
+            "session":  session,
+            "isDemo":   1 if is_demo else 0,
+            "uid":      uid,
             "platform": 2,
         }],
         separators=(",", ":"),
@@ -159,10 +210,54 @@ def _po_montar_ssid_completo(session: str, is_demo: bool, uid: int = 0) -> str:
     )
 
 
+def _po_tentar_login_json(s, email: str, senha: str, login_url: str) -> tuple:
+    """
+    Tenta login via API JSON (modo preferido da Pocket Option).
+    Retorna (ok, session_token, uid, erro).
+    """
+    # Endpoint de API JSON
+    api_endpoints = [
+        login_url.replace("/login/", "/api/v1/login"),
+        login_url.replace("/login/", "/api/login"),
+        "https://pocketoption.com/api/v1/login",
+        "https://pocketoption.com/api/login",
+    ]
+    for ep in api_endpoints:
+        try:
+            r = s.post(
+                ep,
+                json={"email": email, "password": senha},
+                headers={
+                    "Content-Type": "application/json",
+                    "Accept":       "application/json",
+                    "Referer":      login_url,
+                },
+                timeout=15,
+            )
+            if r.status_code in (200, 201):
+                j = r.json() if hasattr(r, 'json') else {}
+                tok = (j.get("session") or j.get("token") or j.get("ssid")
+                       or (j.get("data") or {}).get("session", "")
+                       or (j.get("data") or {}).get("token", ""))
+                uid = int(j.get("uid") or j.get("user_id") or
+                          (j.get("data") or {}).get("uid", 0) or 0)
+                if tok and len(tok) >= 20:
+                    return True, tok, uid, ""
+        except Exception:
+            continue
+    return False, "", 0, "api_json_falhou"
+
+
 def _po_capturar_curl_cffi(email: str, senha: str) -> tuple:
     """
     Faz login na Pocket Option usando curl_cffi (impersonate Chrome).
     Retorna (ok, session_token, uid, erro).
+
+    Estratégias em ordem:
+      1. API JSON  (/api/v1/login)
+      2. Form POST (/login/)
+      3. Cookie de sessão após login
+      4. HTML do /cabinet
     """
     try:
         from curl_cffi import requests as _creqs
@@ -171,83 +266,119 @@ def _po_capturar_curl_cffi(email: str, senha: str) -> tuple:
         s.headers.update({
             "User-Agent":      _PO_UA,
             "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8",
+            "Accept":          "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
             "Origin":          "https://pocketoption.com",
-            "Referer":         _PO_URL_LOGIN,
         })
 
-        # 1. Carrega a página de login para pegar cookies e CSRF
-        csrf = ""
-        try:
-            pg = s.get(_PO_URL_LOGIN, timeout=15)
-            m  = re.search(r'name="_token"\s+value="([^"]+)"', pg.text)
-            if not m:
-                m = re.search(r'"csrf[_-]token"\s*:\s*"([^"]+)"', pg.text)
-            if m:
-                csrf = m.group(1)
-        except Exception:
-            pass
-
-        # 2. POST de login
-        payload = {"email": email, "password": senha, "remember": "1"}
-        if csrf:
-            payload["_token"] = csrf
-
-        resp = s.post(
-            _PO_URL_LOGIN,
-            data=payload,
-            headers={
-                "Content-Type": "application/x-www-form-urlencoded",
-                "Referer":      _PO_URL_LOGIN,
-            },
-            timeout=20,
-            allow_redirects=True,
-        )
-
-        # 3. Detecta OTP / 2FA
-        text_lower = resp.text.lower()
-        if ("two-factor" in text_lower or "2fa" in text_lower
-                or "otp" in text_lower or resp.status_code == 422):
-            return False, "", 0, "OTP_REQUIRED"
-
-        # 4. Verifica se fez login (deve redirecionar para /cabinet)
-        if resp.status_code not in (200, 201, 302) and "cabinet" not in resp.url:
-            return False, "", 0, f"Login falhou (HTTP {resp.status_code}). Verifique email/senha."
-
-        # 5. Tenta extrair token da resposta JSON
         uid = 0
-        try:
-            j = resp.json()
-            tok = (j.get("session") or j.get("token")
-                   or j.get("ssid") or (j.get("data") or {}).get("session", ""))
-            uid = int(j.get("uid") or j.get("user_id") or 0)
-            if tok and len(tok) >= 20:
-                return True, tok, uid, ""
-        except Exception:
-            pass
 
-        # 6. Acessa /cabinet e extrai token do HTML
+        # ── Tenta todos os URLs de login ─────────────────────────────────────
+        login_url_usado = None
+        for login_url in _PO_LOGIN_URLS:
+            try:
+                # 1. Carrega a página para pegar cookies e CSRF
+                csrf = ""
+                try:
+                    pg  = s.get(login_url, timeout=12)
+                    for pat_csrf in [r'name="_token"\s+value="([^"]+)"',
+                                     r'"_token"\s*:\s*"([^"]+)"',
+                                     r'csrf[_-]token["\s]*[=:]["\s]*([a-zA-Z0-9+/=]{20,})'
+                                    ]:
+                        mc = re.search(pat_csrf, pg.text)
+                        if mc:
+                            csrf = mc.group(1)
+                            break
+                except Exception:
+                    pass
+
+                # 2. Estratégia A — API JSON
+                ok_j, tok_j, uid_j, _ = _po_tentar_login_json(s, email, senha, login_url)
+                if ok_j and tok_j:
+                    return True, tok_j, uid_j, ""
+
+                # 3. Estratégia B — Form POST (application/x-www-form-urlencoded)
+                payload = {"email": email, "password": senha, "remember": "1"}
+                if csrf:
+                    payload["_token"] = csrf
+
+                resp = s.post(
+                    login_url,
+                    data=payload,
+                    headers={
+                        "Content-Type": "application/x-www-form-urlencoded",
+                        "Referer":      login_url,
+                    },
+                    timeout=20,
+                    allow_redirects=True,
+                )
+
+                tl = resp.text.lower()
+                if "two-factor" in tl or "2fa" in tl or resp.status_code == 422:
+                    return False, "", 0, "OTP_REQUIRED"
+
+                # Tenta JSON da resposta
+                try:
+                    j = resp.json()
+                    tok = (j.get("session") or j.get("token") or j.get("ssid")
+                           or (j.get("data") or {}).get("session", ""))
+                    uid = int(j.get("uid") or j.get("user_id") or 0)
+                    if tok and len(tok) >= 20:
+                        return True, tok, uid, ""
+                except Exception:
+                    pass
+
+                login_url_usado = login_url
+                break  # avança para extração pós-login
+
+            except Exception:
+                continue
+
+        if not login_url_usado:
+            return False, "", 0, "Falha ao carregar página de login."
+
+        # ── 4. Cookie de sessão após login ────────────────────────────────────
+        tok_cookie = _po_extrair_ssid_dos_cookies(s)
+        if tok_cookie:
+            print(f"[PocketOption] 🍪 SSID extraído do cookie! len={len(tok_cookie)}")
+            return True, tok_cookie, uid, ""
+
+        # ── 5. HTML do /cabinet ───────────────────────────────────────────────
+        for cab_url in _PO_CABINET_URLS:
+            try:
+                cab = s.get(cab_url, timeout=15)
+                tok = _po_extrair_ssid_do_html(cab.text)
+                if tok:
+                    m_uid = re.search(r'["\']uid["\']\s*:\s*(\d+)', cab.text)
+                    if m_uid:
+                        uid = int(m_uid.group(1))
+                    return True, tok, uid, ""
+                # Tenta extrair cookie após carregar /cabinet
+                tok_cookie = _po_extrair_ssid_dos_cookies(s)
+                if tok_cookie:
+                    return True, tok_cookie, uid, ""
+            except Exception:
+                continue
+
+        # ── 6. Último fallback: página de trade ───────────────────────────────
         try:
-            cab = s.get(_PO_URL_CABINET, timeout=15)
-            tok = _po_extrair_ssid_do_html(cab.text)
+            trade = s.get("https://pocketoption.com/en/cabinet/demo-quick-high-low/", timeout=15)
+            tok = _po_extrair_ssid_do_html(trade.text)
             if tok:
-                # Tenta extrair uid do HTML
-                m_uid = re.search(r'"uid"\s*:\s*(\d+)', cab.text)
-                if m_uid:
-                    uid = int(m_uid.group(1))
                 return True, tok, uid, ""
+            tok_cookie = _po_extrair_ssid_dos_cookies(s)
+            if tok_cookie:
+                return True, tok_cookie, uid, ""
         except Exception:
             pass
 
-        # 7. Tenta /trade page
+        # Debug: loga os cookies disponíveis para diagnóstico
         try:
-            trade = s.get(_PO_URL_TRADE, timeout=15)
-            tok   = _po_extrair_ssid_do_html(trade.text)
-            if tok:
-                return True, tok, uid, ""
+            cookies_nomes = [c.name for c in s.cookies] if hasattr(s.cookies, '__iter__') else list(s.cookies.keys())
+            print(f"[PocketOption] 🔍 Cookies disponíveis: {cookies_nomes}")
         except Exception:
             pass
 
-        return False, "", 0, f"Token não encontrado após login (HTTP {resp.status_code})."
+        return False, "", 0, "Token não encontrado. Tente colar o SSID manualmente."
 
     except ImportError:
         return False, "", 0, "curl_cffi_indisponivel"
@@ -257,7 +388,7 @@ def _po_capturar_curl_cffi(email: str, senha: str) -> tuple:
 
 def _po_capturar_requests(email: str, senha: str) -> tuple:
     """
-    Fallback: login na Pocket Option usando requests padrão.
+    Fallback com requests padrão (sem impersonate).
     Retorna (ok, session_token, uid, erro).
     """
     try:
@@ -267,54 +398,64 @@ def _po_capturar_requests(email: str, senha: str) -> tuple:
         s.headers.update({
             "User-Agent":      _PO_UA,
             "Accept-Language": "pt-BR,pt;q=0.9",
+            "Accept":          "text/html,application/xhtml+xml,*/*;q=0.8",
             "Origin":          "https://pocketoption.com",
-            "Referer":         _PO_URL_LOGIN,
         })
 
-        # CSRF
-        csrf = ""
-        try:
-            pg = s.get(_PO_URL_LOGIN, timeout=15)
-            m  = re.search(r'name="_token"\s+value="([^"]+)"', pg.text)
-            if m:
-                csrf = m.group(1)
-        except Exception:
-            pass
-
-        payload = {"email": email, "password": senha, "remember": "1"}
-        if csrf:
-            payload["_token"] = csrf
-
-        resp = s.post(
-            _PO_URL_LOGIN,
-            data=payload,
-            headers={
-                "Content-Type": "application/x-www-form-urlencoded",
-                "Referer":      _PO_URL_LOGIN,
-            },
-            timeout=20,
-            allow_redirects=True,
-        )
-
-        text_lower = resp.text.lower()
-        if ("two-factor" in text_lower or "2fa" in text_lower
-                or "otp" in text_lower or resp.status_code == 422):
-            return False, "", 0, "OTP_REQUIRED"
-
         uid = 0
-        # Tenta /cabinet
-        try:
-            cab = s.get(_PO_URL_CABINET, timeout=15)
-            tok = _po_extrair_ssid_do_html(cab.text)
-            if tok:
-                m_uid = re.search(r'"uid"\s*:\s*(\d+)', cab.text)
-                if m_uid:
-                    uid = int(m_uid.group(1))
-                return True, tok, uid, ""
-        except Exception:
-            pass
+        for login_url in _PO_LOGIN_URLS:
+            try:
+                # CSRF
+                csrf = ""
+                pg = s.get(login_url, timeout=12)
+                for pat_csrf in [r'name="_token"\s+value="([^"]+)"',
+                                  r'"_token"\s*:\s*"([^"]+)"']:
+                    mc = re.search(pat_csrf, pg.text)
+                    if mc:
+                        csrf = mc.group(1)
+                        break
 
-        return False, "", 0, f"Token não encontrado (HTTP {resp.status_code})."
+                # API JSON primeiro
+                ok_j, tok_j, uid_j, _ = _po_tentar_login_json(s, email, senha, login_url)
+                if ok_j and tok_j:
+                    return True, tok_j, uid_j, ""
+
+                # Form POST
+                payload = {"email": email, "password": senha, "remember": "1"}
+                if csrf:
+                    payload["_token"] = csrf
+                resp = s.post(
+                    login_url, data=payload,
+                    headers={"Content-Type": "application/x-www-form-urlencoded",
+                             "Referer": login_url},
+                    timeout=20, allow_redirects=True,
+                )
+                tl = resp.text.lower()
+                if "two-factor" in tl or "2fa" in tl or resp.status_code == 422:
+                    return False, "", 0, "OTP_REQUIRED"
+                break
+            except Exception:
+                continue
+
+        # Cookie
+        tok_c = _po_extrair_ssid_dos_cookies(s)
+        if tok_c:
+            return True, tok_c, uid, ""
+
+        # HTML cabinet
+        for cab_url in _PO_CABINET_URLS:
+            try:
+                cab = s.get(cab_url, timeout=15)
+                tok = _po_extrair_ssid_do_html(cab.text)
+                if tok:
+                    return True, tok, uid, ""
+                tok_c = _po_extrair_ssid_dos_cookies(s)
+                if tok_c:
+                    return True, tok_c, uid, ""
+            except Exception:
+                continue
+
+        return False, "", 0, "Token não encontrado. Tente colar o SSID manualmente."
 
     except Exception as e:
         return False, "", 0, str(e)
