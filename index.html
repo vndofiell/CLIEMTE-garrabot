@@ -30967,7 +30967,21 @@ async function _qxHmaQCiclo() {
     // 6) Opera o melhor aprovado
     const aprovados = resultados.filter(r => r.aprovado);
     if (aprovados.length === 0) {
-        print(`🟠 HMA QUOTEX: NO TRADE — nenhum ativo aprovado (conf ≥ ${est.qhma_confianca || 75}%)`, 'log-info');
+        // Mostra o melhor sinal descartado e qual filtro bloqueou
+        if (resultados.length > 0) {
+            const melhorDesc = resultados.reduce((a, b) => b.confianca > a.confianca ? b : a);
+            const _motivo = melhorDesc.motivo || 'confiança abaixo do mínimo';
+            const _confMin = est.qhma_confianca || 75;
+            print(
+                `🟠 HMA QUOTEX: 🚫 Sinal bloqueado pelos filtros | ` +
+                `Melhor: <b>${melhorDesc.decisao || 'N/A'}</b> ${melhorDesc.ativoNome} ` +
+                `conf <b>${melhorDesc.confianca}%</b> (mín ${_confMin}%) | ` +
+                `Motivo: <b style="color:#ffbd2e">${_motivo}</b>`,
+                'log-info'
+            );
+        } else {
+            print(`🟠 HMA QUOTEX: 🚫 Nenhum sinal gerado — dados insuficientes nos ativos analisados`, 'log-info');
+        }
         return;
     }
     const melhor = aprovados.reduce((a, b) => b.confianca > a.confianca ? b : a);
@@ -31156,11 +31170,7 @@ function _qxHmaQAgendarEntrada(direcao, contexto, est) {
     clearInterval(_qxHmaQ._entradaWatch);
 
     const _tentar = () => {
-        if (!_qxHmaQ.rodando) {
-            _qxHmaQPararPing(); _qxHmaQ.opBloqueada = false;
-            print(`🟠 HMA QUOTEX: ❌ ENTRADA NÃO REALIZADA — robô foi parado antes de entrar (${direcao.toUpperCase()} ${contexto.ativoNome})`, 'log-loss');
-            return;
-        }
+        if (!_qxHmaQ.rodando) { _qxHmaQPararPing(); _qxHmaQ.opBloqueada = false; return; }
         const agora     = _qxAgoraMs();
         const tsAb      = _qxChart.tsAbertura || Math.floor(agora / 1000 / periodo) * periodo;
         const tsFech_ms = (tsAb + periodo) * 1000;
@@ -31178,14 +31188,10 @@ function _qxHmaQAgendarEntrada(direcao, contexto, est) {
             print(`🟠 HMA QUOTEX: ⏱ ${direcao.toUpperCase()} ${contexto.ativoNome} — entrando em ${Math.round(msAte/1000)}s`, 'log-info');
             _qxHmaQ._entradaTimer = setTimeout(() => {
                 _qxHmaQPararPing();
-                if (!_qxHmaQ.rodando) {
-                    _qxHmaQ.opBloqueada = false;
-                    print(`🟠 HMA QUOTEX: ❌ ENTRADA NÃO REALIZADA — robô parado no momento exato da entrada (${direcao.toUpperCase()} ${contexto.ativoNome})`, 'log-loss');
-                    return;
-                }
+                if (!_qxHmaQ.rodando) { _qxHmaQ.opBloqueada = false; return; }
                 // Verifica conexão no momento exato — se WS caiu, aguarda reconexão e retenta
                 if (_qx.status !== 'conectado') {
-                    print(`🟠 HMA QUOTEX: ❌ ENTRADA NÃO REALIZADA — conexão Quotex perdida no momento da entrada (status: ${_qx.status}) | ${direcao.toUpperCase()} ${contexto.ativoNome}`, 'log-loss');
+                    print('🟠 HMA QUOTEX: ⚠️ Conexão perdida antes da entrada — aguardando reconexão', 'log-info');
                     _qxHmaQ.opBloqueada = false;
                     let _reconTent = 0;
                     const _reconPoll = setInterval(() => {
@@ -31199,7 +31205,7 @@ function _qxHmaQAgendarEntrada(direcao, contexto, est) {
                         }
                         if (_reconTent >= 12) {
                             clearInterval(_reconPoll);
-                            print(`🟠 HMA QUOTEX: ❌ ENTRADA DESCARTADA — sem reconexão após 60s (${direcao.toUpperCase()} ${contexto.ativoNome})`, 'log-loss');
+                            print('🟠 HMA QUOTEX: ⚠️ Sem reconexão após 60s — sinal descartado', 'log-info');
                         }
                     }, 5000);
                     return;
@@ -31211,10 +31217,8 @@ function _qxHmaQAgendarEntrada(direcao, contexto, est) {
             _qxHmaQPararPing();
             _qxHmaQOperar(direcao, contexto, est);
         } else {
-            // Vela já fechou — timing perdido, aguarda nova vela via watch
+            // Vela já fechou, aguarda nova vela via watch
             _qxHmaQPararPing();
-            const _msAtrasado = Math.round(-msAte / 1000);
-            print(`🟠 HMA QUOTEX: ⚠️ Timing perdido — vela fechou há ${_msAtrasado}s, aguardando nova vela (${direcao.toUpperCase()} ${contexto.ativoNome})`, 'log-info');
             let tentativas = 0;
             _qxHmaQ._entradaWatch = setInterval(() => {
                 tentativas++;
@@ -31226,14 +31230,10 @@ function _qxHmaQAgendarEntrada(direcao, contexto, est) {
                     _qxHmaQIniciarPing();
                     _qxHmaQ._entradaTimer = setTimeout(() => {
                         _qxHmaQPararPing();
-                        if (!_qxHmaQ.rodando) {
-                            _qxHmaQ.opBloqueada = false;
-                            print(`🟠 HMA QUOTEX: ❌ ENTRADA NÃO REALIZADA — robô parado enquanto aguardava nova vela (${direcao.toUpperCase()} ${contexto.ativoNome})`, 'log-loss');
-                            return;
-                        }
+                        if (!_qxHmaQ.rodando) { _qxHmaQ.opBloqueada = false; return; }
                         if (_qx.status !== 'conectado') {
                             _qxHmaQ.opBloqueada = false;
-                            print(`🟠 HMA QUOTEX: ❌ ENTRADA NÃO REALIZADA — conexão perdida ao aguardar nova vela (status: ${_qx.status}) | ${direcao.toUpperCase()} ${contexto.ativoNome}`, 'log-loss');
+                            print('🟠 HMA QUOTEX: ⚠️ Conexão perdida antes da entrada — aguardando reconexão', 'log-info');
                             let _reconTent2 = 0;
                             const _reconPoll2 = setInterval(() => {
                                 _reconTent2++;
@@ -31246,7 +31246,7 @@ function _qxHmaQAgendarEntrada(direcao, contexto, est) {
                                 }
                                 if (_reconTent2 >= 12) {
                                     clearInterval(_reconPoll2);
-                                    print(`🟠 HMA QUOTEX: ❌ ENTRADA DESCARTADA — sem reconexão após 60s (${direcao.toUpperCase()} ${contexto.ativoNome})`, 'log-loss');
+                                    print('🟠 HMA QUOTEX: ⚠️ Sem reconexão após 60s — sinal descartado', 'log-info');
                                 }
                             }, 5000);
                             return;
@@ -31260,7 +31260,7 @@ function _qxHmaQAgendarEntrada(direcao, contexto, est) {
                 } else if (tentativas > 15) {
                     clearInterval(_qxHmaQ._entradaWatch);
                     _qxHmaQPararPing();
-                    print(`🟠 HMA QUOTEX: ❌ ENTRADA NÃO REALIZADA — timing perdido após 15 tentativas de sincronizar com nova vela (${direcao.toUpperCase()} ${contexto.ativoNome})`, 'log-loss');
+                    print('🟠 HMA QUOTEX: ⚠️ Timing perdido — aguardando próxima vela', 'log-info');
                     _qxHmaQ.opBloqueada = false;
                 }
             }, 400);
