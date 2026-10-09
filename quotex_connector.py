@@ -877,10 +877,12 @@ def quotex_operar(ativo: str, direcao: str, valor: float, duracao: int) -> dict:
     if not client or not loop:
         # Conexão perdida — dispara reconexão automática em background
         _quotex_reconectar_bg(email_saved, senha_saved, tipo_saved, ssid_saved)
+        print(f"[Quotex] ❌ ENTRADA NÃO REALIZADA — sem conexão WebSocket ativo | ativo={ativo} dir={direcao} — reconectando em background")
         return {"ok": False, "erro": "Quotex não conectada. Reconectando automaticamente..."}
 
     direcao_norm = direcao.lower().strip()
     if direcao_norm not in ("call", "put"):
+        print(f"[Quotex] ❌ ENTRADA NÃO REALIZADA — direção inválida: '{direcao}' | ativo={ativo}")
         return {"ok": False, "erro": f"Direção inválida: '{direcao}'. Use 'call' ou 'put'."}
 
     fut = None
@@ -905,6 +907,7 @@ def quotex_operar(ativo: str, direcao: str, valor: float, duracao: int) -> dict:
 
         # Resultado None = WebSocket retornou vazio (sessão morta)
         if resultado is None:
+            print(f"[Quotex] ❌ ENTRADA NÃO REALIZADA — buy() retornou None (sessão encerrada) | ativo={ativo} dir={direcao_norm} val={valor}")
             raise ConnectionError("buy() retornou None — sessão Quotex encerrada.")
 
         if isinstance(resultado, (list, tuple)) and len(resultado) >= 2:
@@ -946,8 +949,9 @@ def quotex_operar(ativo: str, direcao: str, valor: float, duracao: int) -> dict:
         # A ordem pode ter sido aceita mesmo sem resposta.
         # Não cancelar o future nem enviar outra compra automaticamente.
         print(
-            f"[Quotex] ALERTA: confirmação pendente | "
-            f"ativo={ativo} | direção={direcao_norm} | valor={valor}"
+            f"[Quotex] ❌ ENTRADA NÃO REALIZADA (PENDENTE) — timeout externo aguardando buy() | "
+            f"ativo={ativo} | direção={direcao_norm} | valor={valor} | "
+            f"motivo: pyquotex demorou mais de {int(duracao)+30}s para responder"
         )
         return {
             "ok": False,
