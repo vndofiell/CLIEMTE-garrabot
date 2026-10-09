@@ -740,7 +740,7 @@ class AsyncPocketOptionClient:
                 f'Expected format: 42["auth",{{"session":"your_session","isDemo":1,"uid":12345,"platform":1}}]'
             )
 
-    async def _wait_for_authentication(self, timeout: float = 10.0) -> None:
+    async def _wait_for_authentication(self, timeout: float = 30.0) -> None:
         """Wait for authentication to complete (like old API)"""
         auth_received = False
         auth_error = None

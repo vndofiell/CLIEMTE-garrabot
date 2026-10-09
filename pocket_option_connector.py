@@ -254,8 +254,9 @@ def _po_montar_ssid_completo(session: str, is_demo: bool, uid: int = 0) -> str:
     """
     Monta o SSID no formato completo que a API aceita:
       42["auth",{"session":"...","isDemo":1,"uid":0,"platform":2}]
+    O prefixo "42" é obrigatório — é o tipo de mensagem do protocolo Socket.IO.
     """
-    return json.dumps(
+    payload = json.dumps(
         ["auth", {
             "session":  session,
             "isDemo":   1 if is_demo else 0,
@@ -265,6 +266,10 @@ def _po_montar_ssid_completo(session: str, is_demo: bool, uid: int = 0) -> str:
         separators=(",", ":"),
         ensure_ascii=False,
     )
+    # Garante que o prefixo Socket.IO "42" está presente
+    if not payload.startswith("42"):
+        payload = "42" + payload
+    return payload
 
 
 def _po_tentar_login_json(s, email: str, senha: str, login_url: str) -> tuple:
@@ -801,11 +806,11 @@ def pocket_conectar(ssid: str = "", is_demo: bool = True,
         _PO_STATE["is_demo"] = is_demo
 
     try:
-        _run_async(_conectar_async(ssid, is_demo), timeout=20.0)
+        _run_async(_conectar_async(ssid, is_demo), timeout=60.0)
     except concurrent.futures.TimeoutError:
         with _PO_LOCK:
             _PO_STATE["status"] = "erro"
-            _PO_STATE["erro"]   = "Timeout ao conectar (20s)."
+            _PO_STATE["erro"]   = "Timeout ao conectar (60s)."
         return {"ok": False, "erro": "Timeout ao conectar."}
     except Exception as e:
         return {"ok": False, "erro": str(e)}

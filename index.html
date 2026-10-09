@@ -27672,7 +27672,9 @@ function pocketConectarSsid(tipo) {
 function _poIniciarPoll(isDemo) {
     if (_po.autoTimer) clearInterval(_po.autoTimer);
     let tentativas = 0;
-    const MAX = 60; // 60 × 1s = 60s de timeout
+    let faseCapturado = 0; // segundos aguardando WebSocket após captura do SSID
+    const MAX = 90;        // 90s total
+    const MAX_WS = 60;     // 60s aguardando WebSocket após SSID capturado
 
     _po.autoTimer = setInterval(() => {
         tentativas++;
@@ -27691,8 +27693,16 @@ function _poIniciarPoll(isDemo) {
                         print('🔵 POCKET OPTION conectada (' + (isDemo ? 'DEMO' : 'REAL') + ')!', 'log-info');
 
                 } else if (d.status === 'capturado') {
-                    if (progMsg) progMsg.textContent = '✅ SSID capturado! Conectando ao WebSocket...';
+                    faseCapturado++;
+                    if (progMsg) progMsg.textContent = '🔗 SSID capturado! Conectando ao WebSocket...';
                     if (progIco) progIco.textContent = '🔗';
+                    if (progSub) progSub.textContent = `Aguardando WebSocket... (${faseCapturado}s)`;
+                    if (faseCapturado >= MAX_WS) {
+                        clearInterval(_po.autoTimer);
+                        _poBadge('❌ Timeout no WebSocket — tente novamente.', '#f44');
+                        _poAtualizarBotao('erro', 'Timeout WS');
+                        _poMostrarSecao('form');
+                    }
 
                 } else if (d.status === 'erro') {
                     clearInterval(_po.autoTimer);
