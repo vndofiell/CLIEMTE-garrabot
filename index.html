@@ -27730,9 +27730,8 @@ let _poCapTimer = null;
 
 function pocketAbrirLoginPage() {
     const srv = window.location.origin;
-    // Abre a janela PRIMEIRO (síncrono no clique) para evitar bloqueio de popup
-    _poLoginWin = window.open(srv + '/pocket/login-page', 'po_login',
-        'width=460,height=620,scrollbars=yes');
+    // Abre como ABA (sem parâmetros de tamanho = nunca bloqueado pelo navegador)
+    _poLoginWin = window.open(srv + '/pocket/login-page', '_blank');
     // Limpa captura anterior depois
     fetch('/pocket/ssid-captura/limpar', { method: 'POST' }).catch(() => {});
 
