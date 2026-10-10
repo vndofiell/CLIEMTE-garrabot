@@ -4,6 +4,7 @@ from digit_matrix_sniper import register_digit_matrix
 from memory_time_engine import get_mte, mte_pode_operar, mte_registrar, mte_status
 from masaniello import Masaniello
 from garra_hma_core import hma_avaliar, _hma_hist_salvar, _hma_hist_ler
+from quotex_otc_fluxo import analisar_otc_fluxo
 import threading
 import time
 import json
@@ -15128,6 +15129,58 @@ def garra_hma_mtf():
         "total_tf":    total_tf,
         "detalhes":    detalhes,
     })
+
+
+# ── OTC Fluxo EMA Pro — avaliação de candles OHLC fechados ──────────────────
+@app.route('/quotex/otc-fluxo/avaliar', methods=['POST'])
+def quotex_otc_fluxo_avaliar():
+    """
+    Avalia candles OTC com EMA 9/21/50 + RSI 14 + ADX 14 + ATR 14.
+
+    Body JSON:
+        candles:           list[{open,high,low,close}]  — mín. 60 velas fechadas, da mais antiga à mais recente
+        confianca_minima:  float                         — threshold de score (padrão 75)
+
+    Retorna:
+        { ok, estrategia, decisao, score, confianca_minima, motivos, bloqueios, indicadores, aviso }
+    """
+    dados = request.get_json(force=True, silent=True) or {}
+    candles          = dados.get("candles") or []
+    confianca_minima = float(dados.get("confianca_minima", 75))
+
+    if not isinstance(candles, list) or len(candles) == 0:
+        return jsonify({"ok": False, "erro": "Campo 'candles' deve ser lista não vazia."}), 400
+
+    try:
+        resultado = analisar_otc_fluxo(candles, confianca_minima=confianca_minima)
+    except ValueError as exc:
+        return jsonify({"ok": False, "erro": str(exc)}), 400
+
+    # Notificação Telegram quando há sinal (bloqueado no modo ESPELHO)
+    if resultado.get("decisao") in ("CALL", "PUT") and _MODO_OPERACAO.get("modo") != "ESPELHO":
+        try:
+            cfg_tg = _tg_carregar()
+            if cfg_tg.get("enabled"):
+                dec    = resultado["decisao"]
+                score  = resultado["score"]
+                ind    = resultado.get("indicadores", {})
+                motivos = "\n".join(f"  ✓ {m}" for m in resultado.get("motivos", [])[:5])
+                msg = (
+                    f"📊 *OTC FLUXO EMA PRO*\n\n"
+                    f"{'🟢' if dec == 'CALL' else '🔴'} *{dec}* | Score: *{score}/100*\n"
+                    f"EMA 9: `{ind.get('ema9','—')}` | 21: `{ind.get('ema21','—')}` | 50: `{ind.get('ema50','—')}`\n"
+                    f"RSI 14: `{ind.get('rsi14','—')}` | ADX 14: `{ind.get('adx14','—')}`\n"
+                    f"DI+: `{ind.get('di_plus','—')}` | DI-: `{ind.get('di_minus','—')}`\n"
+                    f"{motivos}\n"
+                    f"🕐 {_hora_brt('%H:%M:%S')}\n"
+                    f"⚠️ Educativo — validar em DEMO."
+                )
+                _tg_dispatch(lambda: _tg_enviar_texto(cfg_tg["token"], cfg_tg["chat_id"], msg))
+        except Exception:
+            pass
+
+    print(f"[OTC-FLUXO] decisao={resultado.get('decisao')} score={resultado.get('score')}")
+    return jsonify(resultado)
 
 
 def start_server():
