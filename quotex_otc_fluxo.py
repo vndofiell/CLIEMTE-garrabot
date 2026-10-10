@@ -157,13 +157,19 @@ def analisar_otc_fluxo(candles, confianca_minima=75):
     directions = [1 if c["close"] > c["open"] else (-1 if c["close"] < c["open"] else 0) for c in cs]
     pullback_bull = directions[-3] == -1 and directions[-2] in (-1, 0) and directions[-1] == 1
     pullback_bear = directions[-3] == 1  and directions[-2] in (1,  0) and directions[-1] == -1
-    confirm_bull  = last["close"] > last["open"] and last["close"] > prev["high"]
-    confirm_bear  = last["close"] < last["open"] and last["close"] < prev["low"]
-    wick_ok_bull  = upper_wick <= max(body * 1.25, atr * 0.18)
-    wick_ok_bear  = lower_wick <= max(body * 1.25, atr * 0.18)
-    volatility_ok = 0.55 <= (atr / max(atr_baseline, 1e-12)) <= 1.8
-    near_ema      = distance_ema9_atr <= 1.15
-    adx_ok        = adx >= 18
+
+    # Confirmação: fecha acima dos 60% do range do candle anterior (CALL)
+    #              ou abaixo dos 40% do range do candle anterior (PUT)
+    # Mais realista para M1 OTC do que exigir rompimento total da máx/mín.
+    prev_rng     = max(prev["high"] - prev["low"], 1e-12)
+    confirm_bull = last["close"] > last["open"] and last["close"] >= prev["low"] + prev_rng * 0.60
+    confirm_bear = last["close"] < last["open"] and last["close"] <= prev["high"] - prev_rng * 0.60
+
+    wick_ok_bull  = upper_wick <= max(body * 1.5,  atr * 0.25)
+    wick_ok_bear  = lower_wick <= max(body * 1.5,  atr * 0.25)
+    volatility_ok = 0.40 <= (atr / max(atr_baseline, 1e-12)) <= 2.2
+    near_ema      = distance_ema9_atr <= 1.50
+    adx_ok        = adx >= 14   # OTC frequentemente tem ADX 14–18 mesmo em tendência
 
     score_call, score_put = 0, 0
     reasons_call, reasons_put = [], []
@@ -186,7 +192,7 @@ def analisar_otc_fluxo(candles, confianca_minima=75):
     if body_ratio >= 0.45 and wick_ok_bear and last["close"] < last["open"]: score_put  += 10
 
     blocks = []
-    if not adx_ok:       blocks.append(f"ADX fraco ({adx:.1f} < 18): possível lateralização")
+    if not adx_ok:       blocks.append(f"ADX fraco ({adx:.1f} < 14): possível lateralização")
     if not volatility_ok: blocks.append("ATR fora da faixa recente: volatilidade anormal ou fraca")
     if not near_ema:      blocks.append("Preço esticado em relação à EMA 9; evitar perseguir movimento")
     if body_ratio < 0.25: blocks.append("Candle sem corpo direcional suficiente")
