@@ -5074,6 +5074,8 @@ const ESTRATEGIAS = {
         qhma_stop_loss:     0,
         // Registrar resultados para aprendizado
         qhma_aprendizado:   true,
+        // Inverter sinal: CALL→PUT / PUT→CALL
+        qhma_inverter:      false,
         desc: "Motor HMA exclusivo para Quotex · OTC e Abertos · Análise em tempo real · CALL/PUT automático",
     },
     // ── OTC FLUXO EMA PRO ─────────────────────────────────────────────────────
@@ -5096,6 +5098,8 @@ const ESTRATEGIAS = {
         // Stop Win / Stop Loss em $ (0 = desligado)
         otcf_stop_win:       0,
         otcf_stop_loss:      0,
+        // Inverter sinal: CALL→PUT / PUT→CALL
+        otcf_inverter:       false,
         desc: "EMA 9/21/50 + RSI 14 + ADX 14 + ATR 14 · Pullback + Retomada confirmada · OTC Quotex",
     },
 };
@@ -8568,6 +8572,19 @@ function selecionarEstrategia(nome) {
         aprQLbl.textContent = '📊 Registrar resultados para aprendizado estatístico';
         aprQRow.appendChild(aprQChk); aprQRow.appendChild(aprQLbl);
         campos.appendChild(aprQRow);
+        // Toggle inversão — HMA QUOTEX
+        const invQRow = document.createElement('div');
+        invQRow.style.cssText = 'display:flex;align-items:center;gap:8px;margin-top:6px;';
+        const invQChk = document.createElement('input');
+        invQChk.type = 'checkbox'; invQChk.id = 'cfg-qhma-inverter';
+        invQChk.checked = est.qhma_inverter === true;
+        invQChk.style.cssText = 'accent-color:#ff4444;width:14px;height:14px;';
+        const invQLbl = document.createElement('label');
+        invQLbl.htmlFor = 'cfg-qhma-inverter';
+        invQLbl.style.cssText = 'font-size:0.72rem;color:#ff4444;font-family:"Share Tech Mono";cursor:pointer;';
+        invQLbl.textContent = '🔄 Inverter sinal — CALL→PUT / PUT→CALL';
+        invQRow.appendChild(invQChk); invQRow.appendChild(invQLbl);
+        campos.appendChild(invQRow);
     } else if (est.tipo === 'otc_fluxo') {
         // ── OTC FLUXO EMA PRO ─────────────────────────────────────────────────
         const ofDiv = document.createElement('div');
@@ -8591,6 +8608,19 @@ function selecionarEstrategia(nome) {
         campo('Máximo de Gales', 'cfg-otcf-maxg', 'number', est.otcf_max_gales || 3, 1, 10, 1);
         campo('Stop Win ($) — 0=desligado', 'cfg-otcf-sw', 'number', est.otcf_stop_win || 0, 0, 9999, 0.5);
         campo('Stop Loss ($) — 0=desligado', 'cfg-otcf-sl', 'number', est.otcf_stop_loss || 0, 0, 9999, 0.5);
+        // Toggle inversão — OTC FLUXO
+        const invORow = document.createElement('div');
+        invORow.style.cssText = 'display:flex;align-items:center;gap:8px;margin-top:6px;';
+        const invOChk = document.createElement('input');
+        invOChk.type = 'checkbox'; invOChk.id = 'cfg-otcf-inverter';
+        invOChk.checked = est.otcf_inverter === true;
+        invOChk.style.cssText = 'accent-color:#ff4444;width:14px;height:14px;';
+        const invOLbl = document.createElement('label');
+        invOLbl.htmlFor = 'cfg-otcf-inverter';
+        invOLbl.style.cssText = 'font-size:0.72rem;color:#ff4444;font-family:"Share Tech Mono";cursor:pointer;';
+        invOLbl.textContent = '🔄 Inverter sinal — CALL→PUT / PUT→CALL';
+        invORow.appendChild(invOChk); invORow.appendChild(invOLbl);
+        campos.appendChild(invORow);
     }
 
     fecharModal('modal-estrategia');
@@ -8735,6 +8765,8 @@ function confirmarEstrategia() {
         if (_qSl)   est.qhma_stop_loss   = parseFloat(_qSl.value) || 0;
         const _qApr  = document.getElementById('cfg-qhma-aprendizado');
         if (_qApr)  est.qhma_aprendizado = _qApr.checked;
+        const _qInv  = document.getElementById('cfg-qhma-inverter');
+        if (_qInv)  est.qhma_inverter    = _qInv.checked;
     }
     // ── Campos otc_fluxo ──────────────────────────────────────────────────────
     if (est.tipo === 'otc_fluxo') {
@@ -8758,6 +8790,8 @@ function confirmarEstrategia() {
         if (_oSw)   est.otcf_stop_win     = parseFloat(_oSw.value) || 0;
         const _oSl   = document.getElementById('cfg-otcf-sl');
         if (_oSl)   est.otcf_stop_loss    = parseFloat(_oSl.value) || 0;
+        const _oInv  = document.getElementById('cfg-otcf-inverter');
+        if (_oInv)  est.otcf_inverter     = _oInv.checked;
     }
     // Reseta contador de sequência ao confirmar
     bot._seqContador = 0;
@@ -12035,7 +12069,13 @@ function initWebSocket(wssUrl) {
                         'EVEN':  'DIGITEVEN',  'ODD':   'DIGITODD',
                         'CALL':  'CALL',       'PUT':   'PUT',
                     };
-                    const _hmaCt = _hmaContrMap[_hmaS.decisao] || est.hma_contrato || 'DIGITUNDER';
+                    // Inversão de sinal (CALL↔PUT) quando hma_inverter está ativo
+                    const _hmaDecisaoFinal = (est.hma_inverter && (_hmaS.decisao === 'CALL' || _hmaS.decisao === 'PUT'))
+                        ? (_hmaS.decisao === 'CALL' ? 'PUT' : 'CALL')
+                        : _hmaS.decisao;
+                    if (est.hma_inverter && _hmaDecisaoFinal !== _hmaS.decisao)
+                        print(`🔄 HMA INVERSÃO ativa: ${_hmaS.decisao} → <b>${_hmaDecisaoFinal}</b>`, 'log-info');
+                    const _hmaCt = _hmaContrMap[_hmaDecisaoFinal] || est.hma_contrato || 'DIGITUNDER';
                     // Sinaliza para a conta secundária espelhar esta entrada
                     bot._hmaSecSinal = {
                         contract_type: _hmaCt,
@@ -30988,12 +31028,19 @@ async function _otcFluxoCiclo() {
         // 3. Melhor ativo com sinal
         const melhor   = varredura.melhor;
         const ativoId  = melhor.ativo;
-        const decisao  = melhor.decisao;
         const score    = melhor.score;
         // Busca metadados do ativo (nome amigável + payout) da lista original
         const meta     = ativosMeta.find(a => (a.id || a.name || a.nome) === ativoId) || {};
         const ativoNm  = meta.nome || meta.label || ativoId;
         const payout   = meta.payout || meta.profit || 0;
+
+        // Inversão de sinal quando otcf_inverter está ativo
+        const _decisaoOriginal = melhor.decisao;
+        const decisao = (est.otcf_inverter && (_decisaoOriginal === 'CALL' || _decisaoOriginal === 'PUT'))
+            ? (_decisaoOriginal === 'CALL' ? 'PUT' : 'CALL')
+            : _decisaoOriginal;
+        if (est.otcf_inverter && decisao !== _decisaoOriginal)
+            print(`🔄 OTC FLUXO INVERSÃO ativa: ${_decisaoOriginal} → <b>${decisao}</b>`, 'log-info');
 
         // Atualiza ativo atual (para exibição)
         _otcFluxo.ativoAtual = { id: ativoId, nome: ativoNm };
