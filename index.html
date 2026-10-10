@@ -32549,8 +32549,19 @@ const _drvModo = {
 };
 
 // ── WebSocket dedicado ────────────────────────────────────────────────────────
-function _drvWsConectar() {
-    if (_drvChart._ws && (_drvChart._ws.readyState === WebSocket.OPEN || _drvChart._ws.readyState === WebSocket.CONNECTING)) return;
+function _drvWsConectar(onPronto) {
+    // Se já está aberto, dispara callback imediatamente
+    if (_drvChart._ws && _drvChart._ws.readyState === WebSocket.OPEN) {
+        if (onPronto) onPronto();
+        return;
+    }
+    // Se está conectando, empilha callback
+    if (_drvChart._ws && _drvChart._ws.readyState === WebSocket.CONNECTING) {
+        if (onPronto) _drvChart._wsQueue.push({ __cb: onPronto });
+        return;
+    }
+    if (onPronto) _drvChart._wsQueue.push({ __cb: onPronto });
+
     const APP_ID_DRV = (typeof APP_ID !== 'undefined') ? APP_ID : 36544;
     const WS_URL = `wss://ws.derivws.com/websockets/v3?app_id=${APP_ID_DRV}`;
     _drvChart._ws = new WebSocket(WS_URL);
@@ -32559,9 +32570,13 @@ function _drvWsConectar() {
         _drvChart._wsReady = true;
         // Autoriza com o token do bot principal se disponível
         const tok = (typeof bot !== 'undefined' && bot.token) ? bot.token : null;
-        if (tok) _drvChart._ws.send(JSON.stringify({ authorize: tok }));
-        // Drena fila
-        while (_drvChart._wsQueue.length) _drvChart._ws.send(_drvChart._wsQueue.shift());
+        if (tok) {
+            // Aguarda authorize responder antes de drenar fila
+            _drvChart._ws.send(JSON.stringify({ authorize: tok, req_id: 9499 }));
+        } else {
+            // Sem token — drena fila direto (dados públicos: ticks_history não precisa auth)
+            _drvDrenarFila();
+        }
     };
     _drvChart._ws.onmessage = (ev) => {
         try { _drvWsMensagem(JSON.parse(ev.data)); } catch (_) {}
@@ -32577,13 +32592,26 @@ function _drvWsConectar() {
     _drvChart._ws.onerror = () => {};
 }
 
+function _drvDrenarFila() {
+    while (_drvChart._wsQueue.length) {
+        const item = _drvChart._wsQueue.shift();
+        if (item && item.__cb) {
+            item.__cb();
+        } else if (typeof item === 'string') {
+            _drvChart._ws.send(item);
+        }
+    }
+}
+
 function _drvWsSend(payload) {
     const msg = JSON.stringify(payload);
     if (_drvChart._ws && _drvChart._ws.readyState === WebSocket.OPEN) {
         _drvChart._ws.send(msg);
     } else {
         _drvChart._wsQueue.push(msg);
-        _drvWsConectar();
+        if (!_drvChart._ws || _drvChart._ws.readyState === WebSocket.CLOSED || _drvChart._ws.readyState === WebSocket.CLOSING) {
+            _drvWsConectar();
+        }
     }
 }
 
@@ -32624,15 +32652,19 @@ function _drvWsMensagem(d) {
         _drvProcessarResultado(d);
         return;
     }
-    // authorize → atualiza saldo/tipo
-    if (d.msg_type === 'authorize' && d.authorize) {
-        const auth = d.authorize;
-        const saldoEl = document.getElementById('drv-chart-saldo');
-        const tipoEl  = document.getElementById('drv-chart-tipo');
-        const lblEl   = document.getElementById('lbl-drv-chart');
-        if (saldoEl) saldoEl.textContent = '$' + parseFloat(auth.balance || 0).toFixed(2);
-        if (tipoEl)  tipoEl.textContent  = auth.is_virtual ? 'DEMO' : 'REAL';
-        if (lblEl)   lblEl.textContent   = (auth.is_virtual ? 'DEMO' : 'REAL') + ' • $' + parseFloat(auth.balance || 0).toFixed(2);
+    // authorize → atualiza saldo/tipo E drena fila pendente
+    if (d.msg_type === 'authorize' || (d.req_id === 9499)) {
+        if (d.authorize) {
+            const auth = d.authorize;
+            const saldoEl = document.getElementById('drv-chart-saldo');
+            const tipoEl  = document.getElementById('drv-chart-tipo');
+            const lblEl   = document.getElementById('lbl-drv-chart');
+            if (saldoEl) saldoEl.textContent = '$' + parseFloat(auth.balance || 0).toFixed(2);
+            if (tipoEl)  tipoEl.textContent  = auth.is_virtual ? 'DEMO' : 'REAL';
+            if (lblEl)   lblEl.textContent   = (auth.is_virtual ? 'DEMO' : 'REAL') + ' • $' + parseFloat(auth.balance || 0).toFixed(2);
+        }
+        // Drena fila (seja bem-sucedido ou com erro de authorize)
+        _drvDrenarFila();
         return;
     }
     // balance update
@@ -32654,11 +32686,28 @@ function _drvCarregarCandles() {
     document.getElementById('drv-chart-loading-msg').textContent = 'CARREGANDO CANDLES...';
     document.getElementById('drv-chart-erro').style.display = 'none';
 
+    // Timeout de segurança: se em 12s não chegou resposta, mostra erro
+    const timeoutId = setTimeout(() => {
+        if (_drvChart._reqMap[reqId]) {
+            delete _drvChart._reqMap[reqId];
+            const loadEl = document.getElementById('drv-chart-loading');
+            const erroEl = document.getElementById('drv-chart-erro');
+            const erroMsg = document.getElementById('drv-chart-erro-msg');
+            if (loadEl) loadEl.style.display = 'none';
+            if (erroMsg) erroMsg.textContent = '⏱ Timeout — verifique conexão com a Deriv e tente novamente.';
+            if (erroEl) erroEl.style.display = 'flex';
+        }
+    }, 12000);
+
     _drvChart._reqMap[reqId] = (d) => {
-        document.getElementById('drv-chart-loading').style.display = 'none';
+        clearTimeout(timeoutId);
+        const loadEl = document.getElementById('drv-chart-loading');
+        const erroEl = document.getElementById('drv-chart-erro');
+        const erroMsg = document.getElementById('drv-chart-erro-msg');
+        if (loadEl) loadEl.style.display = 'none';
         if (!d.candles || d.candles.length === 0) {
-            document.getElementById('drv-chart-erro-msg').textContent = 'Nenhum candle retornado para ' + ativo;
-            document.getElementById('drv-chart-erro').style.display = 'flex';
+            if (erroMsg) erroMsg.textContent = 'Nenhum candle retornado para ' + ativo;
+            if (erroEl) erroEl.style.display = 'flex';
             return;
         }
         const seen = new Set();
@@ -32806,17 +32855,12 @@ function _drvIniciarChart() {
 function drvChartAbrir() {
     const m = document.getElementById('modal-drv-chart');
     if (m) m.style.display = 'block';
-    // Verifica se Deriv está conectada (bot.ws pronto)
-    const conectado = (typeof bot !== 'undefined' && bot.ws && bot.ws.readyState === WebSocket.OPEN);
-    const banner = document.getElementById('drv-banner-desconectado');
-    if (banner) banner.style.display = conectado ? 'none' : 'block';
-    if (!conectado) {
-        document.getElementById('drv-chart-loading').style.display = 'none';
-        document.getElementById('drv-chart-erro-msg').textContent = '❌ Deriv não conectada. Clique em "CONECTAR DERIV" no painel à direita.';
-        document.getElementById('drv-chart-erro').style.display = 'flex';
-    }
-    // Atualiza saldo do bot.ws (se disponível)
-    if (conectado && typeof bot !== 'undefined' && bot._lastBalance !== undefined) {
+
+    // Inicializa gráfico imediatamente (não depende do WS)
+    _drvIniciarChart();
+
+    // Atualiza saldo do bot.ws se disponível
+    if (typeof bot !== 'undefined' && bot._lastBalance !== undefined) {
         const saldoEl = document.getElementById('drv-chart-saldo');
         const tipoEl  = document.getElementById('drv-chart-tipo');
         const lblEl   = document.getElementById('lbl-drv-chart');
@@ -32825,9 +32869,11 @@ function drvChartAbrir() {
         if (tipoEl)  tipoEl.textContent  = tipo;
         if (lblEl)   lblEl.textContent   = tipo + ' • $' + parseFloat(bot._lastBalance).toFixed(2);
     }
-    _drvIniciarChart();
-    _drvWsConectar();
-    if (conectado) drvChartCarregar();
+
+    // Conecta WS dedicado e carrega candles assim que estiver pronto (após authorize)
+    _drvWsConectar(() => {
+        drvChartCarregar();
+    });
 }
 
 function drvChartFechar() {
