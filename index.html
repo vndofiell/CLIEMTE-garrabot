@@ -32890,27 +32890,58 @@ function drvOperar(direcao) {
     const reqProp = 9700 + Math.floor(Math.random()*200);
     const reqBuy  = reqProp + 1;
 
-    const propPayload = { proposal:1, amount:valor, basis:'stake', contract_type:tipoContrato, currency:'USD', duration:duracao, duration_unit:'s', symbol:ativo, req_id:reqProp };
+    // Monta payload — a API Deriv usa 'symbol' (não 'ativo')
+    // Para CALL/PUT: duration_unit pode ser 's' (segundos) ou 'm' (minutos)
+    // Deriv aceita duration_unit:'t' para ticks, 's' para segundos, 'm' minutos
+    const duracaoUnit = 's';
+    const propPayload = {
+        proposal: 1,
+        amount: valor,
+        basis: 'stake',
+        contract_type: tipoContrato,
+        currency: 'USD',
+        duration: duracao,
+        duration_unit: duracaoUnit,
+        symbol: ativo,
+        req_id: reqProp,
+    };
+    // Digits com barreira
     if (tipoContrato.includes('OVER') || tipoContrato.includes('UNDER')) propPayload.barrier = '5';
+    // Digits EVEN/ODD não precisam de barreira nem de duration_unit 's' — usam ticks
+    if (tipoContrato === 'DIGITEVEN' || tipoContrato === 'DIGITODD') {
+        delete propPayload.duration_unit;
+        propPayload.duration = 1;
+        propPayload.duration_unit = 't';
+    }
+
+    const _drvUnlockBtns = () => { if (btnCall) btnCall.disabled = false; if (btnPut) btnPut.disabled = false; };
 
     const handler = (ev) => {
         try {
             const d = JSON.parse(ev.data);
-            if (d.req_id === reqProp && d.msg_type === 'proposal') {
-                if (!d.proposal?.id) {
+            // Captura qualquer resposta com o req_id da proposta
+            if (d.req_id === reqProp) {
+                if (d.error) {
                     ws.removeEventListener('message', handler);
-                    if (btnCall) btnCall.disabled = false; if (btnPut) btnPut.disabled = false;
-                    _drvOpStatusMsg('❌ Proposta rejeitada: '+(d.error?.message||'erro'), '#f44');
+                    _drvUnlockBtns();
+                    _drvOpStatusMsg('❌ Proposta rejeitada: ' + d.error.message, '#f44');
                     _drvModo.opBloqueada = false; return;
                 }
-                // Atualiza payout estimado
-                const estEl = document.getElementById('drv-pagamento-est');
-                if (estEl && d.proposal.payout > 0) estEl.textContent = '$'+parseFloat(d.proposal.payout).toFixed(2);
-                ws.send(JSON.stringify({ buy: d.proposal.id, price: valor, req_id: reqBuy }));
+                if (d.proposal?.id) {
+                    const estEl = document.getElementById('drv-pagamento-est');
+                    if (estEl && d.proposal.payout > 0) estEl.textContent = '$' + parseFloat(d.proposal.payout).toFixed(2);
+                    ws.send(JSON.stringify({ buy: d.proposal.id, price: valor, req_id: reqBuy }));
+                }
+                return;
             }
-            if (d.req_id === reqBuy && d.msg_type === 'buy') {
+            // Captura resposta do buy
+            if (d.req_id === reqBuy) {
                 ws.removeEventListener('message', handler);
-                if (btnCall) btnCall.disabled = false; if (btnPut) btnPut.disabled = false;
+                _drvUnlockBtns();
+                if (d.error) {
+                    _drvOpStatusMsg('❌ Buy falhou: ' + d.error.message, '#f44');
+                    _drvModo.opBloqueada = false; return;
+                }
                 if (d.buy?.contract_id) {
                     const cid = d.buy.contract_id, tsAgora = Date.now();
                     const cor = direcao === 'call' ? '#27c93f' : '#f44';
@@ -32919,7 +32950,7 @@ function drvOperar(direcao) {
                     _drvIniciarOpAtiva({ id:cid, direcao, valor, duracao, ts:tsAgora, precoEntrada:_drvChart.lastPreco||0 });
                     _drvAguardarResultado(cid, duracao);
                 } else {
-                    _drvOpStatusMsg('❌ Buy falhou: '+(d.error?.message||'erro'), '#f44');
+                    _drvOpStatusMsg('❌ Buy sem contract_id', '#f44');
                     _drvModo.opBloqueada = false;
                 }
             }
