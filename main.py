@@ -15183,6 +15183,113 @@ def quotex_otc_fluxo_avaliar():
     return jsonify(resultado)
 
 
+# ── OTC Fluxo — varredura multi-ativo em paralelo ───────────────────────────
+@app.route('/quotex/otc-fluxo/varrer', methods=['POST'])
+def quotex_otc_fluxo_varrer():
+    """
+    Varre múltiplos ativos em paralelo com a estratégia OTC Fluxo EMA Pro.
+    Para cada ativo busca os candles e executa analisar_otc_fluxo().
+    Retorna o melhor sinal (maior score com decisão CALL/PUT) ou NO_TRADE.
+
+    Body JSON:
+        ativos:            list[str]   — lista de IDs de ativos Quotex
+        periodo:           int         — período das velas em segundos (padrão 60)
+        count:             int         — nº de candles a buscar (padrão 80)
+        confianca_minima:  float       — score mínimo (padrão 75)
+
+    Retorna:
+        {
+          ok, melhor: { ativo, decisao, score, motivos, bloqueios, indicadores },
+          todos: [...],
+          aprovados: int,
+          varridos: int
+        }
+    """
+    import asyncio as _asyncio
+    from quotex_connector import _QUOTEX_STATE, _QUOTEX_LOCK, _ORDEM_BG_CACHE, _ORDEM_BG_LOCK
+
+    dados            = request.get_json(force=True, silent=True) or {}
+    ativos           = dados.get("ativos") or []
+    periodo          = int(dados.get("periodo", 60))
+    count            = int(dados.get("count", 80))
+    confianca_minima = float(dados.get("confianca_minima", 75))
+
+    if not isinstance(ativos, list) or len(ativos) == 0:
+        return jsonify({"ok": False, "erro": "Campo 'ativos' deve ser lista não vazia."}), 400
+
+    with _QUOTEX_LOCK:
+        client = _QUOTEX_STATE.get("client")
+        loop   = _QUOTEX_STATE.get("loop")
+
+    if not client or not loop:
+        return jsonify({"ok": False, "erro": "Quotex não conectada.", "melhor": None, "todos": []}), 400
+
+    # Bloqueia durante buy em andamento
+    with _ORDEM_BG_LOCK:
+        _buy_ativo = any(v.get("etapa") == "enviando" for v in _ORDEM_BG_CACHE.values())
+    if _buy_ativo:
+        return jsonify({"ok": False, "erro": "buy em andamento", "melhor": None, "todos": []}), 400
+
+    resultados = []
+    lock_res   = threading.Lock()
+
+    def _analisar_ativo(ativo_id):
+        try:
+            qtd_segundos = count * periodo
+            fut = _asyncio.run_coroutine_threadsafe(
+                client.get_historical_candles(ativo_id, qtd_segundos, periodo), loop
+            )
+            raw = fut.result(timeout=12) or []
+
+            candles = []
+            for c in raw[-count:]:
+                if not isinstance(c, dict):
+                    continue
+                ts = int(c.get("time") or 0)
+                o  = float(c.get("open")  or 0)
+                h  = float(c.get("high")  or c.get("max") or o)
+                l  = float(c.get("low")   or c.get("min") or o)
+                cl = float(c.get("close") or o)
+                if ts > 0 and o > 0:
+                    candles.append({"time": ts, "open": o, "high": h, "low": l, "close": cl})
+
+            candles.sort(key=lambda x: x["time"])
+
+            if len(candles) < 60:
+                with lock_res:
+                    resultados.append({"ativo": ativo_id, "decisao": "NO_TRADE", "score": 0,
+                                       "motivos": [f"Candles insuficientes: {len(candles)}/60"], "bloqueios": [], "indicadores": {}})
+                return
+
+            res = analisar_otc_fluxo(candles, confianca_minima=confianca_minima)
+            res["ativo"] = ativo_id
+            print(f"[OTC-VARRER] {ativo_id} → {res['decisao']} score={res['score']}")
+            with lock_res:
+                resultados.append(res)
+
+        except Exception as exc:
+            print(f"[OTC-VARRER] {ativo_id} erro: {exc}")
+            with lock_res:
+                resultados.append({"ativo": ativo_id, "decisao": "NO_TRADE", "score": 0,
+                                   "motivos": [str(exc)], "bloqueios": [], "indicadores": {}})
+
+    threads = [threading.Thread(target=_analisar_ativo, args=(a,), daemon=True) for a in ativos]
+    for t in threads: t.start()
+    for t in threads: t.join(timeout=20)
+
+    aprovados = [r for r in resultados if r.get("decisao") in ("CALL", "PUT")]
+    melhor    = max(aprovados, key=lambda r: r.get("score", 0)) if aprovados else None
+
+    print(f"[OTC-VARRER] varridos={len(resultados)} aprovados={len(aprovados)} melhor={melhor['ativo'] if melhor else 'nenhum'}")
+    return jsonify({
+        "ok":       True,
+        "melhor":   melhor,
+        "todos":    resultados,
+        "aprovados": len(aprovados),
+        "varridos":  len(resultados),
+    })
+
+
 def start_server():
     # Oracle Cloud / Render — porta configurável via variável de ambiente, padrão 5000
     port = int(os.environ.get("PORT", 5000))

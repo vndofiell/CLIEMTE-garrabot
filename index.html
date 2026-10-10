@@ -30918,83 +30918,87 @@ async function _otcFluxoCiclo() {
     if (est.otcf_stop_win  > 0 && _otcFluxo.lucroSessao >=  est.otcf_stop_win)  { _otcFluxoParar(); print(`🏆 OTC FLUXO — Stop Win! +$${_otcFluxo.lucroSessao.toFixed(2)}`, 'log-win');  return; }
     if (est.otcf_stop_loss > 0 && _otcFluxo.lucroSessao <= -est.otcf_stop_loss) { _otcFluxoParar(); print(`🛑 OTC FLUXO — Stop Loss! -$${Math.abs(_otcFluxo.lucroSessao).toFixed(2)}`, 'log-loss'); return; }
 
+    if (_otcFluxo.opBloqueada) { print('📈 OTC FLUXO: ⏳ Aguardando resultado anterior...', 'log-info'); return; }
+
     _otcFluxo._cicloRodando = true;
     try {
-        // 1. Buscar ativos com payout adequado
+        // 1. Buscar lista de ativos elegíveis (filtro de payout + tipo de mercado)
         const tipoMercado = est.otcf_tipo_mercado || 'otc';
         const payMin      = est.otcf_payout_min   || 75;
-        let ativos = [];
+        const periodo     = est.otcf_periodo       || 60;
+        let ativosMeta = [];   // [{id, nome, payout}]
         try {
             const rAtv = await fetch('/quotex/ativos-payout');
             const dAtv = await rAtv.json();
             const lista = Array.isArray(dAtv.ativos) ? dAtv.ativos : [];
-            ativos = lista.filter(a => {
+            ativosMeta = lista.filter(a => {
                 const payout = a.payout || a.profit || 0;
                 if (payout < payMin) return false;
-                if (tipoMercado === 'otc')     return (a.nome || a.id || '').toLowerCase().includes('otc');
-                if (tipoMercado === 'abertos') return !(a.nome || a.id || '').toLowerCase().includes('otc');
+                const nm = (a.nome || a.id || a.name || '').toLowerCase();
+                if (tipoMercado === 'otc')     return nm.includes('otc');
+                if (tipoMercado === 'abertos') return !nm.includes('otc');
                 return true;
             });
         } catch(e) { print('📈 OTC FLUXO: ⚠️ Erro ao buscar ativos: ' + e.message, 'log-info'); }
 
-        if (!ativos.length) { print('📈 OTC FLUXO: ⚠️ Sem ativos com payout ≥ ' + payMin + '% — aguardando próxima vela', 'log-info'); _otcFluxo._cicloRodando = false; return; }
-
-        // Troca de ativo após N losses
-        const lossesMax = est.otcf_losses_troca || 0;
-        if (lossesMax > 0 && _otcFluxo.losses >= lossesMax) {
-            const atual = _otcFluxo.ativoAtual?.id || '';
-            const outro = ativos.find(a => (a.id || a.nome) !== atual) || ativos[0];
-            _otcFluxo.ativoAtual = outro;
-            _otcFluxo.losses = 0;
-            print(`📈 OTC FLUXO: 🔁 ${lossesMax} losses — trocando para ${outro.nome || outro.id}`, 'log-info');
-        } else if (!_otcFluxo.ativoAtual) {
-            _otcFluxo.ativoAtual = ativos[0];
+        if (!ativosMeta.length) {
+            print(`📈 OTC FLUXO: ⚠️ Sem ativos com payout ≥ ${payMin}% (${tipoMercado}) — aguardando`, 'log-info');
+            _otcFluxo._cicloRodando = false; return;
         }
 
-        const ativoSel = _otcFluxo.ativoAtual;
-        const ativoId  = ativoSel.id   || ativoSel.name  || '';
-        const ativoNm  = ativoSel.nome || ativoSel.label || ativoId;
-        const payout   = ativoSel.payout || ativoSel.profit || 0;
+        // Lista apenas os IDs para o backend varrer em paralelo
+        const idsParaVarrer = ativosMeta.map(a => a.id || a.name || a.nome).filter(Boolean);
+        print(`📈 OTC FLUXO: 🔍 Varrendo <b>${idsParaVarrer.length}</b> ativos em paralelo (${tipoMercado}, pay≥${payMin}%)...`, 'log-info');
 
-        // 2. Buscar candles fechados
-        const periodo = est.otcf_periodo || 60;
-        const nVelas  = 80; // 80 velas = suficiente para os indicadores
-        let candles = [];
+        // 2. Varredura multi-ativo no backend (todos em paralelo)
+        let varredura;
         try {
-            const rCan = await fetch(`/quotex/candles?ativo=${encodeURIComponent(ativoId)}&periodo=${periodo}&count=${nVelas}`);
-            const dCan = await rCan.json();
-            candles = Array.isArray(dCan.candles) ? dCan.candles : (Array.isArray(dCan) ? dCan : []);
-        } catch(e) { print('📈 OTC FLUXO: ⚠️ Erro ao buscar candles: ' + e.message, 'log-info'); _otcFluxo._cicloRodando = false; return; }
-
-        if (candles.length < 60) { print(`📈 OTC FLUXO: ⚠️ Candles insuficientes (${candles.length}/60) em ${ativoNm}`, 'log-info'); _otcFluxo._cicloRodando = false; return; }
-
-        // 3. Chamar a estratégia
-        let res;
-        try {
-            const r = await fetch('/quotex/otc-fluxo/avaliar', {
+            const r = await fetch('/quotex/otc-fluxo/varrer', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ candles, confianca_minima: est.otcf_confianca || 75 }),
+                body: JSON.stringify({
+                    ativos:           idsParaVarrer,
+                    periodo:          periodo,
+                    count:            80,
+                    confianca_minima: est.otcf_confianca || 75,
+                }),
             });
-            res = await r.json();
-        } catch(e) { print('📈 OTC FLUXO: ⚠️ Erro na análise: ' + e.message, 'log-info'); _otcFluxo._cicloRodando = false; return; }
+            varredura = await r.json();
+        } catch(e) { print('📈 OTC FLUXO: ⚠️ Erro na varredura: ' + e.message, 'log-info'); _otcFluxo._cicloRodando = false; return; }
 
-        const decisao = res?.decisao || 'NO_TRADE';
-        const score   = res?.score   || 0;
-        const ind     = res?.indicadores || {};
+        if (!varredura.ok) { print('📈 OTC FLUXO: ⚠️ ' + (varredura.erro || 'erro na varredura'), 'log-info'); _otcFluxo._cicloRodando = false; return; }
 
-        if (decisao === 'NO_TRADE') {
-            const bloqueios = (res?.bloqueios || []).join(' | ') || 'confluência incompleta';
-            print(`📈 OTC FLUXO [${ativoNm}]: 🚫 NO TRADE — ${bloqueios}`, 'log-info');
-            _otcFluxo._cicloRodando = false;
-            return;
+        print(`📈 OTC FLUXO: 📊 Varridos=${varredura.varridos} | Com sinal=${varredura.aprovados}`, 'log-info');
+
+        if (!varredura.melhor) {
+            // Mostra resumo dos bloqueios mais comuns
+            const todos = varredura.todos || [];
+            const bloqueiosCont = {};
+            todos.forEach(r => (r.bloqueios || []).forEach(b => { bloqueiosCont[b] = (bloqueiosCont[b] || 0) + 1; }));
+            const top = Object.entries(bloqueiosCont).sort((a,b)=>b[1]-a[1]).slice(0,3).map(([b,n])=>`${b} (${n}x)`).join(' · ');
+            print(`📈 OTC FLUXO: 🚫 Nenhum sinal — ${top || 'confluência incompleta em todos os ativos'}`, 'log-info');
+            _otcFluxo._cicloRodando = false; return;
         }
 
-        if (_otcFluxo.opBloqueada) { print('📈 OTC FLUXO: ⏳ Aguardando resultado anterior...', 'log-info'); _otcFluxo._cicloRodando = false; return; }
+        // 3. Melhor ativo com sinal
+        const melhor   = varredura.melhor;
+        const ativoId  = melhor.ativo;
+        const decisao  = melhor.decisao;
+        const score    = melhor.score;
+        // Busca metadados do ativo (nome amigável + payout) da lista original
+        const meta     = ativosMeta.find(a => (a.id || a.name || a.nome) === ativoId) || {};
+        const ativoNm  = meta.nome || meta.label || ativoId;
+        const payout   = meta.payout || meta.profit || 0;
+
+        // Atualiza ativo atual (para exibição)
+        _otcFluxo.ativoAtual = { id: ativoId, nome: ativoNm };
+
+        print(
+            `📈 OTC FLUXO: ${decisao} | <b>${ativoNm}</b> | score <b>${score}/100</b> | payout ${payout}% | $${_otcFluxo.valorAtual} — MELHOR ENTRE ${varredura.varridos} ativos ✅`,
+            decisao === 'CALL' ? 'log-win' : 'log-loss'
+        );
 
         // 4. Entrar na operação
-        print(`📈 OTC FLUXO: ${decisao} | ${ativoNm} | score <b>${score}/100</b> | payout ${payout}% | $${_otcFluxo.valorAtual} — entrando na virada ✅`, decisao === 'CALL' ? 'log-win' : 'log-loss');
-
         _otcFluxo.opBloqueada = true;
         let opId = null;
         try {
@@ -31002,9 +31006,9 @@ async function _otcFluxoCiclo() {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    ativo:    ativoId,
-                    direcao:  decisao,
-                    valor:    _otcFluxo.valorAtual,
+                    ativo:     ativoId,
+                    direcao:   decisao,
+                    valor:     _otcFluxo.valorAtual,
                     expiracao: periodo,
                 }),
             });
@@ -31019,12 +31023,12 @@ async function _otcFluxoCiclo() {
             return;
         }
 
-        // 5. Aguardar resultado (polling até 3× o período)
+        // 5. Aguardar resultado (polling)
         const maxEspera = (periodo + 15) * 1000;
         const inicio    = Date.now();
         let resultado   = null;
         while (Date.now() - inicio < maxEspera) {
-            await new Promise(r => setTimeout(r, 3000));
+            await new Promise(resolve => setTimeout(resolve, 3000));
             if (!_otcFluxo.rodando) break;
             try {
                 const rRes = await fetch(`/quotex/resultado/${opId}`);
@@ -31043,7 +31047,7 @@ async function _otcFluxoCiclo() {
         const win   = resultado.resultado === 'win';
         const lucro = parseFloat(resultado.lucro || 0);
         _otcFluxo.lucroSessao += lucro;
-        _otcFluxo.opBloqueada = false;
+        _otcFluxo.opBloqueada  = false;
 
         if (win) {
             _otcFluxo.losses    = 0;
@@ -31066,7 +31070,6 @@ async function _otcFluxoCiclo() {
             }
         }
 
-        // Atualiza stake no input
         const inpStake = document.getElementById('stake-input');
         if (inpStake) inpStake.value = _otcFluxo.valorAtual.toFixed(2);
 
