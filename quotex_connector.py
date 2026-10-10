@@ -899,19 +899,28 @@ def _quotex_buy_bg(op_key: str, client, loop,
     """
     Executa buy() em background thread e armazena o resultado em
     _ORDEM_BG_CACHE[op_key]. Chamado por quotex_operar().
+
+    IMPORTANTE: o buy() interno do pyquotex aguarda buy_id por até
+    'duration' segundos (ex: 60s). Usamos asyncio.wait_for com timeout
+    de 8s para forçar cancelamento nativo dentro do loop — o fut.result()
+    retorna em ≤8s em vez de travar por 60s.
     """
-    timeout_buy = 20  # Quotex confirma buy em <5s; 20s é margem segura
-    print(
-        f"[Quotex] 📤 BG BUY | ativo={ativo} | dir={direcao_norm} | "
-        f"val={valor:.2f} | dur={duracao}s | timeout={timeout_buy}s"
-    )
-    try:
-        fut = asyncio.run_coroutine_threadsafe(
+    TIMEOUT_BUY = 8  # segundos — pyquotex confirma em <3s na prática
+
+    async def _buy_com_timeout():
+        return await asyncio.wait_for(
             client.buy(amount=valor, asset=ativo,
                        direction=direcao_norm, duration=duracao),
-            loop,
+            timeout=TIMEOUT_BUY,
         )
-        resultado = fut.result(timeout=timeout_buy)
+
+    print(
+        f"[Quotex] 📤 BG BUY | ativo={ativo} | dir={direcao_norm} | "
+        f"val={valor:.2f} | dur={duracao}s | timeout={TIMEOUT_BUY}s"
+    )
+    try:
+        fut = asyncio.run_coroutine_threadsafe(_buy_com_timeout(), loop)
+        resultado = fut.result(timeout=TIMEOUT_BUY + 3)  # +3s margem de thread
 
         if resultado is None:
             raise ConnectionError("buy() retornou None — sessão encerrada.")
@@ -967,10 +976,10 @@ def _quotex_buy_bg(op_key: str, client, loop,
         # Dispara busca de resultado em background
         quotex_resultado_iniciar(op_id, duracao_s=duracao)
 
-    except concurrent.futures.TimeoutError:
+    except (concurrent.futures.TimeoutError, asyncio.TimeoutError, TimeoutError):
         print(
-            f"[Quotex] ⚠️ TIMEOUT THREAD | ativo={ativo} | "
-            f"dir={direcao_norm} | timeout={timeout_buy}s"
+            f"[Quotex] ⚠️ TIMEOUT BUY | ativo={ativo} | "
+            f"dir={direcao_norm} | timeout={TIMEOUT_BUY}s"
         )
         with _ORDEM_BG_LOCK:
             _ORDEM_BG_CACHE[op_key] = {
