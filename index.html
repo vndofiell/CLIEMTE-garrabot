@@ -2594,6 +2594,13 @@
         <span class="cmd-label" id="lbl-qx-chart" style="color:#57606a;">Velas + Operar</span>
     </button>
 
+    <div class="cmd-section">▸ DERIV TRADING</div>
+    <button class="cmd-btn" id="btn-drv-chart" onclick="drvChartAbrir()"
+        style="border-color:rgba(0,255,65,0.6); color:#00ff41; font-weight:bold;">
+        📊 Gráfico Deriv
+        <span class="cmd-label" id="lbl-drv-chart" style="color:#57606a;">Velas + Operar</span>
+    </button>
+
     <div class="cmd-section">▸ PLACAR</div>
     <button class="cmd-btn" onclick="resetarPlacar()" style="border-color:rgba(255,189,46,0.4); color:#ffbd2e;">
         🔄 resetar placar
@@ -28863,6 +28870,376 @@ window.addEventListener('load', () => {
 </div>
 
 <!-- ══════════════════════════════════════════════════════════
+     MODAL — GRÁFICO DE VELAS DERIV
+════════════════════════════════════════════════════════════ -->
+<div id="modal-drv-chart" style="
+    display:none; position:fixed; top:0; left:0; width:100%; height:100%;
+    background:rgba(0,0,0,0.92); z-index:9900;
+    font-family:'Share Tech Mono',monospace;">
+
+  <!-- Cabeçalho -->
+  <div style="display:flex; align-items:center; justify-content:space-between;
+              padding:8px 14px; background:#0a0f0a; border-bottom:1px solid rgba(0,255,65,0.35);">
+    <div style="display:flex; align-items:center; gap:10px;">
+      <span style="color:#00ff41; font-size:0.9rem; letter-spacing:2px; font-weight:bold;">📊 DERIV</span>
+      <select id="drv-ativo-sel"
+          style="background:#0a0a12; border:1px solid rgba(0,255,65,0.5); color:#00ff41;
+                 padding:4px 8px; font-family:'Share Tech Mono'; font-size:0.75rem;
+                 border-radius:3px; outline:none; cursor:pointer; max-width:180px;"
+          onchange="drvChartCarregar()">
+        <option value="R_100">Volatility 100 Index</option>
+        <option value="R_75">Volatility 75 Index</option>
+        <option value="R_50">Volatility 50 Index</option>
+        <option value="R_25">Volatility 25 Index</option>
+        <option value="R_10">Volatility 10 Index</option>
+        <option value="1HZ100V">Volatility 100 (1s)</option>
+        <option value="1HZ75V">Volatility 75 (1s)</option>
+        <option value="1HZ50V">Volatility 50 (1s)</option>
+        <option value="1HZ10V">Volatility 10 (1s)</option>
+        <option value="frxEURUSD">EUR/USD</option>
+        <option value="frxGBPUSD">GBP/USD</option>
+        <option value="frxUSDJPY">USD/JPY</option>
+        <option value="frxAUDUSD">AUD/USD</option>
+      </select>
+      <select id="drv-periodo-sel"
+          style="background:#0a0a12; border:1px solid rgba(0,255,65,0.3); color:#aaa;
+                 padding:4px 6px; font-family:'Share Tech Mono'; font-size:0.7rem;
+                 border-radius:3px; outline:none; cursor:pointer;"
+          onchange="drvChartCarregar()">
+        <option value="60" selected>1m</option>
+        <option value="120">2m</option>
+        <option value="300">5m</option>
+        <option value="900">15m</option>
+        <option value="1800">30m</option>
+        <option value="3600">1h</option>
+      </select>
+      <span id="drv-preco-atual"
+          style="color:#fff; font-size:0.85rem; font-weight:bold; letter-spacing:1px;">
+        --
+      </span>
+      <span id="drv-preco-dir" style="font-size:0.8rem;">⬆️</span>
+    </div>
+    <div style="display:flex; align-items:center; gap:8px;">
+      <span style="font-size:0.7rem; color:#aaa;">Saldo:</span>
+      <span id="drv-chart-saldo" style="color:#00ff41; font-weight:bold; font-size:0.8rem;">$--</span>
+      <span id="drv-chart-tipo"
+          style="font-size:0.62rem; color:#555; border:1px solid #333;
+                 padding:2px 6px; border-radius:3px;">DEMO</span>
+      <button onclick="drvChartFechar()"
+          style="background:transparent; border:1px solid #f44; color:#f44;
+                 padding:4px 10px; font-family:'Share Tech Mono'; font-size:0.7rem;
+                 cursor:pointer; border-radius:3px; letter-spacing:1px;">
+        ✕ FECHAR
+      </button>
+    </div>
+  </div>
+
+  <!-- Corpo: gráfico + painel de operação -->
+  <div style="display:flex; height:calc(100vh - 44px);">
+
+    <!-- Gráfico de velas -->
+    <div style="flex:1; position:relative; background:#0a100a;">
+      <div id="drv-chart-container" style="width:100%; height:100%;"></div>
+
+      <div id="drv-vela-timer" style="
+          position:absolute; right:68px;
+          background:rgba(20,30,20,0.95); border:1px solid rgba(255,255,255,0.15);
+          color:#c8d0e0; font-family:'Share Tech Mono',monospace;
+          font-size:0.74rem; padding:1px 7px; border-radius:3px;
+          pointer-events:none; z-index:6; letter-spacing:1px;
+          white-space:nowrap; display:none;">
+        00:00
+      </div>
+
+      <div id="drv-op-timer-overlay" style="
+          position:absolute; left:50%; transform:translateX(-50%);
+          display:none; pointer-events:none; z-index:8;
+          flex-direction:column; align-items:center; gap:3px;">
+        <div id="drv-op-timer-bubble" style="
+            background:rgba(20,30,20,0.97);
+            border:2px solid #00ff41;
+            border-radius:20px; padding:3px 12px;
+            font-family:'Share Tech Mono',monospace;
+            font-size:0.78rem; color:#fff;
+            letter-spacing:2px; white-space:nowrap;
+            box-shadow:0 2px 12px rgba(0,0,0,0.6);">
+          $1 • 00:00
+        </div>
+      </div>
+
+      <div id="drv-op-linha-entrada" style="
+          position:absolute; left:0; right:68px;
+          height:1px; pointer-events:none; z-index:7;
+          display:none; border-top:1px dashed #00ff41;">
+      </div>
+
+      <div id="drv-chart-loading" style="
+          position:absolute; top:0; left:0; width:100%; height:100%;
+          display:flex; align-items:center; justify-content:center;
+          background:rgba(10,16,10,0.88); z-index:10; flex-direction:column; gap:10px;">
+        <div style="font-size:1.5rem;">📊</div>
+        <div style="color:#00ff41; font-size:0.8rem; letter-spacing:2px;" id="drv-chart-loading-msg">
+          CARREGANDO CANDLES...
+        </div>
+      </div>
+
+      <div id="drv-chart-erro" style="
+          display:none; position:absolute; top:0; left:0; width:100%; height:100%;
+          align-items:center; justify-content:center; background:rgba(10,16,10,0.92);
+          z-index:11; flex-direction:column; gap:10px; text-align:center; padding:20px;">
+        <div style="font-size:2rem;">❌</div>
+        <div id="drv-chart-erro-msg" style="color:#f44; font-size:0.8rem;"></div>
+        <button onclick="drvChartCarregar()"
+            style="margin-top:8px; padding:8px 16px; background:rgba(0,255,65,0.08);
+                   border:1px solid #00ff41; color:#00ff41; font-family:'Share Tech Mono';
+                   font-size:0.75rem; cursor:pointer; border-radius:3px;">
+          🔄 TENTAR NOVAMENTE
+        </button>
+      </div>
+    </div>
+
+    <!-- Painel direito: operar -->
+    <div style="width:260px; flex-shrink:0; background:#0a0f0a;
+                border-left:1px solid rgba(0,255,65,0.2);
+                display:flex; flex-direction:column; overflow-y:auto; overflow-x:hidden;">
+
+      <div id="drv-banner-desconectado" style="
+          display:none; padding:10px 12px; background:rgba(0,200,0,0.06);
+          border-bottom:2px solid rgba(0,200,0,0.4); text-align:center;">
+        <div style="font-size:0.68rem; color:#00ff41; letter-spacing:1px; margin-bottom:6px;">
+          🔌 DERIV DESCONECTADA
+        </div>
+        <button onclick="runCmd('conectar')"
+            style="width:100%; padding:9px; background:rgba(0,255,65,0.08);
+                   border:1px solid #00ff41; color:#00ff41;
+                   font-family:'Share Tech Mono'; font-size:0.72rem;
+                   letter-spacing:1px; cursor:pointer; border-radius:4px; font-weight:bold;">
+          🤖 CONECTAR DERIV
+        </button>
+      </div>
+
+      <!-- MODO DE OPERAÇÃO -->
+      <div style="padding:10px 12px 8px; border-bottom:1px solid rgba(255,255,255,0.06);">
+        <div style="font-size:0.6rem; color:#555; letter-spacing:1px; margin-bottom:8px;">MODO DE OPERAÇÃO</div>
+        <div style="display:flex; flex-direction:column; gap:4px;" id="drv-modo-lista">
+
+          <div class="drv-modo-item drv-modo-ativo" data-modo="manual" onclick="drvSelecionarModo('manual')"
+              style="display:flex; align-items:center; gap:8px; padding:7px 9px; border-radius:5px;
+                     cursor:pointer; border:1px solid rgba(255,255,255,0.12); background:rgba(255,255,255,0.04);">
+            <span style="font-size:0.85rem;">⚪</span>
+            <div>
+              <div style="font-size:0.68rem; color:#c8d0e0; letter-spacing:1px;">MANUAL</div>
+              <div style="font-size:0.58rem; color:#555;">Operação controlada pelo usuário</div>
+            </div>
+          </div>
+
+          <div class="drv-modo-item" data-modo="price_action" onclick="drvSelecionarModo('price_action')"
+              style="display:flex; align-items:center; gap:8px; padding:7px 9px; border-radius:5px;
+                     cursor:pointer; border:1px solid rgba(255,255,255,0.06); background:transparent;">
+            <span style="font-size:0.85rem;">🔵</span>
+            <div>
+              <div style="font-size:0.68rem; color:#c8d0e0; letter-spacing:1px;">PRICE ACTION PRO</div>
+              <div style="font-size:0.58rem; color:#555;">Estratégia de Price Action</div>
+            </div>
+          </div>
+
+          <div class="drv-modo-item" data-modo="fluxo" onclick="drvSelecionarModo('fluxo')"
+              style="display:flex; align-items:center; gap:8px; padding:7px 9px; border-radius:5px;
+                     cursor:pointer; border:1px solid rgba(255,255,255,0.06); background:transparent;">
+            <span style="font-size:0.85rem;">🟣</span>
+            <div>
+              <div style="font-size:0.68rem; color:#c8d0e0; letter-spacing:1px;">FLUXO PRO</div>
+              <div style="font-size:0.58rem; color:#555;">Estratégia baseada em fluxo</div>
+            </div>
+          </div>
+
+          <div class="drv-modo-item" data-modo="automatico" onclick="drvSelecionarModo('automatico')"
+              style="display:flex; align-items:center; gap:8px; padding:7px 9px; border-radius:5px;
+                     cursor:pointer; border:1px solid rgba(255,255,255,0.06); background:transparent;">
+            <span style="font-size:0.85rem;">🟢</span>
+            <div>
+              <div style="font-size:0.68rem; color:#c8d0e0; letter-spacing:1px;">AUTOMÁTICO</div>
+              <div style="font-size:0.58rem; color:#555;">Analisa ativos em tempo real</div>
+            </div>
+          </div>
+
+          <div class="drv-modo-item" data-modo="hma" onclick="drvSelecionarModo('hma')"
+              style="display:flex; align-items:center; gap:8px; padding:7px 9px; border-radius:5px;
+                     cursor:pointer; border:1px solid rgba(0,255,65,0.25); background:transparent;">
+            <span style="font-size:0.85rem;">🧠</span>
+            <div>
+              <div style="font-size:0.68rem; color:#00ff41; letter-spacing:1px;">GARRA AI HMA</div>
+              <div style="font-size:0.58rem; color:#555;">Motor HMA · Deriv automático</div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Tipo de contrato (Deriv) -->
+      <div style="padding:8px 12px; border-bottom:1px solid rgba(255,255,255,0.06);">
+        <div style="font-size:0.6rem; color:#555; letter-spacing:1px; margin-bottom:6px;">TIPO DE CONTRATO</div>
+        <div style="display:flex; gap:4px; flex-wrap:wrap;">
+          <button class="drv-ct-btn drv-ct-ativo" data-ct="CALL"
+              onclick="drvSetContrato('CALL')"
+              style="flex:1; padding:5px 4px; background:rgba(39,201,63,0.08);
+                     border:1px solid rgba(39,201,63,0.5); color:#27c93f;
+                     font-family:'Share Tech Mono'; font-size:0.62rem;
+                     cursor:pointer; border-radius:3px;">CALL/PUT</button>
+          <button class="drv-ct-btn" data-ct="DIGITEVEN"
+              onclick="drvSetContrato('DIGITEVEN')"
+              style="flex:1; padding:5px 4px; background:transparent;
+                     border:1px solid #333; color:#666;
+                     font-family:'Share Tech Mono'; font-size:0.62rem;
+                     cursor:pointer; border-radius:3px;">EVEN/ODD</button>
+          <button class="drv-ct-btn" data-ct="DIGITOVER"
+              onclick="drvSetContrato('DIGITOVER')"
+              style="flex:1; padding:5px 4px; background:transparent;
+                     border:1px solid #333; color:#666;
+                     font-family:'Share Tech Mono'; font-size:0.62rem;
+                     cursor:pointer; border-radius:3px;">OVER/UNDER</button>
+        </div>
+      </div>
+
+      <!-- Duração -->
+      <div style="padding:12px 12px 8px; border-bottom:1px solid rgba(255,255,255,0.06);">
+        <div style="font-size:0.62rem; color:#555; letter-spacing:1px; margin-bottom:6px;">TEMPO</div>
+        <div style="display:flex; gap:6px; flex-wrap:wrap;">
+          <button class="drv-dur-btn" data-s="30"  onclick="drvSetDuracao(30)"  style="padding:5px 8px;">30s</button>
+          <button class="drv-dur-btn drv-dur-ativo" data-s="60"  onclick="drvSetDuracao(60)"  style="padding:5px 8px;">1m</button>
+          <button class="drv-dur-btn" data-s="120" onclick="drvSetDuracao(120)" style="padding:5px 8px;">2m</button>
+          <button class="drv-dur-btn" data-s="300" onclick="drvSetDuracao(300)" style="padding:5px 8px;">5m</button>
+        </div>
+        <div style="display:flex; align-items:center; gap:6px; margin-top:8px;">
+          <button onclick="drvAjustarDuracao(-30)"
+              style="padding:5px 10px; background:#0a0a12; border:1px solid #333;
+                     color:#aaa; cursor:pointer; border-radius:3px; font-size:0.9rem;">−</button>
+          <div style="flex:1; text-align:center; color:#0ff; font-size:1rem; font-weight:bold;"
+               id="drv-dur-display">00:01:00</div>
+          <button onclick="drvAjustarDuracao(30)"
+              style="padding:5px 10px; background:#0a0a12; border:1px solid #333;
+                     color:#aaa; cursor:pointer; border-radius:3px; font-size:0.9rem;">+</button>
+        </div>
+      </div>
+
+      <!-- Valor -->
+      <div style="padding:10px 12px; border-bottom:1px solid rgba(255,255,255,0.06);">
+        <div style="font-size:0.62rem; color:#555; letter-spacing:1px; margin-bottom:6px;">INVESTIMENTO</div>
+        <div style="display:flex; align-items:center; gap:6px;">
+          <button onclick="drvAjustarValor(-1)"
+              style="padding:5px 12px; background:#0a0a12; border:1px solid #333;
+                     color:#aaa; cursor:pointer; border-radius:3px; font-size:1rem;">−</button>
+          <div style="flex:1; position:relative;">
+            <input id="drv-valor-input" type="number" min="1" step="1" value="1"
+                style="width:100%; background:#0a0a12; border:1px solid rgba(0,255,65,0.4);
+                       color:#00ff41; padding:6px 28px 6px 8px; font-family:'Share Tech Mono';
+                       font-size:0.9rem; border-radius:3px; outline:none; text-align:center;">
+            <span style="position:absolute; right:8px; top:50%; transform:translateY(-50%);
+                         color:#555; font-size:0.8rem;">$</span>
+          </div>
+          <button onclick="drvAjustarValor(1)"
+              style="padding:5px 12px; background:#0a0a12; border:1px solid #333;
+                     color:#aaa; cursor:pointer; border-radius:3px; font-size:1rem;">+</button>
+        </div>
+        <div style="display:flex; gap:4px; margin-top:6px;">
+          <button onclick="drvSetValor(1)"  style="flex:1; padding:4px; background:#0a0a12; border:1px solid #222; color:#666; font-family:'Share Tech Mono'; font-size:0.62rem; cursor:pointer; border-radius:2px;">$1</button>
+          <button onclick="drvSetValor(5)"  style="flex:1; padding:4px; background:#0a0a12; border:1px solid #222; color:#666; font-family:'Share Tech Mono'; font-size:0.62rem; cursor:pointer; border-radius:2px;">$5</button>
+          <button onclick="drvSetValor(10)" style="flex:1; padding:4px; background:#0a0a12; border:1px solid #222; color:#666; font-family:'Share Tech Mono'; font-size:0.62rem; cursor:pointer; border-radius:2px;">$10</button>
+          <button onclick="drvSetValor(25)" style="flex:1; padding:4px; background:#0a0a12; border:1px solid #222; color:#666; font-family:'Share Tech Mono'; font-size:0.62rem; cursor:pointer; border-radius:2px;">$25</button>
+        </div>
+      </div>
+
+      <!-- Pagamento estimado -->
+      <div style="padding:8px 12px; border-bottom:1px solid rgba(255,255,255,0.06);
+                  display:flex; justify-content:space-between; align-items:center;">
+        <span style="font-size:0.62rem; color:#555;">Pagamento estimado</span>
+        <span id="drv-pagamento-est" style="color:#00ff41; font-weight:bold; font-size:0.8rem;">$--</span>
+      </div>
+
+      <!-- Botões CALL / PUT -->
+      <div style="padding:12px; display:flex; flex-direction:column; gap:10px;">
+        <button id="drv-btn-call" onclick="drvOperar('call')"
+            style="width:100%; padding:14px; background:rgba(39,201,63,0.12);
+                   border:2px solid #27c93f; color:#27c93f;
+                   font-family:'Share Tech Mono'; font-size:0.9rem;
+                   letter-spacing:2px; cursor:pointer; border-radius:6px; font-weight:bold;">
+          ▲ PARA CIMA
+        </button>
+        <button id="drv-btn-put" onclick="drvOperar('put')"
+            style="width:100%; padding:14px; background:rgba(244,68,68,0.12);
+                   border:2px solid #f44; color:#f44;
+                   font-family:'Share Tech Mono'; font-size:0.9rem;
+                   letter-spacing:2px; cursor:pointer; border-radius:6px; font-weight:bold;">
+          ▼ PARA BAIXO
+        </button>
+      </div>
+
+      <!-- Botão Resetar Sessão + Reset Placar -->
+      <div style="padding:0 12px 4px; display:flex; gap:6px;">
+        <button onclick="drvResetarSessao()"
+            style="flex:1; padding:7px 4px; background:rgba(255,189,46,0.08);
+                   border:1px solid rgba(255,189,46,0.5); color:#ffbd2e;
+                   font-family:'Share Tech Mono'; font-size:0.62rem;
+                   letter-spacing:1px; cursor:pointer; border-radius:4px;">
+          🔄 RESET SESSÃO
+        </button>
+        <button onclick="drvResetarPlacar()"
+            style="flex:1; padding:7px 4px; background:rgba(255,68,68,0.06);
+                   border:1px solid rgba(255,68,68,0.35); color:#f87171;
+                   font-family:'Share Tech Mono'; font-size:0.62rem;
+                   letter-spacing:1px; cursor:pointer; border-radius:4px;">
+          🗑️ RESET PLACAR
+        </button>
+      </div>
+
+      <!-- Status da última operação -->
+      <div id="drv-op-status" style="
+          margin:0 12px 8px; padding:8px 10px; border-radius:4px;
+          font-size:0.7rem; text-align:center; display:none;
+          border:1px solid #333; background:rgba(0,0,0,0.3);">
+      </div>
+
+      <!-- Painel de sinais automáticos -->
+      <div id="drv-painel-sinais" style="display:none; border-top:1px solid rgba(255,255,255,0.06); width:100%;">
+        <div style="padding:8px 12px 6px; display:flex; justify-content:space-between; align-items:center;">
+          <span id="drv-sinais-titulo" style="font-size:0.6rem; color:#555; letter-spacing:1px;">ANÁLISE</span>
+          <div style="display:flex; gap:5px; align-items:center;">
+            <button id="drv-sinais-toggle"
+                style="font-size:0.58rem; padding:2px 7px; background:transparent;
+                       border:1px solid rgba(0,255,65,0.5); color:#00ff41;
+                       cursor:pointer; border-radius:3px; font-family:'Share Tech Mono';"
+                onclick="drvToggleAnalise()">▶ INICIAR</button>
+          </div>
+        </div>
+        <div id="drv-sinais-lista" style="
+            padding:0 6px 8px;
+            display:flex; flex-direction:column; gap:4px;
+            overflow-y:auto; max-height:420px; min-height:80px;">
+          <div style="color:#333; font-size:0.62rem; text-align:center; margin-top:20px; padding:0 8px;">
+            Clique em ▶ INICIAR para começar a análise
+          </div>
+        </div>
+      </div>
+
+      <!-- Histórico de operações -->
+      <div id="drv-painel-historico" style="padding:10px 12px; border-top:1px solid rgba(255,255,255,0.06); flex:1;">
+        <div style="font-size:0.62rem; color:#555; letter-spacing:1px; margin-bottom:8px;">
+          OPERAÇÕES — <span id="drv-hist-count">0</span>
+        </div>
+        <div id="drv-hist-lista" style="
+            display:flex; flex-direction:column; gap:4px; max-height:250px; overflow-y:auto;">
+          <div style="color:#333; font-size:0.65rem; text-align:center; margin-top:20px;">
+            Nenhuma operação nesta sessão
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+
+<!-- ══════════════════════════════════════════════════════════
      MODAL — GERENCIAMENTO E ESTRATÉGIA (Quotex)
 ════════════════════════════════════════════════════════════ -->
 <div id="modal-qx-gerenciamento" style="
@@ -32109,6 +32486,829 @@ function _qxHmaAtualizarStake(win, lucro) {
     const inp = document.getElementById('qx-valor-input');
     if (inp) inp.value = _qxHma.valorAtual.toFixed(2);
 }
+
+// ══════════════════════════════════════════════════════════
+//  GRÁFICO DE VELAS — DERIV
+//  Usa o WebSocket existente (bot.ws) para ticks_history e
+//  ticks em tempo real. Opera via proposal/buy da API Deriv.
+// ══════════════════════════════════════════════════════════
+
+// ── Estilos dos botões de duração/modo ───────────────────────────────────────
+(function _drvEstilos() {
+    const s = document.createElement('style');
+    s.textContent = `
+        .drv-dur-btn {
+            background:#0a0a12; border:1px solid #333; color:#555;
+            font-family:'Share Tech Mono'; font-size:0.7rem;
+            cursor:pointer; border-radius:3px; transition:all 0.15s;
+        }
+        .drv-dur-btn:hover { border-color:#00ff41; color:#00ff41; }
+        .drv-dur-ativo { border-color:rgba(0,255,65,0.7) !important; color:#00ff41 !important; background:rgba(0,255,65,0.08) !important; }
+        .drv-modo-ativo { border-color:rgba(0,255,65,0.5) !important; background:rgba(0,255,65,0.06) !important; }
+        .drv-ct-ativo { border-color:rgba(39,201,63,0.7) !important; background:rgba(39,201,63,0.12) !important; color:#27c93f !important; }
+    `;
+    document.head.appendChild(s);
+})();
+
+// ── Estado ────────────────────────────────────────────────────────────────────
+const _drvChart = {
+    chart:      null,
+    series:     null,
+    ativo:      'R_100',
+    periodo:    60,
+    duracao:    60,
+    valor:      1,
+    contrato:   'CALL',        // CALL | DIGITEVEN | DIGITOVER
+    historico:  [],
+    rtTimer:    null,
+    lastPreco:  0,
+    velaAtual:  null,
+    tsAbertura: 0,
+    opAtiva:    null,
+    priceLine:  null,
+    // sub IDs para cancelar subscrições
+    _subTickId:    null,
+    _subCandleId:  null,
+    // ws dedicado para o gráfico (não compartilha com bot.ws para evitar conflito)
+    _ws:        null,
+    _wsReady:   false,
+    _wsQueue:   [],
+    _reqMap:    {},   // req_id → callback
+    _reqSeq:    9500, // req_ids acima de 9500 para não colidir com bot.ws
+    _sessaoWins:   0,
+    _sessaoLosses: 0,
+    _sessaoLucro:  0,
+};
+
+// ── Modo automático ────────────────────────────────────────────────────────────
+const _drvModo = {
+    modo:        'manual',   // manual | price_action | fluxo | automatico | hma
+    rodando:     false,
+    opBloqueada: false,
+    analiseTimer: null,
+};
+
+// ── WebSocket dedicado ────────────────────────────────────────────────────────
+function _drvWsConectar() {
+    if (_drvChart._ws && (_drvChart._ws.readyState === WebSocket.OPEN || _drvChart._ws.readyState === WebSocket.CONNECTING)) return;
+    const APP_ID_DRV = (typeof APP_ID !== 'undefined') ? APP_ID : 36544;
+    const WS_URL = `wss://ws.derivws.com/websockets/v3?app_id=${APP_ID_DRV}`;
+    _drvChart._ws = new WebSocket(WS_URL);
+    _drvChart._wsReady = false;
+    _drvChart._ws.onopen = () => {
+        _drvChart._wsReady = true;
+        // Autoriza com o token do bot principal se disponível
+        const tok = (typeof bot !== 'undefined' && bot.token) ? bot.token : null;
+        if (tok) _drvChart._ws.send(JSON.stringify({ authorize: tok }));
+        // Drena fila
+        while (_drvChart._wsQueue.length) _drvChart._ws.send(_drvChart._wsQueue.shift());
+    };
+    _drvChart._ws.onmessage = (ev) => {
+        try { _drvWsMensagem(JSON.parse(ev.data)); } catch (_) {}
+    };
+    _drvChart._ws.onclose = () => {
+        _drvChart._wsReady = false;
+        // Reconecta após 3s se o modal ainda estiver aberto
+        setTimeout(() => {
+            const m = document.getElementById('modal-drv-chart');
+            if (m && m.style.display !== 'none') _drvWsConectar();
+        }, 3000);
+    };
+    _drvChart._ws.onerror = () => {};
+}
+
+function _drvWsSend(payload) {
+    const msg = JSON.stringify(payload);
+    if (_drvChart._ws && _drvChart._ws.readyState === WebSocket.OPEN) {
+        _drvChart._ws.send(msg);
+    } else {
+        _drvChart._wsQueue.push(msg);
+        _drvWsConectar();
+    }
+}
+
+function _drvWsMensagem(d) {
+    if (d.error) return;
+
+    // Resposta de candles históricos
+    if (d.msg_type === 'candles') {
+        const cb = _drvChart._reqMap[d.req_id];
+        if (cb) { delete _drvChart._reqMap[d.req_id]; cb(d); }
+        return;
+    }
+    // Resposta de ticks_history (série de ticks)
+    if (d.msg_type === 'history') {
+        const cb = _drvChart._reqMap[d.req_id];
+        if (cb) { delete _drvChart._reqMap[d.req_id]; cb(d); }
+        return;
+    }
+    // Tick em tempo real (subscrição)
+    if (d.msg_type === 'tick' && d.tick) {
+        _drvProcessarTick(d.tick);
+        return;
+    }
+    // proposal — guarda para o buy
+    if (d.msg_type === 'proposal' && d.proposal) {
+        const cb = _drvChart._reqMap[d.req_id];
+        if (cb) { delete _drvChart._reqMap[d.req_id]; cb(d); }
+        return;
+    }
+    // buy
+    if (d.msg_type === 'buy' && d.buy) {
+        const cb = _drvChart._reqMap[d.req_id];
+        if (cb) { delete _drvChart._reqMap[d.req_id]; cb(d); }
+        return;
+    }
+    // sell (resultado de expiração)
+    if (d.msg_type === 'sell' || (d.msg_type === 'proposal_open_contract' && d.proposal_open_contract)) {
+        _drvProcessarResultado(d);
+        return;
+    }
+    // authorize → atualiza saldo/tipo
+    if (d.msg_type === 'authorize' && d.authorize) {
+        const auth = d.authorize;
+        const saldoEl = document.getElementById('drv-chart-saldo');
+        const tipoEl  = document.getElementById('drv-chart-tipo');
+        const lblEl   = document.getElementById('lbl-drv-chart');
+        if (saldoEl) saldoEl.textContent = '$' + parseFloat(auth.balance || 0).toFixed(2);
+        if (tipoEl)  tipoEl.textContent  = auth.is_virtual ? 'DEMO' : 'REAL';
+        if (lblEl)   lblEl.textContent   = (auth.is_virtual ? 'DEMO' : 'REAL') + ' • $' + parseFloat(auth.balance || 0).toFixed(2);
+        return;
+    }
+    // balance update
+    if (d.msg_type === 'balance' && d.balance) {
+        const saldoEl = document.getElementById('drv-chart-saldo');
+        if (saldoEl) saldoEl.textContent = '$' + parseFloat(d.balance.balance || 0).toFixed(2);
+        return;
+    }
+}
+
+// ── Carregar candles históricos via WebSocket ────────────────────────────────
+function _drvCarregarCandles() {
+    const ativo   = _drvChart.ativo;
+    const periodo = _drvChart.periodo;
+    const limite  = 150;
+    const reqId   = ++_drvChart._reqSeq;
+
+    document.getElementById('drv-chart-loading').style.display = 'flex';
+    document.getElementById('drv-chart-loading-msg').textContent = 'CARREGANDO CANDLES...';
+    document.getElementById('drv-chart-erro').style.display = 'none';
+
+    _drvChart._reqMap[reqId] = (d) => {
+        document.getElementById('drv-chart-loading').style.display = 'none';
+        if (!d.candles || d.candles.length === 0) {
+            document.getElementById('drv-chart-erro-msg').textContent = 'Nenhum candle retornado para ' + ativo;
+            document.getElementById('drv-chart-erro').style.display = 'flex';
+            return;
+        }
+        const seen = new Set();
+        const candles = d.candles
+            .map(c => ({ time: parseInt(c.epoch), open: parseFloat(c.open), high: parseFloat(c.high), low: parseFloat(c.low), close: parseFloat(c.close) }))
+            .sort((a, b) => a.time - b.time)
+            .filter(c => { if (seen.has(c.time)) return false; seen.add(c.time); return true; });
+        if (candles.length === 0) return;
+        if (_drvChart.series) {
+            _drvChart.series.setData(candles);
+            _drvChart.chart.timeScale().applyOptions({ barSpacing: 8, rightOffset: 5 });
+            _drvChart.chart.timeScale().scrollToRealTime();
+        }
+        const ult = candles[candles.length - 1];
+        _drvChart.tsAbertura = ult.time;
+        _drvChart.velaAtual  = { ...ult };
+        _drvChart.lastPreco  = ult.close;
+        // Inicia subscrição de ticks em tempo real
+        _drvSubscreverTicks();
+    };
+
+    // Cancela subscrição anterior
+    if (_drvChart._subCandleId) {
+        _drvWsSend({ forget: _drvChart._subCandleId });
+        _drvChart._subCandleId = null;
+    }
+
+    _drvWsSend({
+        ticks_history: ativo,
+        adjust_start_time: 1,
+        count: limite,
+        end: 'latest',
+        granularity: periodo,
+        style: 'candles',
+        req_id: reqId,
+    });
+}
+
+// ── Subscrição de ticks ───────────────────────────────────────────────────────
+function _drvSubscreverTicks() {
+    if (_drvChart._subTickId) {
+        _drvWsSend({ forget: _drvChart._subTickId });
+        _drvChart._subTickId = null;
+    }
+    const reqId = ++_drvChart._reqSeq;
+    _drvChart._reqMap[reqId] = (d) => {
+        if (d.subscription) _drvChart._subTickId = d.subscription.id;
+    };
+    _drvWsSend({ ticks: _drvChart.ativo, subscribe: 1, req_id: reqId });
+}
+
+// ── Processar tick em tempo real ─────────────────────────────────────────────
+function _drvProcessarTick(tick) {
+    const preco     = parseFloat(tick.quote);
+    const epoch     = parseInt(tick.epoch);
+    const periodo   = _drvChart.periodo;
+    const tsAbertura = Math.floor(epoch / periodo) * periodo;
+
+    // Atualiza display de preço
+    const dir = preco > _drvChart.lastPreco ? '▲' : preco < _drvChart.lastPreco ? '▼' : '●';
+    const cor = preco > _drvChart.lastPreco ? '#22c55e' : preco < _drvChart.lastPreco ? '#ef4444' : '#aaa';
+    const elP = document.getElementById('drv-preco-atual');
+    const elD = document.getElementById('drv-preco-dir');
+    if (elP) { elP.textContent = preco.toFixed(tick.pip_size || 5); elP.style.color = cor; }
+    if (elD) elD.textContent = dir;
+
+    // Atualiza vela atual no gráfico
+    if (!_drvChart.series) return;
+    if (_drvChart.velaAtual && tsAbertura === _drvChart.velaAtual.time) {
+        const v = _drvChart.velaAtual;
+        v.high  = Math.max(v.high, preco);
+        v.low   = Math.min(v.low,  preco);
+        v.close = preco;
+        _drvChart.series.update(v);
+    } else if (tsAbertura > (_drvChart.velaAtual?.time || 0)) {
+        _drvChart.velaAtual = { time: tsAbertura, open: preco, high: preco, low: preco, close: preco };
+        _drvChart.series.update(_drvChart.velaAtual);
+        _drvChart.chart.timeScale().scrollToRealTime();
+    }
+    _drvChart.lastPreco  = preco;
+    _drvChart.tsAbertura = tsAbertura;
+
+    // Timer de vela
+    const agora   = epoch;
+    const restam  = Math.max(0, (tsAbertura + periodo) - agora);
+    const mm = String(Math.floor(restam / 60)).padStart(2, '0');
+    const ss = String(restam % 60).padStart(2, '0');
+    const timerEl = document.getElementById('drv-vela-timer');
+    if (timerEl) {
+        timerEl.textContent   = mm + ':' + ss;
+        timerEl.style.color   = restam <= 10 ? '#ef5350' : '#c8d0e0';
+        timerEl.style.borderColor = restam <= 10 ? 'rgba(239,83,80,0.6)' : 'rgba(255,255,255,0.15)';
+        if (_drvChart.series && _drvChart.velaAtual) {
+            try {
+                const chartH = document.getElementById('drv-chart-container')?.clientHeight || 500;
+                const y = _drvChart.series.priceToCoordinate(_drvChart.velaAtual.close);
+                if (y !== null && y > 10 && y < chartH - 30) {
+                    timerEl.style.top     = Math.round(y) + 'px';
+                    timerEl.style.display = 'block';
+                }
+            } catch (_) {}
+        }
+    }
+
+    // Análise automática (modos não-manual)
+    if (_drvModo.rodando && !_drvModo.opBloqueada && _drvModo.modo !== 'manual') {
+        _drvAnalisarAutomatic(preco);
+    }
+}
+
+// ── Inicializa lightweight-charts ─────────────────────────────────────────────
+function _drvIniciarChart() {
+    if (_drvChart.chart) return;
+    const container = document.getElementById('drv-chart-container');
+    if (!container || typeof LightweightCharts === 'undefined') return;
+    _drvChart.chart = LightweightCharts.createChart(container, {
+        width: container.clientWidth || 800,
+        height: container.clientHeight || 500,
+        layout: { background: { color: '#0a100a' }, textColor: '#6a8a6a' },
+        grid: {
+            vertLines: { color: 'rgba(30,60,30,0.7)' },
+            horzLines: { color: 'rgba(30,60,30,0.7)' },
+        },
+        crosshair: {
+            mode: LightweightCharts.CrosshairMode.Normal,
+            vertLine: { color: 'rgba(0,255,65,0.3)', style: 1, labelBackgroundColor: '#0d1a0d' },
+            horzLine: { color: 'rgba(0,255,65,0.3)', style: 1, labelBackgroundColor: '#0d1a0d' },
+        },
+        rightPriceScale: { borderColor: 'rgba(30,60,30,0.8)', textColor: '#6a8a6a', scaleMargins: { top: 0.1, bottom: 0.1 } },
+        timeScale: { borderColor: 'rgba(30,60,30,0.8)', textColor: '#6a8a6a', timeVisible: true, secondsVisible: false, rightOffset: 5, barSpacing: 8, minBarSpacing: 2 },
+        handleScale: { axisPressedMouseMove: { time: true, price: true } },
+    });
+    _drvChart.series = _drvChart.chart.addCandlestickSeries({
+        upColor: '#00c853', downColor: '#ef5350', borderVisible: false,
+        wickUpColor: '#00c853', wickDownColor: '#ef5350',
+    });
+    window.addEventListener('resize', () => {
+        if (_drvChart.chart && document.getElementById('modal-drv-chart').style.display !== 'none') {
+            _drvChart.chart.applyOptions({ width: container.clientWidth, height: container.clientHeight });
+        }
+    });
+}
+
+// ── Abrir / fechar modal ──────────────────────────────────────────────────────
+function drvChartAbrir() {
+    const m = document.getElementById('modal-drv-chart');
+    if (m) m.style.display = 'block';
+    // Verifica se Deriv está conectada (bot.ws pronto)
+    const conectado = (typeof bot !== 'undefined' && bot.ws && bot.ws.readyState === WebSocket.OPEN);
+    const banner = document.getElementById('drv-banner-desconectado');
+    if (banner) banner.style.display = conectado ? 'none' : 'block';
+    if (!conectado) {
+        document.getElementById('drv-chart-loading').style.display = 'none';
+        document.getElementById('drv-chart-erro-msg').textContent = '❌ Deriv não conectada. Clique em "CONECTAR DERIV" no painel à direita.';
+        document.getElementById('drv-chart-erro').style.display = 'flex';
+    }
+    // Atualiza saldo do bot.ws (se disponível)
+    if (conectado && typeof bot !== 'undefined' && bot._lastBalance !== undefined) {
+        const saldoEl = document.getElementById('drv-chart-saldo');
+        const tipoEl  = document.getElementById('drv-chart-tipo');
+        const lblEl   = document.getElementById('lbl-drv-chart');
+        const tipo    = (typeof bot !== 'undefined' && bot._loginid && bot._loginid.startsWith('VRTC')) ? 'DEMO' : 'REAL';
+        if (saldoEl) saldoEl.textContent = '$' + parseFloat(bot._lastBalance).toFixed(2);
+        if (tipoEl)  tipoEl.textContent  = tipo;
+        if (lblEl)   lblEl.textContent   = tipo + ' • $' + parseFloat(bot._lastBalance).toFixed(2);
+    }
+    _drvIniciarChart();
+    _drvWsConectar();
+    if (conectado) drvChartCarregar();
+}
+
+function drvChartFechar() {
+    const m = document.getElementById('modal-drv-chart');
+    if (m) m.style.display = 'none';
+    clearInterval(_drvChart.rtTimer);
+    if (_drvModo.analiseTimer) { clearInterval(_drvModo.analiseTimer); _drvModo.analiseTimer = null; }
+    // Cancela subscrição de ticks
+    if (_drvChart._subTickId && _drvChart._ws && _drvChart._ws.readyState === WebSocket.OPEN) {
+        _drvChart._ws.send(JSON.stringify({ forget: _drvChart._subTickId }));
+        _drvChart._subTickId = null;
+    }
+}
+
+// ── Carregar (ativo/período mudou) ────────────────────────────────────────────
+function drvChartCarregar() {
+    _drvChart.ativo   = document.getElementById('drv-ativo-sel').value;
+    _drvChart.periodo = parseInt(document.getElementById('drv-periodo-sel').value);
+    _drvChart.velaAtual  = null;
+    _drvChart.tsAbertura = 0;
+    _drvCarregarCandles();
+}
+
+// ── Controles de duração ──────────────────────────────────────────────────────
+function drvSetDuracao(seg) {
+    _drvChart.duracao = seg;
+    document.querySelectorAll('.drv-dur-btn').forEach(b => b.classList.toggle('drv-dur-ativo', parseInt(b.dataset.s) === seg));
+    _drvAtualizarDuracaoDisplay();
+    _drvRecalcPagamento();
+}
+function drvAjustarDuracao(delta) { _drvChart.duracao = Math.max(5, _drvChart.duracao + delta); _drvAtualizarDuracaoDisplay(); _drvRecalcPagamento(); }
+function _drvAtualizarDuracaoDisplay() {
+    const s = _drvChart.duracao, h = Math.floor(s/3600), m = Math.floor((s%3600)/60), sec = s%60;
+    const el = document.getElementById('drv-dur-display');
+    if (el) el.textContent = String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(sec).padStart(2,'0');
+}
+
+// ── Controles de valor ─────────────────────────────────────────────────────────
+function drvSetValor(v) {
+    _drvChart.valor = v;
+    const inp = document.getElementById('drv-valor-input');
+    if (inp) inp.value = v;
+    _drvRecalcPagamento();
+}
+function drvAjustarValor(delta) {
+    const inp = document.getElementById('drv-valor-input');
+    const v = Math.max(1, parseFloat(inp?.value || 1) + delta);
+    if (inp) inp.value = v;
+    _drvChart.valor = v;
+    _drvRecalcPagamento();
+}
+function _drvRecalcPagamento() {
+    const valor = parseFloat(document.getElementById('drv-valor-input')?.value || 1);
+    // Deriv CALL/PUT paga ~95% tipicamente (sem payout fixo disponível sem proposal)
+    const payEst = (valor * 1.85).toFixed(2);
+    const el = document.getElementById('drv-pagamento-est');
+    if (el) el.textContent = '≈$' + payEst;
+}
+document.addEventListener('DOMContentLoaded', () => {
+    const inp = document.getElementById('drv-valor-input');
+    if (inp) inp.addEventListener('input', () => { _drvChart.valor = parseFloat(inp.value || 1); _drvRecalcPagamento(); });
+});
+
+// ── Tipo de contrato ──────────────────────────────────────────────────────────
+function drvSetContrato(ct) {
+    _drvChart.contrato = ct;
+    document.querySelectorAll('.drv-ct-btn').forEach(b => {
+        const isAtivo = b.dataset.ct === ct;
+        b.classList.toggle('drv-ct-ativo', isAtivo);
+        b.style.background = isAtivo ? 'rgba(39,201,63,0.12)' : 'transparent';
+        b.style.borderColor = isAtivo ? 'rgba(39,201,63,0.7)' : '#333';
+        b.style.color = isAtivo ? '#27c93f' : '#666';
+    });
+}
+
+// ── Selecionar modo ───────────────────────────────────────────────────────────
+function drvSelecionarModo(modo) {
+    _drvModo.modo = modo;
+    document.querySelectorAll('.drv-modo-item').forEach(el => {
+        el.classList.toggle('drv-modo-ativo', el.dataset.modo === modo);
+        el.style.borderColor = el.dataset.modo === modo ? 'rgba(0,255,65,0.5)' : 'rgba(255,255,255,0.06)';
+        el.style.background  = el.dataset.modo === modo ? 'rgba(0,255,65,0.06)' : 'transparent';
+    });
+    const painelSinais = document.getElementById('drv-painel-sinais');
+    if (painelSinais) {
+        painelSinais.style.display = (modo !== 'manual') ? 'block' : 'none';
+    }
+    const titulo = document.getElementById('drv-sinais-titulo');
+    if (titulo) {
+        const nomes = { price_action: 'PRICE ACTION', fluxo: 'FLUXO PRO', automatico: 'AUTOMÁTICO', hma: 'GARRA AI HMA' };
+        titulo.textContent = nomes[modo] || 'ANÁLISE';
+    }
+    if (_drvModo.rodando) drvToggleAnalise(); // para análise se estava rodando
+}
+
+// ── Toggle Análise Automática ─────────────────────────────────────────────────
+function drvToggleAnalise() {
+    _drvModo.rodando = !_drvModo.rodando;
+    const btn = document.getElementById('drv-sinais-toggle');
+    if (btn) {
+        btn.textContent = _drvModo.rodando ? '⏹ PARAR' : '▶ INICIAR';
+        btn.style.borderColor = _drvModo.rodando ? 'rgba(239,83,80,0.6)' : 'rgba(0,255,65,0.5)';
+        btn.style.color = _drvModo.rodando ? '#ef4444' : '#00ff41';
+    }
+    if (_drvModo.rodando) {
+        _drvAdicionarSinal({ msg: '🔍 Análise iniciada — monitorando ' + _drvChart.ativo, cor: '#00ff41' });
+    } else {
+        _drvAdicionarSinal({ msg: '⏹ Análise pausada', cor: '#ffbd2e' });
+        _drvModo.opBloqueada = false;
+    }
+}
+
+// ── Análise automática simples (Price Action) ─────────────────────────────────
+let _drvAnaliseContador = 0;
+function _drvAnalisarAutomatic(precoAtual) {
+    _drvAnaliseContador++;
+    // Analisa a cada 5 ticks para reduzir processamento
+    if (_drvAnaliseContador % 5 !== 0) return;
+
+    const vela = _drvChart.velaAtual;
+    if (!vela || !_drvChart.series) return;
+
+    const modo = _drvModo.modo;
+    let direcao = null;
+    let confianca = 0;
+
+    if (modo === 'price_action' || modo === 'automatico') {
+        // Price Action simples: compara corpo da vela
+        const corpo = vela.close - vela.open;
+        const amplitude = Math.abs(vela.high - vela.low);
+        if (amplitude > 0) {
+            confianca = Math.abs(corpo / amplitude) * 100;
+            if (confianca >= 55) direcao = corpo > 0 ? 'call' : 'put';
+        }
+    } else if (modo === 'fluxo') {
+        // Fluxo: tendência do preço atual vs abertura da vela
+        const diff = precoAtual - vela.open;
+        confianca = 60;
+        if (Math.abs(diff) > 0) direcao = diff > 0 ? 'call' : 'put';
+    } else if (modo === 'hma') {
+        // HMA simplificado: usa último preço vs média da vela
+        const media = (vela.open + vela.high + vela.low + vela.close) / 4;
+        confianca = 65;
+        direcao = precoAtual > media ? 'call' : 'put';
+    }
+
+    if (direcao && confianca >= 55) {
+        const emoji = direcao === 'call' ? '▲' : '▼';
+        const cor   = direcao === 'call' ? '#27c93f' : '#ef4444';
+        _drvAdicionarSinal({
+            msg: `${emoji} SINAL ${direcao.toUpperCase()} | conf:${confianca.toFixed(0)}% | $${_drvChart.ativo}`,
+            cor,
+            direcao,
+        });
+        // Em modo automático, opera se não houver operação ativa
+        if ((modo === 'automatico' || modo === 'hma') && !_drvModo.opBloqueada) {
+            _drvModo.opBloqueada = true;
+            drvOperar(direcao);
+        }
+    }
+}
+
+function _drvAdicionarSinal({ msg, cor, direcao }) {
+    const lista = document.getElementById('drv-sinais-lista');
+    if (!lista) return;
+    // Remove placeholder
+    const placeholder = lista.querySelector('[data-placeholder]');
+    if (placeholder) placeholder.remove();
+    const item = document.createElement('div');
+    item.style.cssText = `
+        padding:5px 8px; border-radius:4px; font-size:0.62rem;
+        border:1px solid ${cor || '#333'}; color:${cor || '#aaa'};
+        background:rgba(0,0,0,0.2); font-family:'Share Tech Mono';
+        display:flex; align-items:center; gap:6px;
+    `;
+    const ts = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    item.textContent = `[${ts}] ${msg}`;
+    lista.insertBefore(item, lista.firstChild);
+    // Mantém no máximo 30 sinais
+    while (lista.children.length > 30) lista.removeChild(lista.lastChild);
+}
+
+// ── Operar ─────────────────────────────────────────────────────────────────────
+function drvOperar(direcao) {
+    const ativo     = _drvChart.ativo;
+    const valor     = parseFloat(document.getElementById('drv-valor-input')?.value || 1);
+    const duracao   = _drvChart.duracao;
+    const contrato  = _drvChart.contrato;
+    const btnCall   = document.getElementById('drv-btn-call');
+    const btnPut    = document.getElementById('drv-btn-put');
+
+    // Verifica conexão Deriv
+    const wsOk = _drvChart._ws && _drvChart._ws.readyState === WebSocket.OPEN;
+    const botOk = (typeof bot !== 'undefined' && bot.ws && bot.ws.readyState === WebSocket.OPEN);
+    if (!wsOk && !botOk) {
+        _drvOpStatusMsg('❌ Deriv não conectada. Conecte primeiro.', '#f44');
+        _drvModo.opBloqueada = false;
+        return;
+    }
+
+    if (btnCall) btnCall.disabled = true;
+    if (btnPut)  btnPut.disabled  = true;
+    _drvOpStatusMsg('⏳ Enviando proposta...', '#ffbd2e');
+
+    // Determina tipo de contrato e direção
+    let tipoContrato, dirContrato;
+    if (contrato === 'CALL') {
+        tipoContrato = direcao === 'call' ? 'CALL' : 'PUT';
+        dirContrato  = direcao === 'call' ? 'CALL' : 'PUT';
+    } else if (contrato === 'DIGITEVEN') {
+        tipoContrato = direcao === 'call' ? 'DIGITEVEN' : 'DIGITODD';
+        dirContrato  = tipoContrato;
+    } else {
+        // DIGITOVER/DIGITUNDER com barreira 5
+        tipoContrato = direcao === 'call' ? 'DIGITOVER' : 'DIGITUNDER';
+        dirContrato  = tipoContrato;
+    }
+
+    const reqIdProp = ++_drvChart._reqSeq;
+    const reqIdBuy  = ++_drvChart._reqSeq;
+
+    // Envia proposal
+    const proposalPayload = {
+        proposal: 1,
+        amount: valor,
+        basis: 'stake',
+        contract_type: tipoContrato,
+        currency: 'USD',
+        duration: duracao,
+        duration_unit: 's',
+        symbol: ativo,
+        req_id: reqIdProp,
+    };
+    // Digits precisam de barrier
+    if (tipoContrato.startsWith('DIGIT') && (tipoContrato.includes('OVER') || tipoContrato.includes('UNDER'))) {
+        proposalPayload.barrier = '5';
+    }
+
+    _drvChart._reqMap[reqIdProp] = (pd) => {
+        if (!pd.proposal || !pd.proposal.id) {
+            if (btnCall) btnCall.disabled = false;
+            if (btnPut)  btnPut.disabled  = false;
+            _drvOpStatusMsg('❌ Proposta rejeitada: ' + (pd.error?.message || 'erro desconhecido'), '#f44');
+            _drvModo.opBloqueada = false;
+            return;
+        }
+        const propId = pd.proposal.id;
+        const payEst = parseFloat(pd.proposal.payout || 0).toFixed(2);
+
+        // Atualiza pagamento estimado com valor real da Deriv
+        const estEl = document.getElementById('drv-pagamento-est');
+        if (estEl && payEst > 0) estEl.textContent = '$' + payEst;
+
+        // Envia buy
+        _drvChart._reqMap[reqIdBuy] = (bd) => {
+            if (btnCall) btnCall.disabled = false;
+            if (btnPut)  btnPut.disabled  = false;
+            if (bd.buy && bd.buy.contract_id) {
+                const cid = bd.buy.contract_id;
+                const tsAgora = Date.now();
+                const emoji = direcao === 'call' ? '▲' : '▼';
+                const cor   = direcao === 'call' ? '#27c93f' : '#f44';
+                _drvOpStatusMsg(`${emoji} Operação enviada! ${duracao}s | ID:${cid}`, cor);
+                _drvAdicionarHistorico({ id: cid, direcao, valor, duracao, ativo, ts: tsAgora, status: 'aguardando' });
+                _drvIniciarOpAtiva({ id: cid, direcao, valor, duracao, ts: tsAgora, precoEntrada: _drvChart.lastPreco || 0 });
+                // Aguarda resultado
+                _drvAguardarResultado(cid, duracao);
+            } else {
+                _drvOpStatusMsg('❌ Buy falhou: ' + (bd.error?.message || 'erro'), '#f44');
+                _drvModo.opBloqueada = false;
+            }
+        };
+        _drvWsSend({ buy: propId, price: valor, req_id: reqIdBuy });
+    };
+
+    _drvWsSend(proposalPayload);
+}
+
+// ── Aguarda resultado ─────────────────────────────────────────────────────────
+function _drvAguardarResultado(contractId, duracao) {
+    setTimeout(() => {
+        const reqId = ++_drvChart._reqSeq;
+        _drvChart._reqMap[reqId] = (d) => {
+            _drvModo.opBloqueada = false;
+            if (!d.proposal_open_contract) { _drvEncerrarOpAtiva(null); return; }
+            const poc = d.proposal_open_contract;
+            if (poc.status === 'open') {
+                // ainda aberto — tenta de novo daqui 3s
+                setTimeout(() => _drvAguardarResultado(contractId, 0), 3000);
+                return;
+            }
+            const win = poc.profit >= 0;
+            const lucro = parseFloat(poc.profit || 0);
+            _drvEncerrarOpAtiva(win ? 'win' : 'loss');
+            _drvAtualizarHistorico(contractId, win ? 'win' : 'loss', lucro);
+            _drvChart._sessaoWins   += win ? 1 : 0;
+            _drvChart._sessaoLosses += win ? 0 : 1;
+            _drvChart._sessaoLucro  += lucro;
+            const emoji = win ? '✅ WIN' : '❌ LOSS';
+            const valStr = win ? `+$${lucro.toFixed(2)}` : `-$${Math.abs(lucro).toFixed(2)}`;
+            _drvOpStatusMsg(`${emoji} ${valStr}`, win ? '#27c93f' : '#f44');
+        };
+        _drvWsSend({ proposal_open_contract: 1, contract_id: contractId, req_id: reqId });
+    }, (duracao + 2) * 1000);
+}
+
+function _drvProcessarResultado(d) {
+    // Recebe resultado via sell ou proposal_open_contract subscription
+    const poc = d.proposal_open_contract || d.sell;
+    if (!poc) return;
+    if (!_drvChart.opAtiva) return;
+    const win = (poc.profit !== undefined) ? poc.profit >= 0 : (poc.sell_price > poc.buy_price);
+    const lucro = parseFloat(poc.profit || 0);
+    _drvEncerrarOpAtiva(win ? 'win' : 'loss');
+    _drvAtualizarHistorico(_drvChart.opAtiva?.id, win ? 'win' : 'loss', lucro);
+    _drvModo.opBloqueada = false;
+}
+
+// ── Operação ativa no gráfico ─────────────────────────────────────────────────
+function _drvIniciarOpAtiva(op) {
+    _drvEncerrarOpAtiva(null);
+    if (!_drvChart.series) return;
+    const corDir = op.direcao === 'call' ? '#00c853' : '#ef5350';
+    const tsVelaAtual = _drvChart.tsAbertura || Math.floor(Date.now() / 1000 / 60) * 60;
+    try {
+        _drvChart.series.setMarkers([{
+            time: tsVelaAtual, position: op.direcao === 'call' ? 'belowBar' : 'aboveBar',
+            color: corDir, shape: op.direcao === 'call' ? 'arrowUp' : 'arrowDown',
+            text: '$' + parseFloat(op.valor).toFixed(2), size: 1.5,
+        }]);
+    } catch (_) {}
+    try {
+        if (_drvChart.priceLine) { _drvChart.series.removePriceLine(_drvChart.priceLine); _drvChart.priceLine = null; }
+        if (op.precoEntrada > 0) {
+            _drvChart.priceLine = _drvChart.series.createPriceLine({
+                price: op.precoEntrada, color: corDir, lineWidth: 1, lineStyle: 2,
+                axisLabelVisible: true, title: op.direcao === 'call' ? '▲ ENTRADA' : '▼ ENTRADA',
+            });
+        }
+    } catch (_) {}
+    const linhaEl  = document.getElementById('drv-op-linha-entrada');
+    const timerEl  = document.getElementById('drv-op-timer-overlay');
+    const bubbleEl = document.getElementById('drv-op-timer-bubble');
+    if (linhaEl)  { linhaEl.style.borderColor = corDir; linhaEl.style.display = 'block'; }
+    if (timerEl)  { timerEl.style.display = 'flex'; }
+    if (bubbleEl) { bubbleEl.style.borderColor = corDir; }
+    const _posicionarLinha = () => {
+        if (!_drvChart.series || !op.precoEntrada) return;
+        try {
+            const y = _drvChart.series.priceToCoordinate(op.precoEntrada);
+            if (y !== null && y > 10) {
+                if (linhaEl) linhaEl.style.top = Math.round(y) + 'px';
+                if (timerEl) timerEl.style.top = (Math.round(y) - 18) + 'px';
+            }
+        } catch (_) {}
+    };
+    _drvChart.opAtiva = { ...op, corDir, tsVelaAtual };
+    const tsFimMs = op.ts + op.duracao * 1000;
+    _drvChart.opAtiva.timerInterval = setInterval(() => {
+        const restamMs = Math.max(0, tsFimMs - Date.now());
+        const restamS  = Math.ceil(restamMs / 1000);
+        const mm = String(Math.floor(restamS / 60)).padStart(2, '0');
+        const ss = String(restamS % 60).padStart(2, '0');
+        if (bubbleEl) bubbleEl.textContent = '$' + parseFloat(op.valor).toFixed(2) + ' • ' + mm + ':' + ss;
+        _posicionarLinha();
+        if (restamMs <= 0) clearInterval(_drvChart.opAtiva?.timerInterval);
+    }, 500);
+    _posicionarLinha();
+}
+
+function _drvEncerrarOpAtiva(resultado) {
+    if (_drvChart.opAtiva?.timerInterval) clearInterval(_drvChart.opAtiva.timerInterval);
+    if (_drvChart.priceLine && _drvChart.series) {
+        try { _drvChart.series.removePriceLine(_drvChart.priceLine); } catch (_) {}
+        _drvChart.priceLine = null;
+    }
+    const linhaEl = document.getElementById('drv-op-linha-entrada');
+    const timerEl = document.getElementById('drv-op-timer-overlay');
+    if (linhaEl) linhaEl.style.display = 'none';
+    if (timerEl) timerEl.style.display = 'none';
+    if (resultado && _drvChart.series && _drvChart.opAtiva) {
+        const win = resultado === 'win';
+        const corRes = win ? '#00c853' : '#ef5350';
+        const periodo = _drvChart.periodo || 60;
+        const tsSaida = (_drvChart.opAtiva.tsVelaAtual || 0) + periodo;
+        try {
+            _drvChart.series.setMarkers([
+                { time: _drvChart.opAtiva.tsVelaAtual || Math.floor(Date.now()/1000), position: _drvChart.opAtiva.direcao === 'call' ? 'belowBar' : 'aboveBar', color: _drvChart.opAtiva.corDir, shape: _drvChart.opAtiva.direcao === 'call' ? 'arrowUp' : 'arrowDown', text: '$' + parseFloat(_drvChart.opAtiva.valor).toFixed(2), size: 1.5 },
+                { time: tsSaida, position: win ? 'aboveBar' : 'belowBar', color: corRes, shape: 'circle', text: win ? '✓ WIN' : '✗ LOSS', size: 1.2 }
+            ]);
+        } catch (_) {}
+    } else if (_drvChart.series) {
+        try { _drvChart.series.setMarkers([]); } catch (_) {}
+    }
+    _drvChart.opAtiva = null;
+}
+
+// ── Status de operação ────────────────────────────────────────────────────────
+function _drvOpStatusMsg(msg, cor) {
+    const el = document.getElementById('drv-op-status');
+    if (!el) return;
+    el.style.display = 'block'; el.style.color = cor || '#aaa';
+    el.style.borderColor = cor || '#333'; el.textContent = msg;
+}
+
+// ── Histórico ─────────────────────────────────────────────────────────────────
+function _drvAdicionarHistorico(op) {
+    _drvChart.historico.push(op);
+    _drvRenderizarHistorico();
+}
+
+function _drvAtualizarHistorico(id, res, lucro) {
+    const op = _drvChart.historico.find(h => String(h.id) === String(id));
+    if (op) { op.status = res; op.lucro = lucro; }
+    _drvRenderizarHistorico();
+}
+
+function _drvRenderizarHistorico() {
+    const lista = document.getElementById('drv-hist-lista');
+    const count = document.getElementById('drv-hist-count');
+    if (!lista) return;
+    if (count) count.textContent = _drvChart.historico.length;
+    lista.innerHTML = '';
+    if (_drvChart.historico.length === 0) {
+        lista.innerHTML = '<div style="color:#333; font-size:0.65rem; text-align:center; margin-top:20px;">Nenhuma operação nesta sessão</div>';
+        return;
+    }
+    [..._drvChart.historico].reverse().forEach(op => {
+        const win   = op.status === 'win';
+        const pend  = op.status === 'aguardando';
+        const cor   = pend ? '#ffbd2e' : (win ? '#27c93f' : '#f44');
+        const emoji = pend ? '⏳' : (win ? '✅' : '❌');
+        const lucroStr = op.lucro !== undefined ? (win ? '+$' + Math.abs(op.lucro).toFixed(2) : '-$' + Math.abs(op.lucro).toFixed(2)) : '';
+        const item = document.createElement('div');
+        item.style.cssText = `
+            padding:5px 8px; border-radius:4px; font-size:0.62rem;
+            border:1px solid ${cor}30; background:${cor}10;
+            display:flex; justify-content:space-between; align-items:center;
+            font-family:'Share Tech Mono';
+        `;
+        const ts = new Date(op.ts).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+        item.innerHTML = `
+            <span style="color:${cor}">${emoji} ${op.direcao?.toUpperCase()}</span>
+            <span style="color:#555">${ts}</span>
+            <span style="color:#aaa">$${parseFloat(op.valor).toFixed(2)}</span>
+            <span style="color:${cor}">${lucroStr}</span>
+        `;
+        lista.appendChild(item);
+    });
+}
+
+// ── Resetar sessão / placar ───────────────────────────────────────────────────
+function drvResetarSessao() {
+    _drvChart.historico      = [];
+    _drvChart._sessaoWins    = 0;
+    _drvChart._sessaoLosses  = 0;
+    _drvChart._sessaoLucro   = 0;
+    _drvModo.rodando         = false;
+    _drvModo.opBloqueada     = false;
+    _drvEncerrarOpAtiva(null);
+    const btn = document.getElementById('drv-sinais-toggle');
+    if (btn) { btn.textContent = '▶ INICIAR'; btn.style.borderColor = 'rgba(0,255,65,0.5)'; btn.style.color = '#00ff41'; }
+    _drvRenderizarHistorico();
+    _drvOpStatusMsg('🔄 Sessão resetada', '#ffbd2e');
+    // Recarrega candles
+    drvChartCarregar();
+}
+
+function drvResetarPlacar() {
+    _drvChart._sessaoWins   = 0;
+    _drvChart._sessaoLosses = 0;
+    _drvChart._sessaoLucro  = 0;
+    _drvChart.historico     = [];
+    _drvRenderizarHistorico();
+    _drvOpStatusMsg('🗑️ Placar zerado', '#f87171');
+}
+
+// ── CSS botões Quotex — adiciona drv-dur-btn com estilo similar ───────────────
+// (os estilos foram injetados no início do bloco via _drvEstilos())
+
+
 </script>
 
 </body>
