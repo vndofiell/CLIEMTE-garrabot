@@ -5076,6 +5076,28 @@ const ESTRATEGIAS = {
         qhma_aprendizado:   true,
         desc: "Motor HMA exclusivo para Quotex · OTC e Abertos · Análise em tempo real · CALL/PUT automático",
     },
+    // ── OTC FLUXO EMA PRO ─────────────────────────────────────────────────────
+    "📈 OTC FLUXO EMA PRO": {
+        tipo:                "otc_fluxo",
+        // Confiança mínima para emitir sinal (score)
+        otcf_confianca:      75,
+        // Tipo de mercado preferencial
+        otcf_tipo_mercado:   "otc",
+        // Payout mínimo para aceitar o ativo (%)
+        otcf_payout_min:     75,
+        // Período das velas em segundos (60 = M1)
+        otcf_periodo:        60,
+        // Trocar mercado após N losses consecutivos (0 = desligado)
+        otcf_losses_troca:   3,
+        // Gerenciamento de stake
+        otcf_gerenciamento:  "fixo",
+        otcf_mult_gale:      2.0,
+        otcf_max_gales:      3,
+        // Stop Win / Stop Loss em $ (0 = desligado)
+        otcf_stop_win:       0,
+        otcf_stop_loss:      0,
+        desc: "EMA 9/21/50 + RSI 14 + ADX 14 + ATR 14 · Pullback + Retomada confirmada · OTC Quotex",
+    },
 };
 
 // ═══════════════════════════════════════════════════════
@@ -8546,6 +8568,29 @@ function selecionarEstrategia(nome) {
         aprQLbl.textContent = '📊 Registrar resultados para aprendizado estatístico';
         aprQRow.appendChild(aprQChk); aprQRow.appendChild(aprQLbl);
         campos.appendChild(aprQRow);
+    } else if (est.tipo === 'otc_fluxo') {
+        // ── OTC FLUXO EMA PRO ─────────────────────────────────────────────────
+        const ofDiv = document.createElement('div');
+        ofDiv.style.cssText = 'background:rgba(0,200,80,0.06);border:1px solid rgba(0,200,80,0.35);border-radius:4px;padding:10px 12px;font-size:0.70rem;color:#00c850;font-family:"Share Tech Mono";margin-bottom:10px;line-height:1.8;';
+        ofDiv.innerHTML =
+            '📈 <b>OTC FLUXO EMA PRO</b><br>' +
+            '<span style="color:#8899aa">EMA 9/21/50 · RSI 14 · ADX 14 · ATR 14 · Pullback + Retomada confirmada</span><br>' +
+            '<span style="color:#556677">Analisa candles OTC fechados · CALL/PUT com confluência técnica</span>';
+        campos.appendChild(ofDiv);
+
+        campo('Confiança mínima (score 0–100)', 'cfg-otcf-confianca', 'number', est.otcf_confianca || 75, 50, 95, 1);
+        campo('Tipo de mercado', 'cfg-otcf-tipo', 'select', est.otcf_tipo_mercado || 'otc',
+              undefined, undefined, undefined, ['otc','ambos','abertos']);
+        campo('Payout mínimo (%)', 'cfg-otcf-payout', 'number', est.otcf_payout_min || 75, 50, 99, 1);
+        campo('Período das velas (s)', 'cfg-otcf-periodo', 'select', est.otcf_periodo || 60,
+              undefined, undefined, undefined, [60, 300, 900]);
+        campo('Trocar mercado após N losses (0=off)', 'cfg-otcf-losses-troca', 'number', est.otcf_losses_troca ?? 3, 0, 10, 1);
+        campo('Gerenciamento de stake', 'cfg-otcf-mgr', 'select', est.otcf_gerenciamento || 'fixo',
+              undefined, undefined, undefined, ['fixo','martingale','sorosgale','loss_recovery','qsr']);
+        campo('Multiplicador Gale', 'cfg-otcf-mult', 'number', est.otcf_mult_gale || 2.0, 1.1, 10, 0.1);
+        campo('Máximo de Gales', 'cfg-otcf-maxg', 'number', est.otcf_max_gales || 3, 1, 10, 1);
+        campo('Stop Win ($) — 0=desligado', 'cfg-otcf-sw', 'number', est.otcf_stop_win || 0, 0, 9999, 0.5);
+        campo('Stop Loss ($) — 0=desligado', 'cfg-otcf-sl', 'number', est.otcf_stop_loss || 0, 0, 9999, 0.5);
     }
 
     fecharModal('modal-estrategia');
@@ -8691,6 +8736,29 @@ function confirmarEstrategia() {
         const _qApr  = document.getElementById('cfg-qhma-aprendizado');
         if (_qApr)  est.qhma_aprendizado = _qApr.checked;
     }
+    // ── Campos otc_fluxo ──────────────────────────────────────────────────────
+    if (est.tipo === 'otc_fluxo') {
+        const _oConf = document.getElementById('cfg-otcf-confianca');
+        if (_oConf) est.otcf_confianca    = Math.max(50, Math.min(95, parseInt(_oConf.value) || 75));
+        const _oTipo = document.getElementById('cfg-otcf-tipo');
+        if (_oTipo) est.otcf_tipo_mercado = _oTipo.value || 'otc';
+        const _oPay  = document.getElementById('cfg-otcf-payout');
+        if (_oPay)  est.otcf_payout_min   = Math.max(50, Math.min(99, parseInt(_oPay.value) || 75));
+        const _oPer  = document.getElementById('cfg-otcf-periodo');
+        if (_oPer)  est.otcf_periodo      = parseInt(_oPer.value) || 60;
+        const _oLoss = document.getElementById('cfg-otcf-losses-troca');
+        if (_oLoss) est.otcf_losses_troca = Math.max(0, Math.min(10, parseInt(_oLoss.value) || 3));
+        const _oMgr  = document.getElementById('cfg-otcf-mgr');
+        if (_oMgr)  est.otcf_gerenciamento = _oMgr.value || 'fixo';
+        const _oMult = document.getElementById('cfg-otcf-mult');
+        if (_oMult) est.otcf_mult_gale    = Math.max(1.1, parseFloat(_oMult.value) || 2.0);
+        const _oMaxg = document.getElementById('cfg-otcf-maxg');
+        if (_oMaxg) est.otcf_max_gales    = Math.max(1, parseInt(_oMaxg.value) || 3);
+        const _oSw   = document.getElementById('cfg-otcf-sw');
+        if (_oSw)   est.otcf_stop_win     = parseFloat(_oSw.value) || 0;
+        const _oSl   = document.getElementById('cfg-otcf-sl');
+        if (_oSl)   est.otcf_stop_loss    = parseFloat(_oSl.value) || 0;
+    }
     // Reseta contador de sequência ao confirmar
     bot._seqContador = 0;
     _seqStatusClear();
@@ -8719,7 +8787,9 @@ function confirmarEstrategia() {
 
     // Atualiza boto do painel
     let resumo = nome;
-    if (est.tipo === 'hma_quotex') {
+    if (est.tipo === 'otc_fluxo') {
+        resumo = `conf≥${est.otcf_confianca || 75}% | ${est.otcf_tipo_mercado || 'otc'} | pay≥${est.otcf_payout_min || 75}%`;
+    } else if (est.tipo === 'hma_quotex') {
         resumo = `conf≥${est.qhma_confianca || 75}% | ${est.qhma_tipo_mercado || 'ambos'} | pay≥${est.qhma_payout_min || 75}%`;
     } else if (est.tipo === 'hma_core') {
         resumo = `conf≥${est.hma_confianca || 68}% | ${est.hma_contrato || 'AUTO'} | ${est.duracao || 1}${est.duracao_unit || 't'} | ${est.ativo || 'R_100'}`;
@@ -8745,7 +8815,11 @@ function confirmarEstrategia() {
 
     _atualizarPainelConexao(est.tipo);
     fecharModal('modal-cfg-estrategia');
-    if (est.tipo === 'hma_quotex') {
+    if (est.tipo === 'otc_fluxo') {
+        print(`📈 <b>OTC FLUXO EMA PRO</b> ativado | conf≥<b>${est.otcf_confianca || 75}%</b> | tipo=<b>${est.otcf_tipo_mercado || 'otc'}</b> | pay≥<b>${est.otcf_payout_min || 75}%</b>`, "log-win");
+        print(`📈 OTC Fluxo: EMA 9/21/50 · RSI 14 · ADX 14 · ATR 14 · Pullback + Retomada confirmada`, "log-info");
+        _otcFluxo.pendente = true;
+    } else if (est.tipo === 'hma_quotex') {
         print(`🟠 <b>GARRA AI CORE — HMA QUOTEX</b> ativado | conf≥<b>${est.qhma_confianca || 75}%</b> | tipo=<b>${est.qhma_tipo_mercado || 'ambos'}</b> | pay≥<b>${est.qhma_payout_min || 75}%</b> | modo=<b>${est.qhma_modo || 'hibrido'}</b>`, "log-win");
         print(`🟠 HMA Quotex: Candles → Multi-Timeframe → Regime → Decision Engine → Risk Gate · OTC + Abertos`, "log-info");
         // Inicia o motor HMA Quotex automaticamente
@@ -30767,6 +30841,256 @@ function _qxHmaAguardarResultado(opId, contexto, direcao) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════════
+// 📈 OTC FLUXO EMA PRO — motor dedicado para Quotex OTC
+// Busca ativos OTC/Abertos, coleta candles OHLC fechados, chama
+// /quotex/otc-fluxo/avaliar e opera CALL/PUT com gerenciamento de stake.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const _otcFluxo = {
+    rodando:       false,
+    opBloqueada:   false,
+    timer:         null,
+    ativoAtual:    null,
+    losses:        0,
+    lucroSessao:   0,
+    valorBase:     1,
+    valorAtual:    1,
+    galeAtual:     0,
+    pendente:      false,
+    _ultimaVirada: 0,
+    _cicloRodando: false,
+};
+
+function _otcFluxoParar() {
+    _otcFluxo.rodando      = false;
+    _otcFluxo.opBloqueada  = false;
+    _otcFluxo._cicloRodando = false;
+    _otcFluxo.pendente     = false;
+    clearInterval(_otcFluxo.timer);
+    _otcFluxo.timer = null;
+    print('📈 OTC FLUXO EMA PRO — motor parado.', 'log-info');
+}
+
+function _otcFluxoIniciar() {
+    const est = ESTRATEGIAS['📈 OTC FLUXO EMA PRO'];
+    if (!est) return;
+
+    _otcFluxo.rodando       = true;
+    _otcFluxo.opBloqueada   = false;
+    _otcFluxo._cicloRodando = false;
+    _otcFluxo._ultimaVirada = 0;
+    _otcFluxo.lucroSessao   = 0;
+    _otcFluxo.losses        = 0;
+    _otcFluxo.galeAtual     = 0;
+    _otcFluxo.ativoAtual    = null;
+    _otcFluxo.pendente      = false;
+
+    const vBase = parseFloat(document.getElementById('stake-input')?.value || 1);
+    _otcFluxo.valorBase  = vBase;
+    _otcFluxo.valorAtual = vBase;
+
+    print('📈 <b>OTC FLUXO EMA PRO</b> motor iniciado — aguardando virada de vela...', 'log-win');
+
+    _otcFluxoCiclo();
+    clearInterval(_otcFluxo.timer);
+    _otcFluxo.timer = setInterval(() => {
+        if (!_otcFluxo.rodando || _otcFluxo._cicloRodando) return;
+        const periodo = ESTRATEGIAS['📈 OTC FLUXO EMA PRO']?.otcf_periodo || 60;
+        const agora   = Math.floor(_qxAgoraMs() / 1000);
+        const tsAb    = Math.floor(agora / periodo) * periodo;
+        const seg     = agora - tsAb;
+        if (seg >= 0 && seg <= 3 && tsAb !== _otcFluxo._ultimaVirada) {
+            _otcFluxo._ultimaVirada = tsAb;
+            _otcFluxoCiclo();
+        }
+    }, 800);
+}
+
+async function _otcFluxoCiclo() {
+    if (!_otcFluxo.rodando || _otcFluxo._cicloRodando) return;
+    if (!bot.running) { _otcFluxoParar(); return; }
+
+    const est = ESTRATEGIAS['📈 OTC FLUXO EMA PRO'];
+    if (!est) return;
+
+    // Stop Win / Stop Loss
+    if (est.otcf_stop_win  > 0 && _otcFluxo.lucroSessao >=  est.otcf_stop_win)  { _otcFluxoParar(); print(`🏆 OTC FLUXO — Stop Win! +$${_otcFluxo.lucroSessao.toFixed(2)}`, 'log-win');  return; }
+    if (est.otcf_stop_loss > 0 && _otcFluxo.lucroSessao <= -est.otcf_stop_loss) { _otcFluxoParar(); print(`🛑 OTC FLUXO — Stop Loss! -$${Math.abs(_otcFluxo.lucroSessao).toFixed(2)}`, 'log-loss'); return; }
+
+    _otcFluxo._cicloRodando = true;
+    try {
+        // 1. Buscar ativos com payout adequado
+        const tipoMercado = est.otcf_tipo_mercado || 'otc';
+        const payMin      = est.otcf_payout_min   || 75;
+        let ativos = [];
+        try {
+            const rAtv = await fetch('/quotex/ativos-payout');
+            const dAtv = await rAtv.json();
+            const lista = Array.isArray(dAtv.ativos) ? dAtv.ativos : [];
+            ativos = lista.filter(a => {
+                const payout = a.payout || a.profit || 0;
+                if (payout < payMin) return false;
+                if (tipoMercado === 'otc')     return (a.nome || a.id || '').toLowerCase().includes('otc');
+                if (tipoMercado === 'abertos') return !(a.nome || a.id || '').toLowerCase().includes('otc');
+                return true;
+            });
+        } catch(e) { print('📈 OTC FLUXO: ⚠️ Erro ao buscar ativos: ' + e.message, 'log-info'); }
+
+        if (!ativos.length) { print('📈 OTC FLUXO: ⚠️ Sem ativos com payout ≥ ' + payMin + '% — aguardando próxima vela', 'log-info'); _otcFluxo._cicloRodando = false; return; }
+
+        // Troca de ativo após N losses
+        const lossesMax = est.otcf_losses_troca || 0;
+        if (lossesMax > 0 && _otcFluxo.losses >= lossesMax) {
+            const atual = _otcFluxo.ativoAtual?.id || '';
+            const outro = ativos.find(a => (a.id || a.nome) !== atual) || ativos[0];
+            _otcFluxo.ativoAtual = outro;
+            _otcFluxo.losses = 0;
+            print(`📈 OTC FLUXO: 🔁 ${lossesMax} losses — trocando para ${outro.nome || outro.id}`, 'log-info');
+        } else if (!_otcFluxo.ativoAtual) {
+            _otcFluxo.ativoAtual = ativos[0];
+        }
+
+        const ativoSel = _otcFluxo.ativoAtual;
+        const ativoId  = ativoSel.id   || ativoSel.name  || '';
+        const ativoNm  = ativoSel.nome || ativoSel.label || ativoId;
+        const payout   = ativoSel.payout || ativoSel.profit || 0;
+
+        // 2. Buscar candles fechados
+        const periodo = est.otcf_periodo || 60;
+        const nVelas  = 80; // 80 velas = suficiente para os indicadores
+        let candles = [];
+        try {
+            const rCan = await fetch(`/quotex/candles?ativo=${encodeURIComponent(ativoId)}&periodo=${periodo}&count=${nVelas}`);
+            const dCan = await rCan.json();
+            candles = Array.isArray(dCan.candles) ? dCan.candles : (Array.isArray(dCan) ? dCan : []);
+        } catch(e) { print('📈 OTC FLUXO: ⚠️ Erro ao buscar candles: ' + e.message, 'log-info'); _otcFluxo._cicloRodando = false; return; }
+
+        if (candles.length < 60) { print(`📈 OTC FLUXO: ⚠️ Candles insuficientes (${candles.length}/60) em ${ativoNm}`, 'log-info'); _otcFluxo._cicloRodando = false; return; }
+
+        // 3. Chamar a estratégia
+        let res;
+        try {
+            const r = await fetch('/quotex/otc-fluxo/avaliar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ candles, confianca_minima: est.otcf_confianca || 75 }),
+            });
+            res = await r.json();
+        } catch(e) { print('📈 OTC FLUXO: ⚠️ Erro na análise: ' + e.message, 'log-info'); _otcFluxo._cicloRodando = false; return; }
+
+        const decisao = res?.decisao || 'NO_TRADE';
+        const score   = res?.score   || 0;
+        const ind     = res?.indicadores || {};
+
+        if (decisao === 'NO_TRADE') {
+            const bloqueios = (res?.bloqueios || []).join(' | ') || 'confluência incompleta';
+            print(`📈 OTC FLUXO [${ativoNm}]: 🚫 NO TRADE — ${bloqueios}`, 'log-info');
+            _otcFluxo._cicloRodando = false;
+            return;
+        }
+
+        if (_otcFluxo.opBloqueada) { print('📈 OTC FLUXO: ⏳ Aguardando resultado anterior...', 'log-info'); _otcFluxo._cicloRodando = false; return; }
+
+        // 4. Entrar na operação
+        print(`📈 OTC FLUXO: ${decisao} | ${ativoNm} | score <b>${score}/100</b> | payout ${payout}% | $${_otcFluxo.valorAtual} — entrando na virada ✅`, decisao === 'CALL' ? 'log-win' : 'log-loss');
+
+        _otcFluxo.opBloqueada = true;
+        let opId = null;
+        try {
+            const rOp = await fetch('/quotex/operar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    ativo:    ativoId,
+                    direcao:  decisao,
+                    valor:    _otcFluxo.valorAtual,
+                    expiracao: periodo,
+                }),
+            });
+            const dOp = await rOp.json();
+            if (!dOp.ok && !dOp.id) throw new Error(dOp.erro || 'sem id');
+            opId = dOp.id || dOp.op_id || null;
+            print(`📈 OTC FLUXO: ⏳ Ordem enviada | id=${opId} | ${decisao} ${ativoNm} $${_otcFluxo.valorAtual}`, 'log-info');
+        } catch(e) {
+            print(`📈 OTC FLUXO: ❌ Erro ao operar — ${e.message}`, 'log-loss');
+            _otcFluxo.opBloqueada = false;
+            _otcFluxo._cicloRodando = false;
+            return;
+        }
+
+        // 5. Aguardar resultado (polling até 3× o período)
+        const maxEspera = (periodo + 15) * 1000;
+        const inicio    = Date.now();
+        let resultado   = null;
+        while (Date.now() - inicio < maxEspera) {
+            await new Promise(r => setTimeout(r, 3000));
+            if (!_otcFluxo.rodando) break;
+            try {
+                const rRes = await fetch(`/quotex/resultado/${opId}`);
+                const dRes = await rRes.json();
+                if (dRes.ok && dRes.resultado) { resultado = dRes; break; }
+            } catch(_){}
+        }
+
+        if (!resultado) {
+            print(`📈 OTC FLUXO: ⚠️ Timeout aguardando resultado — id=${opId}`, 'log-info');
+            _otcFluxo.opBloqueada = false;
+            _otcFluxo._cicloRodando = false;
+            return;
+        }
+
+        const win   = resultado.resultado === 'win';
+        const lucro = parseFloat(resultado.lucro || 0);
+        _otcFluxo.lucroSessao += lucro;
+        _otcFluxo.opBloqueada = false;
+
+        if (win) {
+            _otcFluxo.losses    = 0;
+            _otcFluxo.galeAtual = 0;
+            _otcFluxo.valorAtual = _otcFluxo.valorBase;
+            print(`📈 OTC FLUXO: ✅ WIN +$${lucro.toFixed(2)} | ${ativoNm} | sessão: ${_otcFluxo.lucroSessao >= 0 ? '+' : ''}$${_otcFluxo.lucroSessao.toFixed(2)}`, 'log-win');
+        } else {
+            _otcFluxo.losses++;
+            const mgr  = est.otcf_gerenciamento || 'fixo';
+            const mult = est.otcf_mult_gale || 2.0;
+            const maxG = est.otcf_max_gales || 3;
+            if (mgr !== 'fixo' && _otcFluxo.galeAtual < maxG) {
+                _otcFluxo.galeAtual++;
+                _otcFluxo.valorAtual = parseFloat((_otcFluxo.valorBase * Math.pow(mult, _otcFluxo.galeAtual)).toFixed(2));
+                print(`📈 OTC FLUXO: ❌ LOSS -$${Math.abs(lucro).toFixed(2)} | ${ativoNm} | Gale ${_otcFluxo.galeAtual}/${maxG} → $${_otcFluxo.valorAtual}`, 'log-loss');
+            } else {
+                _otcFluxo.galeAtual = 0;
+                _otcFluxo.valorAtual = _otcFluxo.valorBase;
+                print(`📈 OTC FLUXO: ❌ LOSS -$${Math.abs(lucro).toFixed(2)} | ${ativoNm} | losses: ${_otcFluxo.losses}`, 'log-loss');
+            }
+        }
+
+        // Atualiza stake no input
+        const inpStake = document.getElementById('stake-input');
+        if (inpStake) inpStake.value = _otcFluxo.valorAtual.toFixed(2);
+
+    } catch(e) {
+        print('📈 OTC FLUXO: ❌ Erro inesperado — ' + e.message, 'log-loss');
+    } finally {
+        _otcFluxo._cicloRodando = false;
+    }
+}
+
+// ── Watcher: inicia/para motor conforme estado do bot ────────────────────────
+(function _otcFluxoWatch() {
+    setInterval(() => {
+        if (!_otcFluxo.pendente) return;
+        if (_qx.status !== 'conectado') return;
+        if (bot.running && bot.estrategia === '📈 OTC FLUXO EMA PRO') {
+            _otcFluxoIniciar();
+        } else if (!bot.running && _otcFluxo.rodando) {
+            _otcFluxoParar();
+        }
+    }, 1000);
+})();
+
+
 // 🟠 GARRA AI CORE — HMA QUOTEX (motor dedicado)
 // Motor exclusivo para Quotex: busca ativos OTC e Abertos em tempo real,
 // analisa com o mesmo backend HMA, opera CALL/PUT automaticamente.
