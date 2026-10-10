@@ -15280,13 +15280,31 @@ def quotex_otc_fluxo_varrer():
     aprovados = [r for r in resultados if r.get("decisao") in ("CALL", "PUT")]
     melhor    = max(aprovados, key=lambda r: r.get("score", 0)) if aprovados else None
 
+    # Top 5 ativos por score (independente de decisão) — para diagnóstico
+    top5 = sorted(resultados, key=lambda r: r.get("score", 0), reverse=True)[:5]
+
+    # Bloqueios mais frequentes entre os NO_TRADE
+    bloq_cnt: dict = {}
+    for r in resultados:
+        for b in r.get("bloqueios", []):
+            bloq_cnt[b] = bloq_cnt.get(b, 0) + 1
+    top_bloq = sorted(bloq_cnt.items(), key=lambda x: x[1], reverse=True)[:5]
+
     print(f"[OTC-VARRER] varridos={len(resultados)} aprovados={len(aprovados)} melhor={melhor['ativo'] if melhor else 'nenhum'}")
+    if top_bloq:
+        print(f"[OTC-VARRER] top bloqueios: {' | '.join(f'{b}({n})' for b, n in top_bloq)}")
+    if top5:
+        _t5_str = ' | '.join('{ativo}={score}({decisao})'.format(**r) for r in top5)
+        print(f"[OTC-VARRER] top5 score: {_t5_str}")
+
     return jsonify({
-        "ok":       True,
-        "melhor":   melhor,
-        "todos":    resultados,
+        "ok":        True,
+        "melhor":    melhor,
+        "todos":     resultados,
+        "top5":      top5,
         "aprovados": len(aprovados),
         "varridos":  len(resultados),
+        "top_bloqueios": [{"bloqueio": b, "count": n} for b, n in top_bloq],
     })
 
 

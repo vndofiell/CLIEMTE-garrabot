@@ -30968,15 +30968,20 @@ async function _otcFluxoCiclo() {
 
         if (!varredura.ok) { print('📈 OTC FLUXO: ⚠️ ' + (varredura.erro || 'erro na varredura'), 'log-info'); _otcFluxo._cicloRodando = false; return; }
 
-        print(`📈 OTC FLUXO: 📊 Varridos=${varredura.varridos} | Com sinal=${varredura.aprovados}`, 'log-info');
+        print(`📈 OTC FLUXO: 📊 Varridos=${varredura.varridos} | Com sinal=<b>${varredura.aprovados}</b>`, 'log-info');
 
         if (!varredura.melhor) {
-            // Mostra resumo dos bloqueios mais comuns
-            const todos = varredura.todos || [];
-            const bloqueiosCont = {};
-            todos.forEach(r => (r.bloqueios || []).forEach(b => { bloqueiosCont[b] = (bloqueiosCont[b] || 0) + 1; }));
-            const top = Object.entries(bloqueiosCont).sort((a,b)=>b[1]-a[1]).slice(0,3).map(([b,n])=>`${b} (${n}x)`).join(' · ');
-            print(`📈 OTC FLUXO: 🚫 Nenhum sinal — ${top || 'confluência incompleta em todos os ativos'}`, 'log-info');
+            // Bloqueios mais frequentes (já calculados pelo backend)
+            const topBloq = (varredura.top_bloqueios || []).slice(0, 3)
+                .map(b => `${b.bloqueio} (${b.count}x)`).join(' · ');
+            print(`📈 OTC FLUXO: 🚫 Nenhum sinal — ${topBloq || 'confluência incompleta em todos os ativos'}`, 'log-info');
+
+            // Top 5 ativos mais próximos do sinal (maior score mesmo sem atingir mínimo)
+            const top5 = (varredura.top5 || []).filter(r => r.score > 0);
+            if (top5.length) {
+                const resumo = top5.map(r => `${r.ativo.replace('_otc','').replace('_OTC','')} <b>${r.score}</b>pts`).join(' · ');
+                print(`📈 OTC FLUXO: 📉 Mais próximos: ${resumo}`, 'log-info');
+            }
             _otcFluxo._cicloRodando = false; return;
         }
 
