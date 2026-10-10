@@ -8410,6 +8410,20 @@ function selecionarEstrategia(nome) {
         campo('Confiança mínima para entrar (%)', 'cfg-hma-confianca', 'number',
               est.hma_confianca || 68, 50, 95, 1);
 
+        // ── Toggle inversão — HMA CORE (Deriv) ───────────────────────────────
+        const invHmaRow = document.createElement('div');
+        invHmaRow.style.cssText = 'display:flex;align-items:center;gap:8px;margin-top:2px;margin-bottom:4px;background:rgba(255,68,68,0.08);border:1px solid rgba(255,68,68,0.35);border-radius:4px;padding:8px 10px;';
+        const invHmaChk = document.createElement('input');
+        invHmaChk.type = 'checkbox'; invHmaChk.id = 'cfg-hma-inverter';
+        invHmaChk.checked = est.hma_inverter === true;
+        invHmaChk.style.cssText = 'accent-color:#ff4444;width:16px;height:16px;cursor:pointer;';
+        const invHmaLbl = document.createElement('label');
+        invHmaLbl.htmlFor = 'cfg-hma-inverter';
+        invHmaLbl.style.cssText = 'font-size:0.75rem;color:#ff4444;font-family:"Share Tech Mono";cursor:pointer;font-weight:bold;';
+        invHmaLbl.textContent = '🔄 INVERTER SINAL — CALL→PUT / PUT→CALL';
+        invHmaRow.appendChild(invHmaChk); invHmaRow.appendChild(invHmaLbl);
+        campos.appendChild(invHmaRow);
+
         // ── Janelas de análise (checkboxes) ──────────────────────────────────
         const janLbl = document.createElement('div');
         janLbl.style.cssText = 'font-size:0.65rem;color:#57606a;margin-top:10px;margin-bottom:4px;letter-spacing:1px;font-family:"Share Tech Mono";';
@@ -8596,6 +8610,21 @@ function selecionarEstrategia(nome) {
         campos.appendChild(ofDiv);
 
         campo('Confiança mínima (score 0–100)', 'cfg-otcf-confianca', 'number', est.otcf_confianca || 75, 50, 95, 1);
+
+        // ── Toggle inversão — OTC FLUXO (Quotex) ─────────────────────────────
+        const invOfRow2 = document.createElement('div');
+        invOfRow2.style.cssText = 'display:flex;align-items:center;gap:8px;margin-top:2px;margin-bottom:4px;background:rgba(255,68,68,0.08);border:1px solid rgba(255,68,68,0.35);border-radius:4px;padding:8px 10px;';
+        const invOfChk2 = document.createElement('input');
+        invOfChk2.type = 'checkbox'; invOfChk2.id = 'cfg-otcf-inverter';
+        invOfChk2.checked = est.otcf_inverter === true;
+        invOfChk2.style.cssText = 'accent-color:#ff4444;width:16px;height:16px;cursor:pointer;';
+        const invOfLbl2 = document.createElement('label');
+        invOfLbl2.htmlFor = 'cfg-otcf-inverter';
+        invOfLbl2.style.cssText = 'font-size:0.75rem;color:#ff4444;font-family:"Share Tech Mono";cursor:pointer;font-weight:bold;';
+        invOfLbl2.textContent = '🔄 INVERTER SINAL — CALL→PUT / PUT→CALL';
+        invOfRow2.appendChild(invOfChk2); invOfRow2.appendChild(invOfLbl2);
+        campos.appendChild(invOfRow2);
+
         campo('Tipo de mercado', 'cfg-otcf-tipo', 'select', est.otcf_tipo_mercado || 'otc',
               undefined, undefined, undefined, ['otc','ambos','abertos']);
         campo('Payout mínimo (%)', 'cfg-otcf-payout', 'number', est.otcf_payout_min || 75, 50, 99, 1);
@@ -8738,6 +8767,9 @@ function confirmarEstrategia() {
         // Aprendizado
         const _aprEl = document.getElementById('cfg-hma-aprendizado');
         if (_aprEl) est.hma_aprendizado = _aprEl.checked;
+        // Inversão
+        const _invHmaEl = document.getElementById('cfg-hma-inverter');
+        if (_invHmaEl) est.hma_inverter = _invHmaEl.checked;
     }
     // ── Campos hma_quotex ─────────────────────────────────────────────────────
     if (est.tipo === 'hma_quotex') {
