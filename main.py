@@ -3447,6 +3447,16 @@ def rota_quotex_status():
     return jsonify(dados)
 
 
+# ── Rota: reconectar automático (chamado pelo frontend quando detecta falha) ──
+@app.route('/quotex/reconectar-auto', methods=['POST'])
+def rota_quotex_reconectar_auto():
+    """Dispara reconexão em background sem bloquear o frontend."""
+    if not _QUOTEX_DISPONIVEL:
+        return jsonify({"ok": False, "erro": "Módulo Quotex indisponível."})
+    resultado = quotex_reconectar_se_preciso()
+    return jsonify(resultado)
+
+
 # ── Rota: desconectar ─────────────────────────────────────────────────────────
 @app.route('/quotex/desconectar', methods=['POST'])
 def rota_quotex_desconectar():
@@ -3622,7 +3632,8 @@ def rota_quotex_ativos_payout():
         loop   = _QUOTEX_STATE.get("loop")
 
     if not client or not loop:
-        if _payout_cache and (_t.time() - _payout_cache_ts) < 300:
+        if _payout_cache:
+            # Sem conexão: serve cache de qualquer idade — melhor que lista vazia
             return jsonify({"ok": True, "ativos": _payout_cache, "cache": True})
         return jsonify({"ok": False, "erro": "Quotex não conectada.", "ativos": []})
 

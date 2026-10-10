@@ -30947,6 +30947,15 @@ async function _qxHmaQCiclo() {
                 }
             }
         } else if (!d.ok) {
+            const _erroConexao = (d.erro || '').toLowerCase().includes('conectad');
+            if (_erroConexao) {
+                // Quotex desconectada — dispara reconexão e sai sem bloquear
+                _qxHmaQ._cicloRodando = false;
+                print(`🟠 HMA QUOTEX: ⚠️ Quotex não conectada — disparando reconexão...`, 'log-info');
+                fetch('/quotex/reconectar-auto', { method: 'POST' }).catch(() => {});
+                setTimeout(() => { if (_qxHmaQ.rodando) _qxHmaQCiclo(); }, 5000);
+                return;
+            }
             print(`🟠 HMA QUOTEX [DEBUG] rota retornou ok=false: ${d.erro || 'sem detalhe'}`, 'log-info');
         } else {
             print(`🟠 HMA QUOTEX [DEBUG] rota retornou lista vazia`, 'log-info');
