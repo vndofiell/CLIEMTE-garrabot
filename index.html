@@ -32487,362 +32487,205 @@ function _qxHmaAtualizarStake(win, lucro) {
     if (inp) inp.value = _qxHma.valorAtual.toFixed(2);
 }
 
+
 // ══════════════════════════════════════════════════════════
 //  GRÁFICO DE VELAS — DERIV
-//  Usa o WebSocket existente (bot.ws) para ticks_history e
-//  ticks em tempo real. Opera via proposal/buy da API Deriv.
+//  Candles via API REST pública Deriv (sem WS próprio).
+//  Ticks em tempo real via polling do bot.ws existente.
 // ══════════════════════════════════════════════════════════
 
-// ── Estilos dos botões de duração/modo ───────────────────────────────────────
-(function _drvEstilos() {
+// ── Estilos ───────────────────────────────────────────────
+(function(){
     const s = document.createElement('style');
     s.textContent = `
-        .drv-dur-btn {
-            background:#0a0a12; border:1px solid #333; color:#555;
+        .drv-dur-btn { background:#0a0a12; border:1px solid #333; color:#555;
             font-family:'Share Tech Mono'; font-size:0.7rem;
-            cursor:pointer; border-radius:3px; transition:all 0.15s;
-        }
+            cursor:pointer; border-radius:3px; transition:all 0.15s; }
         .drv-dur-btn:hover { border-color:#00ff41; color:#00ff41; }
-        .drv-dur-ativo { border-color:rgba(0,255,65,0.7) !important; color:#00ff41 !important; background:rgba(0,255,65,0.08) !important; }
-        .drv-modo-ativo { border-color:rgba(0,255,65,0.5) !important; background:rgba(0,255,65,0.06) !important; }
-        .drv-ct-ativo { border-color:rgba(39,201,63,0.7) !important; background:rgba(39,201,63,0.12) !important; color:#27c93f !important; }
+        .drv-dur-ativo  { border-color:rgba(0,255,65,0.7)!important; color:#00ff41!important; background:rgba(0,255,65,0.08)!important; }
+        .drv-modo-ativo { border-color:rgba(0,255,65,0.5)!important; background:rgba(0,255,65,0.06)!important; }
+        .drv-ct-ativo   { border-color:rgba(39,201,63,0.7)!important; background:rgba(39,201,63,0.12)!important; color:#27c93f!important; }
     `;
     document.head.appendChild(s);
 })();
 
-// ── Estado ────────────────────────────────────────────────────────────────────
+// ── Estado ────────────────────────────────────────────────
 const _drvChart = {
-    chart:      null,
-    series:     null,
-    ativo:      'R_100',
-    periodo:    60,
-    duracao:    60,
-    valor:      1,
-    contrato:   'CALL',        // CALL | DIGITEVEN | DIGITOVER
-    historico:  [],
-    rtTimer:    null,
-    lastPreco:  0,
-    velaAtual:  null,
-    tsAbertura: 0,
-    opAtiva:    null,
-    priceLine:  null,
-    // sub IDs para cancelar subscrições
-    _subTickId:    null,
-    _subCandleId:  null,
-    // ws dedicado para o gráfico (não compartilha com bot.ws para evitar conflito)
-    _ws:        null,
-    _wsReady:   false,
-    _wsQueue:   [],
-    _reqMap:    {},   // req_id → callback
-    _reqSeq:    9500, // req_ids acima de 9500 para não colidir com bot.ws
-    _sessaoWins:   0,
-    _sessaoLosses: 0,
-    _sessaoLucro:  0,
+    chart:null, series:null,
+    ativo:'R_100', periodo:60, duracao:60, valor:1, contrato:'CALL',
+    historico:[], rtTimer:null, lastPreco:0,
+    velaAtual:null, tsAbertura:0,
+    opAtiva:null, priceLine:null,
+    _sessaoWins:0, _sessaoLosses:0, _sessaoLucro:0,
 };
-
-// ── Modo automático ────────────────────────────────────────────────────────────
 const _drvModo = {
-    modo:        'manual',   // manual | price_action | fluxo | automatico | hma
-    rodando:     false,
-    opBloqueada: false,
-    analiseTimer: null,
+    modo:'manual', rodando:false, opBloqueada:false,
 };
 
-// ── WebSocket dedicado ────────────────────────────────────────────────────────
-function _drvWsConectar(onPronto) {
-    // Se já está aberto, dispara callback imediatamente
-    if (_drvChart._ws && _drvChart._ws.readyState === WebSocket.OPEN) {
-        if (onPronto) onPronto();
-        return;
-    }
-    // Se está conectando, empilha callback
-    if (_drvChart._ws && _drvChart._ws.readyState === WebSocket.CONNECTING) {
-        if (onPronto) _drvChart._wsQueue.push({ __cb: onPronto });
-        return;
-    }
-    if (onPronto) _drvChart._wsQueue.push({ __cb: onPronto });
-
-    const APP_ID_DRV = (typeof APP_ID !== 'undefined') ? APP_ID : 36544;
-    const WS_URL = `wss://ws.derivws.com/websockets/v3?app_id=${APP_ID_DRV}`;
-    _drvChart._ws = new WebSocket(WS_URL);
-    _drvChart._wsReady = false;
-    _drvChart._ws.onopen = () => {
-        _drvChart._wsReady = true;
-        // Autoriza com o token do bot principal se disponível
-        const tok = (typeof bot !== 'undefined' && bot.token) ? bot.token : null;
-        if (tok) {
-            // Aguarda authorize responder antes de drenar fila
-            _drvChart._ws.send(JSON.stringify({ authorize: tok, req_id: 9499 }));
-        } else {
-            // Sem token — drena fila direto (dados públicos: ticks_history não precisa auth)
-            _drvDrenarFila();
+// ── Deriv REST API pública (sem auth, sem WS próprio) ─────
+// Endpoint público: https://api.deriv.com/api-explorer
+// ticks_history retorna candles sem precisar de token
+async function _drvFetchCandles(ativo, granularity, count) {
+    // Usa a API WebSocket da Deriv via fetch polyfill sobre HTTP não é possível.
+    // Usa o endpoint público do servidor do próprio bot como proxy.
+    // Se não existir, cai para usar o bot.ws existente.
+    try {
+        // Tenta endpoint local do bot (main.py pode já ter /deriv/candles)
+        const r = await fetch(`/deriv/candles?ativo=${encodeURIComponent(ativo)}&granularity=${granularity}&count=${count}`);
+        if (r.ok) {
+            const d = await r.json();
+            if (d.ok && d.candles) return d.candles;
         }
-    };
-    _drvChart._ws.onmessage = (ev) => {
-        try { _drvWsMensagem(JSON.parse(ev.data)); } catch (_) {}
-    };
-    _drvChart._ws.onclose = () => {
-        _drvChart._wsReady = false;
-        // Reconecta após 3s se o modal ainda estiver aberto
-        setTimeout(() => {
-            const m = document.getElementById('modal-drv-chart');
-            if (m && m.style.display !== 'none') _drvWsConectar();
-        }, 3000);
-    };
-    _drvChart._ws.onerror = () => {};
-}
+    } catch(_) {}
 
-function _drvDrenarFila() {
-    while (_drvChart._wsQueue.length) {
-        const item = _drvChart._wsQueue.shift();
-        if (item && item.__cb) {
-            item.__cb();
-        } else if (typeof item === 'string') {
-            _drvChart._ws.send(item);
-        }
-    }
-}
+    // Fallback: usa o bot.ws (já autenticado e aberto)
+    return new Promise((resolve) => {
+        const ws = (typeof bot !== 'undefined') ? bot.ws : null;
+        if (!ws || ws.readyState !== WebSocket.OPEN) { resolve([]); return; }
 
-function _drvWsSend(payload) {
-    const msg = JSON.stringify(payload);
-    if (_drvChart._ws && _drvChart._ws.readyState === WebSocket.OPEN) {
-        _drvChart._ws.send(msg);
-    } else {
-        _drvChart._wsQueue.push(msg);
-        if (!_drvChart._ws || _drvChart._ws.readyState === WebSocket.CLOSED || _drvChart._ws.readyState === WebSocket.CLOSING) {
-            _drvWsConectar();
-        }
-    }
-}
+        const reqId = 9600 + Math.floor(Math.random() * 300);
+        const timeout = setTimeout(() => { resolve([]); }, 8000);
 
-function _drvWsMensagem(d) {
-    if (d.error) return;
-
-    // Resposta de candles históricos
-    if (d.msg_type === 'candles') {
-        const cb = _drvChart._reqMap[d.req_id];
-        if (cb) { delete _drvChart._reqMap[d.req_id]; cb(d); }
-        return;
-    }
-    // Resposta de ticks_history (série de ticks)
-    if (d.msg_type === 'history') {
-        const cb = _drvChart._reqMap[d.req_id];
-        if (cb) { delete _drvChart._reqMap[d.req_id]; cb(d); }
-        return;
-    }
-    // Tick em tempo real (subscrição)
-    if (d.msg_type === 'tick' && d.tick) {
-        _drvProcessarTick(d.tick);
-        return;
-    }
-    // proposal — guarda para o buy
-    if (d.msg_type === 'proposal' && d.proposal) {
-        const cb = _drvChart._reqMap[d.req_id];
-        if (cb) { delete _drvChart._reqMap[d.req_id]; cb(d); }
-        return;
-    }
-    // buy
-    if (d.msg_type === 'buy' && d.buy) {
-        const cb = _drvChart._reqMap[d.req_id];
-        if (cb) { delete _drvChart._reqMap[d.req_id]; cb(d); }
-        return;
-    }
-    // sell (resultado de expiração)
-    if (d.msg_type === 'sell' || (d.msg_type === 'proposal_open_contract' && d.proposal_open_contract)) {
-        _drvProcessarResultado(d);
-        return;
-    }
-    // authorize → atualiza saldo/tipo E drena fila pendente
-    if (d.msg_type === 'authorize' || (d.req_id === 9499)) {
-        if (d.authorize) {
-            const auth = d.authorize;
-            const saldoEl = document.getElementById('drv-chart-saldo');
-            const tipoEl  = document.getElementById('drv-chart-tipo');
-            const lblEl   = document.getElementById('lbl-drv-chart');
-            if (saldoEl) saldoEl.textContent = '$' + parseFloat(auth.balance || 0).toFixed(2);
-            if (tipoEl)  tipoEl.textContent  = auth.is_virtual ? 'DEMO' : 'REAL';
-            if (lblEl)   lblEl.textContent   = (auth.is_virtual ? 'DEMO' : 'REAL') + ' • $' + parseFloat(auth.balance || 0).toFixed(2);
-        }
-        // Drena fila (seja bem-sucedido ou com erro de authorize)
-        _drvDrenarFila();
-        return;
-    }
-    // balance update
-    if (d.msg_type === 'balance' && d.balance) {
-        const saldoEl = document.getElementById('drv-chart-saldo');
-        if (saldoEl) saldoEl.textContent = '$' + parseFloat(d.balance.balance || 0).toFixed(2);
-        return;
-    }
-}
-
-// ── Carregar candles históricos via WebSocket ────────────────────────────────
-function _drvCarregarCandles() {
-    const ativo   = _drvChart.ativo;
-    const periodo = _drvChart.periodo;
-    const limite  = 150;
-    const reqId   = ++_drvChart._reqSeq;
-
-    document.getElementById('drv-chart-loading').style.display = 'flex';
-    document.getElementById('drv-chart-loading-msg').textContent = 'CARREGANDO CANDLES...';
-    document.getElementById('drv-chart-erro').style.display = 'none';
-
-    // Timeout de segurança: se em 12s não chegou resposta, mostra erro
-    const timeoutId = setTimeout(() => {
-        if (_drvChart._reqMap[reqId]) {
-            delete _drvChart._reqMap[reqId];
-            const loadEl = document.getElementById('drv-chart-loading');
-            const erroEl = document.getElementById('drv-chart-erro');
-            const erroMsg = document.getElementById('drv-chart-erro-msg');
-            if (loadEl) loadEl.style.display = 'none';
-            if (erroMsg) erroMsg.textContent = '⏱ Timeout — verifique conexão com a Deriv e tente novamente.';
-            if (erroEl) erroEl.style.display = 'flex';
-        }
-    }, 12000);
-
-    _drvChart._reqMap[reqId] = (d) => {
-        clearTimeout(timeoutId);
-        const loadEl = document.getElementById('drv-chart-loading');
-        const erroEl = document.getElementById('drv-chart-erro');
-        const erroMsg = document.getElementById('drv-chart-erro-msg');
-        if (loadEl) loadEl.style.display = 'none';
-        if (!d.candles || d.candles.length === 0) {
-            if (erroMsg) erroMsg.textContent = 'Nenhum candle retornado para ' + ativo;
-            if (erroEl) erroEl.style.display = 'flex';
-            return;
-        }
-        const seen = new Set();
-        const candles = d.candles
-            .map(c => ({ time: parseInt(c.epoch), open: parseFloat(c.open), high: parseFloat(c.high), low: parseFloat(c.low), close: parseFloat(c.close) }))
-            .sort((a, b) => a.time - b.time)
-            .filter(c => { if (seen.has(c.time)) return false; seen.add(c.time); return true; });
-        if (candles.length === 0) return;
-        if (_drvChart.series) {
-            _drvChart.series.setData(candles);
-            _drvChart.chart.timeScale().applyOptions({ barSpacing: 8, rightOffset: 5 });
-            _drvChart.chart.timeScale().scrollToRealTime();
-        }
-        const ult = candles[candles.length - 1];
-        _drvChart.tsAbertura = ult.time;
-        _drvChart.velaAtual  = { ...ult };
-        _drvChart.lastPreco  = ult.close;
-        // Inicia subscrição de ticks em tempo real
-        _drvSubscreverTicks();
-    };
-
-    // Cancela subscrição anterior
-    if (_drvChart._subCandleId) {
-        _drvWsSend({ forget: _drvChart._subCandleId });
-        _drvChart._subCandleId = null;
-    }
-
-    _drvWsSend({
-        ticks_history: ativo,
-        adjust_start_time: 1,
-        count: limite,
-        end: 'latest',
-        granularity: periodo,
-        style: 'candles',
-        req_id: reqId,
+        const handler = (ev) => {
+            try {
+                const d = JSON.parse(ev.data);
+                if (d.req_id !== reqId) return;
+                clearTimeout(timeout);
+                ws.removeEventListener('message', handler);
+                if (d.candles) resolve(d.candles);
+                else resolve([]);
+            } catch(_) {}
+        };
+        ws.addEventListener('message', handler);
+        ws.send(JSON.stringify({
+            ticks_history: ativo,
+            adjust_start_time: 1,
+            count: count,
+            end: 'latest',
+            granularity: granularity,
+            style: 'candles',
+            req_id: reqId,
+        }));
     });
 }
 
-// ── Subscrição de ticks ───────────────────────────────────────────────────────
+// ── Subscrição de ticks via bot.ws ────────────────────────
 function _drvSubscreverTicks() {
-    if (_drvChart._subTickId) {
-        _drvWsSend({ forget: _drvChart._subTickId });
-        _drvChart._subTickId = null;
+    // Para timer anterior
+    if (_drvChart.rtTimer) { clearInterval(_drvChart.rtTimer); _drvChart.rtTimer = null; }
+
+    // Tenta usar bot.ws para ticks em tempo real
+    const ws = (typeof bot !== 'undefined') ? bot.ws : null;
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        // Adiciona listener para ticks do ativo selecionado
+        _drvChart._tickHandler = (ev) => {
+            try {
+                const d = JSON.parse(ev.data);
+                if (d.msg_type === 'tick' && d.tick && d.tick.symbol === _drvChart.ativo) {
+                    _drvProcessarTick(d.tick);
+                }
+            } catch(_) {}
+        };
+        ws.addEventListener('message', _drvChart._tickHandler);
+        // Subscreve ticks do ativo
+        ws.send(JSON.stringify({ ticks: _drvChart.ativo, subscribe: 1 }));
+    } else {
+        // Fallback: polling a cada 1s buscando o preço atual
+        _drvChart.rtTimer = setInterval(_drvPollTick, 1000);
     }
-    const reqId = ++_drvChart._reqSeq;
-    _drvChart._reqMap[reqId] = (d) => {
-        if (d.subscription) _drvChart._subTickId = d.subscription.id;
-    };
-    _drvWsSend({ ticks: _drvChart.ativo, subscribe: 1, req_id: reqId });
 }
 
-// ── Processar tick em tempo real ─────────────────────────────────────────────
-function _drvProcessarTick(tick) {
-    const preco     = parseFloat(tick.quote);
-    const epoch     = parseInt(tick.epoch);
-    const periodo   = _drvChart.periodo;
-    const tsAbertura = Math.floor(epoch / periodo) * periodo;
+// Polling de tick como fallback (usa /deriv/tick se existir)
+async function _drvPollTick() {
+    try {
+        const r = await fetch(`/deriv/tick?ativo=${encodeURIComponent(_drvChart.ativo)}`);
+        if (!r.ok) return;
+        const d = await r.json();
+        if (d.ok && d.preco) {
+            _drvProcessarTick({ quote: d.preco, epoch: d.epoch || Math.floor(Date.now()/1000) });
+        }
+    } catch(_) {}
+}
 
-    // Atualiza display de preço
+function _drvRemoverTickHandler() {
+    const ws = (typeof bot !== 'undefined') ? bot.ws : null;
+    if (ws && _drvChart._tickHandler) {
+        ws.removeEventListener('message', _drvChart._tickHandler);
+        _drvChart._tickHandler = null;
+    }
+    if (_drvChart.rtTimer) { clearInterval(_drvChart.rtTimer); _drvChart.rtTimer = null; }
+}
+
+// ── Processar tick ────────────────────────────────────────
+function _drvProcessarTick(tick) {
+    const preco    = parseFloat(tick.quote);
+    const epoch    = parseInt(tick.epoch);
+    const periodo  = _drvChart.periodo;
+    const tsAb     = Math.floor(epoch / periodo) * periodo;
+
     const dir = preco > _drvChart.lastPreco ? '▲' : preco < _drvChart.lastPreco ? '▼' : '●';
     const cor = preco > _drvChart.lastPreco ? '#22c55e' : preco < _drvChart.lastPreco ? '#ef4444' : '#aaa';
     const elP = document.getElementById('drv-preco-atual');
     const elD = document.getElementById('drv-preco-dir');
-    if (elP) { elP.textContent = preco.toFixed(tick.pip_size || 5); elP.style.color = cor; }
+    if (elP) { elP.textContent = preco.toFixed(5); elP.style.color = cor; }
     if (elD) elD.textContent = dir;
 
-    // Atualiza vela atual no gráfico
     if (!_drvChart.series) return;
-    if (_drvChart.velaAtual && tsAbertura === _drvChart.velaAtual.time) {
+    if (_drvChart.velaAtual && tsAb === _drvChart.velaAtual.time) {
         const v = _drvChart.velaAtual;
-        v.high  = Math.max(v.high, preco);
-        v.low   = Math.min(v.low,  preco);
-        v.close = preco;
+        v.high = Math.max(v.high, preco); v.low = Math.min(v.low, preco); v.close = preco;
         _drvChart.series.update(v);
-    } else if (tsAbertura > (_drvChart.velaAtual?.time || 0)) {
-        _drvChart.velaAtual = { time: tsAbertura, open: preco, high: preco, low: preco, close: preco };
+    } else if (tsAb > (_drvChart.velaAtual?.time || 0)) {
+        _drvChart.velaAtual = { time: tsAb, open: preco, high: preco, low: preco, close: preco };
         _drvChart.series.update(_drvChart.velaAtual);
         _drvChart.chart.timeScale().scrollToRealTime();
     }
-    _drvChart.lastPreco  = preco;
-    _drvChart.tsAbertura = tsAbertura;
+    _drvChart.lastPreco = preco; _drvChart.tsAbertura = tsAb;
 
     // Timer de vela
-    const agora   = epoch;
-    const restam  = Math.max(0, (tsAbertura + periodo) - agora);
-    const mm = String(Math.floor(restam / 60)).padStart(2, '0');
-    const ss = String(restam % 60).padStart(2, '0');
+    const restam = Math.max(0, (tsAb + periodo) - epoch);
+    const mm = String(Math.floor(restam/60)).padStart(2,'0');
+    const ss = String(restam%60).padStart(2,'0');
     const timerEl = document.getElementById('drv-vela-timer');
     if (timerEl) {
-        timerEl.textContent   = mm + ':' + ss;
-        timerEl.style.color   = restam <= 10 ? '#ef5350' : '#c8d0e0';
+        timerEl.textContent = mm+':'+ss;
+        timerEl.style.color = restam <= 10 ? '#ef5350' : '#c8d0e0';
         timerEl.style.borderColor = restam <= 10 ? 'rgba(239,83,80,0.6)' : 'rgba(255,255,255,0.15)';
         if (_drvChart.series && _drvChart.velaAtual) {
             try {
-                const chartH = document.getElementById('drv-chart-container')?.clientHeight || 500;
                 const y = _drvChart.series.priceToCoordinate(_drvChart.velaAtual.close);
-                if (y !== null && y > 10 && y < chartH - 30) {
-                    timerEl.style.top     = Math.round(y) + 'px';
-                    timerEl.style.display = 'block';
-                }
-            } catch (_) {}
+                const chartH = document.getElementById('drv-chart-container')?.clientHeight || 500;
+                if (y !== null && y > 10 && y < chartH - 30) { timerEl.style.top = Math.round(y)+'px'; timerEl.style.display='block'; }
+            } catch(_) {}
         }
     }
 
-    // Análise automática (modos não-manual)
     if (_drvModo.rodando && !_drvModo.opBloqueada && _drvModo.modo !== 'manual') {
         _drvAnalisarAutomatic(preco);
     }
 }
 
-// ── Inicializa lightweight-charts ─────────────────────────────────────────────
+// ── Inicializa gráfico ────────────────────────────────────
 function _drvIniciarChart() {
     if (_drvChart.chart) return;
     const container = document.getElementById('drv-chart-container');
     if (!container || typeof LightweightCharts === 'undefined') return;
     _drvChart.chart = LightweightCharts.createChart(container, {
-        width: container.clientWidth || 800,
-        height: container.clientHeight || 500,
+        width: container.clientWidth || 800, height: container.clientHeight || 500,
         layout: { background: { color: '#0a100a' }, textColor: '#6a8a6a' },
-        grid: {
-            vertLines: { color: 'rgba(30,60,30,0.7)' },
-            horzLines: { color: 'rgba(30,60,30,0.7)' },
-        },
+        grid: { vertLines: { color: 'rgba(30,60,30,0.7)' }, horzLines: { color: 'rgba(30,60,30,0.7)' } },
         crosshair: {
             mode: LightweightCharts.CrosshairMode.Normal,
-            vertLine: { color: 'rgba(0,255,65,0.3)', style: 1, labelBackgroundColor: '#0d1a0d' },
-            horzLine: { color: 'rgba(0,255,65,0.3)', style: 1, labelBackgroundColor: '#0d1a0d' },
+            vertLine: { color: 'rgba(0,255,65,0.3)', style:1, labelBackgroundColor:'#0d1a0d' },
+            horzLine: { color: 'rgba(0,255,65,0.3)', style:1, labelBackgroundColor:'#0d1a0d' },
         },
-        rightPriceScale: { borderColor: 'rgba(30,60,30,0.8)', textColor: '#6a8a6a', scaleMargins: { top: 0.1, bottom: 0.1 } },
-        timeScale: { borderColor: 'rgba(30,60,30,0.8)', textColor: '#6a8a6a', timeVisible: true, secondsVisible: false, rightOffset: 5, barSpacing: 8, minBarSpacing: 2 },
-        handleScale: { axisPressedMouseMove: { time: true, price: true } },
+        rightPriceScale: { borderColor:'rgba(30,60,30,0.8)', textColor:'#6a8a6a', scaleMargins:{top:0.1,bottom:0.1} },
+        timeScale: { borderColor:'rgba(30,60,30,0.8)', textColor:'#6a8a6a', timeVisible:true, secondsVisible:false, rightOffset:5, barSpacing:8, minBarSpacing:2 },
+        handleScale: { axisPressedMouseMove: { time:true, price:true } },
     });
     _drvChart.series = _drvChart.chart.addCandlestickSeries({
-        upColor: '#00c853', downColor: '#ef5350', borderVisible: false,
-        wickUpColor: '#00c853', wickDownColor: '#ef5350',
+        upColor:'#00c853', downColor:'#ef5350', borderVisible:false,
+        wickUpColor:'#00c853', wickDownColor:'#ef5350',
     });
     window.addEventListener('resize', () => {
         if (_drvChart.chart && document.getElementById('modal-drv-chart').style.display !== 'none') {
@@ -32851,58 +32694,84 @@ function _drvIniciarChart() {
     });
 }
 
-// ── Abrir / fechar modal ──────────────────────────────────────────────────────
+// ── Abrir / fechar ────────────────────────────────────────
 function drvChartAbrir() {
     const m = document.getElementById('modal-drv-chart');
     if (m) m.style.display = 'block';
-
-    // Inicializa gráfico imediatamente (não depende do WS)
     _drvIniciarChart();
 
-    // Atualiza saldo do bot.ws se disponível
+    // Saldo do bot
     if (typeof bot !== 'undefined' && bot._lastBalance !== undefined) {
-        const saldoEl = document.getElementById('drv-chart-saldo');
-        const tipoEl  = document.getElementById('drv-chart-tipo');
-        const lblEl   = document.getElementById('lbl-drv-chart');
-        const tipo    = (typeof bot !== 'undefined' && bot._loginid && bot._loginid.startsWith('VRTC')) ? 'DEMO' : 'REAL';
-        if (saldoEl) saldoEl.textContent = '$' + parseFloat(bot._lastBalance).toFixed(2);
-        if (tipoEl)  tipoEl.textContent  = tipo;
-        if (lblEl)   lblEl.textContent   = tipo + ' • $' + parseFloat(bot._lastBalance).toFixed(2);
+        const tipo = (bot._loginid && bot._loginid.startsWith('VRTC')) ? 'DEMO' : 'REAL';
+        const s = document.getElementById('drv-chart-saldo');
+        const t = document.getElementById('drv-chart-tipo');
+        const l = document.getElementById('lbl-drv-chart');
+        if (s) s.textContent = '$' + parseFloat(bot._lastBalance).toFixed(2);
+        if (t) t.textContent = tipo;
+        if (l) l.textContent = tipo + ' • $' + parseFloat(bot._lastBalance).toFixed(2);
     }
 
-    // Conecta WS dedicado e carrega candles assim que estiver pronto (após authorize)
-    _drvWsConectar(() => {
-        drvChartCarregar();
-    });
+    drvChartCarregar();
 }
 
 function drvChartFechar() {
     const m = document.getElementById('modal-drv-chart');
     if (m) m.style.display = 'none';
-    clearInterval(_drvChart.rtTimer);
+    _drvRemoverTickHandler();
     if (_drvModo.analiseTimer) { clearInterval(_drvModo.analiseTimer); _drvModo.analiseTimer = null; }
-    // Cancela subscrição de ticks
-    if (_drvChart._subTickId && _drvChart._ws && _drvChart._ws.readyState === WebSocket.OPEN) {
-        _drvChart._ws.send(JSON.stringify({ forget: _drvChart._subTickId }));
-        _drvChart._subTickId = null;
+}
+
+// ── Carregar candles ──────────────────────────────────────
+async function drvChartCarregar() {
+    _drvChart.ativo   = document.getElementById('drv-ativo-sel')?.value || 'R_100';
+    _drvChart.periodo = parseInt(document.getElementById('drv-periodo-sel')?.value || 60);
+    _drvChart.velaAtual = null; _drvChart.tsAbertura = 0;
+    _drvRemoverTickHandler();
+
+    const loadEl = document.getElementById('drv-chart-loading');
+    const erroEl = document.getElementById('drv-chart-erro');
+    const erroMsg = document.getElementById('drv-chart-erro-msg');
+    if (loadEl) { loadEl.style.display = 'flex'; document.getElementById('drv-chart-loading-msg').textContent = 'CARREGANDO CANDLES...'; }
+    if (erroEl) erroEl.style.display = 'none';
+
+    try {
+        const raw = await _drvFetchCandles(_drvChart.ativo, _drvChart.periodo, 150);
+        if (!raw || raw.length === 0) {
+            if (loadEl) loadEl.style.display = 'none';
+            if (erroMsg) erroMsg.textContent = '❌ Nenhum candle retornado. Verifique se a Deriv está conectada.';
+            if (erroEl) erroEl.style.display = 'flex';
+            return;
+        }
+        const seen = new Set();
+        const candles = raw
+            .map(c => ({ time: parseInt(c.epoch), open: parseFloat(c.open), high: parseFloat(c.high), low: parseFloat(c.low), close: parseFloat(c.close) }))
+            .sort((a,b) => a.time - b.time)
+            .filter(c => { if (seen.has(c.time)) return false; seen.add(c.time); return true; });
+
+        if (_drvChart.series) {
+            _drvChart.series.setData(candles);
+            _drvChart.chart.timeScale().applyOptions({ barSpacing:8, rightOffset:5 });
+            _drvChart.chart.timeScale().scrollToRealTime();
+        }
+        const ult = candles[candles.length - 1];
+        _drvChart.tsAbertura = ult.time;
+        _drvChart.velaAtual  = { ...ult };
+        _drvChart.lastPreco  = ult.close;
+
+        if (loadEl) loadEl.style.display = 'none';
+        _drvSubscreverTicks();
+    } catch(e) {
+        if (loadEl) loadEl.style.display = 'none';
+        if (erroMsg) erroMsg.textContent = '❌ Erro ao carregar candles: ' + e.message;
+        if (erroEl) erroEl.style.display = 'flex';
     }
 }
 
-// ── Carregar (ativo/período mudou) ────────────────────────────────────────────
-function drvChartCarregar() {
-    _drvChart.ativo   = document.getElementById('drv-ativo-sel').value;
-    _drvChart.periodo = parseInt(document.getElementById('drv-periodo-sel').value);
-    _drvChart.velaAtual  = null;
-    _drvChart.tsAbertura = 0;
-    _drvCarregarCandles();
-}
-
-// ── Controles de duração ──────────────────────────────────────────────────────
+// ── Controles duração / valor / contrato ──────────────────
 function drvSetDuracao(seg) {
     _drvChart.duracao = seg;
     document.querySelectorAll('.drv-dur-btn').forEach(b => b.classList.toggle('drv-dur-ativo', parseInt(b.dataset.s) === seg));
-    _drvAtualizarDuracaoDisplay();
-    _drvRecalcPagamento();
+    _drvAtualizarDuracaoDisplay(); _drvRecalcPagamento();
 }
 function drvAjustarDuracao(delta) { _drvChart.duracao = Math.max(5, _drvChart.duracao + delta); _drvAtualizarDuracaoDisplay(); _drvRecalcPagamento(); }
 function _drvAtualizarDuracaoDisplay() {
@@ -32910,449 +32779,264 @@ function _drvAtualizarDuracaoDisplay() {
     const el = document.getElementById('drv-dur-display');
     if (el) el.textContent = String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(sec).padStart(2,'0');
 }
-
-// ── Controles de valor ─────────────────────────────────────────────────────────
-function drvSetValor(v) {
-    _drvChart.valor = v;
-    const inp = document.getElementById('drv-valor-input');
-    if (inp) inp.value = v;
-    _drvRecalcPagamento();
-}
+function drvSetValor(v) { _drvChart.valor = v; const i = document.getElementById('drv-valor-input'); if (i) i.value = v; _drvRecalcPagamento(); }
 function drvAjustarValor(delta) {
     const inp = document.getElementById('drv-valor-input');
-    const v = Math.max(1, parseFloat(inp?.value || 1) + delta);
-    if (inp) inp.value = v;
-    _drvChart.valor = v;
-    _drvRecalcPagamento();
+    const v = Math.max(1, parseFloat(inp?.value||1) + delta);
+    if (inp) inp.value = v; _drvChart.valor = v; _drvRecalcPagamento();
 }
 function _drvRecalcPagamento() {
-    const valor = parseFloat(document.getElementById('drv-valor-input')?.value || 1);
-    // Deriv CALL/PUT paga ~95% tipicamente (sem payout fixo disponível sem proposal)
-    const payEst = (valor * 1.85).toFixed(2);
+    const v = parseFloat(document.getElementById('drv-valor-input')?.value||1);
     const el = document.getElementById('drv-pagamento-est');
-    if (el) el.textContent = '≈$' + payEst;
+    if (el) el.textContent = '≈$' + (v * 1.85).toFixed(2);
 }
 document.addEventListener('DOMContentLoaded', () => {
     const inp = document.getElementById('drv-valor-input');
-    if (inp) inp.addEventListener('input', () => { _drvChart.valor = parseFloat(inp.value || 1); _drvRecalcPagamento(); });
+    if (inp) inp.addEventListener('input', () => { _drvChart.valor = parseFloat(inp.value||1); _drvRecalcPagamento(); });
 });
-
-// ── Tipo de contrato ──────────────────────────────────────────────────────────
 function drvSetContrato(ct) {
     _drvChart.contrato = ct;
     document.querySelectorAll('.drv-ct-btn').forEach(b => {
-        const isAtivo = b.dataset.ct === ct;
-        b.classList.toggle('drv-ct-ativo', isAtivo);
-        b.style.background = isAtivo ? 'rgba(39,201,63,0.12)' : 'transparent';
-        b.style.borderColor = isAtivo ? 'rgba(39,201,63,0.7)' : '#333';
-        b.style.color = isAtivo ? '#27c93f' : '#666';
+        const on = b.dataset.ct === ct;
+        b.classList.toggle('drv-ct-ativo', on);
+        b.style.background  = on ? 'rgba(39,201,63,0.12)' : 'transparent';
+        b.style.borderColor = on ? 'rgba(39,201,63,0.7)' : '#333';
+        b.style.color       = on ? '#27c93f' : '#666';
     });
 }
 
-// ── Selecionar modo ───────────────────────────────────────────────────────────
+// ── Modos ─────────────────────────────────────────────────
 function drvSelecionarModo(modo) {
     _drvModo.modo = modo;
     document.querySelectorAll('.drv-modo-item').forEach(el => {
-        el.classList.toggle('drv-modo-ativo', el.dataset.modo === modo);
-        el.style.borderColor = el.dataset.modo === modo ? 'rgba(0,255,65,0.5)' : 'rgba(255,255,255,0.06)';
-        el.style.background  = el.dataset.modo === modo ? 'rgba(0,255,65,0.06)' : 'transparent';
+        const on = el.dataset.modo === modo;
+        el.classList.toggle('drv-modo-ativo', on);
+        el.style.borderColor = on ? 'rgba(0,255,65,0.5)' : 'rgba(255,255,255,0.06)';
+        el.style.background  = on ? 'rgba(0,255,65,0.06)' : 'transparent';
     });
-    const painelSinais = document.getElementById('drv-painel-sinais');
-    if (painelSinais) {
-        painelSinais.style.display = (modo !== 'manual') ? 'block' : 'none';
-    }
-    const titulo = document.getElementById('drv-sinais-titulo');
-    if (titulo) {
-        const nomes = { price_action: 'PRICE ACTION', fluxo: 'FLUXO PRO', automatico: 'AUTOMÁTICO', hma: 'GARRA AI HMA' };
-        titulo.textContent = nomes[modo] || 'ANÁLISE';
-    }
-    if (_drvModo.rodando) drvToggleAnalise(); // para análise se estava rodando
+    const ps = document.getElementById('drv-painel-sinais');
+    if (ps) ps.style.display = modo !== 'manual' ? 'block' : 'none';
+    const t = document.getElementById('drv-sinais-titulo');
+    if (t) t.textContent = ({price_action:'PRICE ACTION',fluxo:'FLUXO PRO',automatico:'AUTOMÁTICO',hma:'GARRA AI HMA'}[modo]) || 'ANÁLISE';
+    if (_drvModo.rodando) drvToggleAnalise();
 }
 
-// ── Toggle Análise Automática ─────────────────────────────────────────────────
 function drvToggleAnalise() {
     _drvModo.rodando = !_drvModo.rodando;
     const btn = document.getElementById('drv-sinais-toggle');
-    if (btn) {
-        btn.textContent = _drvModo.rodando ? '⏹ PARAR' : '▶ INICIAR';
-        btn.style.borderColor = _drvModo.rodando ? 'rgba(239,83,80,0.6)' : 'rgba(0,255,65,0.5)';
-        btn.style.color = _drvModo.rodando ? '#ef4444' : '#00ff41';
-    }
-    if (_drvModo.rodando) {
-        _drvAdicionarSinal({ msg: '🔍 Análise iniciada — monitorando ' + _drvChart.ativo, cor: '#00ff41' });
-    } else {
-        _drvAdicionarSinal({ msg: '⏹ Análise pausada', cor: '#ffbd2e' });
-        _drvModo.opBloqueada = false;
-    }
+    if (btn) { btn.textContent = _drvModo.rodando ? '⏹ PARAR' : '▶ INICIAR'; btn.style.borderColor = _drvModo.rodando ? 'rgba(239,83,80,0.6)' : 'rgba(0,255,65,0.5)'; btn.style.color = _drvModo.rodando ? '#ef4444' : '#00ff41'; }
+    _drvAdicionarSinal({ msg: _drvModo.rodando ? '🔍 Análise iniciada' : '⏹ Análise pausada', cor: _drvModo.rodando ? '#00ff41' : '#ffbd2e' });
+    if (!_drvModo.rodando) _drvModo.opBloqueada = false;
 }
 
-// ── Análise automática simples (Price Action) ─────────────────────────────────
 let _drvAnaliseContador = 0;
 function _drvAnalisarAutomatic(precoAtual) {
     _drvAnaliseContador++;
-    // Analisa a cada 5 ticks para reduzir processamento
     if (_drvAnaliseContador % 5 !== 0) return;
-
-    const vela = _drvChart.velaAtual;
-    if (!vela || !_drvChart.series) return;
-
+    const vela = _drvChart.velaAtual; if (!vela) return;
     const modo = _drvModo.modo;
-    let direcao = null;
-    let confianca = 0;
-
+    let direcao = null, confianca = 0;
     if (modo === 'price_action' || modo === 'automatico') {
-        // Price Action simples: compara corpo da vela
-        const corpo = vela.close - vela.open;
-        const amplitude = Math.abs(vela.high - vela.low);
-        if (amplitude > 0) {
-            confianca = Math.abs(corpo / amplitude) * 100;
-            if (confianca >= 55) direcao = corpo > 0 ? 'call' : 'put';
-        }
+        const corpo = vela.close - vela.open, amp = Math.abs(vela.high - vela.low);
+        if (amp > 0) { confianca = Math.abs(corpo/amp)*100; if (confianca >= 55) direcao = corpo > 0 ? 'call' : 'put'; }
     } else if (modo === 'fluxo') {
-        // Fluxo: tendência do preço atual vs abertura da vela
-        const diff = precoAtual - vela.open;
-        confianca = 60;
+        const diff = precoAtual - vela.open; confianca = 60;
         if (Math.abs(diff) > 0) direcao = diff > 0 ? 'call' : 'put';
     } else if (modo === 'hma') {
-        // HMA simplificado: usa último preço vs média da vela
-        const media = (vela.open + vela.high + vela.low + vela.close) / 4;
-        confianca = 65;
+        const media = (vela.open+vela.high+vela.low+vela.close)/4; confianca = 65;
         direcao = precoAtual > media ? 'call' : 'put';
     }
-
     if (direcao && confianca >= 55) {
-        const emoji = direcao === 'call' ? '▲' : '▼';
-        const cor   = direcao === 'call' ? '#27c93f' : '#ef4444';
-        _drvAdicionarSinal({
-            msg: `${emoji} SINAL ${direcao.toUpperCase()} | conf:${confianca.toFixed(0)}% | $${_drvChart.ativo}`,
-            cor,
-            direcao,
-        });
-        // Em modo automático, opera se não houver operação ativa
+        const cor = direcao === 'call' ? '#27c93f' : '#ef4444';
+        _drvAdicionarSinal({ msg: `${direcao==='call'?'▲':'▼'} SINAL ${direcao.toUpperCase()} | conf:${confianca.toFixed(0)}%`, cor });
         if ((modo === 'automatico' || modo === 'hma') && !_drvModo.opBloqueada) {
-            _drvModo.opBloqueada = true;
-            drvOperar(direcao);
+            _drvModo.opBloqueada = true; drvOperar(direcao);
         }
     }
 }
 
-function _drvAdicionarSinal({ msg, cor, direcao }) {
-    const lista = document.getElementById('drv-sinais-lista');
-    if (!lista) return;
-    // Remove placeholder
-    const placeholder = lista.querySelector('[data-placeholder]');
-    if (placeholder) placeholder.remove();
+function _drvAdicionarSinal({ msg, cor }) {
+    const lista = document.getElementById('drv-sinais-lista'); if (!lista) return;
     const item = document.createElement('div');
-    item.style.cssText = `
-        padding:5px 8px; border-radius:4px; font-size:0.62rem;
-        border:1px solid ${cor || '#333'}; color:${cor || '#aaa'};
-        background:rgba(0,0,0,0.2); font-family:'Share Tech Mono';
-        display:flex; align-items:center; gap:6px;
-    `;
-    const ts = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    item.textContent = `[${ts}] ${msg}`;
+    item.style.cssText = `padding:5px 8px;border-radius:4px;font-size:0.62rem;border:1px solid ${cor||'#333'};color:${cor||'#aaa'};background:rgba(0,0,0,0.2);font-family:'Share Tech Mono';`;
+    item.textContent = '['+new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',second:'2-digit'})+'] '+msg;
     lista.insertBefore(item, lista.firstChild);
-    // Mantém no máximo 30 sinais
     while (lista.children.length > 30) lista.removeChild(lista.lastChild);
 }
 
-// ── Operar ─────────────────────────────────────────────────────────────────────
+// ── Operar ────────────────────────────────────────────────
 function drvOperar(direcao) {
-    const ativo     = _drvChart.ativo;
-    const valor     = parseFloat(document.getElementById('drv-valor-input')?.value || 1);
-    const duracao   = _drvChart.duracao;
-    const contrato  = _drvChart.contrato;
-    const btnCall   = document.getElementById('drv-btn-call');
-    const btnPut    = document.getElementById('drv-btn-put');
+    const ativo   = _drvChart.ativo;
+    const valor   = parseFloat(document.getElementById('drv-valor-input')?.value||1);
+    const duracao = _drvChart.duracao;
+    const ws      = (typeof bot !== 'undefined') ? bot.ws : null;
+    const btnCall = document.getElementById('drv-btn-call');
+    const btnPut  = document.getElementById('drv-btn-put');
 
-    // Verifica conexão Deriv
-    const wsOk = _drvChart._ws && _drvChart._ws.readyState === WebSocket.OPEN;
-    const botOk = (typeof bot !== 'undefined' && bot.ws && bot.ws.readyState === WebSocket.OPEN);
-    if (!wsOk && !botOk) {
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
         _drvOpStatusMsg('❌ Deriv não conectada. Conecte primeiro.', '#f44');
-        _drvModo.opBloqueada = false;
-        return;
+        _drvModo.opBloqueada = false; return;
     }
-
     if (btnCall) btnCall.disabled = true;
     if (btnPut)  btnPut.disabled  = true;
     _drvOpStatusMsg('⏳ Enviando proposta...', '#ffbd2e');
 
-    // Determina tipo de contrato e direção
-    let tipoContrato, dirContrato;
-    if (contrato === 'CALL') {
-        tipoContrato = direcao === 'call' ? 'CALL' : 'PUT';
-        dirContrato  = direcao === 'call' ? 'CALL' : 'PUT';
-    } else if (contrato === 'DIGITEVEN') {
-        tipoContrato = direcao === 'call' ? 'DIGITEVEN' : 'DIGITODD';
-        dirContrato  = tipoContrato;
-    } else {
-        // DIGITOVER/DIGITUNDER com barreira 5
-        tipoContrato = direcao === 'call' ? 'DIGITOVER' : 'DIGITUNDER';
-        dirContrato  = tipoContrato;
-    }
+    const ct = _drvChart.contrato;
+    let tipoContrato;
+    if (ct === 'CALL')       tipoContrato = direcao === 'call' ? 'CALL' : 'PUT';
+    else if (ct === 'DIGITEVEN') tipoContrato = direcao === 'call' ? 'DIGITEVEN' : 'DIGITODD';
+    else                     tipoContrato = direcao === 'call' ? 'DIGITOVER' : 'DIGITUNDER';
 
-    const reqIdProp = ++_drvChart._reqSeq;
-    const reqIdBuy  = ++_drvChart._reqSeq;
+    const reqProp = 9700 + Math.floor(Math.random()*200);
+    const reqBuy  = reqProp + 1;
 
-    // Envia proposal
-    const proposalPayload = {
-        proposal: 1,
-        amount: valor,
-        basis: 'stake',
-        contract_type: tipoContrato,
-        currency: 'USD',
-        duration: duracao,
-        duration_unit: 's',
-        symbol: ativo,
-        req_id: reqIdProp,
-    };
-    // Digits precisam de barrier
-    if (tipoContrato.startsWith('DIGIT') && (tipoContrato.includes('OVER') || tipoContrato.includes('UNDER'))) {
-        proposalPayload.barrier = '5';
-    }
+    const propPayload = { proposal:1, amount:valor, basis:'stake', contract_type:tipoContrato, currency:'USD', duration:duracao, duration_unit:'s', symbol:ativo, req_id:reqProp };
+    if (tipoContrato.includes('OVER') || tipoContrato.includes('UNDER')) propPayload.barrier = '5';
 
-    _drvChart._reqMap[reqIdProp] = (pd) => {
-        if (!pd.proposal || !pd.proposal.id) {
-            if (btnCall) btnCall.disabled = false;
-            if (btnPut)  btnPut.disabled  = false;
-            _drvOpStatusMsg('❌ Proposta rejeitada: ' + (pd.error?.message || 'erro desconhecido'), '#f44');
-            _drvModo.opBloqueada = false;
-            return;
-        }
-        const propId = pd.proposal.id;
-        const payEst = parseFloat(pd.proposal.payout || 0).toFixed(2);
-
-        // Atualiza pagamento estimado com valor real da Deriv
-        const estEl = document.getElementById('drv-pagamento-est');
-        if (estEl && payEst > 0) estEl.textContent = '$' + payEst;
-
-        // Envia buy
-        _drvChart._reqMap[reqIdBuy] = (bd) => {
-            if (btnCall) btnCall.disabled = false;
-            if (btnPut)  btnPut.disabled  = false;
-            if (bd.buy && bd.buy.contract_id) {
-                const cid = bd.buy.contract_id;
-                const tsAgora = Date.now();
-                const emoji = direcao === 'call' ? '▲' : '▼';
-                const cor   = direcao === 'call' ? '#27c93f' : '#f44';
-                _drvOpStatusMsg(`${emoji} Operação enviada! ${duracao}s | ID:${cid}`, cor);
-                _drvAdicionarHistorico({ id: cid, direcao, valor, duracao, ativo, ts: tsAgora, status: 'aguardando' });
-                _drvIniciarOpAtiva({ id: cid, direcao, valor, duracao, ts: tsAgora, precoEntrada: _drvChart.lastPreco || 0 });
-                // Aguarda resultado
-                _drvAguardarResultado(cid, duracao);
-            } else {
-                _drvOpStatusMsg('❌ Buy falhou: ' + (bd.error?.message || 'erro'), '#f44');
-                _drvModo.opBloqueada = false;
+    const handler = (ev) => {
+        try {
+            const d = JSON.parse(ev.data);
+            if (d.req_id === reqProp && d.msg_type === 'proposal') {
+                if (!d.proposal?.id) {
+                    ws.removeEventListener('message', handler);
+                    if (btnCall) btnCall.disabled = false; if (btnPut) btnPut.disabled = false;
+                    _drvOpStatusMsg('❌ Proposta rejeitada: '+(d.error?.message||'erro'), '#f44');
+                    _drvModo.opBloqueada = false; return;
+                }
+                // Atualiza payout estimado
+                const estEl = document.getElementById('drv-pagamento-est');
+                if (estEl && d.proposal.payout > 0) estEl.textContent = '$'+parseFloat(d.proposal.payout).toFixed(2);
+                ws.send(JSON.stringify({ buy: d.proposal.id, price: valor, req_id: reqBuy }));
             }
-        };
-        _drvWsSend({ buy: propId, price: valor, req_id: reqIdBuy });
+            if (d.req_id === reqBuy && d.msg_type === 'buy') {
+                ws.removeEventListener('message', handler);
+                if (btnCall) btnCall.disabled = false; if (btnPut) btnPut.disabled = false;
+                if (d.buy?.contract_id) {
+                    const cid = d.buy.contract_id, tsAgora = Date.now();
+                    const cor = direcao === 'call' ? '#27c93f' : '#f44';
+                    _drvOpStatusMsg(`${direcao==='call'?'▲':'▼'} Operação enviada! ${duracao}s | ID:${cid}`, cor);
+                    _drvAdicionarHistorico({ id:cid, direcao, valor, duracao, ativo, ts:tsAgora, status:'aguardando' });
+                    _drvIniciarOpAtiva({ id:cid, direcao, valor, duracao, ts:tsAgora, precoEntrada:_drvChart.lastPreco||0 });
+                    _drvAguardarResultado(cid, duracao);
+                } else {
+                    _drvOpStatusMsg('❌ Buy falhou: '+(d.error?.message||'erro'), '#f44');
+                    _drvModo.opBloqueada = false;
+                }
+            }
+        } catch(_) {}
     };
-
-    _drvWsSend(proposalPayload);
+    ws.addEventListener('message', handler);
+    ws.send(JSON.stringify(propPayload));
 }
 
-// ── Aguarda resultado ─────────────────────────────────────────────────────────
+// ── Aguardar resultado ────────────────────────────────────
 function _drvAguardarResultado(contractId, duracao) {
+    const ws = (typeof bot !== 'undefined') ? bot.ws : null;
+    if (!ws) return;
     setTimeout(() => {
-        const reqId = ++_drvChart._reqSeq;
-        _drvChart._reqMap[reqId] = (d) => {
-            _drvModo.opBloqueada = false;
-            if (!d.proposal_open_contract) { _drvEncerrarOpAtiva(null); return; }
-            const poc = d.proposal_open_contract;
-            if (poc.status === 'open') {
-                // ainda aberto — tenta de novo daqui 3s
-                setTimeout(() => _drvAguardarResultado(contractId, 0), 3000);
-                return;
-            }
-            const win = poc.profit >= 0;
-            const lucro = parseFloat(poc.profit || 0);
-            _drvEncerrarOpAtiva(win ? 'win' : 'loss');
-            _drvAtualizarHistorico(contractId, win ? 'win' : 'loss', lucro);
-            _drvChart._sessaoWins   += win ? 1 : 0;
-            _drvChart._sessaoLosses += win ? 0 : 1;
-            _drvChart._sessaoLucro  += lucro;
-            const emoji = win ? '✅ WIN' : '❌ LOSS';
-            const valStr = win ? `+$${lucro.toFixed(2)}` : `-$${Math.abs(lucro).toFixed(2)}`;
-            _drvOpStatusMsg(`${emoji} ${valStr}`, win ? '#27c93f' : '#f44');
+        const reqId = 9800 + Math.floor(Math.random()*100);
+        const handler = (ev) => {
+            try {
+                const d = JSON.parse(ev.data);
+                if (d.req_id !== reqId) return;
+                ws.removeEventListener('message', handler);
+                _drvModo.opBloqueada = false;
+                if (!d.proposal_open_contract) { _drvEncerrarOpAtiva(null); return; }
+                const poc = d.proposal_open_contract;
+                if (poc.status === 'open') { setTimeout(() => _drvAguardarResultado(contractId, 0), 3000); return; }
+                const win = poc.profit >= 0, lucro = parseFloat(poc.profit||0);
+                _drvEncerrarOpAtiva(win ? 'win' : 'loss');
+                _drvAtualizarHistorico(contractId, win ? 'win' : 'loss', lucro);
+                _drvChart._sessaoWins   += win ? 1 : 0;
+                _drvChart._sessaoLosses += win ? 0 : 1;
+                _drvChart._sessaoLucro  += lucro;
+                _drvOpStatusMsg(`${win?'✅ WIN':'❌ LOSS'} ${win?'+':''}$${lucro.toFixed(2)}`, win ? '#27c93f' : '#f44');
+            } catch(_) {}
         };
-        _drvWsSend({ proposal_open_contract: 1, contract_id: contractId, req_id: reqId });
+        ws.addEventListener('message', handler);
+        ws.send(JSON.stringify({ proposal_open_contract:1, contract_id:contractId, req_id:reqId }));
     }, (duracao + 2) * 1000);
 }
 
-function _drvProcessarResultado(d) {
-    // Recebe resultado via sell ou proposal_open_contract subscription
-    const poc = d.proposal_open_contract || d.sell;
-    if (!poc) return;
-    if (!_drvChart.opAtiva) return;
-    const win = (poc.profit !== undefined) ? poc.profit >= 0 : (poc.sell_price > poc.buy_price);
-    const lucro = parseFloat(poc.profit || 0);
-    _drvEncerrarOpAtiva(win ? 'win' : 'loss');
-    _drvAtualizarHistorico(_drvChart.opAtiva?.id, win ? 'win' : 'loss', lucro);
-    _drvModo.opBloqueada = false;
-}
-
-// ── Operação ativa no gráfico ─────────────────────────────────────────────────
+// ── Operação ativa no gráfico ─────────────────────────────
 function _drvIniciarOpAtiva(op) {
     _drvEncerrarOpAtiva(null);
     if (!_drvChart.series) return;
     const corDir = op.direcao === 'call' ? '#00c853' : '#ef5350';
-    const tsVelaAtual = _drvChart.tsAbertura || Math.floor(Date.now() / 1000 / 60) * 60;
+    const tsV = _drvChart.tsAbertura || Math.floor(Date.now()/1000/60)*60;
+    try { _drvChart.series.setMarkers([{ time:tsV, position:op.direcao==='call'?'belowBar':'aboveBar', color:corDir, shape:op.direcao==='call'?'arrowUp':'arrowDown', text:'$'+parseFloat(op.valor).toFixed(2), size:1.5 }]); } catch(_) {}
     try {
-        _drvChart.series.setMarkers([{
-            time: tsVelaAtual, position: op.direcao === 'call' ? 'belowBar' : 'aboveBar',
-            color: corDir, shape: op.direcao === 'call' ? 'arrowUp' : 'arrowDown',
-            text: '$' + parseFloat(op.valor).toFixed(2), size: 1.5,
-        }]);
-    } catch (_) {}
-    try {
-        if (_drvChart.priceLine) { _drvChart.series.removePriceLine(_drvChart.priceLine); _drvChart.priceLine = null; }
-        if (op.precoEntrada > 0) {
-            _drvChart.priceLine = _drvChart.series.createPriceLine({
-                price: op.precoEntrada, color: corDir, lineWidth: 1, lineStyle: 2,
-                axisLabelVisible: true, title: op.direcao === 'call' ? '▲ ENTRADA' : '▼ ENTRADA',
-            });
-        }
-    } catch (_) {}
-    const linhaEl  = document.getElementById('drv-op-linha-entrada');
-    const timerEl  = document.getElementById('drv-op-timer-overlay');
-    const bubbleEl = document.getElementById('drv-op-timer-bubble');
-    if (linhaEl)  { linhaEl.style.borderColor = corDir; linhaEl.style.display = 'block'; }
-    if (timerEl)  { timerEl.style.display = 'flex'; }
-    if (bubbleEl) { bubbleEl.style.borderColor = corDir; }
-    const _posicionarLinha = () => {
-        if (!_drvChart.series || !op.precoEntrada) return;
-        try {
-            const y = _drvChart.series.priceToCoordinate(op.precoEntrada);
-            if (y !== null && y > 10) {
-                if (linhaEl) linhaEl.style.top = Math.round(y) + 'px';
-                if (timerEl) timerEl.style.top = (Math.round(y) - 18) + 'px';
-            }
-        } catch (_) {}
-    };
-    _drvChart.opAtiva = { ...op, corDir, tsVelaAtual };
+        if (_drvChart.priceLine) { _drvChart.series.removePriceLine(_drvChart.priceLine); _drvChart.priceLine=null; }
+        if (op.precoEntrada > 0) _drvChart.priceLine = _drvChart.series.createPriceLine({ price:op.precoEntrada, color:corDir, lineWidth:1, lineStyle:2, axisLabelVisible:true, title:op.direcao==='call'?'▲ ENTRADA':'▼ ENTRADA' });
+    } catch(_) {}
+    const linhaEl=document.getElementById('drv-op-linha-entrada'), timerEl=document.getElementById('drv-op-timer-overlay'), bubbleEl=document.getElementById('drv-op-timer-bubble');
+    if (linhaEl) { linhaEl.style.borderColor=corDir; linhaEl.style.display='block'; }
+    if (timerEl) timerEl.style.display='flex';
+    if (bubbleEl) bubbleEl.style.borderColor=corDir;
+    _drvChart.opAtiva = { ...op, corDir, tsVelaAtual:tsV };
     const tsFimMs = op.ts + op.duracao * 1000;
     _drvChart.opAtiva.timerInterval = setInterval(() => {
-        const restamMs = Math.max(0, tsFimMs - Date.now());
-        const restamS  = Math.ceil(restamMs / 1000);
-        const mm = String(Math.floor(restamS / 60)).padStart(2, '0');
-        const ss = String(restamS % 60).padStart(2, '0');
-        if (bubbleEl) bubbleEl.textContent = '$' + parseFloat(op.valor).toFixed(2) + ' • ' + mm + ':' + ss;
-        _posicionarLinha();
+        const restamMs=Math.max(0,tsFimMs-Date.now()), restamS=Math.ceil(restamMs/1000);
+        const mm=String(Math.floor(restamS/60)).padStart(2,'0'), ss=String(restamS%60).padStart(2,'0');
+        if (bubbleEl) bubbleEl.textContent='$'+parseFloat(op.valor).toFixed(2)+' • '+mm+':'+ss;
+        if (op.precoEntrada > 0 && _drvChart.series) {
+            try { const y=_drvChart.series.priceToCoordinate(op.precoEntrada); if(y!==null&&y>10){if(linhaEl)linhaEl.style.top=Math.round(y)+'px';if(timerEl)timerEl.style.top=(Math.round(y)-18)+'px';} } catch(_) {}
+        }
         if (restamMs <= 0) clearInterval(_drvChart.opAtiva?.timerInterval);
     }, 500);
-    _posicionarLinha();
 }
 
 function _drvEncerrarOpAtiva(resultado) {
     if (_drvChart.opAtiva?.timerInterval) clearInterval(_drvChart.opAtiva.timerInterval);
-    if (_drvChart.priceLine && _drvChart.series) {
-        try { _drvChart.series.removePriceLine(_drvChart.priceLine); } catch (_) {}
-        _drvChart.priceLine = null;
-    }
-    const linhaEl = document.getElementById('drv-op-linha-entrada');
-    const timerEl = document.getElementById('drv-op-timer-overlay');
-    if (linhaEl) linhaEl.style.display = 'none';
-    if (timerEl) timerEl.style.display = 'none';
+    if (_drvChart.priceLine && _drvChart.series) { try { _drvChart.series.removePriceLine(_drvChart.priceLine); } catch(_) {} _drvChart.priceLine=null; }
+    const linhaEl=document.getElementById('drv-op-linha-entrada'), timerEl=document.getElementById('drv-op-timer-overlay');
+    if (linhaEl) linhaEl.style.display='none'; if (timerEl) timerEl.style.display='none';
     if (resultado && _drvChart.series && _drvChart.opAtiva) {
-        const win = resultado === 'win';
-        const corRes = win ? '#00c853' : '#ef5350';
-        const periodo = _drvChart.periodo || 60;
-        const tsSaida = (_drvChart.opAtiva.tsVelaAtual || 0) + periodo;
-        try {
-            _drvChart.series.setMarkers([
-                { time: _drvChart.opAtiva.tsVelaAtual || Math.floor(Date.now()/1000), position: _drvChart.opAtiva.direcao === 'call' ? 'belowBar' : 'aboveBar', color: _drvChart.opAtiva.corDir, shape: _drvChart.opAtiva.direcao === 'call' ? 'arrowUp' : 'arrowDown', text: '$' + parseFloat(_drvChart.opAtiva.valor).toFixed(2), size: 1.5 },
-                { time: tsSaida, position: win ? 'aboveBar' : 'belowBar', color: corRes, shape: 'circle', text: win ? '✓ WIN' : '✗ LOSS', size: 1.2 }
-            ]);
-        } catch (_) {}
-    } else if (_drvChart.series) {
-        try { _drvChart.series.setMarkers([]); } catch (_) {}
-    }
+        const win=resultado==='win', corRes=win?'#00c853':'#ef5350', periodo=_drvChart.periodo||60, tsSaida=(_drvChart.opAtiva.tsVelaAtual||0)+periodo;
+        try { _drvChart.series.setMarkers([
+            { time:_drvChart.opAtiva.tsVelaAtual||Math.floor(Date.now()/1000), position:_drvChart.opAtiva.direcao==='call'?'belowBar':'aboveBar', color:_drvChart.opAtiva.corDir, shape:_drvChart.opAtiva.direcao==='call'?'arrowUp':'arrowDown', text:'$'+parseFloat(_drvChart.opAtiva.valor).toFixed(2), size:1.5 },
+            { time:tsSaida, position:win?'aboveBar':'belowBar', color:corRes, shape:'circle', text:win?'✓ WIN':'✗ LOSS', size:1.2 }
+        ]); } catch(_) {}
+    } else if (_drvChart.series) { try { _drvChart.series.setMarkers([]); } catch(_) {} }
     _drvChart.opAtiva = null;
 }
 
-// ── Status de operação ────────────────────────────────────────────────────────
-function _drvOpStatusMsg(msg, cor) {
-    const el = document.getElementById('drv-op-status');
-    if (!el) return;
-    el.style.display = 'block'; el.style.color = cor || '#aaa';
-    el.style.borderColor = cor || '#333'; el.textContent = msg;
-}
+function _drvOpStatusMsg(msg, cor) { const el=document.getElementById('drv-op-status'); if(!el)return; el.style.display='block'; el.style.color=cor||'#aaa'; el.style.borderColor=cor||'#333'; el.textContent=msg; }
 
-// ── Histórico ─────────────────────────────────────────────────────────────────
-function _drvAdicionarHistorico(op) {
-    _drvChart.historico.push(op);
-    _drvRenderizarHistorico();
-}
-
-function _drvAtualizarHistorico(id, res, lucro) {
-    const op = _drvChart.historico.find(h => String(h.id) === String(id));
-    if (op) { op.status = res; op.lucro = lucro; }
-    _drvRenderizarHistorico();
-}
-
+// ── Histórico ─────────────────────────────────────────────
+function _drvAdicionarHistorico(op) { _drvChart.historico.push(op); _drvRenderizarHistorico(); }
+function _drvAtualizarHistorico(id, res, lucro) { const op=_drvChart.historico.find(h=>String(h.id)===String(id)); if(op){op.status=res;op.lucro=lucro;} _drvRenderizarHistorico(); }
 function _drvRenderizarHistorico() {
-    const lista = document.getElementById('drv-hist-lista');
-    const count = document.getElementById('drv-hist-count');
+    const lista=document.getElementById('drv-hist-lista'), count=document.getElementById('drv-hist-count');
     if (!lista) return;
     if (count) count.textContent = _drvChart.historico.length;
     lista.innerHTML = '';
-    if (_drvChart.historico.length === 0) {
-        lista.innerHTML = '<div style="color:#333; font-size:0.65rem; text-align:center; margin-top:20px;">Nenhuma operação nesta sessão</div>';
-        return;
-    }
+    if (!_drvChart.historico.length) { lista.innerHTML='<div style="color:#333;font-size:0.65rem;text-align:center;margin-top:20px;">Nenhuma operação nesta sessão</div>'; return; }
     [..._drvChart.historico].reverse().forEach(op => {
-        const win   = op.status === 'win';
-        const pend  = op.status === 'aguardando';
-        const cor   = pend ? '#ffbd2e' : (win ? '#27c93f' : '#f44');
-        const emoji = pend ? '⏳' : (win ? '✅' : '❌');
-        const lucroStr = op.lucro !== undefined ? (win ? '+$' + Math.abs(op.lucro).toFixed(2) : '-$' + Math.abs(op.lucro).toFixed(2)) : '';
-        const item = document.createElement('div');
-        item.style.cssText = `
-            padding:5px 8px; border-radius:4px; font-size:0.62rem;
-            border:1px solid ${cor}30; background:${cor}10;
-            display:flex; justify-content:space-between; align-items:center;
-            font-family:'Share Tech Mono';
-        `;
-        const ts = new Date(op.ts).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-        item.innerHTML = `
-            <span style="color:${cor}">${emoji} ${op.direcao?.toUpperCase()}</span>
-            <span style="color:#555">${ts}</span>
-            <span style="color:#aaa">$${parseFloat(op.valor).toFixed(2)}</span>
-            <span style="color:${cor}">${lucroStr}</span>
-        `;
+        const win=op.status==='win', pend=op.status==='aguardando', cor=pend?'#ffbd2e':(win?'#27c93f':'#f44');
+        const item=document.createElement('div');
+        item.style.cssText=`padding:5px 8px;border-radius:4px;font-size:0.62rem;border:1px solid ${cor}30;background:${cor}10;display:flex;justify-content:space-between;align-items:center;font-family:'Share Tech Mono';`;
+        const ts=new Date(op.ts).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+        const lucroStr=op.lucro!==undefined?(win?'+$'+Math.abs(op.lucro).toFixed(2):'-$'+Math.abs(op.lucro).toFixed(2)):'';
+        item.innerHTML=`<span style="color:${cor}">${pend?'⏳':(win?'✅':'❌')} ${op.direcao?.toUpperCase()}</span><span style="color:#555">${ts}</span><span style="color:#aaa">$${parseFloat(op.valor).toFixed(2)}</span><span style="color:${cor}">${lucroStr}</span>`;
         lista.appendChild(item);
     });
 }
 
-// ── Resetar sessão / placar ───────────────────────────────────────────────────
+// ── Reset ──────────────────────────────────────────────────
 function drvResetarSessao() {
-    _drvChart.historico      = [];
-    _drvChart._sessaoWins    = 0;
-    _drvChart._sessaoLosses  = 0;
-    _drvChart._sessaoLucro   = 0;
-    _drvModo.rodando         = false;
-    _drvModo.opBloqueada     = false;
+    _drvChart.historico=[]; _drvChart._sessaoWins=0; _drvChart._sessaoLosses=0; _drvChart._sessaoLucro=0;
+    _drvModo.rodando=false; _drvModo.opBloqueada=false;
     _drvEncerrarOpAtiva(null);
-    const btn = document.getElementById('drv-sinais-toggle');
-    if (btn) { btn.textContent = '▶ INICIAR'; btn.style.borderColor = 'rgba(0,255,65,0.5)'; btn.style.color = '#00ff41'; }
-    _drvRenderizarHistorico();
-    _drvOpStatusMsg('🔄 Sessão resetada', '#ffbd2e');
-    // Recarrega candles
+    const btn=document.getElementById('drv-sinais-toggle');
+    if (btn){btn.textContent='▶ INICIAR';btn.style.borderColor='rgba(0,255,65,0.5)';btn.style.color='#00ff41';}
+    _drvRenderizarHistorico(); _drvOpStatusMsg('🔄 Sessão resetada','#ffbd2e');
     drvChartCarregar();
 }
-
 function drvResetarPlacar() {
-    _drvChart._sessaoWins   = 0;
-    _drvChart._sessaoLosses = 0;
-    _drvChart._sessaoLucro  = 0;
-    _drvChart.historico     = [];
-    _drvRenderizarHistorico();
-    _drvOpStatusMsg('🗑️ Placar zerado', '#f87171');
+    _drvChart._sessaoWins=0;_drvChart._sessaoLosses=0;_drvChart._sessaoLucro=0;_drvChart.historico=[];
+    _drvRenderizarHistorico(); _drvOpStatusMsg('🗑️ Placar zerado','#f87171');
 }
-
-// ── CSS botões Quotex — adiciona drv-dur-btn com estilo similar ───────────────
-// (os estilos foram injetados no início do bloco via _drvEstilos())
 
 
 </script>
