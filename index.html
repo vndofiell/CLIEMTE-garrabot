@@ -32687,7 +32687,7 @@ const _drvChart = {
     _sessaoWins:0, _sessaoLosses:0, _sessaoLucro:0,
 };
 const _drvModo = {
-    modo:'manual', rodando:false, opBloqueada:false,
+    modo:'manual', rodando:false, opBloqueada:false, viradaTimer:null,
 };
 
 // ── Deriv REST API pública (sem auth, sem WS próprio) ─────
@@ -32996,7 +32996,10 @@ function drvToggleAnalise() {
     const btn = document.getElementById('drv-sinais-toggle');
     if (btn) { btn.textContent = _drvModo.rodando ? '⏹ PARAR' : '▶ INICIAR'; btn.style.borderColor = _drvModo.rodando ? 'rgba(239,83,80,0.6)' : 'rgba(0,255,65,0.5)'; btn.style.color = _drvModo.rodando ? '#ef4444' : '#00ff41'; }
     _drvAdicionarSinal({ msg: _drvModo.rodando ? '🔍 Análise iniciada' : '⏹ Análise pausada', cor: _drvModo.rodando ? '#00ff41' : '#ffbd2e' });
-    if (!_drvModo.rodando) _drvModo.opBloqueada = false;
+    if (!_drvModo.rodando) {
+        _drvModo.opBloqueada = false;
+        if (_drvModo.viradaTimer) { clearTimeout(_drvModo.viradaTimer); _drvModo.viradaTimer = null; }
+    }
 }
 
 let _drvAnaliseContador = 0;
@@ -33004,6 +33007,8 @@ function _drvAnalisarAutomatic(precoAtual) {
     _drvAnaliseContador++;
     if (_drvAnaliseContador % 5 !== 0) return;
     const vela = _drvChart.velaAtual; if (!vela) return;
+    // Não reanalisar se já há entrada agendada para a virada
+    if (_drvModo.viradaTimer) return;
     const modo = _drvModo.modo;
     let direcao = null, confianca = 0;
     if (modo === 'price_action' || modo === 'automatico') {
@@ -33018,9 +33023,22 @@ function _drvAnalisarAutomatic(precoAtual) {
     }
     if (direcao && confianca >= 55) {
         const cor = direcao === 'call' ? '#27c93f' : '#ef4444';
-        _drvAdicionarSinal({ msg: `${direcao==='call'?'▲':'▼'} SINAL ${direcao.toUpperCase()} | conf:${confianca.toFixed(0)}%`, cor });
+        _drvAdicionarSinal({ msg: `${direcao==='call'?'▲':'▼'} SINAL ${direcao.toUpperCase()} | conf:${confianca.toFixed(0)}% | ⏳ aguardando virada...`, cor });
         if ((modo === 'automatico' || modo === 'hma') && !_drvModo.opBloqueada) {
-            _drvModo.opBloqueada = true; drvOperar(direcao);
+            _drvModo.opBloqueada = true;
+            // Calcula ms até a próxima virada de vela usando o relógio do servidor
+            const _periodo  = _drvChart.periodo || 60;
+            const _tsAb     = _drvChart.tsAbertura || (Math.floor(Date.now() / 1000 / _periodo) * _periodo);
+            const _tsFimMs  = (_tsAb + _periodo) * 1000;
+            const _msFalta  = Math.max(0, _tsFimMs - Date.now());
+            // Se faltam menos de 300ms já estamos na virada — entra imediatamente
+            const _atraso   = _msFalta < 300 ? 0 : _msFalta;
+            _drvModo.viradaTimer = setTimeout(() => {
+                _drvModo.viradaTimer = null;
+                // Cancela se o bot foi parado enquanto aguardava
+                if (!_drvModo.rodando) { _drvModo.opBloqueada = false; return; }
+                drvOperar(direcao);
+            }, _atraso);
         }
     }
 }
@@ -33238,6 +33256,7 @@ function _drvRenderizarHistorico() {
 function drvResetarSessao() {
     _drvChart.historico=[]; _drvChart._sessaoWins=0; _drvChart._sessaoLosses=0; _drvChart._sessaoLucro=0;
     _drvModo.rodando=false; _drvModo.opBloqueada=false;
+    if (_drvModo.viradaTimer) { clearTimeout(_drvModo.viradaTimer); _drvModo.viradaTimer = null; }
     _drvEncerrarOpAtiva(null);
     const btn=document.getElementById('drv-sinais-toggle');
     if (btn){btn.textContent='▶ INICIAR';btn.style.borderColor='rgba(0,255,65,0.5)';btn.style.color='#00ff41';}
