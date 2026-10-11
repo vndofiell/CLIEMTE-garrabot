@@ -9564,7 +9564,7 @@ function processCommand(cmd) {
 
     } else if (command === 'iniciar') {
         const _estAtual = ESTRATEGIAS[bot.estrategia];
-        const _ehQuotex = _estAtual && _estAtual.tipo === 'hma_quotex';
+        const _ehQuotex = _estAtual && (_estAtual.tipo === 'hma_quotex' || _estAtual.tipo === 'otc_fluxo');
         const _quotexConectada = _qx.status === 'conectado';
         if (_ehQuotex) {
             if (!_quotexConectada) return print("ACESSO NEGADO: CONECTE A QUOTEX PRIMEIRO (botão 🟠 Quotex no painel)", "log-loss");
@@ -9584,9 +9584,11 @@ function processCommand(cmd) {
             bot.mgr = new GerenciadorUnificado(bot.gerenciamento,
                 Object.assign({ stake: bot.initialStake }, (bot._mgrCfgs && bot._mgrCfgs[bot.gerenciamento]) || {}));
             const est = ESTRATEGIAS[bot.estrategia];
-            // ── Quotex: garante que o motor HMA será disparado pelo watcher ──
+            // ── Quotex: garante que o motor HMA/OTC-Fluxo será disparado pelo watcher ──
             if (est && est.tipo === 'hma_quotex') {
                 _qxHmaQ.pendente = true;
+            } else if (est && est.tipo === 'otc_fluxo') {
+                _otcFluxo.pendente = true;
             }
             if (bot.ws && bot.ws.readyState === WebSocket.OPEN) {
                 const _ativoInic = _resolverAtivo(est && est.ativo);
