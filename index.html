@@ -33190,6 +33190,101 @@ async function _drvFiltroTendencia(ativo, periodo, direcao) {
     return { aprovado, ema_dir, adx_forte, score: Math.round(score), dx: Math.round(dx), resumo };
 }
 
+// ══════════════════════════════════════════════════════════════════════
+// FILTRO TOPO/FUNDO + PAVIOS
+// Analisa os candles do TF operado para detectar:
+//   1) Proximidade de suporte/resistência (topo ou fundo recente)
+//   2) Pavios longos de reversão (martelo, estrela cadente, pin bar)
+// Retorna Promise<{ aprovado, motivo, nivel, dist_pct }>
+// ══════════════════════════════════════════════════════════════════════
+async function _drvFiltroTopoFundo(ativo, periodo, direcao) {
+    let candles = [];
+    try { candles = await _drvFetchCandles(ativo, periodo, 40); } catch(_) {}
+    if (!candles || candles.length < 8) {
+        return { aprovado: true, motivo: 'dados insuficientes', nivel: null, dist_pct: null };
+    }
+
+    const sorted  = [...candles].sort((a, b) => a.epoch - b.epoch);
+    const dir     = direcao.toUpperCase();
+    const n       = sorted.length;
+    const preco   = parseFloat(sorted[n - 1].close);
+
+    // ── 1) Detecta topo/fundo nos últimos 30 candles (excluindo o atual) ──
+    const janela = sorted.slice(-30, -1);
+    const highs  = janela.map(c => parseFloat(c.high));
+    const lows   = janela.map(c => parseFloat(c.low));
+
+    // Topo = máximo da janela | Fundo = mínimo da janela
+    const topo  = Math.max(...highs);
+    const fundo = Math.min(...lows);
+    const range = topo - fundo;
+    if (range <= 0) return { aprovado: true, motivo: 'range zero', nivel: null, dist_pct: null };
+
+    // Proximidade: considera "perto" quando está nos últimos 3% do range para cada lado
+    const ZONA = 0.04; // 4% do range
+    const distTopo  = (topo  - preco) / range;
+    const distFundo = (preco - fundo) / range;
+    const pertoDeTopo  = distTopo  < ZONA;  // preço próximo da resistência
+    const pertoDeFundo = distFundo < ZONA;  // preço próximo do suporte
+
+    // ── 2) Analisa pavios da vela atual e das 2 anteriores ────────────────
+    const velas3 = sorted.slice(-3);
+
+    const _analisarPavio = (c) => {
+        const o = parseFloat(c.open), h = parseFloat(c.high);
+        const l = parseFloat(c.low),  cl= parseFloat(c.close);
+        const corpo   = Math.abs(cl - o);
+        const amp     = h - l;
+        if (amp === 0) return { tipo: 'doji', reversao: null };
+        const pavioSup = h - Math.max(o, cl);
+        const pavioInf = Math.min(o, cl) - l;
+        const pSup_pct = pavioSup / amp;
+        const pInf_pct = pavioInf / amp;
+        // Pin bar de alta (martelo): pavio inferior longo ≥ 60% da amplitude
+        if (pInf_pct >= 0.6 && corpo / amp < 0.3) return { tipo: 'martelo',   reversao: 'CALL' };
+        // Pin bar de baixa (estrela cadente): pavio superior longo ≥ 60%
+        if (pSup_pct >= 0.6 && corpo / amp < 0.3) return { tipo: 'pin_baixa', reversao: 'PUT'  };
+        return { tipo: 'normal', reversao: null };
+    };
+
+    const pavios    = velas3.map(_analisarPavio);
+    const reversoes = pavios.filter(p => p.reversao !== null);
+
+    // Pin bar de reversão contra a direção atual = sinal de alerta
+    const pinContra = reversoes.some(p => p.reversao !== dir);
+    const pinFavor  = reversoes.some(p => p.reversao === dir);
+
+    // ── Decisão ───────────────────────────────────────────────────────────
+    // Bloqueia se: (CALL e perto de topo) OU (PUT e perto de fundo) OU pin bar contra
+    let motivo = '';
+    let aprovado = true;
+
+    if (dir === 'CALL' && pertoDeTopo) {
+        aprovado = false;
+        motivo = `CALL perto de TOPO (dist:${(distTopo*100).toFixed(1)}% do range)`;
+    } else if (dir === 'PUT' && pertoDeFundo) {
+        aprovado = false;
+        motivo = `PUT perto de FUNDO (dist:${(distFundo*100).toFixed(1)}% do range)`;
+    } else if (pinContra && !pinFavor) {
+        aprovado = false;
+        const tipoPin = reversoes.find(p => p.reversao !== dir)?.tipo || 'pin';
+        motivo = `Pin bar de reversão contra: ${tipoPin}`;
+    } else {
+        const nivelRef = dir === 'CALL' ? `resistência:${topo.toFixed(4)}` : `suporte:${fundo.toFixed(4)}`;
+        const _d100 = ((dir==='CALL' ? distTopo : distFundo) * 100).toFixed(1);
+        motivo = `OK — ${nivelRef} | dist:${_d100}%`;
+    }
+
+    return {
+        aprovado,
+        motivo,
+        nivel:    dir === 'CALL' ? topo : fundo,
+        dist_pct: dir === 'CALL' ? distTopo : distFundo,
+        pinContra,
+        pinFavor,
+    };
+}
+
 let _drvAnaliseContador = 0;
 function _drvAnalisarAutomatic(precoAtual) {
     _drvAnaliseContador++;
@@ -33234,13 +33329,14 @@ function _drvAnalisarAutomatic(precoAtual) {
                 }, _atraso);
             };
 
-            // ── Filtros MTF + Tendência (paralelo) ────────────────────
+            // ── Filtros MTF + Tendência + Topo/Fundo (paralelo) ──────
             if (_drvModo.mtfAtivo) {
-                _drvAdicionarSinal({ msg: `🔍 MTF+TENDÊNCIA validando ${direcao.toUpperCase()} | ${(_atraso/1000).toFixed(0)}s até virada...`, cor: '#0ff' });
+                _drvAdicionarSinal({ msg: `🔍 MTF+TENDÊNCIA+S/R validando ${direcao.toUpperCase()} | ${(_atraso/1000).toFixed(0)}s até virada...`, cor: '#0ff' });
                 Promise.all([
                     _drvValidarMTF(_drvChart.ativo, _drvChart.duracao || 60, direcao),
                     _drvFiltroTendencia(_drvChart.ativo, _drvChart.periodo || 60, direcao),
-                ]).then(([mtf, tend]) => {
+                    _drvFiltroTopoFundo(_drvChart.ativo, _drvChart.periodo || 60, direcao),
+                ]).then(([mtf, tend, sr]) => {
                     if (!_drvModo.rodando || _drvModo.viradaTimer) { _drvModo.opBloqueada = false; return; }
 
                     // ── Resultado MTF ──
@@ -33251,23 +33347,29 @@ function _drvAnalisarAutomatic(precoAtual) {
                     _drvAdicionarSinal({ msg: `📊 MTF: ${mtf.consenso} | ${_tfStr}`, cor: mtf.consenso === 'CONFIRMA' ? '#27c93f' : mtf.consenso === 'CONTRA' ? '#ef4444' : '#ffbd2e' });
 
                     // ── Resultado Tendência ──
-                    const _tendIco  = tend.ema_dir === direcao.toUpperCase() ? '✅' : tend.ema_dir === 'NEUTRO' ? '⬜' : '❌';
-                    const _adxIco   = tend.adx_forte ? '📈' : '📉';
-                    const _tendCor  = tend.aprovado ? '#27c93f' : '#ef4444';
-                    _drvAdicionarSinal({ msg: `${_tendIco} TENDÊNCIA: EMA${tend.ema_dir} | ${_adxIco}ADX:${tend.dx} | score:${tend.score}`, cor: _tendCor });
+                    const _tendIco = tend.ema_dir === direcao.toUpperCase() ? '✅' : tend.ema_dir === 'NEUTRO' ? '⬜' : '❌';
+                    const _adxIco  = tend.adx_forte ? '📈' : '📉';
+                    _drvAdicionarSinal({ msg: `${_tendIco} TENDÊNCIA: EMA${tend.ema_dir} | ${_adxIco}ADX:${tend.dx} | score:${tend.score}`, cor: tend.aprovado ? '#27c93f' : '#ef4444' });
+
+                    // ── Resultado Topo/Fundo + Pavios ──
+                    const _srIco  = sr.aprovado ? '✅' : '🚫';
+                    const _pinMsg = sr.pinContra ? ' | 📌PIN↺' : sr.pinFavor ? ' | 📌PIN→' : '';
+                    _drvAdicionarSinal({ msg: `${_srIco} S/R: ${sr.motivo}${_pinMsg}`, cor: sr.aprovado ? '#27c93f' : '#ef4444' });
 
                     // ── Decisão final ──
                     if (!mtf.aprovado) {
                         _drvAdicionarSinal({ msg: `🚫 BLOQUEADO: MTF contra (${mtf.vContra}vs${mtf.vFavor})`, cor: '#ef4444' });
-                        _drvModo.opBloqueada = false;
-                        return;
+                        _drvModo.opBloqueada = false; return;
                     }
                     if (!tend.aprovado) {
                         _drvAdicionarSinal({ msg: `🚫 BLOQUEADO: Tendência fraca/contra (EMA:${tend.ema_dir} ADX:${tend.dx})`, cor: '#ef4444' });
-                        _drvModo.opBloqueada = false;
-                        return;
+                        _drvModo.opBloqueada = false; return;
                     }
-                    // Ambos aprovaram — agenda na virada
+                    if (!sr.aprovado) {
+                        _drvAdicionarSinal({ msg: `🚫 BLOQUEADO: ${sr.motivo}`, cor: '#ef4444' });
+                        _drvModo.opBloqueada = false; return;
+                    }
+                    // Todos aprovaram — agenda na virada
                     _agendarEntrada(mtf);
                 }).catch(() => {
                     _drvAdicionarSinal({ msg: `⚠️ Filtros falharam — entrando sem confirmação`, cor: '#ffbd2e' });
@@ -33417,6 +33519,15 @@ function _drvAguardarResultado(contractId, duracao) {
                 _drvChart._sessaoWins   += win ? 1 : 0;
                 _drvChart._sessaoLosses += win ? 0 : 1;
                 _drvChart._sessaoLucro  += lucro;
+                // Atualiza bot.profit / bot.wins / bot.losses (handler principal foi bloqueado)
+                if (typeof bot !== 'undefined') {
+                    bot.profit += lucro;
+                    if (win) { bot.wins++; bot._seqWinAtual = (bot._seqWinAtual||0)+1; bot._seqLossAtual = 0; }
+                    else     { bot.losses++; bot._seqLossAtual = (bot._seqLossAtual||0)+1; bot._seqWinAtual = 0; }
+                    if (bot.mgr) bot.mgr.updateResult(win, lucro);
+                    bot.ws.send(JSON.stringify({ balance: 1 }));
+                    if (typeof updateHeader === 'function') updateHeader();
+                }
                 _drvOpStatusMsg(`${win?'✅ WIN':'❌ LOSS'} ${win?'+':''}$${lucro.toFixed(2)}`, win ? '#27c93f' : '#f44');
             } catch(_) {}
         };
