@@ -184,6 +184,7 @@
 
     .stat-box span { font-weight: bold; }
     .stat-box.balance span { color: var(--terminal-cyan); }
+    .stat-box.balance span.neg { color: var(--terminal-red) !important; }
 
     /* ── caixa de lucro maior e mais visível ── */
     #hd-profit-box {
@@ -7242,8 +7243,18 @@ function print(text, colorClass = '') {
 let _cotacaoBRL = 0;
 
 function updateHeader(balance) {
-    if (balance !== undefined)
-        document.getElementById('hd-balance').textContent = '$' + parseFloat(balance).toFixed(2);
+    if (balance !== undefined) {
+        const _balVal = parseFloat(balance);
+        const _balEl  = document.getElementById('hd-balance');
+        _balEl.textContent = '$' + _balVal.toFixed(2);
+        // Vermelho quando saldo negativo, ciano quando positivo
+        _balEl.classList.toggle('neg', _balVal < 0);
+    } else {
+        // Mesmo sem novo valor, garante cor correta (ex: após resultado)
+        const _balEl  = document.getElementById('hd-balance');
+        const _balVal = parseFloat((_balEl?.textContent || '0').replace('$','').replace(',','')) || 0;
+        _balEl.classList.toggle('neg', _balVal < 0);
+    }
 
     // Se a conta secundária está conectada, o header exibe os dados dela
     if (typeof _sec !== 'undefined' && _sec.pronto) {
@@ -29314,6 +29325,17 @@ window.addEventListener('load', () => {
           border-top:1px solid rgba(0,255,65,0.15);
           border-bottom:1px solid rgba(0,0,0,0.4);
           display:flex; flex-direction:column; gap:5px;">
+        <!-- linha 0: banca -->
+        <div style="display:flex; gap:4px; align-items:center; margin-bottom:1px;">
+          <div style="flex:1; background:rgba(0,255,255,0.05); border:1px solid rgba(0,255,255,0.2); border-radius:3px; padding:3px 6px; text-align:center;">
+            <span style="color:#555; font-size:0.55rem; letter-spacing:1px;">BANCA</span>
+            <span id="drv-sb-banca" style="color:#0ff; font-weight:bold; font-size:0.82rem; font-family:'Share Tech Mono'; margin-left:6px;">--</span>
+          </div>
+          <div style="flex:1; background:rgba(0,255,65,0.05); border:1px solid rgba(0,255,65,0.2); border-radius:3px; padding:3px 6px; text-align:center;">
+            <span style="color:#555; font-size:0.55rem; letter-spacing:1px;">LUCRO</span>
+            <span id="drv-sb-profit-inline" style="color:#00ff41; font-weight:bold; font-size:0.82rem; font-family:'Share Tech Mono'; margin-left:6px;">$0.00</span>
+          </div>
+        </div>
         <!-- linha 1: lucro + wins + losses + taxa -->
         <div style="display:flex; gap:4px; align-items:center;">
           <div style="flex:2; background:rgba(0,255,65,0.07); border:1px solid rgba(0,255,65,0.25); border-radius:3px; padding:4px 6px; text-align:center;">
@@ -33100,6 +33122,74 @@ async function _drvValidarMTF(ativo, duracaoSeg, direcao) {
     return { aprovado, consenso, vFavor, vContra, vNeutro, detalhes: resultados };
 }
 
+// ══════════════════════════════════════════════════════════════════════
+// FILTRO DE TENDÊNCIA LOCAL — EMA9/21 + ADX simplificado
+// Usa os candles do TF operado (granularity = _drvChart.periodo)
+// para confirmar que o mercado está EM TENDÊNCIA antes de entrar.
+// Retorna Promise<{ aprovado, ema_dir, adx_forte, score, resumo }>
+// ══════════════════════════════════════════════════════════════════════
+async function _drvFiltroTendencia(ativo, periodo, direcao) {
+    // Busca 30 candles do TF operado
+    let candles = [];
+    try {
+        candles = await _drvFetchCandles(ativo, periodo, 30);
+    } catch(_) {}
+    if (!candles || candles.length < 10) {
+        return { aprovado: true, ema_dir: 'NEUTRO', adx_forte: false, score: 0, resumo: 'dados insuficientes' };
+    }
+
+    const sorted  = [...candles].sort((a, b) => a.epoch - b.epoch);
+    const closes  = sorted.map(c => parseFloat(c.close));
+    const highs   = sorted.map(c => parseFloat(c.high));
+    const lows    = sorted.map(c => parseFloat(c.low));
+    const n       = closes.length;
+
+    // ── EMA helper ──────────────────────────────────────────────────
+    const _ema = (arr, p) => {
+        const k = 2 / (p + 1);
+        let e = arr[0];
+        for (let i = 1; i < arr.length; i++) e = arr[i] * k + e * (1 - k);
+        return e;
+    };
+
+    // EMA9 e EMA21 dos closes
+    const ema9  = _ema(closes, 9);
+    const ema21 = _ema(closes, 21);
+    const ema_dir = ema9 > ema21 ? 'CALL' : ema9 < ema21 ? 'PUT' : 'NEUTRO';
+    const ema_ok  = ema_dir === direcao.toUpperCase();
+
+    // ── ADX simplificado (Wilder, janela 7) ─────────────────────────
+    const ADX_PERIODO = Math.min(7, n - 2);
+    let sumDMp = 0, sumDMm = 0, sumTR = 0;
+    for (let i = n - ADX_PERIODO; i < n; i++) {
+        const h = highs[i], l = lows[i], pc = closes[i - 1] || closes[i];
+        const upMove   = h - highs[i - 1];
+        const downMove = lows[i - 1] - l;
+        const dmPlus   = (upMove > downMove && upMove > 0) ? upMove : 0;
+        const dmMinus  = (downMove > upMove && downMove > 0) ? downMove : 0;
+        const tr = Math.max(h - l, Math.abs(h - pc), Math.abs(l - pc));
+        sumDMp += dmPlus; sumDMm += dmMinus; sumTR += tr;
+    }
+    const diPlus  = sumTR > 0 ? (sumDMp / sumTR) * 100 : 0;
+    const diMinus = sumTR > 0 ? (sumDMm / sumTR) * 100 : 0;
+    const dx      = (diPlus + diMinus) > 0 ? Math.abs(diPlus - diMinus) / (diPlus + diMinus) * 100 : 0;
+    const adx_forte = dx >= 20; // ADX >= 20 = tendência presente
+
+    // ── Score composto 0-100 ─────────────────────────────────────────
+    // EMA alinhada: +50 | ADX forte: +30 | EMA distância: até +20
+    let score = 0;
+    if (ema_ok) score += 50;
+    if (adx_forte) score += 30;
+    const emaDist = Math.abs(ema9 - ema21) / (ema21 || 1) * 10000; // em bps
+    score += Math.min(20, emaDist * 2);
+
+    // Aprova se EMA alinhada OU (ADX forte + score ≥ 40)
+    const aprovado = ema_ok || (adx_forte && score >= 40);
+
+    const resumo = `EMA9>${ema9.toFixed(4)} EMA21>${ema21.toFixed(4)} dir:${ema_dir} ADX:${dx.toFixed(0)} score:${score.toFixed(0)}`;
+    return { aprovado, ema_dir, adx_forte, score: Math.round(score), dx: Math.round(dx), resumo };
+}
+
 let _drvAnaliseContador = 0;
 function _drvAnalisarAutomatic(precoAtual) {
     _drvAnaliseContador++;
@@ -33144,36 +33234,47 @@ function _drvAnalisarAutomatic(precoAtual) {
                 }, _atraso);
             };
 
-            // ── Filtro MTF ─────────────────────────────────────────────
+            // ── Filtros MTF + Tendência (paralelo) ────────────────────
             if (_drvModo.mtfAtivo) {
-                _drvAdicionarSinal({ msg: `🔍 MTF validando ${direcao.toUpperCase()} | ${(_atraso/1000).toFixed(0)}s até virada...`, cor: '#0ff' });
-                _drvValidarMTF(_drvChart.ativo, _drvChart.duracao || 60, direcao)
-                    .then(mtf => {
-                        if (!_drvModo.rodando || _drvModo.viradaTimer) { _drvModo.opBloqueada = false; return; }
+                _drvAdicionarSinal({ msg: `🔍 MTF+TENDÊNCIA validando ${direcao.toUpperCase()} | ${(_atraso/1000).toFixed(0)}s até virada...`, cor: '#0ff' });
+                Promise.all([
+                    _drvValidarMTF(_drvChart.ativo, _drvChart.duracao || 60, direcao),
+                    _drvFiltroTendencia(_drvChart.ativo, _drvChart.periodo || 60, direcao),
+                ]).then(([mtf, tend]) => {
+                    if (!_drvModo.rodando || _drvModo.viradaTimer) { _drvModo.opBloqueada = false; return; }
 
-                        // Monta linha de detalhe por TF
-                        const _tfStr = mtf.detalhes.map(d => {
-                            const ico = d.tend === direcao.toUpperCase() ? '✅' : d.tend === 'NEUTRO' ? '⬜' : '❌';
-                            return `${ico}${d.nome}`;
-                        }).join(' ');
-                        _drvAdicionarSinal({ msg: `📊 MTF: ${mtf.consenso} | ${_tfStr}`, cor: mtf.consenso === 'CONFIRMA' ? '#27c93f' : mtf.consenso === 'CONTRA' ? '#ef4444' : '#ffbd2e' });
+                    // ── Resultado MTF ──
+                    const _tfStr = mtf.detalhes.map(d => {
+                        const ico = d.tend === direcao.toUpperCase() ? '✅' : d.tend === 'NEUTRO' ? '⬜' : '❌';
+                        return `${ico}${d.nome}`;
+                    }).join(' ');
+                    _drvAdicionarSinal({ msg: `📊 MTF: ${mtf.consenso} | ${_tfStr}`, cor: mtf.consenso === 'CONFIRMA' ? '#27c93f' : mtf.consenso === 'CONTRA' ? '#ef4444' : '#ffbd2e' });
 
-                        if (!mtf.aprovado) {
-                            // TFs superiores contra — cancela entrada
-                            _drvAdicionarSinal({ msg: `🚫 ENTRADA BLOQUEADA pelo MTF (${mtf.vContra} TFs contra vs ${mtf.vFavor} a favor)`, cor: '#ef4444' });
-                            _drvModo.opBloqueada = false;
-                            return;
-                        }
-                        // MTF confirma ou neutro — agenda entrada na virada
-                        _agendarEntrada(mtf);
-                    })
-                    .catch(() => {
-                        // Erro ao buscar MTF — entra mesmo assim (fail-open)
-                        _drvAdicionarSinal({ msg: `⚠️ MTF falhou — entrando sem confirmação`, cor: '#ffbd2e' });
-                        _agendarEntrada(null);
-                    });
+                    // ── Resultado Tendência ──
+                    const _tendIco  = tend.ema_dir === direcao.toUpperCase() ? '✅' : tend.ema_dir === 'NEUTRO' ? '⬜' : '❌';
+                    const _adxIco   = tend.adx_forte ? '📈' : '📉';
+                    const _tendCor  = tend.aprovado ? '#27c93f' : '#ef4444';
+                    _drvAdicionarSinal({ msg: `${_tendIco} TENDÊNCIA: EMA${tend.ema_dir} | ${_adxIco}ADX:${tend.dx} | score:${tend.score}`, cor: _tendCor });
+
+                    // ── Decisão final ──
+                    if (!mtf.aprovado) {
+                        _drvAdicionarSinal({ msg: `🚫 BLOQUEADO: MTF contra (${mtf.vContra}vs${mtf.vFavor})`, cor: '#ef4444' });
+                        _drvModo.opBloqueada = false;
+                        return;
+                    }
+                    if (!tend.aprovado) {
+                        _drvAdicionarSinal({ msg: `🚫 BLOQUEADO: Tendência fraca/contra (EMA:${tend.ema_dir} ADX:${tend.dx})`, cor: '#ef4444' });
+                        _drvModo.opBloqueada = false;
+                        return;
+                    }
+                    // Ambos aprovaram — agenda na virada
+                    _agendarEntrada(mtf);
+                }).catch(() => {
+                    _drvAdicionarSinal({ msg: `⚠️ Filtros falharam — entrando sem confirmação`, cor: '#ffbd2e' });
+                    _agendarEntrada(null);
+                });
             } else {
-                // MTF desligado — agenda direto (sinal adicionado dentro de _agendarEntrada)
+                // Filtros desligados — agenda direto
                 _agendarEntrada(null);
             }
         }
@@ -33419,12 +33520,21 @@ function _drvSbAtualizar() {
 
     const profit    = g('hd-profit');
     const profitBrl = g('hd-profit-brl');
-    const isNeg = profit.startsWith('-') || profit.startsWith('−');
-    const cor   = isNeg ? '#f44' : '#00ff41';
+    const banca     = g('hd-balance');
+    const isNegP = profit.startsWith('-') || profit.startsWith('−');
+    const isNegB = banca.startsWith('-')  || banca.startsWith('−');
+    const corP   = isNegP ? '#f44' : '#00ff41';
+    const corB   = isNegB ? '#f44' : '#0ff';
 
-    // painel lateral (drv-sb-*)
+    // ── Banca + Lucro inline (linha 0) ──
+    const sbBanca = document.getElementById('drv-sb-banca');
+    if (sbBanca) { sbBanca.textContent = banca || '--'; sbBanca.style.color = corB; }
+    const sbPi = document.getElementById('drv-sb-profit-inline');
+    if (sbPi) { sbPi.textContent = profit || '$0.00'; sbPi.style.color = corP; }
+
+    // ── painel lateral (drv-sb-*) ──
     const sbP = document.getElementById('drv-sb-profit');
-    if (sbP) { sbP.textContent = profit || '$0.00'; sbP.style.color = cor; }
+    if (sbP) { sbP.textContent = profit || '$0.00'; sbP.style.color = corP; }
     const sbPb = document.getElementById('drv-sb-profit-brl');
     if (sbPb) sbPb.textContent = profitBrl || '(R$0,00)';
     set('drv-sb-wins',   g('hd-wins'));
@@ -33435,9 +33545,9 @@ function _drvSbAtualizar() {
     set('drv-sb-strat',  g('hd-strat'));
     set('drv-sb-timer',  g('hd-timer'));
 
-    // cabeçalho (drv-hd-*)
+    // ── cabeçalho (drv-hd-*) ──
     const hdP = document.getElementById('drv-hd-profit');
-    if (hdP) { hdP.textContent = profit || '$0.00'; hdP.style.color = cor; }
+    if (hdP) { hdP.textContent = profit || '$0.00'; hdP.style.color = corP; }
     const hdPb = document.getElementById('drv-hd-profit-brl');
     if (hdPb) hdPb.textContent = profitBrl || '(R$0,00)';
     set('drv-hd-wins',   g('hd-wins'));
