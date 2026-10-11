@@ -33085,6 +33085,10 @@ function drvOperar(direcao) {
                     _drvOpStatusMsg(`${direcao==='call'?'▲':'▼'} Operação enviada! ${duracao}s | ID:${cid}`, cor);
                     _drvAdicionarHistorico({ id:cid, direcao, valor, duracao, ativo, ts:tsAgora, status:'aguardando' });
                     _drvIniciarOpAtiva({ id:cid, direcao, valor, duracao, ts:tsAgora, precoEntrada:_drvChart.lastPreco||0 });
+                    // Sincroniza barra inferior com o mesmo timestamp do gráfico
+                    if (typeof _tradeAtivarLocal === 'function') {
+                        _tradeAtivarLocal(direcao, duracao, ativo, valor, 'deriv', _drvChart.lastPreco||0);
+                    }
                     _drvAguardarResultado(cid, duracao);
                 } else {
                     _drvOpStatusMsg('❌ Buy sem contract_id', '#f44');
@@ -33113,6 +33117,7 @@ function _drvAguardarResultado(contractId, duracao) {
                 const poc = d.proposal_open_contract;
                 if (poc.status === 'open') { setTimeout(() => _drvAguardarResultado(contractId, 0), 3000); return; }
                 const win = poc.profit >= 0, lucro = parseFloat(poc.profit||0);
+                if (_drvChart.opAtiva) _drvChart.opAtiva.lucro = lucro;
                 _drvEncerrarOpAtiva(win ? 'win' : 'loss');
                 _drvAtualizarHistorico(contractId, win ? 'win' : 'loss', lucro);
                 _drvChart._sessaoWins   += win ? 1 : 0;
@@ -33159,6 +33164,11 @@ function _drvEncerrarOpAtiva(resultado) {
     if (_drvChart.priceLine && _drvChart.series) { try { _drvChart.series.removePriceLine(_drvChart.priceLine); } catch(_) {} _drvChart.priceLine=null; }
     const linhaEl=document.getElementById('drv-op-linha-entrada'), timerEl=document.getElementById('drv-op-timer-overlay');
     if (linhaEl) linhaEl.style.display='none'; if (timerEl) timerEl.style.display='none';
+    // Sincroniza encerramento com a barra inferior
+    if (typeof _tradeEncerrarLocal === 'function') {
+        const _win = resultado === 'win', _lucro = _drvChart.opAtiva?.lucro ?? null;
+        _tradeEncerrarLocal(resultado ? (_win ? 'ganhando' : 'perdendo') : null, _lucro);
+    }
     if (resultado && _drvChart.series && _drvChart.opAtiva) {
         const win=resultado==='win', corRes=win?'#00c853':'#ef5350', periodo=_drvChart.periodo||60, tsSaida=(_drvChart.opAtiva.tsVelaAtual||0)+periodo;
         try { _drvChart.series.setMarkers([
