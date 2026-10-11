@@ -28878,64 +28878,103 @@ window.addEventListener('load', () => {
     font-family:'Share Tech Mono',monospace;">
 
   <!-- Cabeçalho -->
-  <div style="display:flex; align-items:center; justify-content:space-between;
-              padding:8px 14px; background:#0a0f0a; border-bottom:1px solid rgba(0,255,65,0.35);">
-    <div style="display:flex; align-items:center; gap:10px;">
-      <span style="color:#00ff41; font-size:0.9rem; letter-spacing:2px; font-weight:bold;">📊 DERIV</span>
-      <select id="drv-ativo-sel"
-          style="background:#0a0a12; border:1px solid rgba(0,255,65,0.5); color:#00ff41;
-                 padding:4px 8px; font-family:'Share Tech Mono'; font-size:0.75rem;
-                 border-radius:3px; outline:none; cursor:pointer; max-width:180px;"
-          onchange="drvChartCarregar()">
-        <option value="R_100">Volatility 100 Index</option>
-        <option value="R_75">Volatility 75 Index</option>
-        <option value="R_50">Volatility 50 Index</option>
-        <option value="R_25">Volatility 25 Index</option>
-        <option value="R_10">Volatility 10 Index</option>
-        <option value="1HZ100V">Volatility 100 (1s)</option>
-        <option value="1HZ75V">Volatility 75 (1s)</option>
-        <option value="1HZ50V">Volatility 50 (1s)</option>
-        <option value="1HZ10V">Volatility 10 (1s)</option>
-        <option value="frxEURUSD">EUR/USD</option>
-        <option value="frxGBPUSD">GBP/USD</option>
-        <option value="frxUSDJPY">USD/JPY</option>
-        <option value="frxAUDUSD">AUD/USD</option>
-      </select>
-      <select id="drv-periodo-sel"
-          style="background:#0a0a12; border:1px solid rgba(0,255,65,0.3); color:#aaa;
-                 padding:4px 6px; font-family:'Share Tech Mono'; font-size:0.7rem;
-                 border-radius:3px; outline:none; cursor:pointer;"
-          onchange="drvChartCarregar()">
-        <option value="60" selected>1m</option>
-        <option value="120">2m</option>
-        <option value="300">5m</option>
-        <option value="900">15m</option>
-        <option value="1800">30m</option>
-        <option value="3600">1h</option>
-      </select>
-      <span id="drv-preco-atual"
-          style="color:#fff; font-size:0.85rem; font-weight:bold; letter-spacing:1px;">
-        --
-      </span>
-      <span id="drv-preco-dir" style="font-size:0.8rem;">⬆️</span>
+  <div style="background:#0a0f0a; border-bottom:1px solid rgba(0,255,65,0.35);">
+    <!-- linha 1: ativo + preço + saldo + fechar -->
+    <div style="display:flex; align-items:center; justify-content:space-between; padding:6px 14px;">
+      <div style="display:flex; align-items:center; gap:10px;">
+        <span style="color:#00ff41; font-size:0.9rem; letter-spacing:2px; font-weight:bold;">📊 DERIV</span>
+        <select id="drv-ativo-sel"
+            style="background:#0a0a12; border:1px solid rgba(0,255,65,0.5); color:#00ff41;
+                   padding:4px 8px; font-family:'Share Tech Mono'; font-size:0.75rem;
+                   border-radius:3px; outline:none; cursor:pointer; max-width:180px;"
+            onchange="drvChartCarregar()">
+          <option value="R_100">Volatility 100 Index</option>
+          <option value="R_75">Volatility 75 Index</option>
+          <option value="R_50">Volatility 50 Index</option>
+          <option value="R_25">Volatility 25 Index</option>
+          <option value="R_10">Volatility 10 Index</option>
+          <option value="1HZ100V">Volatility 100 (1s)</option>
+          <option value="1HZ75V">Volatility 75 (1s)</option>
+          <option value="1HZ50V">Volatility 50 (1s)</option>
+          <option value="1HZ10V">Volatility 10 (1s)</option>
+          <option value="frxEURUSD">EUR/USD</option>
+          <option value="frxGBPUSD">GBP/USD</option>
+          <option value="frxUSDJPY">USD/JPY</option>
+          <option value="frxAUDUSD">AUD/USD</option>
+        </select>
+        <select id="drv-periodo-sel"
+            style="background:#0a0a12; border:1px solid rgba(0,255,65,0.3); color:#aaa;
+                   padding:4px 6px; font-family:'Share Tech Mono'; font-size:0.7rem;
+                   border-radius:3px; outline:none; cursor:pointer;"
+            onchange="drvChartCarregar()">
+          <option value="60" selected>1m</option>
+          <option value="120">2m</option>
+          <option value="300">5m</option>
+          <option value="900">15m</option>
+          <option value="1800">30m</option>
+          <option value="3600">1h</option>
+        </select>
+        <span id="drv-preco-atual"
+            style="color:#fff; font-size:0.85rem; font-weight:bold; letter-spacing:1px;">
+          --
+        </span>
+        <span id="drv-preco-dir" style="font-size:0.8rem;">⬆️</span>
+      </div>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <span style="font-size:0.7rem; color:#aaa;">Saldo:</span>
+        <span id="drv-chart-saldo" style="color:#00ff41; font-weight:bold; font-size:0.8rem;">$--</span>
+        <span id="drv-chart-tipo"
+            style="font-size:0.62rem; color:#555; border:1px solid #333;
+                   padding:2px 6px; border-radius:3px;">DEMO</span>
+        <button onclick="drvChartFechar()"
+            style="background:transparent; border:1px solid #f44; color:#f44;
+                   padding:4px 10px; font-family:'Share Tech Mono'; font-size:0.7rem;
+                   cursor:pointer; border-radius:3px; letter-spacing:1px;">
+          ✕ FECHAR
+        </button>
+      </div>
     </div>
-    <div style="display:flex; align-items:center; gap:8px;">
-      <span style="font-size:0.7rem; color:#aaa;">Saldo:</span>
-      <span id="drv-chart-saldo" style="color:#00ff41; font-weight:bold; font-size:0.8rem;">$--</span>
-      <span id="drv-chart-tipo"
-          style="font-size:0.62rem; color:#555; border:1px solid #333;
-                 padding:2px 6px; border-radius:3px;">DEMO</span>
-      <button onclick="drvChartFechar()"
-          style="background:transparent; border:1px solid #f44; color:#f44;
-                 padding:4px 10px; font-family:'Share Tech Mono'; font-size:0.7rem;
-                 cursor:pointer; border-radius:3px; letter-spacing:1px;">
-        ✕ FECHAR
-      </button>
+    <!-- linha 2: stats do bot (lucro · wins · losses · taxa · stake · ger · estratégia · timer) -->
+    <div style="display:flex; align-items:center; gap:4px; padding:0 14px 6px; flex-wrap:nowrap; overflow:hidden;">
+      <!-- Lucro -->
+      <div style="flex:2; min-width:0; background:rgba(0,255,65,0.06); border:1px solid rgba(0,255,65,0.22); border-radius:3px; padding:3px 8px; display:flex; align-items:center; gap:4px; white-space:nowrap;">
+        <span style="font-size:0.72rem;">📈</span>
+        <span id="drv-hd-profit" style="color:#00ff41; font-weight:bold; font-size:0.8rem;">$0.00</span>
+        <span id="drv-hd-profit-brl" style="color:#4a9; font-size:0.65rem;">(R$0,00)</span>
+      </div>
+      <!-- Wins -->
+      <div style="flex:1; min-width:0; background:rgba(39,201,63,0.06); border:1px solid rgba(39,201,63,0.25); border-radius:3px; padding:3px 6px; text-align:center; white-space:nowrap;">
+        <span style="color:#27c93f; font-size:0.68rem; font-family:'Share Tech Mono';">✅ <span id="drv-hd-wins">0</span></span>
+      </div>
+      <!-- Losses -->
+      <div style="flex:1; min-width:0; background:rgba(244,68,68,0.06); border:1px solid rgba(244,68,68,0.25); border-radius:3px; padding:3px 6px; text-align:center; white-space:nowrap;">
+        <span style="color:#f44; font-size:0.68rem; font-family:'Share Tech Mono';">🔁 <span id="drv-hd-losses">0</span></span>
+      </div>
+      <!-- Taxa -->
+      <div style="flex:1; min-width:0; background:rgba(255,189,46,0.06); border:1px solid rgba(255,189,46,0.25); border-radius:3px; padding:3px 6px; text-align:center; white-space:nowrap;">
+        <span style="color:#ffbd2e; font-size:0.68rem; font-weight:bold; font-family:'Share Tech Mono';">🎯 <span id="drv-hd-taxa">--%</span></span>
+      </div>
+      <!-- Stake -->
+      <div style="flex:1; min-width:0; background:rgba(0,255,255,0.05); border:1px solid rgba(0,255,255,0.2); border-radius:3px; padding:3px 6px; text-align:center; white-space:nowrap;">
+        <span style="color:#0ff; font-size:0.68rem; font-family:'Share Tech Mono';">⚡ <span id="drv-hd-stake">$--</span></span>
+      </div>
+      <!-- Gerenciamento -->
+      <div style="flex:1.2; min-width:0; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.1); border-radius:3px; padding:3px 6px; text-align:center; overflow:hidden; white-space:nowrap;">
+        <span id="drv-hd-mgmt" style="color:#aaa; font-size:0.62rem; font-family:'Share Tech Mono';">--</span>
+      </div>
+      <!-- Estratégia -->
+      <div style="flex:1.6; min-width:0; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.1); border-radius:3px; padding:3px 6px; text-align:center; overflow:hidden; white-space:nowrap;">
+        <span id="drv-hd-strat" style="color:#aaa; font-size:0.62rem; font-family:'Share Tech Mono';">--</span>
+      </div>
+      <!-- Timer -->
+      <div style="flex:1.2; min-width:0; background:rgba(0,255,255,0.05); border:1px solid rgba(0,255,255,0.2); border-radius:3px; padding:3px 6px; text-align:center; white-space:nowrap;">
+        <span style="color:#0ff; font-size:0.68rem; font-family:'Share Tech Mono';">⏱ <span id="drv-hd-timer">00:00:00</span></span>
+      </div>
     </div>
   </div>
 
   <!-- Corpo: gráfico + painel de operação -->
-  <div style="display:flex; height:calc(100vh - 44px);">
+  <div style="display:flex; height:calc(100vh - 78px);">
 
     <!-- Gráfico de velas -->
     <div style="flex:1; position:relative; background:#0a100a;">
@@ -33117,19 +33156,16 @@ function _drvSbAtualizar() {
     const g = id => { const el = document.getElementById(id); return el ? el.textContent.trim() : ''; };
     const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
 
-    // Lucro
-    const profit = g('hd-profit');
+    const profit    = g('hd-profit');
     const profitBrl = g('hd-profit-brl');
-    const profitEl = document.getElementById('drv-sb-profit');
-    const profitBrlEl = document.getElementById('drv-sb-profit-brl');
-    if (profitEl) {
-        profitEl.textContent = profit || '$0.00';
-        const isNeg = profit.startsWith('-') || profit.startsWith('−');
-        const isPos = profit.startsWith('+') || (!isNeg && profit !== '$0.00' && profit !== '$--');
-        profitEl.style.color = isNeg ? '#f44' : (isPos ? '#00ff41' : '#00ff41');
-    }
-    if (profitBrlEl) profitBrlEl.textContent = profitBrl || '(R$0,00)';
+    const isNeg = profit.startsWith('-') || profit.startsWith('−');
+    const cor   = isNeg ? '#f44' : '#00ff41';
 
+    // painel lateral (drv-sb-*)
+    const sbP = document.getElementById('drv-sb-profit');
+    if (sbP) { sbP.textContent = profit || '$0.00'; sbP.style.color = cor; }
+    const sbPb = document.getElementById('drv-sb-profit-brl');
+    if (sbPb) sbPb.textContent = profitBrl || '(R$0,00)';
     set('drv-sb-wins',   g('hd-wins'));
     set('drv-sb-losses', g('hd-losses'));
     set('drv-sb-taxa',   g('hd-taxa'));
@@ -33137,6 +33173,19 @@ function _drvSbAtualizar() {
     set('drv-sb-mgmt',   g('hd-mgmt'));
     set('drv-sb-strat',  g('hd-strat'));
     set('drv-sb-timer',  g('hd-timer'));
+
+    // cabeçalho (drv-hd-*)
+    const hdP = document.getElementById('drv-hd-profit');
+    if (hdP) { hdP.textContent = profit || '$0.00'; hdP.style.color = cor; }
+    const hdPb = document.getElementById('drv-hd-profit-brl');
+    if (hdPb) hdPb.textContent = profitBrl || '(R$0,00)';
+    set('drv-hd-wins',   g('hd-wins'));
+    set('drv-hd-losses', g('hd-losses'));
+    set('drv-hd-taxa',   g('hd-taxa'));
+    set('drv-hd-stake',  g('hd-nextstake'));
+    set('drv-hd-mgmt',   g('hd-mgmt'));
+    set('drv-hd-strat',  g('hd-strat'));
+    set('drv-hd-timer',  g('hd-timer'));
 }
 function _drvSbIniciar() {
     _drvSbAtualizar();
