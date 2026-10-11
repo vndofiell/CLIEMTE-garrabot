@@ -12745,6 +12745,11 @@ function initWebSocket(wssUrl) {
 
         // Resultado da operação
         if (data.msg_type === 'proposal_open_contract' && data.proposal_open_contract.is_sold) {
+            // Ignora contratos abertos pelo painel Deriv Chart — processados por _drvAguardarResultado
+            if (typeof _drvChart !== 'undefined' && _drvChart.cidsAtivos &&
+                _drvChart.cidsAtivos.has(String(data.proposal_open_contract.contract_id))) {
+                return;
+            }
             // ── Resultado de operação DBS: conta wins/losses, atualiza lucro e envia Telegram ──
             if (bot._skipResultadoPrincipal) {
                 bot._skipResultadoPrincipal = false;
@@ -32685,6 +32690,7 @@ const _drvChart = {
     velaAtual:null, tsAbertura:0,
     opAtiva:null, priceLine:null,
     _sessaoWins:0, _sessaoLosses:0, _sessaoLucro:0,
+    cidsAtivos: new Set(),   // IDs de contratos abertos pelo painel Deriv Chart
 };
 const _drvModo = {
     modo:'manual', rodando:false, opBloqueada:false, viradaTimer:null,
@@ -33135,6 +33141,9 @@ function drvOperar(direcao) {
                     const cor = direcao === 'call' ? '#27c93f' : '#f44';
                     _drvOpStatusMsg(`${direcao==='call'?'▲':'▼'} Operação enviada! ${duracao}s | ID:${cid}`, cor);
                     _drvAdicionarHistorico({ id:cid, direcao, valor, duracao, ativo, ts:tsAgora, status:'aguardando' });
+                    // Marca este contrato como pertencente ao painel Deriv Chart
+                    // para que o handler principal do bot não o processe duplamente
+                    _drvChart.cidsAtivos.add(String(cid));
                     _drvIniciarOpAtiva({ id:cid, direcao, valor, duracao, ts:tsAgora, precoEntrada:_drvChart.lastPreco||0 });
                     // Sincroniza barra inferior com o mesmo timestamp do gráfico
                     if (typeof _tradeAtivarLocal === 'function') {
@@ -33169,6 +33178,8 @@ function _drvAguardarResultado(contractId, duracao) {
                 if (poc.status === 'open') { setTimeout(() => _drvAguardarResultado(contractId, 0), 3000); return; }
                 const win = poc.profit >= 0, lucro = parseFloat(poc.profit||0);
                 if (_drvChart.opAtiva) _drvChart.opAtiva.lucro = lucro;
+                // Remove o ID do set para liberar memória
+                _drvChart.cidsAtivos.delete(String(contractId));
                 _drvEncerrarOpAtiva(win ? 'win' : 'loss');
                 _drvAtualizarHistorico(contractId, win ? 'win' : 'loss', lucro);
                 _drvChart._sessaoWins   += win ? 1 : 0;
@@ -33255,6 +33266,7 @@ function _drvRenderizarHistorico() {
 // ── Reset ──────────────────────────────────────────────────
 function drvResetarSessao() {
     _drvChart.historico=[]; _drvChart._sessaoWins=0; _drvChart._sessaoLosses=0; _drvChart._sessaoLucro=0;
+    _drvChart.cidsAtivos.clear();
     _drvModo.rodando=false; _drvModo.opBloqueada=false;
     if (_drvModo.viradaTimer) { clearTimeout(_drvModo.viradaTimer); _drvModo.viradaTimer = null; }
     _drvEncerrarOpAtiva(null);
