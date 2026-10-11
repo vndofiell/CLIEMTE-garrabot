@@ -33102,8 +33102,7 @@ function _drvAplicarGerenciamento(win, lucro) {
 
     // ── Usa GerenciadorUnificado se disponível ──────────────────────────
     if (_drvMgr._gu) {
-        if (win) _drvMgr._gu.onWin(lucro);
-        else     _drvMgr._gu.onLoss(lucro);
+        _drvMgr._gu.updateResult(win, lucro);   // método correto do GerenciadorUnificado
         _drvMgr.valorAtual = _drvMgr._gu.getStake();
         _drvMgr.galeAtual  = _drvMgr._gu._nivelGale || 0;
     } else {
