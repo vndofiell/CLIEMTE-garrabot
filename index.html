@@ -29283,6 +29283,13 @@ window.addEventListener('load', () => {
         <div style="padding:8px 12px 6px; display:flex; justify-content:space-between; align-items:center;">
           <span id="drv-sinais-titulo" style="font-size:0.6rem; color:#555; letter-spacing:1px;">ANÁLISE</span>
           <div style="display:flex; gap:5px; align-items:center;">
+            <!-- Toggle MTF -->
+            <button id="drv-mtf-toggle"
+                title="Filtro Multi-Timeframe: valida TFs superiores antes de entrar"
+                style="font-size:0.56rem; padding:2px 6px; background:rgba(0,255,255,0.08);
+                       border:1px solid rgba(0,255,255,0.5); color:#0ff;
+                       cursor:pointer; border-radius:3px; font-family:'Share Tech Mono';"
+                onclick="drvToggleMtf()">📊 MTF: ON</button>
             <button id="drv-sinais-toggle"
                 style="font-size:0.58rem; padding:2px 7px; background:transparent;
                        border:1px solid rgba(0,255,65,0.5); color:#00ff41;
@@ -32694,6 +32701,7 @@ const _drvChart = {
 };
 const _drvModo = {
     modo:'manual', rodando:false, opBloqueada:false, viradaTimer:null,
+    mtfAtivo: true,   // Filtro Multi-Timeframe ligado por padrão
 };
 
 // ── Deriv REST API pública (sem auth, sem WS próprio) ─────
@@ -33008,6 +33016,90 @@ function drvToggleAnalise() {
     }
 }
 
+// ── Toggle MTF ────────────────────────────────────────────
+function drvToggleMtf() {
+    _drvModo.mtfAtivo = !_drvModo.mtfAtivo;
+    const btn = document.getElementById('drv-mtf-toggle');
+    if (!btn) return;
+    if (_drvModo.mtfAtivo) {
+        btn.textContent   = '📊 MTF: ON';
+        btn.style.color   = '#0ff';
+        btn.style.borderColor = 'rgba(0,255,255,0.5)';
+        btn.style.background  = 'rgba(0,255,255,0.08)';
+    } else {
+        btn.textContent   = '📊 MTF: OFF';
+        btn.style.color   = '#555';
+        btn.style.borderColor = '#333';
+        btn.style.background  = 'transparent';
+    }
+    _drvAdicionarSinal({ msg: `📊 Filtro MTF ${_drvModo.mtfAtivo ? 'ATIVADO' : 'DESATIVADO'}`, cor: _drvModo.mtfAtivo ? '#0ff' : '#ffbd2e' });
+}
+
+// ── Mapa de TFs superiores por duração operada (segundos) ─
+// Deriv usa granularity em segundos: 60=M1, 180=M3, 300=M5,
+// 900=M15, 1800=M30, 3600=H1, 14400=H4
+const _DRV_MTF_MAP = {
+    30:   [{ g: 60,    nome: 'M1'  }, { g: 300,   nome: 'M5'  }, { g: 900,  nome: 'M15' }],
+    60:   [{ g: 180,   nome: 'M3'  }, { g: 300,   nome: 'M5'  }, { g: 900,  nome: 'M15' }, { g: 1800, nome: 'M30' }],
+    120:  [{ g: 300,   nome: 'M5'  }, { g: 900,   nome: 'M15' }, { g: 1800, nome: 'M30' }, { g: 3600, nome: 'H1'  }],
+    300:  [{ g: 900,   nome: 'M15' }, { g: 1800,  nome: 'M30' }, { g: 3600, nome: 'H1'  }, { g: 14400,nome: 'H4'  }],
+    600:  [{ g: 1800,  nome: 'M30' }, { g: 3600,  nome: 'H1'  }, { g: 14400,nome: 'H4'  }],
+    900:  [{ g: 3600,  nome: 'H1'  }, { g: 14400, nome: 'H4'  }],
+};
+
+/**
+ * Busca candles dos TFs superiores e valida alinhamento de tendência.
+ * Retorna Promise<{ aprovado:bool, consenso:str, detalhes:Array }>
+ *
+ * consenso: 'CONFIRMA' | 'CONTRA' | 'NEUTRO'
+ * aprovado: true se maioria dos TFs estiver alinhada (ou NEUTRO)
+ */
+async function _drvValidarMTF(ativo, duracaoSeg, direcao) {
+    const tfsLista = _DRV_MTF_MAP[duracaoSeg]
+        || _DRV_MTF_MAP[60]; // fallback para 1m
+
+    // Busca candles de todos os TFs em paralelo (50 candles cada)
+    const resultados = await Promise.all(tfsLista.map(async tf => {
+        try {
+            const candles = await _drvFetchCandles(ativo, tf.g, 50);
+            if (!candles || candles.length < 5) return { nome: tf.nome, tend: 'NEUTRO', ok: false };
+            // Calcula tendência: compara média das últimas 3 velas com as 3 anteriores
+            const sorted = [...candles].sort((a, b) => a.epoch - b.epoch);
+            const recentes = sorted.slice(-3).map(c => (c.open + c.high + c.low + c.close) / 4);
+            const antigas  = sorted.slice(-8, -5).map(c => (c.open + c.high + c.low + c.close) / 4);
+            if (!antigas.length) return { nome: tf.nome, tend: 'NEUTRO', ok: true };
+            const mediaRec = recentes.reduce((s, v) => s + v, 0) / recentes.length;
+            const mediaAnt = antigas.reduce((s, v)  => s + v, 0) / antigas.length;
+            // Limiar relativo de 0.005% para filtrar ruído
+            const diff = (mediaRec - mediaAnt) / mediaAnt;
+            const LIMIAR = 0.00005;
+            const tend = diff > LIMIAR ? 'CALL' : diff < -LIMIAR ? 'PUT' : 'NEUTRO';
+            return { nome: tf.nome, tend, diff: diff.toFixed(6), ok: true };
+        } catch (_) {
+            return { nome: tf.nome, tend: 'NEUTRO', ok: false };
+        }
+    }));
+
+    // Conta votos — NEUTRO não vota
+    const dir = direcao.toUpperCase(); // 'CALL' ou 'PUT'
+    let vFavor = 0, vContra = 0, vNeutro = 0;
+    resultados.forEach(r => {
+        if (r.tend === dir)                   vFavor++;
+        else if (r.tend !== 'NEUTRO')         vContra++;
+        else                                   vNeutro++;
+    });
+
+    let consenso;
+    if (vFavor === 0 && vContra === 0)    consenso = 'NEUTRO';
+    else if (vFavor >= vContra)           consenso = 'CONFIRMA';
+    else                                   consenso = 'CONTRA';
+
+    // Aprova se CONFIRMA ou NEUTRO; bloqueia se CONTRA com maioria clara (> 1 voto de diferença)
+    const aprovado = consenso !== 'CONTRA' || (vContra - vFavor) <= 1;
+
+    return { aprovado, consenso, vFavor, vContra, vNeutro, detalhes: resultados };
+}
+
 let _drvAnaliseContador = 0;
 function _drvAnalisarAutomatic(precoAtual) {
     _drvAnaliseContador++;
@@ -33029,22 +33121,61 @@ function _drvAnalisarAutomatic(precoAtual) {
     }
     if (direcao && confianca >= 55) {
         const cor = direcao === 'call' ? '#27c93f' : '#ef4444';
-        _drvAdicionarSinal({ msg: `${direcao==='call'?'▲':'▼'} SINAL ${direcao.toUpperCase()} | conf:${confianca.toFixed(0)}% | ⏳ aguardando virada...`, cor });
         if ((modo === 'automatico' || modo === 'hma') && !_drvModo.opBloqueada) {
             _drvModo.opBloqueada = true;
-            // Calcula ms até a próxima virada de vela usando o relógio do servidor
+
+            // Calcula ms até a próxima virada de vela
             const _periodo  = _drvChart.periodo || 60;
             const _tsAb     = _drvChart.tsAbertura || (Math.floor(Date.now() / 1000 / _periodo) * _periodo);
             const _tsFimMs  = (_tsAb + _periodo) * 1000;
             const _msFalta  = Math.max(0, _tsFimMs - Date.now());
-            // Se faltam menos de 300ms já estamos na virada — entra imediatamente
             const _atraso   = _msFalta < 300 ? 0 : _msFalta;
-            _drvModo.viradaTimer = setTimeout(() => {
-                _drvModo.viradaTimer = null;
-                // Cancela se o bot foi parado enquanto aguardava
-                if (!_drvModo.rodando) { _drvModo.opBloqueada = false; return; }
-                drvOperar(direcao);
-            }, _atraso);
+
+            // Função que efetivamente agenda a entrada na virada
+            const _agendarEntrada = (infoMtf) => {
+                const mtfLabel = infoMtf
+                    ? ` | MTF:${infoMtf.consenso} (✅${infoMtf.vFavor} ❌${infoMtf.vContra})`
+                    : '';
+                _drvAdicionarSinal({ msg: `${direcao==='call'?'▲':'▼'} SINAL ${direcao.toUpperCase()} | conf:${confianca.toFixed(0)}%${mtfLabel} | ⏳ virada em ${(_atraso/1000).toFixed(0)}s...`, cor });
+                _drvModo.viradaTimer = setTimeout(() => {
+                    _drvModo.viradaTimer = null;
+                    if (!_drvModo.rodando) { _drvModo.opBloqueada = false; return; }
+                    drvOperar(direcao);
+                }, _atraso);
+            };
+
+            // ── Filtro MTF ─────────────────────────────────────────────
+            if (_drvModo.mtfAtivo) {
+                _drvAdicionarSinal({ msg: `🔍 MTF validando ${direcao.toUpperCase()} | ${(_atraso/1000).toFixed(0)}s até virada...`, cor: '#0ff' });
+                _drvValidarMTF(_drvChart.ativo, _drvChart.duracao || 60, direcao)
+                    .then(mtf => {
+                        if (!_drvModo.rodando || _drvModo.viradaTimer) { _drvModo.opBloqueada = false; return; }
+
+                        // Monta linha de detalhe por TF
+                        const _tfStr = mtf.detalhes.map(d => {
+                            const ico = d.tend === direcao.toUpperCase() ? '✅' : d.tend === 'NEUTRO' ? '⬜' : '❌';
+                            return `${ico}${d.nome}`;
+                        }).join(' ');
+                        _drvAdicionarSinal({ msg: `📊 MTF: ${mtf.consenso} | ${_tfStr}`, cor: mtf.consenso === 'CONFIRMA' ? '#27c93f' : mtf.consenso === 'CONTRA' ? '#ef4444' : '#ffbd2e' });
+
+                        if (!mtf.aprovado) {
+                            // TFs superiores contra — cancela entrada
+                            _drvAdicionarSinal({ msg: `🚫 ENTRADA BLOQUEADA pelo MTF (${mtf.vContra} TFs contra vs ${mtf.vFavor} a favor)`, cor: '#ef4444' });
+                            _drvModo.opBloqueada = false;
+                            return;
+                        }
+                        // MTF confirma ou neutro — agenda entrada na virada
+                        _agendarEntrada(mtf);
+                    })
+                    .catch(() => {
+                        // Erro ao buscar MTF — entra mesmo assim (fail-open)
+                        _drvAdicionarSinal({ msg: `⚠️ MTF falhou — entrando sem confirmação`, cor: '#ffbd2e' });
+                        _agendarEntrada(null);
+                    });
+            } else {
+                // MTF desligado — agenda direto (sinal adicionado dentro de _agendarEntrada)
+                _agendarEntrada(null);
+            }
         }
     }
 }
