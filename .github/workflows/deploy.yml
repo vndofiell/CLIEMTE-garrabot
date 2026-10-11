@@ -1,4 +1,4 @@
-name: 🚀 Deploy Automático para VPS Oracle
+name: 🚀 Deploy Automático para Render
 
 on:
   push:
@@ -7,21 +7,16 @@ on:
 
 jobs:
   deploy:
-    name: Deploy via SSH
+    name: Deploy via Render Deploy Hook
     runs-on: ubuntu-latest
 
     steps:
       - name: ✅ Checkout do código
         uses: actions/checkout@v4
 
-      - name: 🚀 Deploy na VPS
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          script: |
-            cd ~/CLIEMTE-garrabot
-            git pull
-            pm2 restart garrabot
-            pm2 status
+      - name: 🚀 Trigger Deploy no Render
+        run: |
+          echo "Disparando deploy no Render..."
+          curl -s --fail -X POST "${{ secrets.RENDER_DEPLOY_HOOK_URL }}"
+          echo ""
+          echo "✅ Deploy disparado com sucesso!"

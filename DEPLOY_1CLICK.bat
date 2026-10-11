@@ -1,39 +1,35 @@
 @echo off
-title Deploy Garrabot - GitHub + Oracle
+title Deploy Garrabot - GitHub + Render
 color 0A
 echo.
 echo  =============================================
-echo    GARRABOT — COMMIT + DEPLOY COMPLETO
+echo    GARRABOT - COMMIT + DEPLOY RENDER
 echo  =============================================
 echo.
 
-:: ── [1/3] Commit no GitHub ─────────────────────────────────────────────────
-echo  [1/3] Enviando alteracoes para o GitHub...
+:: ── [1/2] Commit no GitHub ─────────────────────────────────────────────────
+echo  [1/2] Enviando alteracoes para o GitHub...
 echo.
+cd /d "%~dp0"
 git add -A
 git diff --cached --quiet
 if %errorlevel% == 0 (
     echo  Nenhuma alteracao nova para commitar. Continuando deploy...
 ) else (
-    set /p MSG="  Digite a mensagem do commit (ou Enter para mensagem automatica): "
+    set /p MSG="  Mensagem do commit (Enter = automatica): "
     if "%MSG%"=="" set MSG=deploy: atualizacao automatica
     git commit -m "%MSG%"
     git push origin main
-    echo  GitHub atualizado com sucesso!
+    echo  GitHub atualizado! O Render vai detectar e iniciar o deploy automaticamente.
 )
 echo.
 
-:: ── [2/3] Deploy no Oracle ─────────────────────────────────────────────────
-echo  [2/3] Conectando no Oracle e atualizando servidor...
-echo.
-ssh -i "C:\Users\vando\OneDrive\Desktop\BOT GARRA SERVIDOR1\BOT GARRA SERVIDOR\ssh-key-2026-07-26.key" -o StrictHostKeyChecking=no ubuntu@158.101.108.207 "cd ~/CLIEMTE-garrabot && git fetch --all && git reset --hard origin/main && pm2 restart garrabot && pm2 status"
-echo.
-
-:: ── [3/3] Concluido ────────────────────────────────────────────────────────
+:: ── [2/2] Concluido ────────────────────────────────────────────────────────
 echo  =============================================
 echo    TUDO PRONTO!
 echo    - GitHub: atualizado
-echo    - Oracle: reiniciado e online
+echo    - Render: deploy iniciado automaticamente
+echo      (acompanhe em: https://dashboard.render.com)
 echo  =============================================
 echo.
 pause
