@@ -33698,12 +33698,24 @@ async function _drvFiltroTopoFundo(ativo, periodo, direcao) {
     const range = topo - fundo;
     if (range <= 0) return { aprovado: true, motivo: 'range zero', nivel: null, dist_pct: null };
 
-    // Proximidade: considera "perto" quando está nos últimos 3% do range para cada lado
-    const ZONA = 0.04; // 4% do range
-    const distTopo  = (topo  - preco) / range;
-    const distFundo = (preco - fundo) / range;
-    const pertoDeTopo  = distTopo  < ZONA;  // preço próximo da resistência
-    const pertoDeFundo = distFundo < ZONA;  // preço próximo do suporte
+    // ── Proximidade por % do range total ──────────────────────────────────
+    const ZONA_RANGE = 0.08; // 8% do range total
+    const distTopoRange  = (topo  - preco) / range;
+    const distFundoRange = (preco - fundo) / range;
+
+    // ── Proximidade por % do preço atual (distância absoluta) ─────────────
+    // Bloqueia se o preço estiver a menos de 0.15% do preço do topo/fundo
+    const ZONA_PRECO = 0.0015; // 0.15% do preço
+    const distTopoPct  = (topo  - preco) / preco;
+    const distFundoPct = (preco - fundo) / preco;
+
+    // "Perto" = qualquer um dos dois critérios verdadeiro
+    const pertoDeTopo  = distTopoRange  < ZONA_RANGE || distTopoPct  < ZONA_PRECO;
+    const pertoDeFundo = distFundoRange < ZONA_RANGE || distFundoPct < ZONA_PRECO;
+
+    // Valores para exibição no log (usa range como referência principal)
+    const distTopo  = distTopoRange;
+    const distFundo = distFundoRange;
 
     // ── 2) Analisa pavios da vela atual e das 2 anteriores ────────────────
     const velas3 = sorted.slice(-3);
@@ -33739,18 +33751,23 @@ async function _drvFiltroTopoFundo(ativo, periodo, direcao) {
 
     if (dir === 'CALL' && pertoDeTopo) {
         aprovado = false;
-        motivo = `CALL perto de TOPO (dist:${(distTopo*100).toFixed(1)}% do range)`;
+        const _pctR = (distTopoRange * 100).toFixed(1);
+        const _pctP = (distTopoPct  * 100).toFixed(2);
+        motivo = `CALL perto de TOPO — resistência:${topo.toFixed(4)} | dist:${_pctR}% range / ${_pctP}% preço`;
     } else if (dir === 'PUT' && pertoDeFundo) {
         aprovado = false;
-        motivo = `PUT perto de FUNDO (dist:${(distFundo*100).toFixed(1)}% do range)`;
+        const _pctR = (distFundoRange * 100).toFixed(1);
+        const _pctP = (distFundoPct  * 100).toFixed(2);
+        motivo = `PUT perto de FUNDO — suporte:${fundo.toFixed(4)} | dist:${_pctR}% range / ${_pctP}% preço`;
     } else if (pinContra && !pinFavor) {
         aprovado = false;
         const tipoPin = reversoes.find(p => p.reversao !== dir)?.tipo || 'pin';
         motivo = `Pin bar de reversão contra: ${tipoPin}`;
     } else {
         const nivelRef = dir === 'CALL' ? `resistência:${topo.toFixed(4)}` : `suporte:${fundo.toFixed(4)}`;
-        const _d100 = ((dir==='CALL' ? distTopo : distFundo) * 100).toFixed(1);
-        motivo = `OK — ${nivelRef} | dist:${_d100}%`;
+        const _dR = ((dir==='CALL' ? distTopoRange : distFundoRange) * 100).toFixed(1);
+        const _dP = ((dir==='CALL' ? distTopoPct   : distFundoPct  ) * 100).toFixed(2);
+        motivo = `OK — ${nivelRef} | dist:${_dR}% range / ${_dP}% preço`;
     }
 
     return {
