@@ -11666,9 +11666,26 @@ function initWebSocket(wssUrl) {
                     bot._canaleDir  = _tpS.dir;
                     bot._tpScore    = _tpS.score;   // salva para usar na notificação do resultado
                     bot._buying     = true;
-                    print(`🏛️ GARRA TREND PRO V2.0 ${_tpS.dir} | score ${_tpS.score}/100 | ENTRADA NA VIRADA ✅`, 'log-win');
-                    print(`   ${_tpS.resumo}`, 'log-info');
-                    _edcEntrar(() => buy());
+                    // Aguarda virada da vela quando contrato é em minutos
+                    const _tpEhMin = (est.duracao_unit === 'm');
+                    if (_tpEhMin) {
+                        const _tpVelaDurMs = (parseInt(est.duracao) || 1) * 60000;
+                        const _tpMsFalta   = _tpVelaDurMs - (Date.now() % _tpVelaDurMs);
+                        const _tpAtraso    = _tpMsFalta < 200 ? 0 : _tpMsFalta;
+                        _seqStatusUpdate(`🏛️ TREND PRO ${_tpS.dir} | score ${_tpS.score}/100 | ⏳ virada em ${(_tpAtraso/1000).toFixed(1)}s...`);
+                        print(`🏛️ GARRA TREND PRO V2.0 ${_tpS.dir} | score ${_tpS.score}/100 | ENTRADA NA VIRADA ✅`, 'log-win');
+                        print(`   ${_tpS.resumo}`, 'log-info');
+                        if (bot._hmaViradaTimer) clearTimeout(bot._hmaViradaTimer);
+                        bot._hmaViradaTimer = setTimeout(() => {
+                            bot._hmaViradaTimer = null;
+                            if (!bot.running) { bot._buying = false; return; }
+                            _edcEntrar(() => buy());
+                        }, _tpAtraso);
+                    } else {
+                        print(`🏛️ GARRA TREND PRO V2.0 ${_tpS.dir} | score ${_tpS.score}/100 | ENTRADA NA VIRADA ✅`, 'log-win');
+                        print(`   ${_tpS.resumo}`, 'log-info');
+                        _edcEntrar(() => buy());
+                    }
                     return;
                 }
 
@@ -11932,8 +11949,24 @@ function initWebSocket(wssUrl) {
                     bot._tpScore   = _tpAiS.score;
                     bot._buying    = true;
                     const _atLbl = _tpAiS.ativo || est.ativo || 'R_100';
-                    print(`🤖 TRADING PRO AI ${_tpAiS.dir} | score <b>${_tpAiS.score}/100</b> | líder: <b>${_tpAiS.lider}</b> | ativo: <b>${_atLbl}</b> | ENTRADA NA VIRADA ✅`, 'log-win');
-                    _edcEntrar(() => buy());
+                    // Aguarda virada da vela quando contrato é em minutos
+                    const _tpAiEhMin = (est.duracao_unit === 'm');
+                    if (_tpAiEhMin) {
+                        const _tpAiVelaDurMs = (parseInt(est.duracao) || 1) * 60000;
+                        const _tpAiMsFalta   = _tpAiVelaDurMs - (Date.now() % _tpAiVelaDurMs);
+                        const _tpAiAtraso    = _tpAiMsFalta < 200 ? 0 : _tpAiMsFalta;
+                        _seqStatusUpdate(`🤖 TRADING PRO AI ${_tpAiS.dir} | score ${_tpAiS.score}/100 | ⏳ virada em ${(_tpAiAtraso/1000).toFixed(1)}s...`);
+                        print(`🤖 TRADING PRO AI ${_tpAiS.dir} | score <b>${_tpAiS.score}/100</b> | líder: <b>${_tpAiS.lider}</b> | ativo: <b>${_atLbl}</b> | ENTRADA NA VIRADA ✅`, 'log-win');
+                        if (bot._hmaViradaTimer) clearTimeout(bot._hmaViradaTimer);
+                        bot._hmaViradaTimer = setTimeout(() => {
+                            bot._hmaViradaTimer = null;
+                            if (!bot.running) { bot._buying = false; return; }
+                            _edcEntrar(() => buy());
+                        }, _tpAiAtraso);
+                    } else {
+                        print(`🤖 TRADING PRO AI ${_tpAiS.dir} | score <b>${_tpAiS.score}/100</b> | líder: <b>${_tpAiS.lider}</b> | ativo: <b>${_atLbl}</b> | ENTRADA NA VIRADA ✅`, 'log-win');
+                        _edcEntrar(() => buy());
+                    }
                     return;
                 }
 
