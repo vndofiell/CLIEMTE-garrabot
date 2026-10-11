@@ -31540,24 +31540,46 @@ async function _otcFluxoCiclo() {
             decisao === 'CALL' ? 'log-win' : 'log-loss'
         );
 
-        // 4. Entrar na operação
+        // 4. Aguardar virada da vela antes de entrar
+        // Calcula quantos ms faltam para o fechamento da vela atual
+        {
+            const _agoraMs   = Date.now();
+            const _agoraS    = Math.floor(_agoraMs / 1000);
+            const _tsAb      = Math.floor(_agoraS / periodo) * periodo;
+            const _tsFechMs  = (_tsAb + periodo) * 1000;
+            const _msAteVela = _tsFechMs - _agoraMs;
+            // Entra entre 2500ms e 200ms antes do fechamento da vela
+            // Se já estamos nessa janela, entra imediatamente; caso contrário aguarda
+            if (_msAteVela > 2500) {
+                const _aguardar = _msAteVela - 2500;
+                print(`📈 OTC FLUXO: ⏱ Aguardando virada da vela em ${Math.round(_msAteVela/1000)}s...`, 'log-info');
+                await new Promise(resolve => setTimeout(resolve, _aguardar));
+            }
+            if (!_otcFluxo.rodando) { _otcFluxo._cicloRodando = false; return; }
+        }
+
+        // 5. Entrar na operação — envia com alinhar_minuto=true para garantir virada
         _otcFluxo.opBloqueada = true;
-        let opId = null;
+        let opKey = null;
+        let opId  = null;
         try {
             const rOp = await fetch('/quotex/operar', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    ativo:     ativoId,
-                    direcao:   decisao,
-                    valor:     _otcFluxo.valorAtual,
-                    expiracao: periodo,
+                    ativo:          ativoId,
+                    direcao:        decisao.toLowerCase(),
+                    valor:          _otcFluxo.valorAtual,
+                    duracao:        periodo,
+                    minutos:        Math.round(periodo / 60) || 1,
+                    alinhar_minuto: true,
                 }),
             });
             const dOp = await rOp.json();
-            if (!dOp.ok && !dOp.id) throw new Error(dOp.erro || 'sem id');
-            opId = dOp.id || dOp.op_id || null;
-            print(`📈 OTC FLUXO: ⏳ Ordem enviada | id=${opId} | ${decisao} ${ativoNm} $${_otcFluxo.valorAtual}`, 'log-info');
+            if (!dOp.ok) throw new Error(dOp.erro || 'falha ao enviar ordem');
+            opKey = dOp.op_key || null;
+            opId  = dOp.id     || null;   // pode vir null se buy ainda não confirmou
+            print(`📈 OTC FLUXO: ⏳ Ordem enviada | ${decisao} ${ativoNm} $${_otcFluxo.valorAtual} | op_key=${opKey}`, 'log-info');
         } catch(e) {
             print(`📈 OTC FLUXO: ❌ Erro ao operar — ${e.message}`, 'log-loss');
             _otcFluxo.opBloqueada = false;
@@ -31565,8 +31587,40 @@ async function _otcFluxoCiclo() {
             return;
         }
 
-        // 5. Aguardar resultado (polling)
-        const maxEspera = (periodo + 15) * 1000;
+        // 6. Poll de confirmação — aguarda o buy confirmar e obter o id real
+        if (opKey && !opId) {
+            const _tIni = Date.now();
+            while (Date.now() - _tIni < 12000) {
+                await new Promise(resolve => setTimeout(resolve, 800));
+                if (!_otcFluxo.rodando) break;
+                try {
+                    const _rSt = await fetch(`/quotex/ordem-status/${opKey}`);
+                    const _dSt = await _rSt.json();
+                    if (_dSt.etapa === 'confirmada' && _dSt.id) {
+                        opId = _dSt.id;
+                        print(`📈 OTC FLUXO: ✅ Confirmado | id=${opId}`, 'log-info');
+                        break;
+                    }
+                    if (_dSt.etapa && _dSt.etapa !== 'enviando') {
+                        // rejeitada, erro_rede, ws_corrompido, confirmacao_pendente
+                        print(`📈 OTC FLUXO: ⚠️ Ordem ${_dSt.etapa}: ${_dSt.erro || ''}`, 'log-info');
+                        _otcFluxo.opBloqueada  = false;
+                        _otcFluxo._cicloRodando = false;
+                        return;
+                    }
+                } catch(_){}
+            }
+        }
+
+        if (!opId) {
+            print(`📈 OTC FLUXO: ⚠️ Não foi possível confirmar a ordem — sem id`, 'log-info');
+            _otcFluxo.opBloqueada  = false;
+            _otcFluxo._cicloRodando = false;
+            return;
+        }
+
+        // 7. Aguardar resultado (polling)
+        const maxEspera = (periodo + 30) * 1000;
         const inicio    = Date.now();
         let resultado   = null;
         while (Date.now() - inicio < maxEspera) {
