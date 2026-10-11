@@ -34017,14 +34017,25 @@ function _drvAguardarResultado(contractId, duracao) {
                 _drvChart._sessaoLosses += win ? 0 : 1;
                 _drvChart._sessaoLucro  += lucro;
                 // Atualiza bot.profit / bot.wins / bot.losses (handler principal foi bloqueado)
+                const _drvStakeUsada = _drvMgr.valorBase || parseFloat(document.getElementById('drv-valor-input')?.value || 1);
+                const _drvProxStake  = _drvMgr.valorAtual || _drvStakeUsada;
                 if (typeof bot !== 'undefined') {
                     bot.profit += lucro;
                     if (win) { bot.wins++; bot._seqWinAtual = (bot._seqWinAtual||0)+1; bot._seqLossAtual = 0; }
                     else     { bot.losses++; bot._seqLossAtual = (bot._seqLossAtual||0)+1; bot._seqWinAtual = 0; }
+                    if (bot._maxStakeUsada == null || _drvStakeUsada > bot._maxStakeUsada) bot._maxStakeUsada = _drvStakeUsada;
                     if (bot.mgr) bot.mgr.updateResult(win, lucro);
                     bot.ws.send(JSON.stringify({ balance: 1 }));
                     if (typeof updateHeader === 'function') updateHeader();
                 }
+                // Envia resultado ao Telegram (mesmo fluxo do bot principal)
+                if (typeof tgEnviarResultado === 'function') {
+                    tgEnviarResultado(win, lucro, _drvProxStake, false, {
+                        estrategia: bot && bot.estrategia ? bot.estrategia : '🤖 TRADING PRO AI',
+                        modo:       bot && bot.gerenciamento ? bot.gerenciamento : '💰 Stake Fixa',
+                    }, _drvStakeUsada);
+                }
+                _drvAplicarGerenciamento(win, lucro);
                 _drvOpStatusMsg(`${win?'✅ WIN':'❌ LOSS'} ${win?'+':''}$${lucro.toFixed(2)}`, win ? '#27c93f' : '#f44');
             } catch(_) {}
         };
