@@ -29282,25 +29282,9 @@ window.addEventListener('load', () => {
         </div>
       </div>
 
-      <!-- Stop Win / Stop Loss -->
-      <div style="padding:8px 12px; border-bottom:1px solid rgba(255,255,255,0.06);">
-        <div style="display:flex; gap:8px;">
-          <div style="flex:1;">
-            <div style="font-size:0.58rem; color:#27c93f; letter-spacing:1px; margin-bottom:4px;">STOP WIN ($)</div>
-            <input id="drv-stop-win" type="number" min="0" step="0.5" value="0" placeholder="0=deslig."
-                style="width:100%; background:#0a0a12; border:1px solid rgba(39,201,63,0.35);
-                       color:#27c93f; padding:5px 6px; font-family:'Share Tech Mono';
-                       font-size:0.72rem; border-radius:3px; outline:none; text-align:center;">
-          </div>
-          <div style="flex:1;">
-            <div style="font-size:0.58rem; color:#f44; letter-spacing:1px; margin-bottom:4px;">STOP LOSS ($)</div>
-            <input id="drv-stop-loss" type="number" min="0" step="0.5" value="0" placeholder="0=deslig."
-                style="width:100%; background:#0a0a12; border:1px solid rgba(244,68,68,0.35);
-                       color:#f44; padding:5px 6px; font-family:'Share Tech Mono';
-                       font-size:0.72rem; border-radius:3px; outline:none; text-align:center;">
-          </div>
-        </div>
-      </div>
+      <!-- Stop Win / Stop Loss — inputs ocultos, valores sincronizados do painel principal -->
+      <input id="drv-stop-win"  type="hidden" value="0">
+      <input id="drv-stop-loss" type="hidden" value="999">
 
       <!-- Botões CALL / PUT -->
       <div style="padding:12px; display:flex; flex-direction:column; gap:10px;">
@@ -34178,7 +34162,11 @@ function _drvSbAtualizar() {
     set('drv-sb-losses', g('hd-losses'));
     set('drv-sb-taxa',   g('hd-taxa'));
     set('drv-sb-stake',  g('hd-nextstake'));
-    set('drv-sb-mgmt',   g('hd-mgmt'));
+    // Barra inferior: também usa o gerenciamento deste painel
+    const _drvMgrNomeSb = (typeof _DRV_MGR_MAP !== 'undefined' && typeof _drvMgr !== 'undefined')
+        ? (_DRV_MGR_MAP[_drvMgr.tipo] || _drvMgr.tipo || '--').replace(/[^\w\s]/gu,'').trim()
+        : g('hd-mgmt');
+    set('drv-sb-mgmt', _drvMgrNomeSb);
     set('drv-sb-strat',  g('hd-strat'));
     set('drv-sb-timer',  g('hd-timer'));
 
@@ -34191,7 +34179,16 @@ function _drvSbAtualizar() {
     set('drv-hd-losses', g('hd-losses'));
     set('drv-hd-taxa',   g('hd-taxa'));
     set('drv-hd-stake',  g('hd-nextstake'));
-    set('drv-hd-mgmt',   g('hd-mgmt'));
+    // Mostra o gerenciamento configurado NESTE painel, não o do bot principal
+    const _drvMgrNome = (typeof _DRV_MGR_MAP !== 'undefined' && typeof _drvMgr !== 'undefined')
+        ? (_DRV_MGR_MAP[_drvMgr.tipo] || _drvMgr.tipo || '--').replace(/[^\w\s]/gu,'').trim()
+        : g('hd-mgmt');
+    set('drv-hd-mgmt', _drvMgrNome);
+    // Sincroniza SW/SL ocultos com os valores do bot principal
+    const _drvSwEl = document.getElementById('drv-stop-win');
+    const _drvSlEl = document.getElementById('drv-stop-loss');
+    if (_drvSwEl && typeof bot !== 'undefined') _drvSwEl.value = bot.stopWin  < 999 ? bot.stopWin  : 0;
+    if (_drvSlEl && typeof bot !== 'undefined') _drvSlEl.value = bot.stopLoss < 999 ? bot.stopLoss : 999;
     set('drv-hd-strat',  g('hd-strat'));
     set('drv-hd-timer',  g('hd-timer'));
 }
