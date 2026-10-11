@@ -12757,8 +12757,9 @@ function initWebSocket(wssUrl) {
         // Resultado da operação
         if (data.msg_type === 'proposal_open_contract' && data.proposal_open_contract.is_sold) {
             // Ignora contratos abertos pelo painel Deriv Chart — processados por _drvAguardarResultado
+            const _cidStr = String(data.proposal_open_contract.contract_id);
             if (typeof _drvChart !== 'undefined' && _drvChart.cidsAtivos &&
-                _drvChart.cidsAtivos.has(String(data.proposal_open_contract.contract_id))) {
+                (_drvChart.cidsAtivos.has(_cidStr) || (_drvChart._processados && _drvChart._processados.has(_cidStr)))) {
                 return;
             }
             // ── Resultado de operação DBS: conta wins/losses, atualiza lucro e envia Telegram ──
@@ -29246,6 +29247,61 @@ window.addEventListener('load', () => {
         <span id="drv-pagamento-est" style="color:#00ff41; font-weight:bold; font-size:0.8rem;">$--</span>
       </div>
 
+      <!-- Gerenciamento -->
+      <div style="padding:10px 12px; border-bottom:1px solid rgba(255,255,255,0.06);">
+        <div style="font-size:0.62rem; color:#555; letter-spacing:1px; margin-bottom:6px;">GERENCIAMENTO</div>
+        <select id="drv-mgr-tipo"
+            onchange="drvMgrMostrarParams()"
+            style="width:100%; background:#0a0a12; border:1px solid rgba(0,255,65,0.35);
+                   color:#c8d0e0; padding:6px 8px; font-family:'Share Tech Mono';
+                   font-size:0.7rem; border-radius:4px; outline:none; margin-bottom:6px;">
+          <option value="fixo">💰 Stake Fixa — entrada constante</option>
+          <option value="martingale">🔄 Martingale — multiplica no loss</option>
+          <option value="sorosgale">⚡ SorosGale — reinveste no win</option>
+          <option value="loss_recovery">📉 Loss Recovery — recuperação gradual</option>
+          <option value="recovery_cons">🛡️ Recovery Conservador — lento</option>
+          <option value="qsr">📐 QSR — % da dívida por op</option>
+          <option value="masaniello">📊 Masaniello — ciclos estatísticos</option>
+          <option value="ciclos">🎯 Ciclos — sequência fixa de stakes</option>
+          <option value="recovery_adapt">🤖 Recovery Adaptativo — auto</option>
+          <option value="juros_compostos">💹 Juros Compostos — % da banca</option>
+          <option value="ral">🏦 RAL — lucro realizado apenas</option>
+          <option value="ccr">🔒 CCR — caixas isoladas</option>
+          <option value="ria">🧠 RIA — recovery inteligente</option>
+        </select>
+        <!-- Parâmetros dinâmicos -->
+        <div id="drv-mgr-params" style="display:flex; flex-direction:column; gap:5px;"></div>
+        <!-- Indicador de estado -->
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:6px;">
+          <span style="font-size:0.58rem; color:#555;">Próxima entrada</span>
+          <span id="drv-mgr-proxima" style="color:#0ff; font-weight:bold; font-size:0.78rem; font-family:'Share Tech Mono';">$--</span>
+        </div>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:2px;">
+          <span style="font-size:0.58rem; color:#555;">Nível de gale</span>
+          <span id="drv-mgr-nivel" style="color:#ffbd2e; font-weight:bold; font-size:0.72rem; font-family:'Share Tech Mono';">0</span>
+        </div>
+      </div>
+
+      <!-- Stop Win / Stop Loss -->
+      <div style="padding:8px 12px; border-bottom:1px solid rgba(255,255,255,0.06);">
+        <div style="display:flex; gap:8px;">
+          <div style="flex:1;">
+            <div style="font-size:0.58rem; color:#27c93f; letter-spacing:1px; margin-bottom:4px;">STOP WIN ($)</div>
+            <input id="drv-stop-win" type="number" min="0" step="0.5" value="0" placeholder="0=deslig."
+                style="width:100%; background:#0a0a12; border:1px solid rgba(39,201,63,0.35);
+                       color:#27c93f; padding:5px 6px; font-family:'Share Tech Mono';
+                       font-size:0.72rem; border-radius:3px; outline:none; text-align:center;">
+          </div>
+          <div style="flex:1;">
+            <div style="font-size:0.58rem; color:#f44; letter-spacing:1px; margin-bottom:4px;">STOP LOSS ($)</div>
+            <input id="drv-stop-loss" type="number" min="0" step="0.5" value="0" placeholder="0=deslig."
+                style="width:100%; background:#0a0a12; border:1px solid rgba(244,68,68,0.35);
+                       color:#f44; padding:5px 6px; font-family:'Share Tech Mono';
+                       font-size:0.72rem; border-radius:3px; outline:none; text-align:center;">
+          </div>
+        </div>
+      </div>
+
       <!-- Botões CALL / PUT -->
       <div style="padding:12px; display:flex; flex-direction:column; gap:10px;">
         <button id="drv-btn-call" onclick="drvOperar('call')"
@@ -29466,16 +29522,19 @@ window.addEventListener('load', () => {
             style="width:100%; background:#0a0a12; border:1px solid rgba(255,107,0,0.4);
                    color:#c8d0e0; padding:7px 10px; font-family:'Share Tech Mono';
                    font-size:0.72rem; border-radius:4px; outline:none; margin-bottom:8px;">
-          <option value="fixo">💰 Fixo — stake constante</option>
-          <option value="martingale">🔄 Martingale — dobra no loss</option>
+          <option value="fixo">💰 Stake Fixa — entrada constante</option>
+          <option value="martingale">🔄 Martingale — multiplica no loss</option>
           <option value="sorosgale">⚡ SorosGale — reinveste no win</option>
-          <option value="loss_recovery">📉 Loss Recovery — recupera gradual</option>
-          <option value="recovery_cons">🛡️ Recovery Conservador — 1 gale max</option>
-          <option value="qsr">📐 QSR — sequência proporcional</option>
-          <option value="masaniello">📊 Masaniello — ciclos calculados</option>
-          <option value="ral">🏦 RAL — % dinâmica da banca</option>
-          <option value="ccr">🔒 CCR — controle de capital restrito</option>
-          <option value="ma_adaptativo">📐 MA-Adaptativo — ajuste por resultado</option>
+          <option value="loss_recovery">📉 Loss Recovery — recuperação gradual</option>
+          <option value="recovery_cons">🛡️ Recovery Conservador — lento</option>
+          <option value="qsr">📐 QSR — % da dívida por op</option>
+          <option value="masaniello">📊 Masaniello — ciclos estatísticos</option>
+          <option value="ciclos">🎯 Ciclos — sequência fixa de stakes</option>
+          <option value="ma_adaptativo">🤖 Recovery Adaptativo — auto</option>
+          <option value="juros_compostos">💹 Juros Compostos — % da banca</option>
+          <option value="ral">🏦 RAL — lucro realizado apenas</option>
+          <option value="ccr">🔒 CCR — caixas isoladas</option>
+          <option value="ria">🧠 RIA — recovery inteligente</option>
         </select>
 
         <!-- Painel de parâmetros dinâmicos por gerenciamento -->
@@ -30448,19 +30507,45 @@ function qxGerMostrarParams() {
             _inp('qx-p-maxg','NÍVEIS QSR',_qxModo.maxGales,2,8,1,'#60a5fa')
         ),
         masaniello:    _grid(
-            _inp('qx-p-masops','OPS/CICLO',_qxModo.masOps,4,50,1,'#00ffcc'),
-            _inp('qx-p-maswr','WIN RATE ALV%',_qxModo.masWinRate,50,90,5,'#4ade80')
+            _inp('qx-p-masops','TOTAL EVENTOS (N)',_qxModo.masOps,4,50,1,'#00ffcc'),
+            _inp('qx-p-maswr','ACERTOS ESP. (K)',_qxModo.masWinRate,1,49,1,'#4ade80')
+        ) + _grid(
+            _inp('qx-p-maspay','PAYOUT (ex:0.85)',_qxModo.pctBanca||0.85,0.01,0.99,0.01,'#ffbd2e')
+        ),
+        ciclos:        `<div style="display:flex;flex-direction:column;gap:2px;">
+            <div style="font-size:0.58rem;color:#60a5fa;letter-spacing:1px;">SEQUÊNCIA (vírgula)</div>
+            <input id="qx-p-ciclos" type="text" value="5,6,3.5,7,14,28"
+              style="width:100%;background:#0a0a12;border:1px solid rgba(255,107,0,0.35);
+                     color:#c8d0e0;font-family:'Share Tech Mono';font-size:0.75rem;
+                     padding:5px 8px;border-radius:4px;outline:none;">
+          </div>`,
+        ma_adaptativo: _grid(
+            _inp('qx-p-mult','MULT RECUPERAÇÃO',_qxModo.multGale,1.05,3,0.05,'#4ade80'),
+            _inp('qx-p-maxg','MAX GALES',_qxModo.maxGales,1,10,1,'#f87171')
+        ),
+        juros_compostos: _grid(
+            _inp('qx-p-jcpct','% BANCA/ENTRADA',_qxModo.pctBanca||2,0.1,50,0.1,'#4ade80'),
+            _inp('qx-p-jcmeta','META LUCRO %',10,0.1,500,0.1,'#27c93f')
+        ) + _grid(
+            _inp('qx-p-jcstop','STOP LOSS %',20,0.1,100,0.1,'#f87171'),
+            _inp('qx-p-jcpayout','PAYOUT (ex:0.85)',0.85,0.01,0.99,0.01,'#ffbd2e')
         ),
         ral:           _grid(
-            _inp('qx-p-pct','% DA BANCA',_qxModo.pctBanca,0.5,20,0.5,'#00ff88'),
-            _inp('qx-p-maxg','MAX GALES',_qxModo.maxGales,1,10,1,'#f87171')
+            _inp('qx-p-pct','% BANCA/TENTATIVA',_qxModo.pctBanca,0.5,20,0.5,'#00ff88'),
+            _inp('qx-p-maxg','MAX FALHAS',_qxModo.maxGales,1,10,1,'#f87171')
+        ) + _grid(
+            _inp('qx-p-ralpayout','PAYOUT (ex:0.85)',0.85,0.01,0.99,0.01,'#ffbd2e')
         ),
         ccr:           _grid(
-            _inp('qx-p-pct','% MAX RISCO',_qxModo.pctBanca,0.5,10,0.5,'#f87171')
+            _inp('qx-p-pct','% MAX RISCO',_qxModo.pctBanca,0.5,10,0.5,'#f87171'),
+            _inp('qx-p-ccrpayout','PAYOUT (ex:0.85)',0.85,0.01,0.99,0.01,'#ffbd2e')
         ),
-        ma_adaptativo: _grid(
-            _inp('qx-p-mult','MULT GAIN',_qxModo.multGale,1.05,3,0.05,'#4ade80'),
-            _inp('qx-p-maxg','MAX GALES',_qxModo.maxGales,1,10,1,'#f87171')
+        ria:           _grid(
+            _inp('qx-p-riapay','PAYOUT (ex:0.85)',0.85,0.01,0.99,0.01,'#ffbd2e'),
+            _inp('qx-p-riarisco','RISCO MÁX % BANCA',3,0.5,20,0.5,'#f87171')
+        ) + _grid(
+            _inp('qx-p-riarec','% DÍVIDA/OP',25,5,50,1,'#4ade80'),
+            _inp('qx-p-riamaxl','LOSSES P/ PAUSAR',4,1,10,1,'#a78bfa')
         ),
     };
     box.innerHTML = defs[mgr] || '';
@@ -32726,6 +32811,394 @@ const _drvModo = {
     mtfAtivo: true,   // Filtro Multi-Timeframe ligado por padrão
 };
 
+// ── Gerenciamento do painel Deriv Chart ──────────────────
+const _drvMgr = {
+    tipo:        'fixo',
+    valorBase:   1.0,
+    valorAtual:  1.0,
+    galeAtual:   0,
+    sessaoLucro: 0,
+    // parâmetros extras por modo (lidos dos inputs ao operar)
+    maxGales:    3,
+    multGale:    2.1,
+    sorosCiclos: 3,
+    sorosLucro:  0,
+    qsrSeq:      [1,1,2,3,5,8,13],
+    qsrIdx:      0,
+    lrDivida:    0,
+    lrRecPct:    50,
+    recConsPct:  30,
+    qsrMax:      50,
+    masEventos:  10,
+    masAcertos:  3,
+    masPay:      0.85,
+    masTipo:     'Normal',
+    ciclosSeq:   [5,6,3.5,7,14,28],
+    ciclosIdx:   0,
+    raMaxima:    20,
+    raRecBase:   30,
+    jcPct:       2.0,
+    jcMetaPct:   10.0,
+    jcStopPct:   20.0,
+    jcPayout:    0.85,
+    jcBanca:     0,
+    ralRecFrac:  0.25,
+    ralLotCap:   3.0,
+    ralMaxStrk:  2,
+    ralResetDraw:0.50,
+    ralPayout:   0.85,
+    ccrBoxSzPct: 5.0,
+    ccrTarget:   1.0,
+    ccrMaxTrd:   40,
+    ccrLotMid:   1.3,
+    ccrLotMax:   1.6,
+    ccrFailStrk: 3,
+    ccrSucRate:  0.35,
+    ccrVault:    2.0,
+    ccrPayout:   0.85,
+    riaPayout:   0.85,
+    riaRiscoPct: 3.0,
+    riaRecPct:   25.0,
+    riaMultMax:  2.5,
+    riaMaxLoss:  4,
+    riaDdBloq:   10.0,
+    // GerenciadorUnificado instance (substituído ao confirmar parâmetros)
+    _gu: null,
+};
+
+// ── Mapa de tipo local → chave do GERENCIAMENTOS ──────────────────────────
+const _DRV_MGR_MAP = {
+    fixo:             '💰 Stake Fixa',
+    martingale:       '🔄 Martingale',
+    sorosgale:        '⚡ SorosGale',
+    loss_recovery:    '📉 Loss Recovery',
+    recovery_cons:    '🛡️ Recovery Conservador',
+    qsr:              '📐 QSR',
+    masaniello:       '📊 Masaniello',
+    ciclos:           '🎯 Ciclos',
+    recovery_adapt:   '🤖 Recovery Adaptativo',
+    juros_compostos:  '💹 Juros Compostos',
+    ral:              '🏦 RAL',
+    ccr:              '🔒 CCR',
+    ria:              '🧠 RIA',
+};
+
+// Mostra/oculta parâmetros conforme gerenciamento selecionado
+function drvMgrMostrarParams() {
+    const tipo = document.getElementById('drv-mgr-tipo')?.value || 'fixo';
+    _drvMgr.tipo = tipo;
+    const box = document.getElementById('drv-mgr-params');
+    if (!box) return;
+    box.innerHTML = '';
+
+    const _inp = (id, label, val, min, max, step, cor) => {
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex; justify-content:space-between; align-items:center; gap:6px; margin-bottom:3px;';
+        row.innerHTML = `
+            <span style="font-size:0.6rem; color:${cor||'#555'}; flex:1;">${label}</span>
+            <input id="${id}" type="number" value="${val}" min="${min}" max="${max}" step="${step}"
+                style="width:70px; background:#0a0a12; border:1px solid rgba(0,255,65,0.3);
+                       color:#0ff; padding:3px 6px; font-family:'Share Tech Mono';
+                       font-size:0.7rem; border-radius:3px; outline:none; text-align:center;">`;
+        box.appendChild(row);
+    };
+    const _sel = (id, label, val, opcoes, cor) => {
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex; justify-content:space-between; align-items:center; gap:6px; margin-bottom:3px;';
+        const opts = opcoes.map(o => `<option value="${o}"${String(o)===String(val)?' selected':''}>${o}</option>`).join('');
+        row.innerHTML = `
+            <span style="font-size:0.6rem; color:${cor||'#555'}; flex:1;">${label}</span>
+            <select id="${id}" style="background:#0a0a12; border:1px solid rgba(0,255,65,0.3);
+                color:#0ff; padding:3px 4px; font-family:'Share Tech Mono'; font-size:0.68rem;
+                border-radius:3px; outline:none;">${opts}</select>`;
+        box.appendChild(row);
+    };
+
+    switch (tipo) {
+        case 'martingale':
+            _inp('drv-mgr-mult',     'Multiplicador',  _drvMgr.multGale,    1.1, 10, 0.1, '#fbbf24');
+            _inp('drv-mgr-maxgales', 'Máx. gales',     _drvMgr.maxGales,    0,  20, 1,   '#f87171');
+            break;
+        case 'sorosgale':
+            _inp('drv-mgr-scic',     'Ciclos Soros',   _drvMgr.sorosCiclos, 1,  10, 1,   '#a78bfa');
+            _inp('drv-mgr-maxgales', 'Máx. gales',     _drvMgr.maxGales,    0,  20, 1,   '#f87171');
+            break;
+        case 'loss_recovery':
+            _inp('drv-mgr-maxgales', 'Núm. de gales',  _drvMgr.maxGales,    0,  20, 1,   '#f87171');
+            _inp('drv-mgr-mult',     'Fator de gale',  _drvMgr.multGale,    1.0, 5, 0.01,'#fbbf24');
+            _inp('drv-mgr-lrrecpct', '% Recuperação',  _drvMgr.lrRecPct,    1, 100, 1,  '#4ade80');
+            break;
+        case 'recovery_cons':
+            _inp('drv-mgr-rconspct', '% Recuperação',  _drvMgr.recConsPct,  1, 100, 1,  '#4ade80');
+            break;
+        case 'qsr':
+            _inp('drv-mgr-maxgales', 'Níveis QSR',     _drvMgr.maxGales,    2,   8, 1,  '#60a5fa');
+            _inp('drv-mgr-qsrmax',   'Stake máx ($)',  _drvMgr.qsrMax,   0.35,1000, 0.01,'#fbbf24');
+            break;
+        case 'masaniello':
+            _inp('drv-mgr-maseventos','Total eventos (N)', _drvMgr.masEventos, 2,   50, 1,   '#00ffcc');
+            _inp('drv-mgr-masacertos','Acertos esp. (K)',  _drvMgr.masAcertos, 1,   49, 1,   '#4ade80');
+            _inp('drv-mgr-maspay',    'Payout (ex:0.85)', _drvMgr.masPay,  0.01, 0.99, 0.01,'#ffbd2e');
+            _sel('drv-mgr-mastipo',   'Tipo',             _drvMgr.masTipo, ['Normal','Progressivo'], '#0ff');
+            break;
+        case 'ciclos':
+            { const row = document.createElement('div');
+              row.style.cssText = 'display:flex; flex-direction:column; gap:2px; margin-bottom:3px;';
+              row.innerHTML = `<span style="font-size:0.6rem; color:#60a5fa;">Sequência (vírgula)</span>
+                <input id="drv-mgr-ciclos" type="text" value="${_drvMgr.ciclosSeq.join(',')}"
+                  style="width:100%; background:#0a0a12; border:1px solid rgba(0,255,65,0.3);
+                         color:#0ff; padding:4px 6px; font-family:'Share Tech Mono';
+                         font-size:0.7rem; border-radius:3px; outline:none;">`;
+              box.appendChild(row); }
+            break;
+        case 'recovery_adapt':
+            _inp('drv-mgr-ramaxima',  'Stake máx ($)',   _drvMgr.raMaxima,  0.35,10000,0.01,'#fbbf24');
+            _inp('drv-mgr-rarecbase', '% Recuperação base', _drvMgr.raRecBase, 1, 100, 1, '#4ade80');
+            break;
+        case 'juros_compostos':
+            _inp('drv-mgr-jcpct',      '% banca/entrada',  _drvMgr.jcPct,     0.1,  50, 0.1,'#4ade80');
+            _inp('drv-mgr-jcmetapct',  'Meta lucro % banca',_drvMgr.jcMetaPct,0.1, 500, 0.1,'#27c93f');
+            _inp('drv-mgr-jcstoppct',  'Stop loss % banca', _drvMgr.jcStopPct,0.1, 100, 0.1,'#f87171');
+            _inp('drv-mgr-jcpayout',   'Payout (ex:0.85)',  _drvMgr.jcPayout, 0.01,0.99,0.01,'#ffbd2e');
+            break;
+        case 'ral':
+            _inp('drv-mgr-ralrecfrac', '% banca/tentativa', _drvMgr.ralRecFrac*100, 1,100, 1,'#00ff88');
+            _inp('drv-mgr-rallotcap',  'Teto lote (×base)', _drvMgr.ralLotCap,    1.1, 20, 0.1,'#fbbf24');
+            _inp('drv-mgr-ralmaxstrk', 'Max falhas seguidas',_drvMgr.ralMaxStrk,    1,  10, 1,  '#f87171');
+            _inp('drv-mgr-ralresetdrw','Drawdown reset (%)', _drvMgr.ralResetDraw*100,10,100,5, '#a78bfa');
+            _inp('drv-mgr-ralpayout',  'Payout (ex:0.85)',  _drvMgr.ralPayout,  0.01,0.99,0.01,'#ffbd2e');
+            break;
+        case 'ccr':
+            _inp('drv-mgr-ccrboxsz',   'Caixa % entrada',   _drvMgr.ccrBoxSzPct,  1, 100, 0.5,'#fbbf24');
+            _inp('drv-mgr-ccrtarget',  'Meta lucro caixa',  _drvMgr.ccrTarget,  0.1,  10, 0.1,'#4ade80');
+            _inp('drv-mgr-ccrmaxtrds', 'Máx trades/caixa',  _drvMgr.ccrMaxTrd,    5, 200, 1,  '#60a5fa');
+            _inp('drv-mgr-ccrlotmid',  'Mult 30-60% draw',  _drvMgr.ccrLotMid,  1.0, 3.0, 0.1,'#ffbd2e');
+            _inp('drv-mgr-ccrlotmax',  'Mult >60% draw',    _drvMgr.ccrLotMax,  1.0, 5.0, 0.1,'#f87171');
+            _inp('drv-mgr-ccrfailstrk','Caixas falha pausar',_drvMgr.ccrFailStrk,  1,  10, 1,  '#a78bfa');
+            _inp('drv-mgr-ccrsucrate', 'Taxa mín sucesso %', _drvMgr.ccrSucRate*100,5, 100, 5,'#00ffcc');
+            _inp('drv-mgr-ccrvault',   'Cofre saque (×base)',_drvMgr.ccrVault,   0.5,  50, 0.5,'#27c93f');
+            _inp('drv-mgr-ccrpayout',  'Payout (ex:0.85)',  _drvMgr.ccrPayout, 0.01,0.99,0.01,'#ffbd2e');
+            break;
+        case 'ria':
+            _inp('drv-mgr-riapayout',  'Payout (ex:0.85)',  _drvMgr.riaPayout,  0.01,0.99,0.01,'#ffbd2e');
+            _inp('drv-mgr-riariscopct','Risco máx % banca', _drvMgr.riaRiscoPct,0.5,  20, 0.5,'#f87171');
+            _inp('drv-mgr-riarecpct',  '% dívida/op',       _drvMgr.riaRecPct,    5,  50, 1,  '#4ade80');
+            _inp('drv-mgr-riamultmax', 'Teto stake (×base)',_drvMgr.riaMultMax,  1.1,  10, 0.1,'#fbbf24');
+            _inp('drv-mgr-riamaxloss', 'Losses p/ pausar',  _drvMgr.riaMaxLoss,   1,  10, 1,  '#a78bfa');
+            _inp('drv-mgr-riaddbloq',  'Drawdown bloqueio %',_drvMgr.riaDdBloq,   3,  50, 1,  '#f87171');
+            break;
+        // fixo: sem parâmetros extras
+    }
+    drvMgrSincronizarInput();
+}
+
+// Lê parâmetros dos inputs e salva no _drvMgr
+function drvMgrLerParams() {
+    _drvMgr.tipo       = document.getElementById('drv-mgr-tipo')?.value || 'fixo';
+    const _v  = id => { const el = document.getElementById(id); return el ? parseFloat(el.value) : null; };
+    const _vi = id => { const el = document.getElementById(id); return el ? parseInt(el.value)   : null; };
+    const _vs = id => { const el = document.getElementById(id); return el ? el.value              : null; };
+    if (_v('drv-mgr-mult')      !== null) _drvMgr.multGale    = _v('drv-mgr-mult');
+    if (_vi('drv-mgr-maxgales') !== null) _drvMgr.maxGales    = _vi('drv-mgr-maxgales');
+    if (_vi('drv-mgr-scic')     !== null) _drvMgr.sorosCiclos = _vi('drv-mgr-scic');
+    if (_v('drv-mgr-lrrecpct')  !== null) _drvMgr.lrRecPct    = _v('drv-mgr-lrrecpct');
+    if (_v('drv-mgr-rconspct')  !== null) _drvMgr.recConsPct  = _v('drv-mgr-rconspct');
+    if (_v('drv-mgr-qsrmax')    !== null) _drvMgr.qsrMax      = _v('drv-mgr-qsrmax');
+    if (_vi('drv-mgr-maseventos')!== null) _drvMgr.masEventos = _vi('drv-mgr-maseventos');
+    if (_vi('drv-mgr-masacertos')!== null) _drvMgr.masAcertos = _vi('drv-mgr-masacertos');
+    if (_v('drv-mgr-maspay')    !== null) _drvMgr.masPay      = _v('drv-mgr-maspay');
+    if (_vs('drv-mgr-mastipo')  !== null) _drvMgr.masTipo     = _vs('drv-mgr-mastipo');
+    const ciclosEl = document.getElementById('drv-mgr-ciclos');
+    if (ciclosEl) _drvMgr.ciclosSeq = ciclosEl.value.split(',').map(x => parseFloat(x.trim())).filter(x => !isNaN(x) && x > 0);
+    if (_v('drv-mgr-ramaxima')  !== null) _drvMgr.raMaxima    = _v('drv-mgr-ramaxima');
+    if (_v('drv-mgr-rarecbase') !== null) _drvMgr.raRecBase   = _v('drv-mgr-rarecbase');
+    if (_v('drv-mgr-jcpct')     !== null) _drvMgr.jcPct       = _v('drv-mgr-jcpct');
+    if (_v('drv-mgr-jcmetapct') !== null) _drvMgr.jcMetaPct   = _v('drv-mgr-jcmetapct');
+    if (_v('drv-mgr-jcstoppct') !== null) _drvMgr.jcStopPct   = _v('drv-mgr-jcstoppct');
+    if (_v('drv-mgr-jcpayout')  !== null) _drvMgr.jcPayout    = _v('drv-mgr-jcpayout');
+    if (_v('drv-mgr-ralrecfrac')!== null) _drvMgr.ralRecFrac  = _v('drv-mgr-ralrecfrac') / 100;
+    if (_v('drv-mgr-rallotcap') !== null) _drvMgr.ralLotCap   = _v('drv-mgr-rallotcap');
+    if (_vi('drv-mgr-ralmaxstrk')!== null) _drvMgr.ralMaxStrk = _vi('drv-mgr-ralmaxstrk');
+    if (_v('drv-mgr-ralresetdrw')!== null) _drvMgr.ralResetDraw = _v('drv-mgr-ralresetdrw') / 100;
+    if (_v('drv-mgr-ralpayout') !== null) _drvMgr.ralPayout   = _v('drv-mgr-ralpayout');
+    if (_v('drv-mgr-ccrboxsz')  !== null) _drvMgr.ccrBoxSzPct = _v('drv-mgr-ccrboxsz');
+    if (_v('drv-mgr-ccrtarget') !== null) _drvMgr.ccrTarget   = _v('drv-mgr-ccrtarget');
+    if (_vi('drv-mgr-ccrmaxtrds')!== null) _drvMgr.ccrMaxTrd  = _vi('drv-mgr-ccrmaxtrds');
+    if (_v('drv-mgr-ccrlotmid') !== null) _drvMgr.ccrLotMid   = _v('drv-mgr-ccrlotmid');
+    if (_v('drv-mgr-ccrlotmax') !== null) _drvMgr.ccrLotMax   = _v('drv-mgr-ccrlotmax');
+    if (_vi('drv-mgr-ccrfailstrk')!== null) _drvMgr.ccrFailStrk = _vi('drv-mgr-ccrfailstrk');
+    if (_v('drv-mgr-ccrsucrate')!== null) _drvMgr.ccrSucRate  = _v('drv-mgr-ccrsucrate') / 100;
+    if (_v('drv-mgr-ccrvault')  !== null) _drvMgr.ccrVault    = _v('drv-mgr-ccrvault');
+    if (_v('drv-mgr-ccrpayout') !== null) _drvMgr.ccrPayout   = _v('drv-mgr-ccrpayout');
+    if (_v('drv-mgr-riapayout') !== null) _drvMgr.riaPayout   = _v('drv-mgr-riapayout');
+    if (_v('drv-mgr-riariscopct')!== null) _drvMgr.riaRiscoPct = _v('drv-mgr-riariscopct');
+    if (_v('drv-mgr-riarecpct') !== null) _drvMgr.riaRecPct   = _v('drv-mgr-riarecpct');
+    if (_v('drv-mgr-riamultmax')!== null) _drvMgr.riaMultMax  = _v('drv-mgr-riamultmax');
+    if (_vi('drv-mgr-riamaxloss')!== null) _drvMgr.riaMaxLoss = _vi('drv-mgr-riamaxloss');
+    if (_v('drv-mgr-riaddbloq') !== null) _drvMgr.riaDdBloq   = _v('drv-mgr-riaddbloq');
+}
+
+// Constrói cfg para GerenciadorUnificado a partir do _drvMgr
+function _drvMgrBuildCfg() {
+    const tipo  = _drvMgr.tipo;
+    const base  = _drvMgr.valorBase;
+    const cfg = { stake: base };
+    switch (tipo) {
+        case 'martingale':    cfg.mart_gales = _drvMgr.maxGales;   cfg.mart_mult = _drvMgr.multGale; break;
+        case 'sorosgale':     cfg.soros_gales = _drvMgr.maxGales;  cfg.soros_mult = _drvMgr.multGale || 2.0; break;
+        case 'loss_recovery': cfg.lr_max_gales = _drvMgr.maxGales; cfg.lr_gale = _drvMgr.multGale;   cfg.lr_recovery_pct = _drvMgr.lrRecPct; break;
+        case 'recovery_cons': cfg.rec_cons_pct = _drvMgr.recConsPct; break;
+        case 'qsr':           cfg.qsr_pct = 50; cfg.qsr_max = _drvMgr.qsrMax; break;
+        case 'masaniello':    cfg.mas_eventos = _drvMgr.masEventos; cfg.mas_acertos = _drvMgr.masAcertos; cfg.mas_pay = _drvMgr.masPay; cfg.mas_tipo = _drvMgr.masTipo; break;
+        case 'ciclos':        cfg.ciclos = _drvMgr.ciclosSeq.length ? _drvMgr.ciclosSeq : [5,6,3.5,7,14,28]; break;
+        case 'recovery_adapt':cfg.ra_maxima = _drvMgr.raMaxima; cfg.ra_rec_base = _drvMgr.raRecBase; break;
+        case 'juros_compostos':
+            cfg.jc_pct = _drvMgr.jcPct; cfg.jc_meta_pct = _drvMgr.jcMetaPct;
+            cfg.jc_stop_pct = _drvMgr.jcStopPct; cfg.jc_payout = _drvMgr.jcPayout;
+            cfg.jc_banca = _drvMgr.jcBanca > 0 ? _drvMgr.jcBanca : base * 50;
+            cfg.stake = Math.max(0.35, parseFloat(((cfg.jc_banca) * _drvMgr.jcPct / 100).toFixed(2)));
+            break;
+        case 'ral':
+            cfg.ral_rec_frac = _drvMgr.ralRecFrac; cfg.ral_lot_cap = _drvMgr.ralLotCap;
+            cfg.ral_max_rec_streak = _drvMgr.ralMaxStrk; cfg.ral_banco_reset_draw = _drvMgr.ralResetDraw;
+            cfg.ral_payout = _drvMgr.ralPayout; cfg.ral_banco_inicial = 0;
+            break;
+        case 'ccr':
+            cfg.ccr_box_size_pct = _drvMgr.ccrBoxSzPct; cfg.ccr_target = _drvMgr.ccrTarget;
+            cfg.ccr_max_trades = _drvMgr.ccrMaxTrd; cfg.ccr_lot_mid = _drvMgr.ccrLotMid;
+            cfg.ccr_lot_max = _drvMgr.ccrLotMax; cfg.ccr_max_fail_streak = _drvMgr.ccrFailStrk;
+            cfg.ccr_box_suc_rate = _drvMgr.ccrSucRate; cfg.ccr_vault_withdraw = _drvMgr.ccrVault;
+            cfg.ccr_payout = _drvMgr.ccrPayout;
+            break;
+        case 'ria':
+            cfg.ria_payout = _drvMgr.riaPayout; cfg.ria_risco_pct = _drvMgr.riaRiscoPct;
+            cfg.ria_rec_pct = _drvMgr.riaRecPct; cfg.ria_mult_max = _drvMgr.riaMultMax;
+            cfg.ria_max_losses = _drvMgr.riaMaxLoss; cfg.ria_dd_bloqueio = _drvMgr.riaDdBloq;
+            cfg._ria_pico_banca_inicial = _drvMgr.jcBanca > 0 ? _drvMgr.jcBanca : base * 50;
+            break;
+    }
+    return cfg;
+}
+
+// Atualiza o indicador de próxima entrada no painel
+function drvMgrSincronizarInput() {
+    const el = document.getElementById('drv-mgr-proxima');
+    const elN = document.getElementById('drv-mgr-nivel');
+    if (el) { el.textContent = '$' + _drvMgr.valorAtual.toFixed(2); }
+    if (elN) {
+        elN.textContent = _drvMgr.galeAtual > 0 ? `G${_drvMgr.galeAtual}` : '—';
+        elN.style.color = _drvMgr.galeAtual > 0 ? '#f44' : '#27c93f';
+    }
+}
+
+// Cria/atualiza o GerenciadorUnificado ao trocar o tipo no select (chamado por drvMgrMostrarParams)
+function _drvMgrAplicarTipo() {
+    drvMgrLerParams();
+    const base = _drvMgr.valorBase || parseFloat(document.getElementById('drv-valor-input')?.value || 1);
+    _drvMgr.valorBase  = base;
+    _drvMgr.valorAtual = base;
+    _drvMgr.galeAtual  = 0;
+    const saldoEl = document.getElementById('drv-saldo-val') || document.getElementById('hd-balance');
+    _drvMgr.jcBanca = saldoEl ? (parseFloat(saldoEl.textContent.replace(/[^0-9.]/g,'')) || base * 50) : base * 50;
+    const chave = _DRV_MGR_MAP[_drvMgr.tipo];
+    if (chave && typeof GerenciadorUnificado !== 'undefined') {
+        const cfg = _drvMgrBuildCfg();
+        cfg.stake = base;
+        _drvMgr._gu = new GerenciadorUnificado(chave, cfg);
+    } else {
+        _drvMgr._gu = null;
+    }
+    drvMgrSincronizarInput();
+}
+
+// Aplica o gerenciamento após um resultado e calcula próxima stake
+function _drvAplicarGerenciamento(win, lucro) {
+    drvMgrLerParams();
+    _drvMgr.sessaoLucro += lucro;
+
+    // ── Usa GerenciadorUnificado se disponível ──────────────────────────
+    if (_drvMgr._gu) {
+        if (win) _drvMgr._gu.onWin(lucro);
+        else     _drvMgr._gu.onLoss(lucro);
+        _drvMgr.valorAtual = _drvMgr._gu.getStake();
+        _drvMgr.galeAtual  = _drvMgr._gu._nivelGale || 0;
+    } else {
+        // ── Fallback para os 5 modos simples originais ──────────────────
+        const base = _drvMgr.valorBase;
+        switch (_drvMgr.tipo) {
+            case 'fixo':
+                _drvMgr.valorAtual = base; _drvMgr.galeAtual = 0; break;
+            case 'martingale':
+                if (win) { _drvMgr.valorAtual = base; _drvMgr.galeAtual = 0; }
+                else if (_drvMgr.galeAtual < _drvMgr.maxGales) {
+                    _drvMgr.valorAtual = parseFloat((_drvMgr.valorAtual * _drvMgr.multGale).toFixed(2));
+                    _drvMgr.galeAtual++;
+                } else { _drvMgr.valorAtual = base; _drvMgr.galeAtual = 0; }
+                break;
+            case 'sorosgale':
+                if (win) { _drvMgr.galeAtual++; _drvMgr.sorosLucro += Math.abs(lucro);
+                    if (_drvMgr.galeAtual >= _drvMgr.sorosCiclos) { _drvMgr.valorAtual = base; _drvMgr.galeAtual = 0; _drvMgr.sorosLucro = 0; }
+                    else { _drvMgr.valorAtual = parseFloat((base + _drvMgr.sorosLucro).toFixed(2)); }
+                } else { _drvMgr.valorAtual = base; _drvMgr.galeAtual = 0; _drvMgr.sorosLucro = 0; }
+                break;
+            case 'loss_recovery':
+                if (win) { _drvMgr.lrDivida = Math.max(0, _drvMgr.lrDivida - Math.abs(lucro));
+                    if (_drvMgr.lrDivida <= 0) { _drvMgr.valorAtual = base; _drvMgr.galeAtual = 0; }
+                } else { _drvMgr.lrDivida += Math.abs(lucro);
+                    if (_drvMgr.galeAtual < _drvMgr.maxGales) { _drvMgr.valorAtual = parseFloat((_drvMgr.valorAtual * _drvMgr.multGale).toFixed(2)); _drvMgr.galeAtual++; }
+                    else { _drvMgr.valorAtual = base; _drvMgr.galeAtual = 0; }
+                }
+                break;
+            case 'qsr':
+                if (win) { _drvMgr.qsrIdx = 0; _drvMgr.galeAtual = 0; _drvMgr.valorAtual = base; }
+                else { _drvMgr.qsrIdx = Math.min(_drvMgr.qsrIdx + 1, _drvMgr.qsrSeq.length - 1); _drvMgr.galeAtual++; _drvMgr.valorAtual = parseFloat((base * _drvMgr.qsrSeq[_drvMgr.qsrIdx]).toFixed(2)); }
+                break;
+            default: _drvMgr.valorAtual = _drvMgr.valorBase;
+        }
+    }
+
+    // Verifica Stop Win / Stop Loss
+    const sw = parseFloat(document.getElementById('drv-stop-win')?.value  || 0);
+    const sl = parseFloat(document.getElementById('drv-stop-loss')?.value || 0);
+    if (sw > 0 && _drvMgr.sessaoLucro >= sw) {
+        _drvAdicionarSinal({ msg: `🏆 STOP WIN atingido! Lucro: +$${_drvMgr.sessaoLucro.toFixed(2)}`, cor: '#27c93f' });
+        drvToggleAnalise();
+    }
+    if (sl > 0 && _drvMgr.sessaoLucro <= -sl) {
+        _drvAdicionarSinal({ msg: `🛑 STOP LOSS atingido! Perda: -$${Math.abs(_drvMgr.sessaoLucro).toFixed(2)}`, cor: '#f44' });
+        drvToggleAnalise();
+    }
+
+    drvMgrSincronizarInput();
+}
+
+// Reinicia o gerenciamento (chamado no Reset Sessão)
+function _drvMgrReiniciar() {
+    const base = parseFloat(document.getElementById('drv-valor-input')?.value || 1);
+    drvMgrLerParams();
+    _drvMgr.valorBase   = base;
+    _drvMgr.valorAtual  = base;
+    _drvMgr.galeAtual   = 0;
+    _drvMgr.sorosLucro  = 0;
+    _drvMgr.lrDivida    = 0;
+    _drvMgr.qsrIdx      = 0;
+    _drvMgr.ciclosIdx   = 0;
+    _drvMgr.sessaoLucro = 0;
+    // Para modos avançados: captura banca real para JC e RIA
+    const saldoEl = document.getElementById('drv-saldo-val') || document.getElementById('hd-balance');
+    _drvMgr.jcBanca = saldoEl ? (parseFloat(saldoEl.textContent.replace(/[^0-9.]/g,'')) || base * 50) : base * 50;
+    // (Re)cria GerenciadorUnificado com a chave correta
+    const chave = _DRV_MGR_MAP[_drvMgr.tipo];
+    if (chave && typeof GerenciadorUnificado !== 'undefined') {
+        const cfg = _drvMgrBuildCfg();
+        cfg.stake = base;
+        _drvMgr._gu = new GerenciadorUnificado(chave, cfg);
+    } else {
+        _drvMgr._gu = null;
+    }
+    drvMgrSincronizarInput();
+}
+
 // ── Deriv REST API pública (sem auth, sem WS próprio) ─────
 // Endpoint público: https://api.deriv.com/api-explorer
 // ticks_history retorna candles sem precisar de token
@@ -33032,6 +33505,10 @@ function drvToggleAnalise() {
     const btn = document.getElementById('drv-sinais-toggle');
     if (btn) { btn.textContent = _drvModo.rodando ? '⏹ PARAR' : '▶ INICIAR'; btn.style.borderColor = _drvModo.rodando ? 'rgba(239,83,80,0.6)' : 'rgba(0,255,65,0.5)'; btn.style.color = _drvModo.rodando ? '#ef4444' : '#00ff41'; }
     _drvAdicionarSinal({ msg: _drvModo.rodando ? '🔍 Análise iniciada' : '⏹ Análise pausada', cor: _drvModo.rodando ? '#00ff41' : '#ffbd2e' });
+    // Envia mensagem de início ao Telegram quando análise começa
+    if (_drvModo.rodando && typeof tgEnviarInicio === 'function') {
+        tgEnviarInicio();
+    }
     if (!_drvModo.rodando) {
         _drvModo.opBloqueada = false;
         if (_drvModo.viradaTimer) { clearTimeout(_drvModo.viradaTimer); _drvModo.viradaTimer = null; }
@@ -33113,11 +33590,12 @@ async function _drvValidarMTF(ativo, duracaoSeg, direcao) {
 
     let consenso;
     if (vFavor === 0 && vContra === 0)    consenso = 'NEUTRO';
-    else if (vFavor >= vContra)           consenso = 'CONFIRMA';
+    else if (vFavor > vContra)            consenso = 'CONFIRMA';   // empate = não confirma
+    else if (vFavor === vContra)          consenso = 'EMPATE';     // 2vs2, 1vs1 → bloqueia
     else                                   consenso = 'CONTRA';
 
-    // Aprova se CONFIRMA ou NEUTRO; bloqueia se CONTRA com maioria clara (> 1 voto de diferença)
-    const aprovado = consenso !== 'CONTRA' || (vContra - vFavor) <= 1;
+    // Aprova apenas se CONFIRMA ou NEUTRO; bloqueia CONTRA e EMPATE
+    const aprovado = consenso === 'CONFIRMA' || consenso === 'NEUTRO';
 
     return { aprovado, consenso, vFavor, vContra, vNeutro, detalhes: resultados };
 }
@@ -33344,7 +33822,7 @@ function _drvAnalisarAutomatic(precoAtual) {
                         const ico = d.tend === direcao.toUpperCase() ? '✅' : d.tend === 'NEUTRO' ? '⬜' : '❌';
                         return `${ico}${d.nome}`;
                     }).join(' ');
-                    _drvAdicionarSinal({ msg: `📊 MTF: ${mtf.consenso} | ${_tfStr}`, cor: mtf.consenso === 'CONFIRMA' ? '#27c93f' : mtf.consenso === 'CONTRA' ? '#ef4444' : '#ffbd2e' });
+                    _drvAdicionarSinal({ msg: `📊 MTF: ${mtf.consenso} | ${_tfStr}`, cor: mtf.consenso === 'CONFIRMA' ? '#27c93f' : (mtf.consenso === 'CONTRA' || mtf.consenso === 'EMPATE') ? '#ef4444' : '#ffbd2e' });
 
                     // ── Resultado Tendência ──
                     const _tendIco = tend.ema_dir === direcao.toUpperCase() ? '✅' : tend.ema_dir === 'NEUTRO' ? '⬜' : '❌';
@@ -33358,7 +33836,10 @@ function _drvAnalisarAutomatic(precoAtual) {
 
                     // ── Decisão final ──
                     if (!mtf.aprovado) {
-                        _drvAdicionarSinal({ msg: `🚫 BLOQUEADO: MTF contra (${mtf.vContra}vs${mtf.vFavor})`, cor: '#ef4444' });
+                        const _motMtf = mtf.consenso === 'EMPATE'
+                            ? `🚫 BLOQUEADO: MTF empatado (${mtf.vFavor}vs${mtf.vContra}) — sem maioria`
+                            : `🚫 BLOQUEADO: MTF contra (${mtf.vContra}vs${mtf.vFavor})`;
+                        _drvAdicionarSinal({ msg: _motMtf, cor: '#ef4444' });
                         _drvModo.opBloqueada = false; return;
                     }
                     if (!tend.aprovado) {
@@ -33395,7 +33876,18 @@ function _drvAdicionarSinal({ msg, cor }) {
 // ── Operar ────────────────────────────────────────────────
 function drvOperar(direcao) {
     const ativo   = _drvChart.ativo;
-    const valor   = parseFloat(document.getElementById('drv-valor-input')?.value||1);
+    // Usa stake do gerenciamento se ativo, senão usa o input
+    const _drvValorBase = parseFloat(document.getElementById('drv-valor-input')?.value||1);
+    if (_drvMgr.valorBase !== _drvValorBase) {
+        _drvMgr.valorBase  = _drvValorBase;
+        _drvMgr.valorAtual = _drvValorBase;
+        _drvMgr._gu = null; // força recriação abaixo
+    }
+    // Cria GU na primeira operação ou quando o tipo mudou
+    if (!_drvMgr._gu && _drvMgr.tipo !== 'fixo') {
+        _drvMgrAplicarTipo();
+    }
+    const valor   = (_drvMgr._gu || _drvMgr.tipo !== 'fixo') ? _drvMgr.valorAtual : _drvValorBase;
     const duracao = _drvChart.duracao;
     const ws      = (typeof bot !== 'undefined') ? bot.ws : null;
     const btnCall = document.getElementById('drv-btn-call');
@@ -33512,7 +34004,12 @@ function _drvAguardarResultado(contractId, duracao) {
                 if (poc.status === 'open') { setTimeout(() => _drvAguardarResultado(contractId, 0), 3000); return; }
                 const win = poc.profit >= 0, lucro = parseFloat(poc.profit||0);
                 if (_drvChart.opAtiva) _drvChart.opAtiva.lucro = lucro;
-                // Remove o ID do set para liberar memória
+                // Guarda que este contrato foi processado ANTES de remover do set
+                // Isso impede que qualquer push automático posterior seja contado duas vezes
+                if (!_drvChart._processados) _drvChart._processados = new Set();
+                if (_drvChart._processados.has(String(contractId))) return; // já processado
+                _drvChart._processados.add(String(contractId));
+                // Remove do set de ativos (agora seguro pois _processados cobre a proteção)
                 _drvChart.cidsAtivos.delete(String(contractId));
                 _drvEncerrarOpAtiva(win ? 'win' : 'loss');
                 _drvAtualizarHistorico(contractId, win ? 'win' : 'loss', lucro);
@@ -33610,6 +34107,7 @@ function _drvRenderizarHistorico() {
 function drvResetarSessao() {
     _drvChart.historico=[]; _drvChart._sessaoWins=0; _drvChart._sessaoLosses=0; _drvChart._sessaoLucro=0;
     _drvChart.cidsAtivos.clear();
+    if (_drvChart._processados) _drvChart._processados.clear();
     _drvModo.rodando=false; _drvModo.opBloqueada=false;
     if (_drvModo.viradaTimer) { clearTimeout(_drvModo.viradaTimer); _drvModo.viradaTimer = null; }
     _drvEncerrarOpAtiva(null);
