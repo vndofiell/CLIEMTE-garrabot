@@ -29221,6 +29221,46 @@ window.addEventListener('load', () => {
         </div>
       </div>
 
+      <!-- ── Barra de stats do bot principal ── -->
+      <div id="drv-stats-bar" style="
+          margin:0 0 0; padding:8px 10px;
+          background:rgba(0,0,0,0.45);
+          border-top:1px solid rgba(0,255,65,0.15);
+          border-bottom:1px solid rgba(0,0,0,0.4);
+          display:flex; flex-direction:column; gap:5px;">
+        <!-- linha 1: lucro + wins + losses + taxa -->
+        <div style="display:flex; gap:4px; align-items:center;">
+          <div style="flex:2; background:rgba(0,255,65,0.07); border:1px solid rgba(0,255,65,0.25); border-radius:3px; padding:4px 6px; text-align:center;">
+            <span id="drv-sb-profit" style="color:#00ff41; font-weight:bold; font-size:0.82rem; font-family:'Share Tech Mono';">$0.00</span>
+            <span id="drv-sb-profit-brl" style="color:#5a9; font-size:0.65rem; margin-left:3px;">(R$0,00)</span>
+          </div>
+          <div style="flex:1; background:rgba(39,201,63,0.07); border:1px solid rgba(39,201,63,0.3); border-radius:3px; padding:4px 4px; text-align:center;">
+            <span style="color:#27c93f; font-size:0.65rem; font-family:'Share Tech Mono';">✅ <span id="drv-sb-wins">0</span></span>
+          </div>
+          <div style="flex:1; background:rgba(244,68,68,0.07); border:1px solid rgba(244,68,68,0.3); border-radius:3px; padding:4px 4px; text-align:center;">
+            <span style="color:#f44; font-size:0.65rem; font-family:'Share Tech Mono';">🔁 <span id="drv-sb-losses">0</span></span>
+          </div>
+          <div style="flex:1; background:rgba(255,189,46,0.07); border:1px solid rgba(255,189,46,0.3); border-radius:3px; padding:4px 4px; text-align:center;">
+            <span style="color:#ffbd2e; font-size:0.65rem; font-weight:bold; font-family:'Share Tech Mono';">🎯 <span id="drv-sb-taxa">--%</span></span>
+          </div>
+        </div>
+        <!-- linha 2: stake + gerenciamento + estratégia + timer -->
+        <div style="display:flex; gap:4px; align-items:center;">
+          <div style="flex:1; background:rgba(0,255,255,0.06); border:1px solid rgba(0,255,255,0.2); border-radius:3px; padding:4px 5px; text-align:center;">
+            <span style="color:#0ff; font-size:0.62rem; font-family:'Share Tech Mono';">⚡ <span id="drv-sb-stake">$--</span></span>
+          </div>
+          <div style="flex:1.4; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.1); border-radius:3px; padding:4px 5px; text-align:center; overflow:hidden;">
+            <span id="drv-sb-mgmt" style="color:#aaa; font-size:0.6rem; font-family:'Share Tech Mono'; white-space:nowrap;">--</span>
+          </div>
+          <div style="flex:1.8; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.1); border-radius:3px; padding:4px 5px; text-align:center; overflow:hidden;">
+            <span id="drv-sb-strat" style="color:#aaa; font-size:0.6rem; font-family:'Share Tech Mono'; white-space:nowrap;">--</span>
+          </div>
+          <div style="flex:1.2; background:rgba(0,255,255,0.06); border:1px solid rgba(0,255,255,0.2); border-radius:3px; padding:4px 5px; text-align:center;">
+            <span style="color:#0ff; font-size:0.62rem; font-family:'Share Tech Mono';">⏱ <span id="drv-sb-timer">00:00:00</span></span>
+          </div>
+        </div>
+      </div>
+
       <!-- Histórico de operações -->
       <div id="drv-painel-historico" style="padding:10px 12px; border-top:1px solid rgba(255,255,255,0.06); flex:1;">
         <div style="font-size:0.62rem; color:#555; letter-spacing:1px; margin-bottom:8px;">
@@ -32711,6 +32751,7 @@ function drvChartAbrir() {
         if (l) l.textContent = tipo + ' • $' + parseFloat(bot._lastBalance).toFixed(2);
     }
 
+    _drvSbIniciar();   // inicia atualização da barra de stats
     drvChartCarregar();
 }
 
@@ -32719,6 +32760,7 @@ function drvChartFechar() {
     if (m) m.style.display = 'none';
     _drvRemoverTickHandler();
     if (_drvModo.analiseTimer) { clearInterval(_drvModo.analiseTimer); _drvModo.analiseTimer = null; }
+    _drvSbParar();   // para atualização da barra de stats
 }
 
 // ── Carregar candles ──────────────────────────────────────
@@ -33067,6 +33109,42 @@ function drvResetarSessao() {
 function drvResetarPlacar() {
     _drvChart._sessaoWins=0;_drvChart._sessaoLosses=0;_drvChart._sessaoLucro=0;_drvChart.historico=[];
     _drvRenderizarHistorico(); _drvOpStatusMsg('🗑️ Placar zerado','#f87171');
+}
+
+// ── Barra de stats — sincroniza com o bot principal ───────
+let _drvSbTimer = null;
+function _drvSbAtualizar() {
+    const g = id => { const el = document.getElementById(id); return el ? el.textContent.trim() : ''; };
+    const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+
+    // Lucro
+    const profit = g('hd-profit');
+    const profitBrl = g('hd-profit-brl');
+    const profitEl = document.getElementById('drv-sb-profit');
+    const profitBrlEl = document.getElementById('drv-sb-profit-brl');
+    if (profitEl) {
+        profitEl.textContent = profit || '$0.00';
+        const isNeg = profit.startsWith('-') || profit.startsWith('−');
+        const isPos = profit.startsWith('+') || (!isNeg && profit !== '$0.00' && profit !== '$--');
+        profitEl.style.color = isNeg ? '#f44' : (isPos ? '#00ff41' : '#00ff41');
+    }
+    if (profitBrlEl) profitBrlEl.textContent = profitBrl || '(R$0,00)';
+
+    set('drv-sb-wins',   g('hd-wins'));
+    set('drv-sb-losses', g('hd-losses'));
+    set('drv-sb-taxa',   g('hd-taxa'));
+    set('drv-sb-stake',  g('hd-nextstake'));
+    set('drv-sb-mgmt',   g('hd-mgmt'));
+    set('drv-sb-strat',  g('hd-strat'));
+    set('drv-sb-timer',  g('hd-timer'));
+}
+function _drvSbIniciar() {
+    _drvSbAtualizar();
+    if (_drvSbTimer) clearInterval(_drvSbTimer);
+    _drvSbTimer = setInterval(_drvSbAtualizar, 1000);
+}
+function _drvSbParar() {
+    if (_drvSbTimer) { clearInterval(_drvSbTimer); _drvSbTimer = null; }
 }
 
 
