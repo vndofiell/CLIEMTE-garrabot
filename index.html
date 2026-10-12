@@ -12677,10 +12677,15 @@ function initWebSocket(wssUrl) {
 
         // Compra confirmada → subscreve resultado
         if (data.msg_type === 'buy') {
+            // Ignora buy do painel Deriv Chart (req_id 9700-10089) — ele tem handler próprio
+            const _buyReqId = data.echo_req && data.echo_req.req_id;
+            if (_buyReqId >= 9700 && _buyReqId < 10090) return;
             if (data.error) { print("⚠️ COMPRA RECUSADA: " + data.error.message, "log-loss"); bot._buying = false; return; }
             const cid   = data.buy && data.buy.contract_id;
             const reqId = data.echo_req && data.echo_req.req_id;
             if (cid) {
+                // Ignora contratos que pertencem ao painel Deriv Chart
+                if (typeof _drvChart !== 'undefined' && _drvChart.cidsAtivos && _drvChart.cidsAtivos.has(String(cid))) return;
                 // Guarda estado do espelho NO MOMENTO da compra — evita race condition no fechamento
                 if (!bot._cidEspelho) bot._cidEspelho = {};
                 bot._cidEspelho[cid] = !!(typeof _sec !== 'undefined' && _sec.espelhandoAtivo);
@@ -33919,30 +33924,44 @@ function drvOperar(direcao) {
     else if (ct === 'DIGITEVEN') tipoContrato = direcao === 'call' ? 'DIGITEVEN' : 'DIGITODD';
     else                     tipoContrato = direcao === 'call' ? 'DIGITOVER' : 'DIGITUNDER';
 
-    const reqProp = 9700 + Math.floor(Math.random()*200);
-    const reqBuy  = reqProp + 1;
+    // req_id do painel Deriv usa faixa 9700-9899 (bot principal usa 10000+)
+    const reqProp = 9700 + Math.floor(Math.random()*190);
+    const reqBuy  = reqProp + 200;  // buy usa faixa separada 9900-9899+200
 
-    // Monta payload — a API Deriv usa 'symbol' (não 'ativo')
-    // Para CALL/PUT: duration_unit pode ser 's' (segundos) ou 'm' (minutos)
-    // Deriv aceita duration_unit:'t' para ticks, 's' para segundos, 'm' minutos
-    const duracaoUnit = 's';
+    // Para CALL/PUT a Deriv prefere 'm' (minutos); converte segundos → minutos quando possível
+    // Digits usam ticks ('t'), EVEN/ODD não precisam de barreira
+    let _durFinal = duracao;
+    let _unitFinal = 's';
+    if (tipoContrato === 'CALL' || tipoContrato === 'PUT') {
+        if (duracao >= 60 && duracao % 60 === 0) {
+            _durFinal  = duracao / 60;   // ex: 60s → 1m, 120s → 2m
+            _unitFinal = 'm';
+        }
+        // durações não divisíveis por 60 ficam em segundos (ex: 30s)
+    }
+
     const propPayload = {
         proposal: 1,
         amount: valor,
         basis: 'stake',
         contract_type: tipoContrato,
         currency: 'USD',
-        duration: duracao,
-        duration_unit: duracaoUnit,
+        duration: _durFinal,
+        duration_unit: _unitFinal,
         underlying_symbol: ativo,
         req_id: reqProp,
     };
-    // Digits com barreira
+    // Digits OVER/UNDER com barreira
     if (tipoContrato.includes('OVER') || tipoContrato.includes('UNDER')) propPayload.barrier = '5';
-    // Digits EVEN/ODD não precisam de barreira nem de duration_unit 's' — usam ticks
+    // Digits EVEN/ODD usam ticks, sem barreira
     if (tipoContrato === 'DIGITEVEN' || tipoContrato === 'DIGITODD') {
-        delete propPayload.duration_unit;
-        propPayload.duration = 1;
+        propPayload.duration      = 1;
+        propPayload.duration_unit = 't';
+        delete propPayload.barrier;
+    }
+    // Digits OVER/UNDER usam ticks
+    if (tipoContrato.includes('OVER') || tipoContrato.includes('UNDER')) {
+        propPayload.duration      = 1;
         propPayload.duration_unit = 't';
     }
 
