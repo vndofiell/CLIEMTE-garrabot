@@ -15329,6 +15329,91 @@ _init_background_threads()
 # GARRA PRICE ACTION PRO — Interface de análise M1 (EMA, RSI, MACD e Volume)
 # A rota é independente do painel principal: /garra-price-action-pro
 # ═══════════════════════════════════════════════════════════════════════════════
+@app.route('/garra-price-action-pro/feed')
+def garra_price_action_pro_feed():
+    """Relé SSE do feed Deriv no backend; evita WebSocket direto do navegador.
+    Usa websocket-client, a mesma abordagem de conexão usada pelo scanner Deriv do projeto.
+    """
+    from flask import Response, stream_with_context
+    symbol = (request.args.get('symbol') or 'R_25').strip()
+    allowed = {'R_10','R_25','R_50','R_75','R_100','frxEURUSD','frxGBPUSD'}
+    if symbol not in allowed:
+        return jsonify({'ok': False, 'error': 'Ativo não permitido'}), 400
+    try:
+        granularity = int(request.args.get('granularity', '60'))
+    except (TypeError, ValueError):
+        granularity = 60
+    if granularity not in (60, 300, 900):
+        granularity = 60
+
+    def stream():
+        ws = None
+        try:
+            import websocket as wsclient
+            ws = wsclient.create_connection(
+                'wss://ws.binaryws.com/websockets/v3?app_id=1089',
+                timeout=18, enable_multithread=True,
+            )
+            ws.send(json.dumps({'ticks_history': symbol, 'adjust_start_time': 1,
+                                'count': 500, 'end': 'latest', 'style': 'candles',
+                                'granularity': granularity}))
+            history = None
+            deadline = time.time() + 15
+            while time.time() < deadline:
+                try:
+                    msg = json.loads(ws.recv())
+                except Exception:
+                    continue
+                if msg.get('error'):
+                    yield 'event: feed_error\ndata: ' + json.dumps({'message': msg['error'].get('message','Erro Deriv')}) + '\n\n'
+                    return
+                if msg.get('candles'):
+                    history = msg['candles']
+                    break
+            if not history:
+                yield 'event: feed_error\ndata: ' + json.dumps({'message':'A Deriv não retornou histórico de velas'}) + '\n\n'
+                return
+            yield 'event: candles\ndata: ' + json.dumps({'symbol':symbol,'granularity':granularity,'candles':history}) + '\n\n'
+            ws.send(json.dumps({'ticks': symbol, 'subscribe': 1}))
+            last_ping = time.time()
+            while True:
+                try:
+                    raw = ws.recv()
+                    msg = json.loads(raw)
+                    if msg.get('error'):
+                        yield 'event: feed_error\ndata: ' + json.dumps({'message':msg['error'].get('message','Erro Deriv')}) + '\n\n'
+                        break
+                    if msg.get('tick'):
+                        yield 'event: tick\ndata: ' + json.dumps(msg['tick']) + '\n\n'
+                    elif msg.get('msg_type') == 'ping':
+                        pass
+                    if time.time() - last_ping > 20:
+                        try: ws.ping()
+                        except Exception: pass
+                        last_ping = time.time()
+                except Exception as exc:
+                    # timeout periódico: mantém a conexão viva e envia heartbeat SSE
+                    if 'timed out' in str(exc).lower() or 'timeout' in str(exc).lower():
+                        yield ': keep-alive\n\n'
+                        continue
+                    raise
+        except GeneratorExit:
+            return
+        except Exception as exc:
+            yield 'event: feed_error\ndata: ' + json.dumps({'message':str(exc)[:180]}) + '\n\n'
+        finally:
+            try:
+                if ws is not None: ws.close()
+            except Exception:
+                pass
+
+    response = Response(stream_with_context(stream()), mimetype='text/event-stream')
+    response.headers['Cache-Control'] = 'no-cache, no-transform'
+    response.headers['X-Accel-Buffering'] = 'no'
+    response.headers['Connection'] = 'keep-alive'
+    return response
+
+
 @app.route('/garra-price-action-pro')
 def garra_price_action_pro_ui():
     from flask import Response
@@ -15379,43 +15464,21 @@ $('signalReason').textContent=ok?'Confluência técnica atendida; confirmar apen
 if(series.candle&&typeof series.candle.setMarkers==='function'){series.candle.setMarkers(ok?[{time:candles[candles.length-1].time,position:dir==='CALL'?'belowBar':'aboveBar',color:dir==='CALL'?'#00e88f':'#ff5364',shape:dir==='CALL'?'arrowUp':'arrowDown',text:dir}]:[]);}}
 
 function openModal(){$('cfgAsset').value=$('asset').value;$('cfgTf').value=$('tf').value;$('cfgRsi').value=cfg.rsi;$('cfgConfidence').value=cfg.confidence;$('cfgEmaFast').value=cfg.fast;$('cfgEmaSlow').value=cfg.slow;$('useVolume').checked=cfg.useVolume;$('useMacd').checked=cfg.useMacd;$('useTrend').checked=cfg.useTrend;$('useCandle').checked=cfg.useCandle;$('modal').classList.add('show')}function closeModal(){$('modal').classList.remove('show')}
-let liveSocket=null,liveReconnect=null,liveGeneration=0,liveSymbol=null,liveGranularity=60,liveTickCount=0,liveWatchdog=null,liveLastMessage=0,livePing=null,historyLoaded=false;
+let liveSource=null,liveReconnect=null,liveGeneration=0,liveSymbol=null,liveGranularity=60,liveTickCount=0,historyLoaded=false;
 const derivSymbols={'Volatility 10 Index':'R_10','Volatility 25 Index':'R_25','Volatility 50 Index':'R_50','Volatility 75 Index':'R_75','Volatility 100 Index':'R_100','EURUSD':'frxEURUSD','GBPUSD':'frxGBPUSD'};
 function setConnection(message,ok=false){$('connection').textContent=message;const dot=document.querySelector('.dot');if(dot){dot.style.background=ok?'var(--green)':'var(--gold)';dot.style.boxShadow=ok?'0 0 10px #00e88f88':'0 0 10px #ffc85755';}}
-function stopLiveFeed(){liveGeneration++;if(liveReconnect){clearTimeout(liveReconnect);liveReconnect=null;}if(liveWatchdog){clearTimeout(liveWatchdog);liveWatchdog=null;}if(livePing){clearInterval(livePing);livePing=null;}if(liveSocket){try{liveSocket.onclose=null;liveSocket.onerror=null;liveSocket.close();}catch(e){}liveSocket=null;}}
+function stopLiveFeed(){liveGeneration++;if(liveReconnect){clearTimeout(liveReconnect);liveReconnect=null;}if(liveSource){try{liveSource.close();}catch(e){}liveSource=null;}}
 function scheduleReconnect(generation,why){if(generation!==liveGeneration)return;setConnection(why+' • reconectando em 3s');if(liveReconnect)clearTimeout(liveReconnect);liveReconnect=setTimeout(()=>{if(generation===liveGeneration)startLiveFeed();},3000);}
 function startLiveFeed(){
-  stopLiveFeed();const generation=liveGeneration;liveSymbol=derivSymbols[$('asset').value]||'R_25';liveGranularity=(Number($('tf').value)||1)*60;liveTickCount=0;historyLoaded=false;liveLastMessage=Date.now();
-  setConnection('CONECTANDO À DERIV • '+liveSymbol);
-  try{liveSocket=new WebSocket('wss://ws.derivws.com/websockets/v3?app_id=1089');}catch(e){scheduleReconnect(generation,'ERRO AO ABRIR WEBSOCKET');return;}
-  liveWatchdog=setTimeout(()=>{if(generation===liveGeneration&&(!liveSocket||liveSocket.readyState!==WebSocket.OPEN)){try{liveSocket&&liveSocket.close();}catch(e){}scheduleReconnect(generation,'TEMPO ESGOTADO NA CONEXÃO');}},12000);
-  liveSocket.onopen=()=>{if(generation!==liveGeneration)return;if(liveWatchdog){clearTimeout(liveWatchdog);liveWatchdog=null;}liveLastMessage=Date.now();setConnection('CONECTADO • SOLICITANDO HISTÓRICO');liveSocket.send(JSON.stringify({ticks_history:liveSymbol,adjust_start_time:1,count:500,end:'latest',style:'candles',granularity:liveGranularity}));
-    livePing=setInterval(()=>{if(generation!==liveGeneration)return;if(!liveSocket||liveSocket.readyState!==WebSocket.OPEN)return;if(Date.now()-liveLastMessage>25000){try{liveSocket.close();}catch(e){}scheduleReconnect(generation,'SEM RESPOSTA DA DERIV');return;}try{liveSocket.send(JSON.stringify({ping:1}));}catch(e){scheduleReconnect(generation,'FALHA NO ENVIO');}},10000);
-  };
-  liveSocket.onmessage=(event)=>{if(generation!==liveGeneration)return;liveLastMessage=Date.now();let msg;try{msg=JSON.parse(event.data);}catch(e){setConnection('RESPOSTA INVÁLIDA DA DERIV');return;}
-    if(msg.error){const em=String(msg.error.message||'erro desconhecido');setConnection('ERRO DERIV: '+em);console.error('[GARRA FEED]',msg.error);if(/Invalid app_id|app_id/i.test(em)){scheduleReconnect(generation,'APP_ID REJEITADO');}return;}
-    if(msg.msg_type==='ping'||msg.ping)return;
-    if(msg.candles&&Array.isArray(msg.candles)){
-      const loaded=msg.candles.map(c=>({time:Number(c.epoch),open:Number(c.open),high:Number(c.high),low:Number(c.low),close:Number(c.close),volume:0})).filter(c=>Number.isFinite(c.time)&&[c.open,c.high,c.low,c.close].every(Number.isFinite)).sort((a,b)=>a.time-b.time);
-      if(loaded.length>=30){candles=loaded;historyLoaded=true;update();analyze();setConnection('HISTÓRICO OK • AGUARDANDO TICKS • '+liveSymbol,true);}
-      else{setConnection('HISTÓRICO INSUFICIENTE ('+loaded.length+' CANDLES)');}
-      // Solicita ticks somente após receber a resposta do histórico.
-      if(liveSocket&&liveSocket.readyState===WebSocket.OPEN)liveSocket.send(JSON.stringify({ticks:liveSymbol,subscribe:1}));
-      return;
-    }
-    if(msg.tick){const tick=msg.tick,epoch=Number(tick.epoch),price=Number(tick.quote);if(!Number.isFinite(epoch)||!Number.isFinite(price))return;
-      if(!historyLoaded){setConnection('TICK RECEBIDO • AGUARDANDO HISTÓRICO');return;}
-      const bucket=Math.floor(epoch/liveGranularity)*liveGranularity;let last=candles[candles.length-1];
-      if(!last||bucket>last.time){const open=last?last.close:price;candles.push({time:bucket,open,high:price,low:price,close:price,volume:1});}
-      else if(bucket===last.time){last.high=Math.max(last.high,price);last.low=Math.min(last.low,price);last.close=price;last.volume=(last.volume||0)+1;}
-      else{return;}
-      if(candles.length>600)candles=candles.slice(-600);
-      liveTickCount++;update();analyze();setConnection('DERIV AO VIVO • '+liveSymbol+' • '+liveTickCount+' TICKS',true);return;
-    }
-    if(msg.subscription&&msg.msg_type==='tick')return;
-  };
-  liveSocket.onerror=(e)=>{if(generation!==liveGeneration)return;console.error('[GARRA FEED] WebSocket error',e);setConnection('ERRO DE REDE • VERIFIQUE FIREWALL/INTERNET');};
-  liveSocket.onclose=(e)=>{if(generation!==liveGeneration)return;const reason=e&&e.code?('CÓDIGO '+e.code):'CONEXÃO FECHADA';if(livePing){clearInterval(livePing);livePing=null;}scheduleReconnect(generation,'FEED DESCONECTADO ('+reason+')');};
+  stopLiveFeed();const generation=liveGeneration;liveSymbol=derivSymbols[$('asset').value]||'R_25';liveGranularity=(Number($('tf').value)||1)*60;liveTickCount=0;historyLoaded=false;
+  setConnection('CONECTANDO AO FEED DERIV DO SERVIDOR • '+liveSymbol);
+  const url='/garra-price-action-pro/feed?symbol='+encodeURIComponent(liveSymbol)+'&granularity='+liveGranularity;
+  try{liveSource=new EventSource(url);}catch(e){console.error('[GARRA FEED] EventSource:',e);scheduleReconnect(generation,'FALHA AO ABRIR FEED DO SERVIDOR');return;}
+  liveSource.addEventListener('open',()=>{if(generation===liveGeneration)setConnection('SERVIDOR CONECTADO • AGUARDANDO VELAS');});
+  liveSource.addEventListener('candles',(event)=>{if(generation!==liveGeneration)return;try{const payload=JSON.parse(event.data);const loaded=(payload.candles||[]).map(c=>({time:Number(c.epoch),open:Number(c.open),high:Number(c.high),low:Number(c.low),close:Number(c.close),volume:0})).filter(c=>Number.isFinite(c.time)&&[c.open,c.high,c.low,c.close].every(Number.isFinite)).sort((a,b)=>a.time-b.time);if(loaded.length<30){setConnection('HISTÓRICO INSUFICIENTE • '+loaded.length);return;}candles=loaded;historyLoaded=true;update();analyze();setConnection('HISTÓRICO DERIV OK • '+liveSymbol,true);}catch(e){console.error('[GARRA FEED] Histórico:',e);setConnection('ERRO AO LER VELAS');}});
+  liveSource.addEventListener('tick',(event)=>{if(generation!==liveGeneration||!historyLoaded)return;try{const tick=JSON.parse(event.data),epoch=Number(tick.epoch),price=Number(tick.quote);if(!Number.isFinite(epoch)||!Number.isFinite(price))return;const bucket=Math.floor(epoch/liveGranularity)*liveGranularity;let last=candles[candles.length-1];if(!last||bucket>last.time){const open=last?last.close:price;candles.push({time:bucket,open,high:price,low:price,close:price,volume:1});}else if(bucket===last.time){last.high=Math.max(last.high,price);last.low=Math.min(last.low,price);last.close=price;last.volume=(last.volume||0)+1;}else{return;}if(candles.length>600)candles=candles.slice(-600);liveTickCount++;update();analyze();setConnection('DERIV AO VIVO • '+liveSymbol+' • '+liveTickCount+' TICKS',true);}catch(e){console.error('[GARRA FEED] Tick inválido:',e);}});
+  liveSource.addEventListener('feed_error',(event)=>{if(generation!==liveGeneration)return;let message='Falha no feed do servidor';try{message=JSON.parse(event.data).message||message;}catch(e){}console.error('[GARRA FEED] Erro do servidor:',message);setConnection('ERRO FEED DERIV: '+message);if(liveSource){liveSource.close();liveSource=null;}scheduleReconnect(generation,'FEED INDISPONÍVEL');});
+  liveSource.onerror=()=>{if(generation!==liveGeneration)return;console.warn('[GARRA FEED] SSE desconectado');if(liveSource){liveSource.close();liveSource=null;}scheduleReconnect(generation,'CONEXÃO COM O SERVIDOR INTERROMPIDA');};
 }
 $('settingsBtn').onclick=openModal;$('settingsBtn2').onclick=openModal;$('closeModal').onclick=closeModal;$('cancelSettings').onclick=closeModal;$('modal').onclick=e=>{if(e.target===$('modal'))closeModal()};$('saveSettings').onclick=()=>{cfg={rsi:Math.max(2,Math.min(50,+$('cfgRsi').value||14)),confidence:Math.max(50,Math.min(95,+$('cfgConfidence').value||70)),fast:Math.max(2,+$('cfgEmaFast').value||9),slow:Math.max(5,+$('cfgEmaSlow').value||21),useVolume:$('useVolume').checked,useMacd:$('useMacd').checked,useTrend:$('useTrend').checked,useCandle:$('useCandle').checked};$('asset').value=$('cfgAsset').value;$('tf').value=$('cfgTf').value;$('modeTag').textContent='M'+$('tf').value;update();analyze();closeModal();startLiveFeed()};$('asset').onchange=()=>{$('assetStat').textContent=$('asset').value;startLiveFeed()};$('tf').onchange=()=>{$('modeTag').textContent='M'+$('tf').value;startLiveFeed()};$('analyzeBtn').onclick=analyze;
 createCharts();candles=makeCandles();update();analyze();startLiveFeed();
