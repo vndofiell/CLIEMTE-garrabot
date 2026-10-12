@@ -15332,61 +15332,446 @@ _init_background_threads()
 @app.route('/garra-price-action-pro')
 def garra_price_action_pro_ui():
     from flask import Response
-    page = r"""<!doctype html>
-<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>GARRA PRICE ACTION PRO — M1</title>
-<script src="https://unpkg.com/lightweight-charts@4.2.2/dist/lightweight-charts.standalone.production.js"></script>
-<style>
-:root{--bg:#080c12;--panel:#101722;--panel2:#0c121b;--line:#1d2a3a;--txt:#e5edf7;--muted:#8b9bb0;--cyan:#00d9ff;--green:#00e88f;--red:#ff5364;--gold:#ffc857;--purple:#b18cff}*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at top,#101e2d 0,#080c12 52%);color:var(--txt);font:13px Inter,Segoe UI,Arial,sans-serif}button,input,select{font:inherit}button{cursor:pointer;border:1px solid var(--line);background:#152131;color:var(--txt);border-radius:8px;padding:9px 12px}button:hover{border-color:var(--cyan)}.app{max-width:1600px;margin:auto;padding:18px}.top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px;flex-wrap:wrap}.brand{display:flex;gap:12px;align-items:center}.logo{width:42px;height:42px;border-radius:12px;background:linear-gradient(135deg,#ff5364,#8b1d36);display:grid;place-items:center;font-size:23px;box-shadow:0 0 25px #ff536433}.brand h1{font-size:17px;letter-spacing:1.4px;margin:0}.brand small{display:block;color:var(--muted);margin-top:5px;letter-spacing:2px;font-size:10px}.status{display:flex;align-items:center;gap:8px;color:var(--muted)}.dot{width:8px;height:8px;border-radius:50%;background:var(--gold);box-shadow:0 0 10px #ffc85755}.gridstats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:12px}.stat,.panel{background:linear-gradient(145deg,#111a26,#0d131c);border:1px solid var(--line);border-radius:13px;box-shadow:0 10px 35px #0003}.stat{padding:14px 16px}.stat label{color:var(--muted);font-size:11px}.stat strong{display:block;font-size:21px;margin-top:8px}.stat em{font-style:normal;color:var(--muted);font-size:11px}.main{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:12px}.panel{padding:14px;min-width:0}.panelhead{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px}.panelhead h2{font-size:13px;letter-spacing:.7px;margin:0}.tools{display:flex;gap:7px;align-items:center;flex-wrap:wrap}.tools select{background:#0b1119;color:var(--txt);border:1px solid var(--line);border-radius:7px;padding:8px}.chip{border:1px solid var(--line);border-radius:7px;padding:6px 8px;color:var(--muted);font-size:10px}.chip.active{color:var(--cyan);border-color:#00d9ff55;background:#00d9ff0b}.chartwrap{height:360px;position:relative}.indicator{margin-top:9px;border-top:1px solid var(--line);padding-top:9px}.indhead{display:flex;justify-content:space-between;color:var(--muted);font-size:11px;margin-bottom:4px}.indhead b{color:var(--txt);font-weight:600}.smallchart{height:82px}.smallchart.vol{height:66px}.legend{display:flex;gap:12px;flex-wrap:wrap;color:var(--muted);font-size:10px;margin:7px 0}.legend span:before{content:'';display:inline-block;width:12px;height:3px;background:var(--c);vertical-align:middle;margin-right:5px}.side{display:flex;flex-direction:column;gap:12px}.signal{padding:16px;border-radius:11px;background:#0a111a;border:1px solid var(--line)}.signal .big{font-size:24px;font-weight:800;margin:8px 0}.wait{color:var(--gold)}.kv{display:flex;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid #1b2734;color:var(--muted)}.kv b{color:var(--txt);text-align:right}.meter{height:6px;background:#1a2634;border-radius:9px;overflow:hidden;margin:8px 0}.meter span{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--cyan),var(--green));transition:width .3s}.action{display:flex;gap:8px;flex-wrap:wrap}.primary{background:linear-gradient(135deg,#00c8ee,#0878a0);border:0;color:#00131a;font-weight:800}.danger{color:#ff7583;border-color:#ff536455}.footnote{font-size:10px;color:var(--muted);line-height:1.6;margin-top:10px}.modalback{position:fixed;inset:0;background:#02050bd9;backdrop-filter:blur(6px);display:none;align-items:center;justify-content:center;padding:16px;z-index:20}.modalback.show{display:flex}.modal{width:min(540px,100%);background:#101722;border:1px solid #2a3c50;border-radius:15px;padding:20px;box-shadow:0 25px 100px #0009}.modalhead{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}.modalhead h2{font-size:15px;margin:0}.formgrid{display:grid;grid-template-columns:1fr 1fr;gap:13px}.field label{display:block;color:var(--muted);font-size:11px;margin-bottom:6px}.field input,.field select{width:100%;background:#080e16;border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:10px}.checks{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:15px 0}.checks label{display:flex;gap:8px;align-items:center;color:#c7d2e0}.modalactions{display:flex;justify-content:flex-end;gap:8px;margin-top:17px}.tag{font-size:10px;border-radius:5px;padding:4px 6px;background:#ffc85718;color:var(--gold)}@media(max-width:900px){.main{grid-template-columns:1fr}.gridstats{grid-template-columns:repeat(2,minmax(0,1fr))}.chartwrap{height:300px}}@media(max-width:480px){.app{padding:10px}.gridstats{gap:7px}.stat{padding:11px}.stat strong{font-size:18px}.formgrid{grid-template-columns:1fr}.brand h1{font-size:14px}}
-</style></head><body><div class="app">
-<header class="top"><div class="brand"><div class="logo">🦅</div><div><h1>GARRA PRICE ACTION PRO</h1><small>REVERSÃO • M1 • INDICADORES TÉCNICOS</small></div></div><div class="status"><span class="dot"></span><span id="connection">AGUARDANDO DADOS DO MERCADO</span><button id="settingsBtn">⚙ Configurar estratégia</button></div></header>
-<section class="gridstats"><div class="stat"><label>ATIVO</label><strong id="assetStat">Volatility 25 Index</strong><em>Mercado selecionado</em></div><div class="stat"><label>TENDÊNCIA</label><strong id="trendStat">—</strong><em>EMA 9 / 21 / 200</em></div><div class="stat"><label>RSI (14)</label><strong id="rsiStat">—</strong><em>Força do movimento</em></div><div class="stat"><label>VOLUME RELATIVO</label><strong id="volStat">—</strong><em>Comparado à média de 20</em></div></section>
-<div class="main"><section class="panel"><div class="panelhead"><h2>GRÁFICO DE VELAS</h2><div class="tools"><select id="asset"><option>Volatility 10 Index</option><option selected>Volatility 25 Index</option><option>Volatility 50 Index</option><option>Volatility 75 Index</option><option>Volatility 100 Index</option><option>EURUSD</option><option>GBPUSD</option></select><select id="tf"><option value="1">M1</option><option value="5">M5</option><option value="15">M15</option></select><span class="chip active">EMA 9</span><span class="chip active">EMA 21</span><span class="chip active">EMA 200</span></div></div>
-<div id="priceChart" class="chartwrap"></div><div class="legend"><span style="--c:#00d9ff">EMA 9</span><span style="--c:#4c8dff">EMA 21</span><span style="--c:#ffc857">EMA 200</span><span style="--c:#00e88f">Alta</span><span style="--c:#ff5364">Baixa</span></div>
-<div class="indicator"><div class="indhead"><b>RSI (14)</b><span id="rsiLabel">Aguardando dados</span></div><div id="rsiChart" class="smallchart"></div></div>
-<div class="indicator"><div class="indhead"><b>MACD (12, 26, 9)</b><span id="macdLabel">Aguardando dados</span></div><div id="macdChart" class="smallchart"></div></div>
-<div class="indicator"><div class="indhead"><b>VOLUME</b><span id="volumeLabel">Aguardando dados</span></div><div id="volumeChart" class="smallchart vol"></div></div>
-<div class="footnote"><span class="tag">MODO VISUAL / DEMONSTRAÇÃO</span> Este painel não afirma estar conectado a cotações em tempo real. Para análise real, conecte o feed de candles da corretora; os candles ilustrativos abaixo são apenas para validar a interface.</div></section>
-<aside class="side"><section class="panel"><div class="panelhead"><h2>ANÁLISE GARRA</h2><span class="tag" id="modeTag">M1</span></div><div class="signal"><div style="color:var(--muted);font-size:11px">SINAL ATUAL</div><div class="big wait" id="signalText">AGUARDAR</div><div style="color:var(--muted)" id="signalReason">Aguardando confirmação dos indicadores.</div><div class="meter"><span id="confidenceBar"></span></div><div class="kv"><span>Confluência</span><b id="confidence">0%</b></div></div><div class="kv"><span>EMA 9 / 21</span><b id="emaState">—</b></div><div class="kv"><span>MACD</span><b id="macdState">—</b></div><div class="kv"><span>RSI</span><b id="rsiState">—</b></div><div class="kv"><span>Volume</span><b id="volumeState">—</b></div><div class="kv"><span>Filtro de vela</span><b id="candleState">—</b></div><div class="action" style="margin-top:15px"><button class="primary" id="analyzeBtn">Analisar confluência</button><button id="settingsBtn2">Configurações</button></div></section>
-<section class="panel"><div class="panelhead"><h2>REGRAS DA ESTRATÉGIA</h2></div><div class="kv"><span>Entrada</span><b>Após fechar a vela</b></div><div class="kv"><span>Direção</span><b>CALL / PUT</b></div><div class="kv"><span>Confirmação</span><b>EMA + RSI + MACD</b></div><div class="kv"><span>Filtro adicional</span><b>Volume relativo</b></div><div class="kv"><span>Proteção</span><b>Sem sinal = aguardar</b></div><p class="footnote">Indicadores são filtros, não garantem precisão ou lucro. Valide em conta demo e teste histórico antes de considerar qualquer execução.</p></section></aside></div></div>
-<div class="modalback" id="modal"><div class="modal"><div class="modalhead"><h2>⚙ CONFIGURAÇÃO DA ESTRATÉGIA</h2><button id="closeModal">✕</button></div><div class="formgrid"><div class="field"><label>Ativo</label><select id="cfgAsset"><option>Volatility 10 Index</option><option selected>Volatility 25 Index</option><option>Volatility 50 Index</option><option>Volatility 75 Index</option><option>Volatility 100 Index</option><option>EURUSD</option><option>GBPUSD</option></select></div><div class="field"><label>Tempo gráfico</label><select id="cfgTf"><option value="1">M1</option><option value="5">M5</option><option value="15">M15</option></select></div><div class="field"><label>Período RSI</label><input id="cfgRsi" type="number" min="2" max="50" value="14"></div><div class="field"><label>Confiança mínima (%)</label><input id="cfgConfidence" type="number" min="50" max="95" value="70"></div><div class="field"><label>EMA rápida</label><input id="cfgEmaFast" type="number" min="2" max="50" value="9"></div><div class="field"><label>EMA lenta</label><input id="cfgEmaSlow" type="number" min="5" max="100" value="21"></div></div><div class="checks"><label><input id="useVolume" type="checkbox" checked> Exigir confirmação de volume</label><label><input id="useMacd" type="checkbox" checked> Exigir confirmação MACD</label><label><input id="useTrend" type="checkbox" checked> Filtrar pela tendência</label><label><input id="useCandle" type="checkbox" checked> Exigir vela fechada</label></div><div class="modalactions"><button id="cancelSettings">Cancelar</button><button class="primary" id="saveSettings">Aplicar configuração</button></div></div></div>
-<script>
-(function(){const $=id=>document.getElementById(id);let candles=[],priceChart,rsiChart,macdChart,volumeChart,series={},rsiSeries,macdLine,macdSignal,macdHist,volSeries;let cfg={rsi:14,confidence:70,fast:9,slow:21,useVolume:true,useMacd:true,useTrend:true,useCandle:true};
-function makeCandles(n=220){let arr=[],p=10000,now=Math.floor(Date.now()/60000)*60;for(let i=n;i>0;i--){let drift=Math.sin(i/14)*1.5+(Math.random()-.49)*5;let o=p,c=Math.max(1,o+drift),h=Math.max(o,c)+Math.random()*2.5,l=Math.min(o,c)-Math.random()*2.5;arr.push({time:now-i*60,open:o,high:h,low:l,close:c,volume:Math.round(70+Math.random()*150+(Math.abs(c-o)*20))});p=c;}return arr;}
-function ema(vals,period){let k=2/(period+1),out=[],v=vals[0]||0;vals.forEach((x,i)=>{v=i===0?x:x*k+v*(1-k);out.push(v)});return out}function rsi(vals,period){let out=Array(vals.length).fill(50);for(let i=period;i<vals.length;i++){let up=0,dn=0;for(let j=i-period+1;j<=i;j++){let d=vals[j]-vals[j-1];if(d>0)up+=d;else dn-=d}out[i]=dn===0?100:100-100/(1+up/dn)}return out}function macd(vals){let a=ema(vals,12),b=ema(vals,26),m=vals.map((_,i)=>a[i]-b[i]),s=ema(m,9);return{m,s,h:m.map((x,i)=>x-s[i])}}
-function createCharts(){if(!window.LightweightCharts){$('connection').textContent='Biblioteca de gráfico indisponível';return}const common={layout:{background:{color:'#0d131c'},textColor:'#8b9bb0'},grid:{vertLines:{color:'#15202d'},horzLines:{color:'#15202d'}},rightPriceScale:{borderColor:'#253244'},timeScale:{borderColor:'#253244',timeVisible:true,secondsVisible:false},crosshair:{mode:0}};priceChart=LightweightCharts.createChart($('priceChart'),{...common,width:$('priceChart').clientWidth,height:360});series.candle=priceChart.addCandlestickSeries({upColor:'#00d995',downColor:'#ff5364',borderUpColor:'#00d995',borderDownColor:'#ff5364',wickUpColor:'#00d995',wickDownColor:'#ff5364'});series.e9=priceChart.addLineSeries({color:'#00d9ff',lineWidth:1,priceLineVisible:false,lastValueVisible:false});series.e21=priceChart.addLineSeries({color:'#4c8dff',lineWidth:1,priceLineVisible:false,lastValueVisible:false});series.e200=priceChart.addLineSeries({color:'#ffc857',lineWidth:1,priceLineVisible:false,lastValueVisible:false});
-rsiChart=LightweightCharts.createChart($('rsiChart'),{...common,width:$('rsiChart').clientWidth,height:82,rightPriceScale:{visible:false},timeScale:{visible:false}});rsiSeries=rsiChart.addLineSeries({color:'#b18cff',lineWidth:2,priceLineVisible:false});rsiSeries.createPriceLine({price:70,color:'#ff5364',lineStyle:2,lineWidth:1,axisLabelVisible:false});rsiSeries.createPriceLine({price:30,color:'#00d995',lineStyle:2,lineWidth:1,axisLabelVisible:false});rsiSeries.createPriceLine({price:50,color:'#526176',lineStyle:2,lineWidth:1,axisLabelVisible:false});
-macdChart=LightweightCharts.createChart($('macdChart'),{...common,width:$('macdChart').clientWidth,height:82,rightPriceScale:{visible:false},timeScale:{visible:false}});macdHist=macdChart.addHistogramSeries({priceLineVisible:false,lastValueVisible:false});macdLine=macdChart.addLineSeries({color:'#00d9ff',lineWidth:1,priceLineVisible:false,lastValueVisible:false});macdSignal=macdChart.addLineSeries({color:'#ff9f43',lineWidth:1,priceLineVisible:false,lastValueVisible:false});
-volumeChart=LightweightCharts.createChart($('volumeChart'),{...common,width:$('volumeChart').clientWidth,height:66,rightPriceScale:{visible:false},timeScale:{borderColor:'#253244',timeVisible:true}});volSeries=volumeChart.addHistogramSeries({priceFormat:{type:'volume'},priceLineVisible:false,lastValueVisible:false});window.addEventListener('resize',()=>{[[priceChart,'priceChart',360],[rsiChart,'rsiChart',82],[macdChart,'macdChart',82],[volumeChart,'volumeChart',66]].forEach(([c,id,h])=>c&&c.applyOptions({width:$(id).clientWidth,height:h}))});}
-function update(){if(!priceChart||!candles.length)return;let closes=candles.map(c=>c.close),e9=ema(closes,cfg.fast),e21=ema(closes,cfg.slow),e200=ema(closes,200),rv=rsi(closes,cfg.rsi),m=macd(closes);series.candle.setData(candles);series.e9.setData(candles.map((c,i)=>({time:c.time,value:e9[i]})));series.e21.setData(candles.map((c,i)=>({time:c.time,value:e21[i]})));series.e200.setData(candles.map((c,i)=>({time:c.time,value:e200[i]})));rsiSeries.setData(candles.map((c,i)=>({time:c.time,value:rv[i]})));macdHist.setData(candles.map((c,i)=>({time:c.time,value:m.h[i],color:m.h[i]>=0?'#00d99588':'#ff536488'})));macdLine.setData(candles.map((c,i)=>({time:c.time,value:m.m[i]})));macdSignal.setData(candles.map((c,i)=>({time:c.time,value:m.s[i]})));volSeries.setData(candles.map(c=>({time:c.time,value:c.volume,color:c.close>=c.open?'#00d99599':'#ff536499'})));[priceChart,rsiChart,macdChart,volumeChart].forEach(c=>c.timeScale().fitContent());let i=candles.length-1,prev=i-1,up=e9[i]>e21[i],down=e9[i]<e21[i],momUp=m.m[i]>m.s[i],momDown=m.m[i]<m.s[i],avg=candles.slice(-21,-1).reduce((s,c)=>s+c.volume,0)/20,volOk=candles[i].volume>avg,trendUp=closes[i]>e200[i],trendDown=closes[i]<e200[i];$('assetStat').textContent=$('asset').value;$('trendStat').textContent=trendUp?'ALTA':trendDown?'BAIXA':'LATERAL';$('trendStat').style.color=trendUp?'var(--green)':trendDown?'var(--red)':'var(--gold)';$('rsiStat').textContent=rv[i].toFixed(1);$('volStat').textContent=(candles[i].volume/Math.max(1,avg)).toFixed(2)+'x';$('rsiLabel').textContent=rv[i].toFixed(1)+(rv[i]>70?' • sobrecompra':rv[i]<30?' • sobrevenda':rv[i]>50?' • força compradora':' • força vendedora');$('macdLabel').textContent=m.m[i]>m.s[i]?'MACD acima da sinal':'MACD abaixo da sinal';$('volumeLabel').textContent=volOk?'Volume acima da média':'Volume abaixo da média';$('emaState').textContent=up?'Alta':down?'Baixa':'Neutro';$('macdState').textContent=momUp?'Comprador':momDown?'Vendedor':'Neutro';$('rsiState').textContent=rv[i].toFixed(1);$('volumeState').textContent=volOk?'Confirmado':'Fraco';$('candleState').textContent=candles[i].close>=candles[i].open?'Vela verde':'Vela vermelha';const c=candles[i],body=Math.abs(c.close-c.open),range=Math.max(1e-9,c.high-c.low),lower=Math.min(c.open,c.close)-c.low,upper=c.high-Math.max(c.open,c.close);const bullPattern=(c.close>c.open&&lower>body*1.4&&upper<body*0.8)||(i>0&&c.close>c.open&&candles[i-1].close<candles[i-1].open&&c.close>=candles[i-1].open&&c.open<=candles[i-1].close);const bearPattern=(c.close<c.open&&upper>body*1.4&&lower<body*0.8)||(i>0&&c.close<c.open&&candles[i-1].close>candles[i-1].open&&c.close<=candles[i-1].open&&c.open>=candles[i-1].close);window._ind={rv:rv[i],up,down,momUp,momDown,volOk,trendUp,trendDown,bullPattern,bearPattern,close:c.close,open:c.open};}
-function analyze(){if(!window._ind)return;const x=window._ind;let call=0,put=0;const reasons=[];
-// Pontuação ponderada: tendência, cruzamento EMA, momentum MACD, RSI, volume e candle.
-if(x.trendUp)call+=25;if(x.trendDown)put+=25;
-if(x.up)call+=15;if(x.down)put+=15;
-if(x.rv>=52&&x.rv<=68)call+=15;else if(x.rv>=32&&x.rv<=48)put+=15;else if(x.rv>70||x.rv<30)reasons.push('RSI em zona extrema: evitar perseguir movimento');
-if(x.momUp)call+=20;if(x.momDown)put+=20;
-if(x.volOk){call+=10;put+=10;}else if(cfg.useVolume)reasons.push('atividade/volume abaixo da média');
-if(x.bullPattern)call+=15;if(x.bearPattern)put+=15;
-let dir=call>put?'CALL':put>call?'PUT':'AGUARDAR';let best=Math.max(call,put);let blockers=[];
-if(cfg.useVolume&&!x.volOk)blockers.push('volume sem confirmação');
-if(cfg.useMacd&&!((dir==='CALL'&&x.momUp)||(dir==='PUT'&&x.momDown)))blockers.push('MACD não confirmou');
-if(cfg.useTrend&&!((dir==='CALL'&&x.trendUp)||(dir==='PUT'&&x.trendDown)))blockers.push('tendência principal contrária');
-if(cfg.useCandle&&((dir==='CALL'&&(x.close<=x.open||x.bearPattern))||(dir==='PUT'&&(x.close>=x.open||x.bullPattern))))blockers.push('candle não confirmou a direção');
-if(x.rv>=70||x.rv<=30)blockers.push('RSI extremo');
-const ok=dir!=='AGUARDAR'&&best>=cfg.confidence&&blockers.length===0;
-$('confidence').textContent=Math.min(100,best)+'%';$('confidenceBar').style.width=Math.min(100,best)+'%';$('signalText').textContent=ok?dir:'AGUARDAR';$('signalText').style.color=ok?(dir==='CALL'?'var(--green)':'var(--red)'):'var(--gold)';
-$('signalReason').textContent=ok?'Confluência técnica atendida; confirmar apenas após o fechamento da vela.':(blockers.length?blockers.join(' • '):'Pontuação insuficiente; aguardar nova vela.');
-if(series.candle&&typeof series.candle.setMarkers==='function'){series.candle.setMarkers(ok?[{time:candles[candles.length-1].time,position:dir==='CALL'?'belowBar':'aboveBar',color:dir==='CALL'?'#00e88f':'#ff5364',shape:dir==='CALL'?'arrowUp':'arrowDown',text:dir}]:[]);}}
+    _css = (
+        ":root{--bg:#080c12;--panel:#101722;--line:#1d2a3a;--txt:#e5edf7;--muted:#8b9bb0;"
+        "--cyan:#00d9ff;--green:#00e88f;--red:#ff5364;--gold:#ffc857;--purple:#b18cff}"
+        "*{box-sizing:border-box}"
+        "body{margin:0;background:radial-gradient(ellipse at top,#101e2d 0,#080c12 52%);"
+        "color:var(--txt);font:13px Inter,'Segoe UI',Arial,sans-serif}"
+        "button,input,select{font:inherit}"
+        "button{cursor:pointer;border:1px solid var(--line);background:#152131;"
+        "color:var(--txt);border-radius:8px;padding:9px 12px;transition:border-color .2s}"
+        "button:hover{border-color:var(--cyan)}"
+        "button.primary{background:linear-gradient(135deg,#1a6b3c,#0f4228);"
+        "border-color:#00e88f66;color:var(--green);font-weight:700}"
+        "button.primary:hover{border-color:var(--green)}"
+        "button.back{background:transparent;border-color:#ffffff22;color:var(--muted);"
+        "font-size:12px;padding:7px 11px}"
+        "button.back:hover{border-color:var(--cyan);color:var(--cyan)}"
+        ".app{max-width:1600px;margin:auto;padding:18px}"
+        ".top{display:flex;align-items:center;justify-content:space-between;"
+        "gap:12px;margin-bottom:16px;flex-wrap:wrap}"
+        ".brand{display:flex;gap:12px;align-items:center}"
+        ".logo{width:42px;height:42px;border-radius:12px;"
+        "background:linear-gradient(135deg,#ff5364,#8b1d36);"
+        "display:grid;place-items:center;font-size:23px;box-shadow:0 0 25px #ff536433}"
+        ".brand h1{font-size:17px;letter-spacing:1.4px;margin:0}"
+        ".brand small{display:block;color:var(--muted);margin-top:5px;"
+        "letter-spacing:2px;font-size:10px}"
+        ".topright{display:flex;align-items:center;gap:8px;flex-wrap:wrap}"
+        ".status{display:flex;align-items:center;gap:8px;color:var(--muted)}"
+        ".dot{width:9px;height:9px;border-radius:50%;background:var(--gold);"
+        "box-shadow:0 0 10px #ffc85766;flex-shrink:0}"
+        ".dot.live{background:var(--green);box-shadow:0 0 12px #00e88f88;"
+        "animation:pulse 1.4s ease-in-out infinite}"
+        "@keyframes pulse{0%,100%{box-shadow:0 0 8px #00e88f66}50%{box-shadow:0 0 20px #00e88fcc}}"
+        ".clock{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;"
+        "background:#0d1520;border:1px solid var(--line);border-radius:6px;padding:4px 10px}"
+        ".gridstats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:12px}"
+        ".stat,.panel{background:linear-gradient(145deg,#111a26,#0d131c);"
+        "border:1px solid var(--line);border-radius:13px;box-shadow:0 10px 35px #0003}"
+        ".stat{padding:14px 16px}"
+        ".stat label{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.6px}"
+        ".stat strong{display:block;font-size:22px;margin-top:8px}"
+        ".stat em{font-style:normal;color:var(--muted);font-size:11px}"
+        ".main{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:12px}"
+        ".panel{padding:14px;min-width:0}"
+        ".panelhead{display:flex;align-items:center;justify-content:space-between;"
+        "gap:10px;flex-wrap:wrap;margin-bottom:12px}"
+        ".panelhead h2{font-size:13px;letter-spacing:.7px;margin:0}"
+        ".tools{display:flex;gap:7px;align-items:center;flex-wrap:wrap}"
+        ".tools select{background:#0d151e;border:1px solid var(--line);"
+        "color:var(--txt);border-radius:7px;padding:5px 8px}"
+        ".chip{font-size:11px;padding:4px 9px;border-radius:6px;"
+        "background:#0d151e;border:1px solid var(--line);color:var(--muted)}"
+        ".chip.active{color:var(--cyan);border-color:#00d9ff44}"
+        ".chartwrap{width:100%;height:360px;border-radius:8px;overflow:hidden;"
+        "border:1px solid var(--line);margin-bottom:10px}"
+        ".smallchart{width:100%;height:82px;border-radius:6px;overflow:hidden}"
+        ".smallchart.vol{height:66px}"
+        ".legend{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:10px}"
+        ".legend span{font-size:11px;color:var(--muted);display:flex;align-items:center;gap:5px}"
+        ".legend span::before{content:'';width:16px;height:2px;"
+        "background:var(--c,var(--muted));border-radius:2px;display:inline-block}"
+        ".indicator{margin-bottom:6px;border:1px solid var(--line);border-radius:8px;"
+        "overflow:hidden;background:#0d131c}"
+        ".indhead{display:flex;justify-content:space-between;align-items:center;"
+        "padding:6px 10px;background:#101722}"
+        ".indhead b{font-size:11px;letter-spacing:.5px;color:var(--muted)}"
+        ".indhead span{font-size:11px;color:var(--cyan)}"
+        ".side{display:flex;flex-direction:column;gap:12px}"
+        ".signal{background:#0d131c;border:1px solid var(--line);"
+        "border-radius:10px;padding:14px;margin-bottom:12px}"
+        ".big{font-size:32px;font-weight:900;letter-spacing:2px;margin:8px 0 6px}"
+        ".big.call{color:var(--green)}.big.put{color:var(--red)}.big.wait{color:var(--gold)}"
+        ".meter{height:6px;background:#1d2a3a;border-radius:3px;overflow:hidden;margin:10px 0 6px}"
+        ".meter span{display:block;height:100%;"
+        "background:linear-gradient(90deg,var(--cyan),var(--green));"
+        "border-radius:3px;transition:width .4s ease;width:0}"
+        ".kv{display:flex;justify-content:space-between;align-items:center;"
+        "padding:6px 0;border-bottom:1px solid #1d2a3a22;font-size:12px}"
+        ".kv:last-of-type{border-bottom:none}.kv span{color:var(--muted)}.kv b{color:var(--txt)}"
+        ".action{display:flex;flex-direction:column;gap:6px}"
+        ".hist-table{width:100%;border-collapse:collapse;font-size:11px;margin-top:6px}"
+        ".hist-table th{color:var(--muted);text-align:left;padding:5px 6px;"
+        "border-bottom:1px solid var(--line);font-weight:600;letter-spacing:.4px}"
+        ".hist-table td{padding:5px 6px;border-bottom:1px solid #1a2433}"
+        ".hist-table tr:last-child td{border-bottom:none}"
+        ".badge{display:inline-block;padding:2px 7px;border-radius:5px;font-weight:700;font-size:10px}"
+        ".badge.call{background:#00e88f22;color:var(--green);border:1px solid #00e88f44}"
+        ".badge.put{background:#ff536422;color:var(--red);border:1px solid #ff536444}"
+        ".badge.wait{background:#ffc85722;color:var(--gold);border:1px solid #ffc85744}"
+        ".tag{font-size:10px;background:#1d2a3a;border:1px solid var(--line);"
+        "border-radius:5px;padding:3px 7px;color:var(--muted);letter-spacing:.5px}"
+        ".footnote{font-size:11px;color:var(--muted);margin-top:12px;padding:10px;"
+        "background:#0a1016;border-radius:8px;border:1px solid var(--line);line-height:1.6}"
+        ".modalback{display:none;position:fixed;inset:0;background:#000000bb;"
+        "z-index:200;place-items:center}"
+        ".modalback.show{display:grid}"
+        ".modal{background:linear-gradient(145deg,#111a26,#0d131c);"
+        "border:1px solid var(--line);border-radius:16px;"
+        "width:min(520px,94vw);max-height:90vh;overflow-y:auto;padding:22px}"
+        ".modalhead{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}"
+        ".modalhead h2{font-size:14px;letter-spacing:.8px;margin:0}"
+        ".modalhead button{background:transparent;border:none;color:var(--muted);font-size:18px;padding:2px 6px}"
+        ".formgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px}"
+        ".field{display:flex;flex-direction:column;gap:5px}"
+        ".field label{font-size:11px;color:var(--muted);letter-spacing:.5px}"
+        ".field input,.field select{background:#0d151e;border:1px solid var(--line);"
+        "color:var(--txt);border-radius:7px;padding:7px 10px}"
+        ".checks{display:flex;flex-direction:column;gap:9px;margin-bottom:18px}"
+        ".checks label{display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer}"
+        ".checks input[type=checkbox]{accent-color:var(--cyan);width:14px;height:14px}"
+        ".modalactions{display:flex;gap:10px;justify-content:flex-end}"
+        "@media(max-width:900px){.main{grid-template-columns:1fr}"
+        ".gridstats{grid-template-columns:1fr 1fr}.formgrid{grid-template-columns:1fr}}"
+        "@media(max-width:520px){.gridstats{grid-template-columns:1fr 1fr}.chartwrap{height:260px}}"
+    )
+    _aopts = (
+        "<option>Volatility 10 Index</option>"
+        "<option selected>Volatility 25 Index</option>"
+        "<option>Volatility 50 Index</option>"
+        "<option>Volatility 75 Index</option>"
+        "<option>Volatility 100 Index</option>"
+        "<option>EURUSD</option>"
+        "<option>GBPUSD</option>"
+    )
+    _js = (
+        "(function(){"
+        "'use strict';"
+        "var $=function(id){return document.getElementById(id);};"
+        "var candles=[],priceChart,rsiChart,macdChart,volumeChart,series={},"
+        "rsiSeries,macdLine,macdSignal,macdHist,volSeries;"
+        "var cfg={rsi:14,confidence:70,fast:9,slow:21,useVolume:true,useMacd:true,useTrend:true,useCandle:true};"
+        "var signalHistory=[],autoRefreshTimer=null;"
+        "function makeCandles(n){n=n||260;var arr=[],p=10000,now=Math.floor(Date.now()/60000)*60;"
+        "for(var i=n;i>0;i--){var drift=Math.sin(i/14)*1.5+(Math.random()-.49)*5;"
+        "var o=p,c=Math.max(1,o+drift),h=Math.max(o,c)+Math.random()*2.5,l=Math.min(o,c)-Math.random()*2.5;"
+        "arr.push({time:now-i*60,open:o,high:h,low:l,close:c,"
+        "volume:Math.round(70+Math.random()*150+(Math.abs(c-o)*20))});p=c;}return arr;}"
+        "function ema(vals,period){var k=2/(period+1),out=[],v=vals[0]||0;"
+        "vals.forEach(function(x,i){v=i===0?x:x*k+v*(1-k);out.push(v)});return out;}"
+        "function rsi(vals,period){var out=Array(vals.length).fill(50);"
+        "for(var i=period;i<vals.length;i++){var up=0,dn=0;"
+        "for(var j=i-period+1;j<=i;j++){var d=vals[j]-vals[j-1];if(d>0)up+=d;else dn-=d;}"
+        "out[i]=dn===0?100:100-100/(1+up/dn);}return out;}"
+        "function macd(vals){var a=ema(vals,12),b=ema(vals,26),"
+        "m=vals.map(function(_,i){return a[i]-b[i]}),s=ema(m,9);"
+        "return{m:m,s:s,h:m.map(function(x,i){return x-s[i];})};}"
+        "function createCharts(){"
+        "if(!window.LightweightCharts){$('connection').textContent='Biblioteca indispon\u00edvel';return;}"
+        "var cm={layout:{background:{color:'#0d131c'},textColor:'#8b9bb0'},"
+        "grid:{vertLines:{color:'#15202d'},horzLines:{color:'#15202d'}},"
+        "rightPriceScale:{borderColor:'#253244'},"
+        "timeScale:{borderColor:'#253244',timeVisible:true,secondsVisible:false},crosshair:{mode:0}};"
+        "priceChart=LightweightCharts.createChart($('priceChart'),Object.assign({},cm,{width:$('priceChart').clientWidth,height:360}));"
+        "series.candle=priceChart.addCandlestickSeries({upColor:'#00d995',downColor:'#ff5364',"
+        "borderUpColor:'#00d995',borderDownColor:'#ff5364',wickUpColor:'#00d995',wickDownColor:'#ff5364'});"
+        "series.e9=priceChart.addLineSeries({color:'#00d9ff',lineWidth:1,priceLineVisible:false,lastValueVisible:false});"
+        "series.e21=priceChart.addLineSeries({color:'#4c8dff',lineWidth:1,priceLineVisible:false,lastValueVisible:false});"
+        "series.e200=priceChart.addLineSeries({color:'#ffc857',lineWidth:1,priceLineVisible:false,lastValueVisible:false});"
+        "rsiChart=LightweightCharts.createChart($('rsiChart'),Object.assign({},cm,"
+        "{width:$('rsiChart').clientWidth,height:82,rightPriceScale:{visible:false},timeScale:{visible:false}}));"
+        "rsiSeries=rsiChart.addLineSeries({color:'#b18cff',lineWidth:2,priceLineVisible:false});"
+        "rsiSeries.createPriceLine({price:70,color:'#ff5364',lineStyle:2,lineWidth:1,axisLabelVisible:false});"
+        "rsiSeries.createPriceLine({price:30,color:'#00d995',lineStyle:2,lineWidth:1,axisLabelVisible:false});"
+        "rsiSeries.createPriceLine({price:50,color:'#526176',lineStyle:2,lineWidth:1,axisLabelVisible:false});"
+        "macdChart=LightweightCharts.createChart($('macdChart'),Object.assign({},cm,"
+        "{width:$('macdChart').clientWidth,height:82,rightPriceScale:{visible:false},timeScale:{visible:false}}));"
+        "macdHist=macdChart.addHistogramSeries({priceLineVisible:false,lastValueVisible:false});"
+        "macdLine=macdChart.addLineSeries({color:'#00d9ff',lineWidth:1,priceLineVisible:false,lastValueVisible:false});"
+        "macdSignal=macdChart.addLineSeries({color:'#ff9f43',lineWidth:1,priceLineVisible:false,lastValueVisible:false});"
+        "volumeChart=LightweightCharts.createChart($('volumeChart'),Object.assign({},cm,"
+        "{width:$('volumeChart').clientWidth,height:66,rightPriceScale:{visible:false},"
+        "timeScale:{borderColor:'#253244',timeVisible:true}}));"
+        "volSeries=volumeChart.addHistogramSeries({priceFormat:{type:'volume'},priceLineVisible:false,lastValueVisible:false});"
+        "window.addEventListener('resize',function(){"
+        "[[priceChart,'priceChart',360],[rsiChart,'rsiChart',82],[macdChart,'macdChart',82],[volumeChart,'volumeChart',66]]"
+        ".forEach(function(a){if(a[0])a[0].applyOptions({width:$(a[1]).clientWidth,height:a[2]});});});}"
+        "function update(){"
+        "if(!priceChart||!candles.length)return;"
+        "var closes=candles.map(function(c){return c.close;});"
+        "var e9v=ema(closes,cfg.fast),e21v=ema(closes,cfg.slow),e200v=ema(closes,200);"
+        "var rv=rsi(closes,cfg.rsi),m=macd(closes),i=candles.length-1;"
+        "var avg=candles.slice(-21,-1).reduce(function(s,c){return s+c.volume},0)/20;"
+        "series.candle.setData(candles);"
+        "series.e9.setData(candles.map(function(c,j){return{time:c.time,value:e9v[j]};}));"
+        "series.e21.setData(candles.map(function(c,j){return{time:c.time,value:e21v[j]};}));"
+        "series.e200.setData(candles.map(function(c,j){return{time:c.time,value:e200v[j]};}));"
+        "rsiSeries.setData(candles.map(function(c,j){return{time:c.time,value:rv[j]};}));"
+        "macdHist.setData(candles.map(function(c,j){return{time:c.time,value:m.h[j],color:m.h[j]>=0?'#00d99588':'#ff536488'};}));"
+        "macdLine.setData(candles.map(function(c,j){return{time:c.time,value:m.m[j]};}));"
+        "macdSignal.setData(candles.map(function(c,j){return{time:c.time,value:m.s[j]};}));"
+        "volSeries.setData(candles.map(function(c){return{time:c.time,value:c.volume,color:c.close>=c.open?'#00d99599':'#ff536499'};}));"
+        "[priceChart,rsiChart,macdChart,volumeChart].forEach(function(c){c.timeScale().fitContent();});"
+        "var up=e9v[i]>e21v[i],down=e9v[i]<e21v[i],momUp=m.m[i]>m.s[i],momDown=m.m[i]<m.s[i];"
+        "var volOk=candles[i].volume>avg,trendUp=closes[i]>e200v[i],trendDown=closes[i]<e200v[i];"
+        "var ci=candles[i],body=Math.abs(ci.close-ci.open),pi=candles[Math.max(0,i-1)];"
+        "var bull=(ci.close>ci.open&&(Math.min(ci.open,ci.close)-ci.low)>body*1.4)"
+        "||(i>0&&ci.close>ci.open&&pi.close<pi.open&&ci.close>=pi.open&&ci.open<=pi.close);"
+        "var bear=(ci.close<ci.open&&(ci.high-Math.max(ci.open,ci.close))>body*1.4)"
+        "||(i>0&&ci.close<ci.open&&pi.close>pi.open&&ci.close<=pi.open&&ci.open>=pi.close);"
+        "$('assetStat').textContent=$('asset').value;"
+        "$('trendStat').textContent=trendUp?'ALTA':trendDown?'BAIXA':'LATERAL';"
+        "$('trendStat').style.color=trendUp?'var(--green)':trendDown?'var(--red)':'var(--gold)';"
+        "$('rsiStat').textContent=rv[i].toFixed(1);"
+        "$('volStat').textContent=(candles[i].volume/Math.max(1,avg)).toFixed(2)+'x';"
+        "$('rsiLabel').textContent=rv[i].toFixed(1)+(rv[i]>70?' \u2022 sobrecompra':rv[i]<30?' \u2022 sobrevenda':rv[i]>50?' \u2022 for\u00e7a compradora':' \u2022 for\u00e7a vendedora');"
+        "$('macdLabel').textContent=m.m[i]>m.s[i]?'MACD acima da sinal':'MACD abaixo da sinal';"
+        "$('volumeLabel').textContent=volOk?'Volume acima da m\u00e9dia':'Volume abaixo da m\u00e9dia';"
+        "$('emaState').textContent=up?'Alta \u2191':down?'Baixa \u2193':'Neutro';"
+        "$('emaState').style.color=up?'var(--green)':down?'var(--red)':'var(--gold)';"
+        "$('trendState').textContent=trendUp?'Acima EMA200':trendDown?'Abaixo EMA200':'Na EMA200';"
+        "$('trendState').style.color=trendUp?'var(--green)':trendDown?'var(--red)':'var(--gold)';"
+        "$('macdState').textContent=momUp?'Comprador \u2191':momDown?'Vendedor \u2193':'Neutro';"
+        "$('macdState').style.color=momUp?'var(--green)':momDown?'var(--red)':'var(--gold)';"
+        "$('rsiState').textContent=rv[i].toFixed(1)+(rv[i]>70?' (SB)':rv[i]<30?' (SV)':'');"
+        "$('rsiState').style.color=rv[i]>70?'var(--red)':rv[i]<30?'var(--green)':'var(--txt)';"
+        "$('volumeState').textContent=volOk?'Confirmado \u2713':'Baixo \u26a0';"
+        "$('volumeState').style.color=volOk?'var(--green)':'var(--gold)';"
+        "window._ind={up:up,down:down,momUp:momUp,momDown:momDown,volOk:volOk,"
+        "trendUp:trendUp,trendDown:trendDown,rv:rv[i],bullPattern:bull,bearPattern:bear,"
+        "close:ci.close,open:ci.open};}"
+        "function analyze(){"
+        "if(!window._ind)return;"
+        "var x=window._ind,call=0,put=0,blockers=[];"
+        "if(x.trendUp)call+=25;if(x.trendDown)put+=25;"
+        "if(x.up)call+=15;if(x.down)put+=15;"
+        "if(x.rv>=52&&x.rv<=68)call+=15;else if(x.rv>=32&&x.rv<=48)put+=15;"
+        "if(x.momUp)call+=20;if(x.momDown)put+=20;"
+        "if(x.volOk){call+=10;put+=10;}"
+        "if(x.bullPattern)call+=15;if(x.bearPattern)put+=15;"
+        "var dir=call>put?'CALL':put>call?'PUT':'AGUARDAR';"
+        "var best=Math.max(call,put);"
+        "if(cfg.useVolume&&!x.volOk)blockers.push('volume sem confirma\u00e7\u00e3o');"
+        "if(cfg.useMacd&&!((dir==='CALL'&&x.momUp)||(dir==='PUT'&&x.momDown)))blockers.push('MACD n\u00e3o confirmou');"
+        "if(cfg.useTrend&&!((dir==='CALL'&&x.trendUp)||(dir==='PUT'&&x.trendDown)))blockers.push('tend\u00eancia contr\u00e1ria');"
+        "if(cfg.useCandle&&((dir==='CALL'&&(x.close<=x.open||x.bearPattern))||(dir==='PUT'&&(x.close>=x.open||x.bullPattern))))blockers.push('candle n\u00e3o confirmou');"
+        "if(x.rv>=70||x.rv<=30)blockers.push('RSI extremo');"
+        "var ok=dir!=='AGUARDAR'&&best>=cfg.confidence&&blockers.length===0;"
+        "var pct=Math.min(100,best);"
+        "$('confidence').textContent=pct+'%';"
+        "$('confidenceBar').style.width=pct+'%';"
+        "$('signalText').textContent=ok?dir:'AGUARDAR';"
+        "$('signalText').className='big '+(ok?(dir==='CALL'?'call':'put'):'wait');"
+        "$('signalReason').textContent=ok?'Conflu\u00eancia t\u00e9cnica atendida; confirmar ap\u00f3s fechamento da vela.':(blockers.length?blockers.join(' \u2022 '):'Pontua\u00e7\u00e3o insuficiente; aguardar nova vela.');"
+        "var cv=(ok&&dir==='CALL')?'Alta \u2713':(ok&&dir==='PUT')?'Baixa \u2713':'Neutro';"
+        "$('candleState').textContent=cv;"
+        "$('candleState').style.color=ok?'var(--green)':'var(--muted)';"
+        "if(series.candle&&typeof series.candle.setMarkers==='function'){"
+        "series.candle.setMarkers(ok?[{time:candles[candles.length-1].time,"
+        "position:dir==='CALL'?'belowBar':'aboveBar',"
+        "color:dir==='CALL'?'#00e88f':'#ff5364',"
+        "shape:dir==='CALL'?'arrowUp':'arrowDown',text:dir}]:[]);}"
+        "if(ok){var now2=new Date();"
+        "var hm=String(now2.getHours()).padStart(2,'0')+':'+String(now2.getMinutes()).padStart(2,'0')+':'+String(now2.getSeconds()).padStart(2,'0');"
+        "var mk=hm.slice(0,5),last=signalHistory[0];"
+        "if(!last||last.minKey!==mk||last.dir!==dir){"
+        "signalHistory.unshift({time:hm,minKey:mk,dir:dir,pct:pct,asset:$('asset').value});"
+        "if(signalHistory.length>20)signalHistory.pop();"
+        "renderHistory();}}}"
+        "function renderHistory(){"
+        "var tbody=$('histBody');"
+        r"""if(!signalHistory.length){tbody.innerHTML='<tr><td colspan="4" style="color:var(--muted);text-align:center;padding:12px">Nenhum sinal gerado ainda</td></tr>';return;}"""
+        "tbody.innerHTML=signalHistory.map(function(r){"
+        "var cls=r.dir==='CALL'?'call':r.dir==='PUT'?'put':'wait';"
+        r"""return '<tr><td style="color:var(--muted)">'+r.time+'</td>'"""
+        r"""+'<td><span class="badge '+cls+'">'+r.dir+'</span></td>'"""
+        r"""+'<td style="color:var(--cyan)">'+r.pct+'%</td>'"""
+        r"""+'<td style="color:var(--muted);font-size:10px">'+r.asset.split(' ')[0]+'</td></tr>';"""
+        "}).join('');}"
+        "function updateClock(){var s=new Date().getSeconds(),rem=60-s;"
+        "$('m1Clock').textContent='M1: '+String(rem).padStart(2,'0')+'s';"
+        "if(s===0||s===1)$('statusDot').classList.add('live');else $('statusDot').classList.remove('live');}"
+        "function startAutoRefresh(){"
+        "if(autoRefreshTimer)clearInterval(autoRefreshTimer);"
+        "var tfMs=parseInt($('tf').value||1)*60*1000;"
+        "autoRefreshTimer=setInterval(function(){"
+        "if(!candles.length)return;"
+        "var last=candles[candles.length-1];"
+        "var nt=last.time+parseInt($('tf').value||1)*60;"
+        "var o=last.close,dr=(Math.random()-.49)*6,c=Math.max(1,o+dr);"
+        "var h=Math.max(o,c)+Math.random()*2,l=Math.min(o,c)-Math.random()*2;"
+        "candles.push({time:nt,open:o,high:h,low:l,close:c,volume:Math.round(70+Math.random()*150)});"
+        "if(candles.length>300)candles.shift();update();analyze();},tfMs);}"
+        "function openModal(){"
+        "$('cfgAsset').value=$('asset').value;$('cfgTf').value=$('tf').value;"
+        "$('cfgRsi').value=cfg.rsi;$('cfgConfidence').value=cfg.confidence;"
+        "$('cfgEmaFast').value=cfg.fast;$('cfgEmaSlow').value=cfg.slow;"
+        "$('useVolume').checked=cfg.useVolume;$('useMacd').checked=cfg.useMacd;"
+        "$('useTrend').checked=cfg.useTrend;$('useCandle').checked=cfg.useCandle;"
+        "$('modal').classList.add('show');}"
+        "function closeModal(){$('modal').classList.remove('show');}"
+        "$('settingsBtn').onclick=openModal;$('settingsBtn2').onclick=openModal;"
+        "$('closeModal').onclick=closeModal;$('cancelSettings').onclick=closeModal;"
+        "$('modal').onclick=function(e){if(e.target===$('modal'))closeModal();};"
+        "$('saveSettings').onclick=function(){"
+        "cfg={rsi:Math.max(2,Math.min(50,+$('cfgRsi').value||14)),"
+        "confidence:Math.max(50,Math.min(95,+$('cfgConfidence').value||70)),"
+        "fast:Math.max(2,+$('cfgEmaFast').value||9),"
+        "slow:Math.max(5,+$('cfgEmaSlow').value||21),"
+        "useVolume:$('useVolume').checked,useMacd:$('useMacd').checked,"
+        "useTrend:$('useTrend').checked,useCandle:$('useCandle').checked};"
+        "$('asset').value=$('cfgAsset').value;$('tf').value=$('cfgTf').value;"
+        "$('modeTag').textContent='M'+$('tf').value;"
+        "startAutoRefresh();update();analyze();closeModal();};"
+        "$('asset').onchange=function(){$('assetStat').textContent=$('asset').value;};"
+        "$('tf').onchange=function(){$('modeTag').textContent='M'+$('tf').value;startAutoRefresh();};"
+        "$('analyzeBtn').onclick=analyze;"
+        "$('clearHistBtn').onclick=function(){signalHistory=[];renderHistory();};"
+        "createCharts();candles=makeCandles();update();analyze();"
+        "$('connection').textContent='DEMO VISUAL \u2022 FEED REAL N\u00c3O CONECTADO';"
+        "setInterval(updateClock,1000);startAutoRefresh();"
+        "window.GARRA_PRICE_ACTION_PRO={"
+        "setCandles:function(data){"
+        "if(!Array.isArray(data)||data.length<30)return false;"
+        "var clean=data.map(function(c){"
+        "return{time:Number(c.time),open:Number(c.open),high:Number(c.high),"
+        "low:Number(c.low),close:Number(c.close),volume:Number(c.volume||0)};}"
+        ").filter(function(c){"
+        "return isFinite(c.time)&&isFinite(c.open)&&isFinite(c.high)"
+        "&&isFinite(c.low)&&isFinite(c.close)&&isFinite(c.volume);"
+        "}).sort(function(a,b){return a.time-b.time;});"
+        "if(clean.length<30)return false;"
+        "candles=clean;update();analyze();"
+        "$('connection').textContent='FEED RECEBIDO \u2022 '+clean.length+' CANDLES';"
+        "$('statusDot').classList.add('live');return true;},"
+        "analyze:function(){analyze();},"
+        "getCandles:function(){return candles.slice();},"
+        "getLastSignal:function(){return signalHistory.length?signalHistory[0]:null;}"
+        "};"
+        "})();"
+    )
+    page = "\n".join([
+        "<!doctype html>",
+        "<html lang='pt-BR'>",
+        "<head>",
+        "<meta charset='utf-8'>",
+        "<meta name='viewport' content='width=device-width,initial-scale=1'>",
+        "<title>GARRA PRICE ACTION PRO \u2014 M1</title>",
+        "<script src='https://unpkg.com/lightweight-charts@4.2.2/dist/lightweight-charts.standalone.production.js'></script>",
+        "<style>" + _css + "</style>",
+        "</head>",
+        "<body>",
+        "<div class='app'>",
+        "<header class='top'>",
+        "  <div class='brand'>",
+        "    <div class='logo'>\U0001f985</div>",
+        "    <div><h1>GARRA PRICE ACTION PRO</h1>",
+        "    <small>REVERS\u00c3O &bull; M1 &bull; INDICADORES T\u00c9CNICOS</small></div>",
+        "  </div>",
+        "  <div class='topright'>",
+        "    <div class='status'><span class='dot' id='statusDot'></span><span id='connection'>AGUARDANDO DADOS</span></div>",
+        "    <span class='clock' id='m1Clock'>M1: --:--</span>",
+        "    <button class='back' onclick=\"window.location.href='/'\">&#8592; Painel</button>",
+        "    <button id='settingsBtn'>&#9881; Configurar</button>",
+        "  </div>",
+        "</header>",
+        "<section class='gridstats'>",
+        "  <div class='stat'><label>ATIVO</label><strong id='assetStat'>Volatility 25 Index</strong><em>Mercado selecionado</em></div>",
+        "  <div class='stat'><label>TEND\u00caNCIA</label><strong id='trendStat'>&mdash;</strong><em>EMA 9 / 21 / 200</em></div>",
+        "  <div class='stat'><label>RSI (14)</label><strong id='rsiStat'>&mdash;</strong><em>For\u00e7a do movimento</em></div>",
+        "  <div class='stat'><label>VOLUME RELATIVO</label><strong id='volStat'>&mdash;</strong><em>M\u00e9dia de 20</em></div>",
+        "</section>",
+        "<div class='main'>",
+        "<section class='panel'>",
+        "  <div class='panelhead'><h2>GR\u00c1FICO DE VELAS</h2>",
+        "    <div class='tools'>",
+        "      <select id='asset'>" + _aopts + "</select>",
+        "      <select id='tf'><option value='1'>M1</option><option value='5'>M5</option><option value='15'>M15</option></select>",
+        "      <span class='chip active'>EMA 9</span><span class='chip active'>EMA 21</span><span class='chip active'>EMA 200</span>",
+        "    </div>",
+        "  </div>",
+        "  <div id='priceChart' class='chartwrap'></div>",
+        "  <div class='legend'><span style='--c:#00d9ff'>EMA 9</span><span style='--c:#4c8dff'>EMA 21</span><span style='--c:#ffc857'>EMA 200</span><span style='--c:#00e88f'>Alta</span><span style='--c:#ff5364'>Baixa</span></div>",
+        "  <div class='indicator'><div class='indhead'><b>RSI (14)</b><span id='rsiLabel'>Aguardando dados</span></div><div id='rsiChart' class='smallchart'></div></div>",
+        "  <div class='indicator'><div class='indhead'><b>MACD (12, 26, 9)</b><span id='macdLabel'>Aguardando dados</span></div><div id='macdChart' class='smallchart'></div></div>",
+        "  <div class='indicator'><div class='indhead'><b>VOLUME</b><span id='volumeLabel'>Aguardando dados</span></div><div id='volumeChart' class='smallchart vol'></div></div>",
+        "  <div class='footnote'><span class='tag'>MODO VISUAL / DEMONSTRA\u00c7\u00c3O</span> Candles ilustrativos para validar a interface. Para an\u00e1lise real use <code>window.GARRA_PRICE_ACTION_PRO.setCandles([...])</code>.</div>",
+        "</section>",
+        "<aside class='side'>",
+        "  <section class='panel'>",
+        "    <div class='panelhead'><h2>AN\u00c1LISE GARRA</h2><span class='tag' id='modeTag'>M1</span></div>",
+        "    <div class='signal'>",
+        "      <div style='color:var(--muted);font-size:11px'>SINAL ATUAL</div>",
+        "      <div class='big wait' id='signalText'>AGUARDAR</div>",
+        "      <div style='color:var(--muted);font-size:11px' id='signalReason'>Aguardando confirma\u00e7\u00e3o dos indicadores.</div>",
+        "      <div class='meter'><span id='confidenceBar'></span></div>",
+        "      <div class='kv'><span>Conflu\u00eancia</span><b id='confidence'>0%</b></div>",
+        "    </div>",
+        "    <div class='kv'><span>EMA 9 / 21</span><b id='emaState'>&mdash;</b></div>",
+        "    <div class='kv'><span>EMA 200 (tend\u00eancia)</span><b id='trendState'>&mdash;</b></div>",
+        "    <div class='kv'><span>MACD</span><b id='macdState'>&mdash;</b></div>",
+        "    <div class='kv'><span>RSI</span><b id='rsiState'>&mdash;</b></div>",
+        "    <div class='kv'><span>Volume</span><b id='volumeState'>&mdash;</b></div>",
+        "    <div class='kv'><span>Filtro de vela</span><b id='candleState'>&mdash;</b></div>",
+        "    <div class='action' style='margin-top:15px'>",
+        "      <button class='primary' id='analyzeBtn'>&#9654; Analisar conflu\u00eancia</button>",
+        "      <button id='settingsBtn2'>&#9881; Configura\u00e7\u00f5es</button>",
+        "    </div>",
+        "  </section>",
+        "  <section class='panel'>",
+        "    <div class='panelhead'><h2>REGRAS DA ESTRAT\u00c9GIA</h2></div>",
+        "    <div class='kv'><span>Entrada</span><b>Ap\u00f3s fechar a vela</b></div>",
+        "    <div class='kv'><span>Dire\u00e7\u00e3o</span><b>CALL / PUT</b></div>",
+        "    <div class='kv'><span>Confirma\u00e7\u00e3o</span><b>EMA + RSI + MACD</b></div>",
+        "    <div class='kv'><span>Filtro adicional</span><b>Volume relativo</b></div>",
+        "    <div class='kv'><span>Prote\u00e7\u00e3o</span><b>Sem sinal = aguardar</b></div>",
+        "    <p class='footnote'>Indicadores s\u00e3o filtros, n\u00e3o garantem precis\u00e3o ou lucro. Valide em conta demo.</p>",
+        "  </section>",
+        "  <section class='panel'>",
+        "    <div class='panelhead'><h2>HIST\u00d3RICO DE SINAIS</h2><button id='clearHistBtn' style='font-size:11px;padding:4px 8px'>Limpar</button></div>",
+        "    <table class='hist-table'><thead><tr><th>HOR\u00c1RIO</th><th>SINAL</th><th>CONF.</th><th>ATIVO</th></tr></thead>",
+        "    <tbody id='histBody'><tr><td colspan='4' style='color:var(--muted);text-align:center;padding:12px'>Nenhum sinal gerado ainda</td></tr></tbody></table>",
+        "  </section>",
+        "</aside>",
+        "</div>",
+        "</div>",
+        "<div class='modalback' id='modal'><div class='modal'>",
+        "  <div class='modalhead'><h2>&#9881; CONFIGURA\u00c7\u00c3O DA ESTRAT\u00c9GIA</h2><button id='closeModal'>&#x2715;</button></div>",
+        "  <div class='formgrid'>",
+        "    <div class='field'><label>Ativo</label><select id='cfgAsset'>" + _aopts + "</select></div>",
+        "    <div class='field'><label>Tempo gr\u00e1fico</label><select id='cfgTf'><option value='1'>M1</option><option value='5'>M5</option><option value='15'>M15</option></select></div>",
+        "    <div class='field'><label>Per\u00edodo RSI</label><input id='cfgRsi' type='number' min='2' max='50' value='14'></div>",
+        "    <div class='field'><label>Confian\u00e7a m\u00ednima (%)</label><input id='cfgConfidence' type='number' min='50' max='95' value='70'></div>",
+        "    <div class='field'><label>EMA r\u00e1pida</label><input id='cfgEmaFast' type='number' min='2' max='50' value='9'></div>",
+        "    <div class='field'><label>EMA lenta</label><input id='cfgEmaSlow' type='number' min='5' max='100' value='21'></div>",
+        "  </div>",
+        "  <div class='checks'>",
+        "    <label><input id='useVolume' type='checkbox' checked> Exigir confirma\u00e7\u00e3o de volume</label>",
+        "    <label><input id='useMacd' type='checkbox' checked> Exigir confirma\u00e7\u00e3o MACD</label>",
+        "    <label><input id='useTrend' type='checkbox' checked> Filtrar pela tend\u00eancia (EMA 200)</label>",
+        "    <label><input id='useCandle' type='checkbox' checked> Exigir vela fechada na dire\u00e7\u00e3o</label>",
+        "  </div>",
+        "  <div class='modalactions'><button id='cancelSettings'>Cancelar</button><button class='primary' id='saveSettings'>Aplicar configura\u00e7\u00e3o</button></div>",
+        "</div></div>",
+        "<script>" + _js + "</script>",
+        "</body></html>",
+    ])
+    return Response(page, mimetype='text/html; charset=utf-8', headers={'Cache-Control': 'no-store'})
 
-function openModal(){$('cfgAsset').value=$('asset').value;$('cfgTf').value=$('tf').value;$('cfgRsi').value=cfg.rsi;$('cfgConfidence').value=cfg.confidence;$('cfgEmaFast').value=cfg.fast;$('cfgEmaSlow').value=cfg.slow;$('useVolume').checked=cfg.useVolume;$('useMacd').checked=cfg.useMacd;$('useTrend').checked=cfg.useTrend;$('useCandle').checked=cfg.useCandle;$('modal').classList.add('show')}function closeModal(){$('modal').classList.remove('show')}
-$('settingsBtn').onclick=openModal;$('settingsBtn2').onclick=openModal;$('closeModal').onclick=closeModal;$('cancelSettings').onclick=closeModal;$('modal').onclick=e=>{if(e.target===$('modal'))closeModal()};$('saveSettings').onclick=()=>{cfg={rsi:Math.max(2,Math.min(50,+$('cfgRsi').value||14)),confidence:Math.max(50,Math.min(95,+$('cfgConfidence').value||70)),fast:Math.max(2,+$('cfgEmaFast').value||9),slow:Math.max(5,+$('cfgEmaSlow').value||21),useVolume:$('useVolume').checked,useMacd:$('useMacd').checked,useTrend:$('useTrend').checked,useCandle:$('useCandle').checked};$('asset').value=$('cfgAsset').value;$('tf').value=$('cfgTf').value;$('modeTag').textContent='M'+$('tf').value;update();analyze();closeModal()};$('asset').onchange=()=>{$('assetStat').textContent=$('asset').value};$('tf').onchange=()=>{$('modeTag').textContent='M'+$('tf').value};$('analyzeBtn').onclick=analyze;
-createCharts();candles=makeCandles();update();analyze();$('connection').textContent='DEMO VISUAL • FEED REAL NÃO CONECTADO';
-// Integração: o código Python do bot pode injetar candles reais via evaluate_js/execute_script.
-// Formato: [{time: UnixSeconds, open, high, low, close, volume}, ...] em ordem cronológica.
-window.GARRA_PRICE_ACTION_PRO={setCandles(data){if(!Array.isArray(data)||data.length<30)return false;const clean=data.map(c=>({time:Number(c.time),open:Number(c.open),high:Number(c.high),low:Number(c.low),close:Number(c.close),volume:Number(c.volume??0)})).filter(c=>Number.isFinite(c.time)&&[c.open,c.high,c.low,c.close,c.volume].every(Number.isFinite)).sort((a,b)=>a.time-b.time);if(clean.length<30)return false;candles=clean;update();analyze();$('connection').textContent='FEED RECEBIDO • '+clean.length+' CANDLES';return true;},analyze(){analyze();},getCandles(){return candles.slice();}};
-})();
-</script></body></html>"""
-    return Response(page, mimetype='text/html; charset=utf-8', headers={'Cache-Control':'no-store'})
+
+
 
 if __name__ == "__main__":
     print("🚀 Iniciando Interface Cyber Cloud...")
