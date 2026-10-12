@@ -15823,49 +15823,105 @@ function processarTick(preco,epoch){
   update();analyze();
 }
 
-/* Conecta WS apenas para ticks em tempo real (igual ao _drvSubscreverTicks) */
+/* ── Conexão WebSocket direta com a Deriv — histórico + ticks ao vivo ── */
+var _pingTimer=null;
 function derivConnectWs(){
+  _pararTickPolling();
   if(_derivWs){try{_derivWs.close();}catch(e){} _derivWs=null;}
+  if(_pingTimer){clearInterval(_pingTimer);_pingTimer=null;}
   var sym=derivSymbol(),gran=derivGranularity();
   var tag=$('srcTag');
-  var retryMsg=_wsRetry>0?' ('+_wsRetry+')':'';
-  $('connection').textContent='DERIV: carregando'+retryMsg+'...';
-  if(tag){tag.textContent=_wsRetry>0?'RECONECTANDO':'CARREGANDO';tag.style.color='var(--gold)';}
+  $('connection').textContent='DERIV: conectando...';
+  if(tag){tag.textContent='CONECTANDO';tag.style.color='var(--gold)';}
 
-  /* 1. Busca historico via HTTP (rapido, igual _drvFetchCandles) */
-  derivFetchCandles(sym,gran,300,function(hist){
-    if(hist.length>=5){
-      var seen={};
-      candles=hist.map(function(c){return{
-        time:Number(c.epoch||c.time),open:Number(c.open),high:Number(c.high),
-        low:Number(c.low),close:Number(c.close),volume:Number(c.volume||1)};
-      }).filter(function(c){
-        if(!c.time||!c.open||seen[c.time])return false;
-        seen[c.time]=1;return true;
-      }).sort(function(a,b){return a.time-b.time;});
-      var ult=candles[candles.length-1];
-      _velaAtual=Object.assign({},ult);
-      _lastPreco=ult.close;
-      update();analyze();
-      $('connection').textContent='DERIV \u2022 '+candles.length+' velas \u2022 '+sym+' \u2022 conectando ao vivo...';
-      if(tag){tag.textContent='HIST\u00d3RICO OK';tag.style.color='var(--cyan)';}
-    } else {
-      /* Sem dados do servidor: usa candles sint\u00e9ticos para o gr\u00e1fico aparecer */
+  var ws=new WebSocket('wss://ws.derivws.com/websockets/v3?app_id=1089');
+  _derivWs=ws;
+  var _histOk=false;
+
+  ws.onopen=function(){
+    _wsRetry=0;
+    /* Pede histórico de candles fechados */
+    ws.send(JSON.stringify({
+      ticks_history:sym,adjust_start_time:1,count:300,
+      end:'latest',start:1,style:'candles',granularity:gran
+    }));
+    /* Heartbeat a cada 20s — igual ao bot principal */
+    if(_pingTimer)clearInterval(_pingTimer);
+    _pingTimer=setInterval(function(){
+      if(ws.readyState===WebSocket.OPEN){
+        try{ws.send(JSON.stringify({ping:1}));}catch(e){}
+      }else{clearInterval(_pingTimer);_pingTimer=null;}
+    },20000);
+  };
+
+  ws.onmessage=function(ev){
+    var d;try{d=JSON.parse(ev.data);}catch(e){return;}
+    var mt=d.msg_type;
+    if(mt==='ping'||mt==='pong')return;
+
+    if(mt==='candles'&&!_histOk){
+      _histOk=true;
+      var raw=d.candles||[];
+      if(raw.length>=5){
+        var seen={};
+        candles=raw.map(function(c){return{
+          time:Number(c.epoch),open:Number(c.open),high:Number(c.high),
+          low:Number(c.low),close:Number(c.close),volume:1};
+        }).filter(function(c){
+          if(!c.time||!c.open||seen[c.time])return false;
+          seen[c.time]=1;return true;
+        }).sort(function(a,b){return a.time-b.time;});
+        var ult=candles[candles.length-1];
+        _velaAtual=Object.assign({},ult);
+        _lastPreco=ult.close;
+        _lastCandleLen=0;
+        update();analyze();
+        $('connection').textContent='DERIV AO VIVO \u2022 '+candles.length+' velas \u2022 '+sym;
+        $('statusDot').classList.add('live');
+        if(tag){tag.textContent='AO VIVO';tag.style.color='var(--green)';}
+      }
+      /* Após histórico, assina ticks ao vivo */
+      ws.send(JSON.stringify({ticks:sym,subscribe:1}));
+      return;
+    }
+
+    if(mt==='tick'&&d.tick&&d.tick.symbol===sym){
+      var tk=d.tick;
+      processarTick(Number(tk.quote),Number(tk.epoch));
+      if(tag&&tag.textContent!=='AO VIVO'){
+        $('connection').textContent='DERIV AO VIVO \u2022 '+candles.length+' velas \u2022 '+sym;
+        $('statusDot').classList.add('live');
+        tag.textContent='AO VIVO';tag.style.color='var(--green)';
+      }
+      return;
+    }
+
+    if(d.error){
+      $('connection').textContent='DERIV: '+(d.error.message||'erro');
+      if(tag){tag.textContent='ERRO';tag.style.color='var(--red)';}
+    }
+  };
+
+  ws.onerror=function(){
+    if(tag){tag.textContent='OFFLINE';tag.style.color='var(--red)';}
+  };
+
+  ws.onclose=function(){
+    if(_pingTimer){clearInterval(_pingTimer);_pingTimer=null;}
+    if(_derivWs!==ws)return;
+    /* Se nunca recebeu histórico, usa dados simulados para o gráfico não ficar vazio */
+    if(!_histOk&&candles.length===0){
       candles=makeCandles(260);
       var ult2=candles[candles.length-1];
-      _velaAtual=Object.assign({},ult2);
-      _lastPreco=ult2.close;
-      update();analyze();
-      $('connection').textContent='MODO OFFLINE \u2022 dados simulados';
-      if(tag){tag.textContent='SIMULADO';tag.style.color='var(--gold)';}
+      _velaAtual=Object.assign({},ult2);_lastPreco=ult2.close;
+      update();
     }
-    /* 2. Inicia polling de ticks via servidor (sem WS direto no browser) */
-    _pararTickPolling();
-    $('connection').textContent='DERIV \u2022 conectando ao vivo...';
-    if(tag){tag.textContent='CONECTANDO';tag.style.color='var(--gold)';}
-    /* Aguarda 1.5s para o servidor iniciar o WS interno antes do primeiro poll */
-    setTimeout(function(){_iniciarTickPolling(sym);},1500);
-  });
+    _wsRetry++;
+    var delay=Math.min(15000,2000*Math.pow(1.5,Math.min(_wsRetry-1,5)));
+    $('connection').textContent='WS: reconectando em '+(delay/1000).toFixed(0)+'s...';
+    if(tag){tag.textContent='RECONECTANDO';tag.style.color='var(--gold)';}
+    setTimeout(function(){if(_derivWs===ws)derivConnectWs();},delay);
+  };
 }
 function enviarEntrada(dir){
   var stake=parseFloat($('tradeStake').value)||1;
@@ -15909,8 +15965,8 @@ $('saveSettings').onclick=function(){
   $('modeTag').textContent='M'+$('tf').value;
   update();analyze();closeModal();
 };
-$('asset').onchange=function(){$('assetStat').textContent=$('asset').value;_pararTickPolling();derivConnectWs();};
-$('tf').onchange=function(){$('modeTag').textContent='M'+$('tf').value;_pararTickPolling();derivConnectWs();};
+$('asset').onchange=function(){$('assetStat').textContent=$('asset').value;derivConnectWs();};
+$('tf').onchange=function(){$('modeTag').textContent='M'+$('tf').value;derivConnectWs();};
 $('analyzeBtn').onclick=analyze;
 $('clearHistBtn').onclick=function(){signalHistory=[];renderHistory();};
 $('btnCall').onclick=function(){enviarEntrada('CALL');};
