@@ -15698,17 +15698,51 @@ function openModal(){
 function closeModal(){$('modal').classList.remove('show');}
 function derivSymbol(){return DERIV_MAP[$('asset').value]||'R_25';}
 function derivGranularity(){return parseInt($('tf').value||1)*60;}
-/* ── Sistema de candles identico ao _drvFetchCandles + _drvProcessarTick ── */
+/* ── Sistema de candles via servidor (polling HTTP) — sem WS direto no browser ── */
 var _wsRetry=0;
 var _velaAtual=null,_lastPreco=0,_tickHandler=null;
+var _tickPollTimer=null,_tickPollActive=false;
 
-/* Busca historico via /deriv/candles (igual ao _drvFetchCandles do index.html) */
+/* Busca historico via /deriv/candles */
 function derivFetchCandles(sym,gran,count,callback){
   var url='/deriv/candles?ativo='+encodeURIComponent(sym)+'&granularity='+gran+'&count='+count;
   fetch(url).then(function(r){return r.json();}).then(function(d){
     if(d.ok&&d.candles&&d.candles.length>=5){callback(d.candles);}
     else{callback([]);}
   }).catch(function(){callback([]);});
+}
+
+/* Polling de ticks via /deriv/tick (servidor mantém WS persistente) */
+function _iniciarTickPolling(sym){
+  _tickPollActive=true;
+  var tag=$('srcTag');
+  function _poll(){
+    if(!_tickPollActive)return;
+    fetch('/deriv/tick?symbol='+encodeURIComponent(sym))
+      .then(function(r){return r.json();})
+      .then(function(d){
+        if(d.ok&&d.price&&d.epoch){
+          processarTick(d.price,d.epoch);
+          if(tag&&tag.textContent!=='AO VIVO'){
+            $('connection').textContent='DERIV AO VIVO \u2022 '+candles.length+' velas \u2022 '+sym;
+            $('statusDot').classList.add('live');
+            tag.textContent='AO VIVO';tag.style.color='var(--green)';
+          }
+        }
+        /* agenda pr\u00f3ximo poll em 1s */
+        _tickPollTimer=setTimeout(_poll,1000);
+      })
+      .catch(function(){
+        _tickPollTimer=setTimeout(_poll,3000);
+      });
+  }
+  if(_tickPollTimer)clearTimeout(_tickPollTimer);
+  _poll();
+}
+
+function _pararTickPolling(){
+  _tickPollActive=false;
+  if(_tickPollTimer){clearTimeout(_tickPollTimer);_tickPollTimer=null;}
 }
 
 function processarTick(preco,epoch){
@@ -15765,76 +15799,12 @@ function derivConnectWs(){
       $('connection').textContent='MODO OFFLINE \u2022 dados simulados';
       if(tag){tag.textContent='SIMULADO';tag.style.color='var(--gold)';}
     }
-    /* 2. Conecta WS direto na Deriv para ticks em tempo real */
-    var ws=new WebSocket('wss://ws.binaryws.com/websockets/v3?app_id=1089');
-    _derivWs=ws;
-    var _pingTimer=null;
-    ws.onopen=function(){
-      _wsRetry=0;
-      /* Primeiro pede historico de candles via WS para ter dados reais */
-      ws.send(JSON.stringify({
-        ticks_history:sym,adjust_start_time:1,count:300,
-        end:'latest',start:1,style:'candles',granularity:gran
-      }));
-      /* Heartbeat: envia ping a cada 20s para manter conexao viva (igual bot principal) */
-      if(_pingTimer)clearInterval(_pingTimer);
-      _pingTimer=setInterval(function(){
-        if(ws.readyState===WebSocket.OPEN){
-          try{ws.send(JSON.stringify({ping:1}));}catch(e){}
-        } else {
-          clearInterval(_pingTimer);_pingTimer=null;
-        }
-      },20000);
-    };
-    ws.onmessage=function(ev){
-      var d;try{d=JSON.parse(ev.data);}catch(e){return;}
-      /* ignora pong e outros keep-alive */
-      if(d.msg_type==='ping'||d.msg_type==='pong')return;
-      if(d.msg_type==='candles'&&d.candles&&d.candles.length>=5){
-        var seen2={};
-        var nc=d.candles.map(function(c){return{
-          time:Number(c.epoch||c.time),open:Number(c.open),high:Number(c.high),
-          low:Number(c.low),close:Number(c.close),volume:1};
-        }).filter(function(c){
-          if(!c.time||!c.open||seen2[c.time])return false;
-          seen2[c.time]=1;return true;
-        }).sort(function(a,b){return a.time-b.time;});
-        candles=nc;
-        var ult3=candles[candles.length-1];
-        _velaAtual=Object.assign({},ult3);
-        _lastPreco=ult3.close;
-        _lastCandleLen=0;
-        update();analyze();
-        $('connection').textContent='DERIV AO VIVO \u2022 '+candles.length+' velas \u2022 '+sym;
-        $('statusDot').classList.add('live');
-        if(tag){tag.textContent='AO VIVO';tag.style.color='var(--green)';}
-        /* Subscreve ticks apos ter o historico */
-        ws.send(JSON.stringify({ticks:sym,subscribe:1}));
-      } else if(d.msg_type==='tick'&&d.tick&&d.tick.symbol===sym){
-        processarTick(Number(d.tick.quote),Number(d.tick.epoch));
-        if(tag&&tag.textContent!=='AO VIVO'){
-          $('connection').textContent='DERIV AO VIVO \u2022 '+candles.length+' velas \u2022 '+sym;
-          $('statusDot').classList.add('live');
-          tag.textContent='AO VIVO';tag.style.color='var(--green)';
-        }
-      } else if(d.error){
-        $('connection').textContent='DERIV: '+(d.error.message||'erro');
-        if(tag){tag.textContent='ERRO';tag.style.color='var(--red)';}
-      }
-    };
-    ws.onerror=function(){
-      if(tag){tag.textContent='OFFLINE';tag.style.color='var(--red)';}
-      $('connection').textContent='WS: erro de conex\u00e3o';
-    };
-    ws.onclose=function(){
-      if(_pingTimer){clearInterval(_pingTimer);_pingTimer=null;}
-      if(_derivWs!==ws)return;
-      _wsRetry++;
-      var delay=Math.min(30000,3000*Math.pow(2,Math.min(_wsRetry-1,4)));
-      $('connection').textContent='WS: reconectando em '+(delay/1000)+'s... ('+_wsRetry+')';
-      if(tag){tag.textContent='RECONECTANDO';tag.style.color='var(--gold)';}
-      setTimeout(function(){if(_derivWs===ws)derivConnectWs();},delay);
-    };
+    /* 2. Inicia polling de ticks via servidor (sem WS direto no browser) */
+    _pararTickPolling();
+    $('connection').textContent='DERIV \u2022 conectando ao vivo...';
+    if(tag){tag.textContent='CONECTANDO';tag.style.color='var(--gold)';}
+    /* Aguarda 1.5s para o servidor iniciar o WS interno antes do primeiro poll */
+    setTimeout(function(){_iniciarTickPolling(sym);},1500);
   });
 }
 function enviarEntrada(dir){
@@ -15879,8 +15849,8 @@ $('saveSettings').onclick=function(){
   $('modeTag').textContent='M'+$('tf').value;
   update();analyze();closeModal();
 };
-$('asset').onchange=function(){$('assetStat').textContent=$('asset').value;derivConnectWs();};
-$('tf').onchange=function(){$('modeTag').textContent='M'+$('tf').value;derivConnectWs();};
+$('asset').onchange=function(){$('assetStat').textContent=$('asset').value;_pararTickPolling();derivConnectWs();};
+$('tf').onchange=function(){$('modeTag').textContent='M'+$('tf').value;_pararTickPolling();derivConnectWs();};
 $('analyzeBtn').onclick=analyze;
 $('clearHistBtn').onclick=function(){signalHistory=[];renderHistory();};
 $('btnCall').onclick=function(){enviarEntrada('CALL');};
@@ -16258,6 +16228,100 @@ def deriv_candles():
         _PAP_CANDLE_CACHE[cache_key] = {"data": candles, "ts": now_ts}
 
     return jsonify({"ok": True, "candles": candles, "source": "deriv", "symbol": symbol})
+
+
+# ── WebSocket persistente no servidor para ticks em tempo real (GARRA PAP) ──────
+# Mantém UMA única conexão WS por símbolo no servidor, com heartbeat automático.
+# O frontend faz polling HTTP a /deriv/tick em vez de abrir WS direto do browser.
+_PAP_TICK_STORE: dict = {}   # {symbol: {price, epoch, ts}}
+_PAP_WS_STORE:   dict = {}   # {symbol: wsapp_thread}
+_PAP_TICK_LOCK = threading.Lock()
+
+def _pap_iniciar_ws_tick(symbol: str):
+    """Inicia (ou reinicia) WebSocket persistente no servidor para um símbolo."""
+    import websocket as _wslib
+    import time as _t
+
+    def _run():
+        _ping_timer = [None]
+        def _on_open(ws):
+            ws.send(json.dumps({"ticks": symbol, "subscribe": 1}))
+            # heartbeat a cada 20s — igual ao bot principal
+            def _ping():
+                while True:
+                    _t.sleep(20)
+                    try:
+                        if ws.sock and ws.sock.connected:
+                            ws.send(json.dumps({"ping": 1}))
+                        else:
+                            break
+                    except Exception:
+                        break
+            t = threading.Thread(target=_ping, daemon=True)
+            t.start()
+
+        def _on_message(ws, raw):
+            try:
+                d = json.loads(raw)
+                if d.get("msg_type") == "tick" and d.get("tick", {}).get("symbol") == symbol:
+                    tk = d["tick"]
+                    with _PAP_TICK_LOCK:
+                        _PAP_TICK_STORE[symbol] = {
+                            "price": float(tk.get("quote", 0)),
+                            "epoch": int(tk.get("epoch", 0)),
+                            "ts":    _t.time(),
+                        }
+            except Exception:
+                pass
+
+        def _on_error(ws, err):
+            pass
+
+        def _on_close(ws, *a):
+            # Remove do store para forçar reinício na próxima chamada
+            with _PAP_TICK_LOCK:
+                _PAP_WS_STORE.pop(symbol, None)
+
+        try:
+            wsapp = _wslib.WebSocketApp(
+                "wss://ws.binaryws.com/websockets/v3?app_id=1089",
+                on_open=_on_open, on_message=_on_message,
+                on_error=_on_error, on_close=_on_close,
+            )
+            with _PAP_TICK_LOCK:
+                _PAP_WS_STORE[symbol] = wsapp
+            wsapp.run_forever(ping_interval=25, ping_timeout=10)
+        except Exception:
+            with _PAP_TICK_LOCK:
+                _PAP_WS_STORE.pop(symbol, None)
+
+    t = threading.Thread(target=_run, daemon=True, name=f"pap_ws_{symbol}")
+    t.start()
+
+
+@app.route('/deriv/tick', methods=['GET'])
+def deriv_tick():
+    """
+    Retorna o último tick de um símbolo. Inicia o WS persistente se necessário.
+    Parâmetros:
+      symbol — símbolo Deriv (ex: R_25, R_10)
+    """
+    import time as _t
+    symbol = request.args.get("symbol", "R_25")
+    symbol = _DERIV_SYMBOL_MAP.get(symbol, symbol)
+
+    # Inicia WS persistente se ainda não existe para este símbolo
+    with _PAP_TICK_LOCK:
+        ws_ativo = symbol in _PAP_WS_STORE
+        tick     = _PAP_TICK_STORE.get(symbol)
+
+    if not ws_ativo:
+        _pap_iniciar_ws_tick(symbol)
+
+    if tick and (_t.time() - tick["ts"]) < 10:
+        return jsonify({"ok": True, "price": tick["price"], "epoch": tick["epoch"], "symbol": symbol})
+
+    return jsonify({"ok": False, "symbol": symbol, "erro": "aguardando"})
 
 
 # ── Rota /deriv/operar — executa CALL/PUT na Deriv via WebSocket + authorize direto ──
