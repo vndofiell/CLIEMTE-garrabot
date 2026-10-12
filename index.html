@@ -34068,61 +34068,92 @@ function drvOperar(direcao) {
     ws.send(JSON.stringify(propPayload));
 }
 
-// ── Aguardar resultado ────────────────────────────────────
+// ── Aguardar resultado com subscrição em tempo real ───────
 function _drvAguardarResultado(contractId, duracao) {
     const ws = (typeof bot !== 'undefined') ? bot.ws : null;
     if (!ws) return;
+    const reqId = 500 + Math.floor(Math.random()*200);
+    let _finalizado = false;
+
+    const handler = (ev) => {
+        try {
+            const d = JSON.parse(ev.data);
+            if (!d.proposal_open_contract) return;
+            const poc = d.proposal_open_contract;
+            // Só processa updates deste contrato
+            if (String(poc.contract_id) !== String(contractId)) return;
+
+            // ── Update intermediário: atualiza cor do widget ──────────
+            if (!poc.is_sold) {
+                const lucroInt = parseFloat(poc.profit || 0);
+                if (typeof _tsLocal !== 'undefined' && _tsLocal.ativo) {
+                    if (lucroInt > 0)      _tsLocal.status = 'ganhando';
+                    else if (lucroInt < 0) _tsLocal.status = 'perdendo';
+                }
+                // Atualiza cor do bubble/linha no gráfico
+                if (_drvChart.opAtiva) {
+                    const _corInt = lucroInt > 0 ? '#00c853' : (lucroInt < 0 ? '#ef5350' : _drvChart.opAtiva.corDir);
+                    const linhaEl = document.getElementById('drv-op-linha-entrada');
+                    const bubbleEl = document.getElementById('drv-op-timer-bubble');
+                    if (linhaEl)  linhaEl.style.borderColor  = _corInt;
+                    if (bubbleEl) bubbleEl.style.borderColor = _corInt;
+                }
+                return;
+            }
+
+            // ── Resultado final ───────────────────────────────────────
+            if (_finalizado) return;
+            _finalizado = true;
+            ws.removeEventListener('message', handler);
+            _drvModo.opBloqueada = false;
+
+            const win = poc.profit >= 0, lucro = parseFloat(poc.profit||0);
+            if (_drvChart.opAtiva) _drvChart.opAtiva.lucro = lucro;
+
+            if (!_drvChart._processados) _drvChart._processados = new Set();
+            if (_drvChart._processados.has(String(contractId))) return;
+            _drvChart._processados.add(String(contractId));
+            _drvChart.cidsAtivos.delete(String(contractId));
+
+            _drvEncerrarOpAtiva(win ? 'win' : 'loss');
+            _drvAtualizarHistorico(contractId, win ? 'win' : 'loss', lucro);
+            _drvChart._sessaoWins   += win ? 1 : 0;
+            _drvChart._sessaoLosses += win ? 0 : 1;
+            _drvChart._sessaoLucro  += lucro;
+
+            const _drvStakeUsada = _drvMgr.valorBase || parseFloat(document.getElementById('drv-valor-input')?.value || 1);
+            const _drvProxStake  = _drvMgr.valorAtual || _drvStakeUsada;
+            if (typeof bot !== 'undefined') {
+                bot.profit += lucro;
+                if (win) { bot.wins++; bot._seqWinAtual = (bot._seqWinAtual||0)+1; bot._seqLossAtual = 0; }
+                else     { bot.losses++; bot._seqLossAtual = (bot._seqLossAtual||0)+1; bot._seqWinAtual = 0; }
+                if (bot._maxStakeUsada == null || _drvStakeUsada > bot._maxStakeUsada) bot._maxStakeUsada = _drvStakeUsada;
+                if (bot.mgr) bot.mgr.updateResult(win, lucro);
+                bot.ws.send(JSON.stringify({ balance: 1 }));
+                if (typeof updateHeader === 'function') updateHeader();
+            }
+            if (typeof tgEnviarResultado === 'function') {
+                tgEnviarResultado(win, lucro, _drvProxStake, false, {
+                    estrategia: bot && bot.estrategia ? bot.estrategia : '🤖 TRADING PRO AI',
+                    modo:       bot && bot.gerenciamento ? bot.gerenciamento : '💰 Stake Fixa',
+                }, _drvStakeUsada);
+            }
+            _drvAplicarGerenciamento(win, lucro);
+            _drvOpStatusMsg(`${win?'✅ WIN':'❌ LOSS'} ${win?'+':''}$${lucro.toFixed(2)}`, win ? '#27c93f' : '#f44');
+        } catch(_) {}
+    };
+    ws.addEventListener('message', handler);
+    // Subscrição em tempo real — recebe updates intermediários de profit
+    ws.send(JSON.stringify({ proposal_open_contract: 1, contract_id: contractId, subscribe: 1, req_id: reqId }));
+
+    // Timeout de segurança: remove handler após duracao + 30s
     setTimeout(() => {
-        const reqId = 500 + Math.floor(Math.random()*200);
-        const handler = (ev) => {
-            try {
-                const d = JSON.parse(ev.data);
-                if (d.req_id !== reqId) return;
-                ws.removeEventListener('message', handler);
-                _drvModo.opBloqueada = false;
-                if (!d.proposal_open_contract) { _drvEncerrarOpAtiva(null); return; }
-                const poc = d.proposal_open_contract;
-                if (poc.status === 'open') { setTimeout(() => _drvAguardarResultado(contractId, 0), 3000); return; }
-                const win = poc.profit >= 0, lucro = parseFloat(poc.profit||0);
-                if (_drvChart.opAtiva) _drvChart.opAtiva.lucro = lucro;
-                // Guarda que este contrato foi processado ANTES de remover do set
-                // Isso impede que qualquer push automático posterior seja contado duas vezes
-                if (!_drvChart._processados) _drvChart._processados = new Set();
-                if (_drvChart._processados.has(String(contractId))) return; // já processado
-                _drvChart._processados.add(String(contractId));
-                // Remove do set de ativos (agora seguro pois _processados cobre a proteção)
-                _drvChart.cidsAtivos.delete(String(contractId));
-                _drvEncerrarOpAtiva(win ? 'win' : 'loss');
-                _drvAtualizarHistorico(contractId, win ? 'win' : 'loss', lucro);
-                _drvChart._sessaoWins   += win ? 1 : 0;
-                _drvChart._sessaoLosses += win ? 0 : 1;
-                _drvChart._sessaoLucro  += lucro;
-                // Atualiza bot.profit / bot.wins / bot.losses (handler principal foi bloqueado)
-                const _drvStakeUsada = _drvMgr.valorBase || parseFloat(document.getElementById('drv-valor-input')?.value || 1);
-                const _drvProxStake  = _drvMgr.valorAtual || _drvStakeUsada;
-                if (typeof bot !== 'undefined') {
-                    bot.profit += lucro;
-                    if (win) { bot.wins++; bot._seqWinAtual = (bot._seqWinAtual||0)+1; bot._seqLossAtual = 0; }
-                    else     { bot.losses++; bot._seqLossAtual = (bot._seqLossAtual||0)+1; bot._seqWinAtual = 0; }
-                    if (bot._maxStakeUsada == null || _drvStakeUsada > bot._maxStakeUsada) bot._maxStakeUsada = _drvStakeUsada;
-                    if (bot.mgr) bot.mgr.updateResult(win, lucro);
-                    bot.ws.send(JSON.stringify({ balance: 1 }));
-                    if (typeof updateHeader === 'function') updateHeader();
-                }
-                // Envia resultado ao Telegram (mesmo fluxo do bot principal)
-                if (typeof tgEnviarResultado === 'function') {
-                    tgEnviarResultado(win, lucro, _drvProxStake, false, {
-                        estrategia: bot && bot.estrategia ? bot.estrategia : '🤖 TRADING PRO AI',
-                        modo:       bot && bot.gerenciamento ? bot.gerenciamento : '💰 Stake Fixa',
-                    }, _drvStakeUsada);
-                }
-                _drvAplicarGerenciamento(win, lucro);
-                _drvOpStatusMsg(`${win?'✅ WIN':'❌ LOSS'} ${win?'+':''}$${lucro.toFixed(2)}`, win ? '#27c93f' : '#f44');
-            } catch(_) {}
-        };
-        ws.addEventListener('message', handler);
-        ws.send(JSON.stringify({ proposal_open_contract:1, contract_id:contractId, req_id:reqId }));
-    }, (duracao + 2) * 1000);
+        if (!_finalizado) {
+            _finalizado = true;
+            ws.removeEventListener('message', handler);
+            _drvModo.opBloqueada = false;
+        }
+    }, (duracao + 30) * 1000);
 }
 
 // ── Operação ativa no gráfico ─────────────────────────────
