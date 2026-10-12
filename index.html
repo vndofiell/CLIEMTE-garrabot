@@ -13957,8 +13957,8 @@ cfgCarregar();
 // CRONMETRO DE SESSÃO
 // ═══════════════════════════════════════════════════════
 const _timer = {
-    inicio:    null,   // Date.now() quando iniciou a sesso
-    acumulado: 0,      // ms acumulados de sesses anteriores (após pausar/parar)
+    inicio:    null,   // Date.now() quando iniciou a sessão
+    acumulado: 0,      // ms acumulados de sessões anteriores (após pausar/parar)
     intervalo: null,   // id do setInterval
     el:        null,   // elemento #hd-timer
 
@@ -13971,13 +13971,21 @@ const _timer = {
     },
 
     _tick() {
+        if (!_timer.el) _timer.el = document.getElementById('hd-timer');
+        if (!_timer.el || _timer.inicio === null) return;
         const total = _timer.acumulado + (Date.now() - _timer.inicio);
         _timer.el.textContent = _timer._fmt(total);
     },
 
     iniciar() {
-        if (_timer.intervalo) return; // jrodando
-        _timer.el = _timer.el || document.getElementById('hd-timer');
+        // Se já há um intervalo rodando mas o elemento sumiu, limpa antes de reiniciar
+        if (_timer.intervalo) {
+            if (!document.getElementById('hd-timer')) return;
+            clearInterval(_timer.intervalo);
+            _timer.intervalo = null;
+        }
+        _timer.el = document.getElementById('hd-timer');
+        if (!_timer.el) return;
         _timer.inicio = Date.now();
         _timer.intervalo = setInterval(() => _timer._tick(), 1000);
         document.getElementById('hd-timer-box').style.borderColor = 'rgba(0,255,255,0.7)';
@@ -13985,10 +13993,12 @@ const _timer = {
 
     pausar() {
         if (!_timer.intervalo) return;
-        _timer.acumulado += Date.now() - _timer.inicio;
+        _timer.acumulado += Date.now() - (_timer.inicio || Date.now());
         clearInterval(_timer.intervalo);
         _timer.intervalo = null;
-        document.getElementById('hd-timer-box').style.borderColor = 'rgba(0,255,255,0.25)';
+        _timer.inicio = null;
+        const box = document.getElementById('hd-timer-box');
+        if (box) box.style.borderColor = 'rgba(0,255,255,0.25)';
     },
 
     resetar() {
@@ -13996,9 +14006,10 @@ const _timer = {
         _timer.intervalo = null;
         _timer.acumulado = 0;
         _timer.inicio    = null;
-        _timer.el = _timer.el || document.getElementById('hd-timer');
-        _timer.el.textContent = '00:00:00';
-        document.getElementById('hd-timer-box').style.borderColor = 'rgba(0,255,255,0.35)';
+        _timer.el = document.getElementById('hd-timer');
+        if (_timer.el) _timer.el.textContent = '00:00:00';
+        const box = document.getElementById('hd-timer-box');
+        if (box) box.style.borderColor = 'rgba(0,255,255,0.35)';
     },
 };
 // ═══════════════════════════════════════════════════════
