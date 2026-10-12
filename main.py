@@ -15385,10 +15385,10 @@ def garra_price_action_pro_ui():
         ".chip{font-size:11px;padding:4px 9px;border-radius:6px;"
         "background:#0d151e;border:1px solid var(--line);color:var(--muted)}"
         ".chip.active{color:var(--cyan);border-color:#00d9ff44}"
-        ".chartwrap{width:100%;height:360px;border-radius:8px;overflow:hidden;"
-        "border:1px solid var(--line);margin-bottom:10px}"
-        ".smallchart{width:100%;height:82px;border-radius:6px;overflow:hidden}"
-        ".smallchart.vol{height:66px}"
+        ".chartwrap{width:100%;height:420px;border-radius:6px;overflow:hidden;"
+        "background:#000;margin-bottom:8px}"
+        ".smallchart{width:100%;height:90px;border-radius:4px;overflow:hidden;background:#000}"
+        ".smallchart.vol{height:70px}"
         ".legend{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:10px}"
         ".legend span{font-size:11px;color:var(--muted);display:flex;align-items:center;gap:5px}"
         ".legend span::before{content:'';width:16px;height:2px;"
@@ -15515,40 +15515,58 @@ function macd(vals){
   var a=ema(vals,12),b=ema(vals,26),m=vals.map(function(_,i){return a[i]-b[i];}),s=ema(m,9);
   return{m:m,s:s,h:m.map(function(x,i){return x-s[i];})};
 }
+function chartH(id){return document.getElementById(id).clientHeight||360;}
 function createCharts(){
   if(!window.LightweightCharts){
     $('connection').textContent='ERRO: biblioteca nao carregou';return;
   }
-  var cm={layout:{background:{color:'#0d131c'},textColor:'#8b9bb0'},
-          grid:{vertLines:{color:'#15202d'},horzLines:{color:'#15202d'}},
-          rightPriceScale:{borderColor:'#253244'},
-          timeScale:{borderColor:'#253244',timeVisible:true,secondsVisible:false},crosshair:{mode:0}};
-  var pw=$('priceChart').clientWidth||800;
-  priceChart=LightweightCharts.createChart($('priceChart'),Object.assign({},cm,{width:pw,height:360}));
-  series.candle=priceChart.addCandlestickSeries({upColor:'#00d995',downColor:'#ff5364',
-    borderUpColor:'#00d995',borderDownColor:'#ff5364',wickUpColor:'#00d995',wickDownColor:'#ff5364'});
-  series.e9=priceChart.addLineSeries({color:'#00d9ff',lineWidth:1,priceLineVisible:false,lastValueVisible:false});
-  series.e21=priceChart.addLineSeries({color:'#4c8dff',lineWidth:1,priceLineVisible:false,lastValueVisible:false});
-  series.e200=priceChart.addLineSeries({color:'#ffc857',lineWidth:1,priceLineVisible:false,lastValueVisible:false});
-  var rw=$('rsiChart').clientWidth||800;
+  /* base: fundo preto puro, sem grade, igual Deriv */
+  var cm={
+    layout:{background:{color:'#000000'},textColor:'#848e9c'},
+    grid:{vertLines:{color:'#111111'},horzLines:{color:'#111111'}},
+    rightPriceScale:{borderColor:'#2a2a2a',borderVisible:true,scaleMargins:{top:0.05,bottom:0.05}},
+    timeScale:{borderColor:'#2a2a2a',timeVisible:true,secondsVisible:false,rightOffset:5},
+    crosshair:{mode:1}
+  };
+  var pw=$('priceChart').clientWidth||900,ph=chartH('priceChart')||420;
+  priceChart=LightweightCharts.createChart($('priceChart'),Object.assign({},cm,{width:pw,height:ph}));
+  /* velas: verde/vermelho sem borda, igual Deriv */
+  series.candle=priceChart.addCandlestickSeries({
+    upColor:'#26a69a',downColor:'#ef5350',
+    borderUpColor:'#26a69a',borderDownColor:'#ef5350',
+    wickUpColor:'#26a69a',wickDownColor:'#ef5350'
+  });
+  series.e9  =priceChart.addLineSeries({color:'#2196f3',lineWidth:1,priceLineVisible:false,lastValueVisible:true,title:'EMA9'});
+  series.e21 =priceChart.addLineSeries({color:'#9c27b0',lineWidth:1,priceLineVisible:false,lastValueVisible:true,title:'EMA21'});
+  series.e200=priceChart.addLineSeries({color:'#ff9800',lineWidth:1,priceLineVisible:false,lastValueVisible:true,title:'EMA200'});
+  /* RSI */
+  var rw=$('rsiChart').clientWidth||900;
   rsiChart=LightweightCharts.createChart($('rsiChart'),Object.assign({},cm,
-    {width:rw,height:82,rightPriceScale:{visible:false},timeScale:{visible:false}}));
-  rsiSeries=rsiChart.addLineSeries({color:'#b18cff',lineWidth:2,priceLineVisible:false});
-  rsiSeries.createPriceLine({price:70,color:'#ff5364',lineStyle:2,lineWidth:1,axisLabelVisible:false});
-  rsiSeries.createPriceLine({price:30,color:'#00d995',lineStyle:2,lineWidth:1,axisLabelVisible:false});
-  rsiSeries.createPriceLine({price:50,color:'#526176',lineStyle:2,lineWidth:1,axisLabelVisible:false});
-  var mw=$('macdChart').clientWidth||800;
+    {width:rw,height:90,
+     rightPriceScale:{visible:true,borderColor:'#2a2a2a',scaleMargins:{top:0.1,bottom:0.1}},
+     timeScale:{visible:false}}));
+  rsiSeries=rsiChart.addLineSeries({color:'#ce93d8',lineWidth:2,priceLineVisible:false,lastValueVisible:true});
+  rsiSeries.createPriceLine({price:70,color:'#ef535066',lineStyle:2,lineWidth:1,axisLabelVisible:true,title:'70'});
+  rsiSeries.createPriceLine({price:30,color:'#26a69a66',lineStyle:2,lineWidth:1,axisLabelVisible:true,title:'30'});
+  rsiSeries.createPriceLine({price:50,color:'#55555566',lineStyle:0,lineWidth:1,axisLabelVisible:false});
+  /* MACD */
+  var mw=$('macdChart').clientWidth||900;
   macdChart=LightweightCharts.createChart($('macdChart'),Object.assign({},cm,
-    {width:mw,height:82,rightPriceScale:{visible:false},timeScale:{visible:false}}));
-  macdHist=macdChart.addHistogramSeries({priceLineVisible:false,lastValueVisible:false});
-  macdLine=macdChart.addLineSeries({color:'#00d9ff',lineWidth:1,priceLineVisible:false,lastValueVisible:false});
-  macdSignal=macdChart.addLineSeries({color:'#ff9f43',lineWidth:1,priceLineVisible:false,lastValueVisible:false});
-  var vw=$('volumeChart').clientWidth||800;
+    {width:mw,height:90,
+     rightPriceScale:{visible:true,borderColor:'#2a2a2a',scaleMargins:{top:0.1,bottom:0.1}},
+     timeScale:{visible:false}}));
+  macdHist  =macdChart.addHistogramSeries({priceLineVisible:false,lastValueVisible:false});
+  macdLine  =macdChart.addLineSeries({color:'#2196f3',lineWidth:1,priceLineVisible:false,lastValueVisible:false});
+  macdSignal=macdChart.addLineSeries({color:'#ff9800',lineWidth:1,priceLineVisible:false,lastValueVisible:false});
+  /* Volume */
+  var vw=$('volumeChart').clientWidth||900;
   volumeChart=LightweightCharts.createChart($('volumeChart'),Object.assign({},cm,
-    {width:vw,height:66,rightPriceScale:{visible:false},timeScale:{borderColor:'#253244',timeVisible:true}}));
+    {width:vw,height:70,
+     rightPriceScale:{visible:false},
+     timeScale:{borderColor:'#2a2a2a',timeVisible:true,secondsVisible:false}}));
   volSeries=volumeChart.addHistogramSeries({priceFormat:{type:'volume'},priceLineVisible:false,lastValueVisible:false});
   window.addEventListener('resize',function(){
-    [[priceChart,'priceChart',360],[rsiChart,'rsiChart',82],[macdChart,'macdChart',82],[volumeChart,'volumeChart',66]]
+    [[priceChart,'priceChart',ph],[rsiChart,'rsiChart',90],[macdChart,'macdChart',90],[volumeChart,'volumeChart',70]]
     .forEach(function(a){if(a[0])a[0].applyOptions({width:$(a[1]).clientWidth,height:a[2]});});
   });
 }
