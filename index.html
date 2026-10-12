@@ -12677,9 +12677,11 @@ function initWebSocket(wssUrl) {
 
         // Compra confirmada → subscreve resultado
         if (data.msg_type === 'buy') {
-            // Ignora buy do painel Deriv Chart (req_id 100-499) — ele tem handler próprio
-            const _buyReqId = data.echo_req && data.echo_req.req_id;
-            if (_buyReqId >= 100 && _buyReqId < 500) return;
+            // Ignora buy do painel Deriv Chart — verifica tanto echo_req.req_id quanto req_id direto
+            // Painel usa reqProp:100-299 e reqBuy:300-499
+            const _buyEchoId = (data.echo_req && data.echo_req.req_id) || 0;
+            const _buyReqId  = data.req_id || 0;
+            if ((_buyEchoId >= 100 && _buyEchoId < 500) || (_buyReqId >= 100 && _buyReqId < 500)) return;
             if (data.error) { print("⚠️ COMPRA RECUSADA: " + data.error.message, "log-loss"); bot._buying = false; return; }
             const cid   = data.buy && data.buy.contract_id;
             const reqId = data.echo_req && data.echo_req.req_id;
@@ -33968,26 +33970,45 @@ function drvOperar(direcao) {
 
     const _drvUnlockBtns = () => { if (btnCall) btnCall.disabled = false; if (btnPut) btnPut.disabled = false; };
 
+    // Guarda o proposal.id para identificar o buy correspondente
+    let _drvPropId = null;
+    // Timeout de segurança: remove handler se não chegar resposta em 15s
+    const _drvHandlerTimeout = setTimeout(() => {
+        ws.removeEventListener('message', handler);
+        _drvUnlockBtns();
+        _drvModo.opBloqueada = false;
+    }, 15000);
+
     const handler = (ev) => {
         try {
             const d = JSON.parse(ev.data);
-            // Captura qualquer resposta com o req_id da proposta
-            if (d.req_id === reqProp) {
+            // Captura resposta da proposta pelo req_id
+            if (d.req_id === reqProp && d.msg_type === 'proposal') {
                 if (d.error) {
+                    clearTimeout(_drvHandlerTimeout);
                     ws.removeEventListener('message', handler);
                     _drvUnlockBtns();
                     _drvOpStatusMsg('❌ Proposta rejeitada: ' + d.error.message, '#f44');
                     _drvModo.opBloqueada = false; return;
                 }
                 if (d.proposal?.id) {
+                    _drvPropId = d.proposal.id;   // guarda para identificar o buy
                     const estEl = document.getElementById('drv-pagamento-est');
                     if (estEl && d.proposal.payout > 0) estEl.textContent = '$' + parseFloat(d.proposal.payout).toFixed(2);
                     ws.send(JSON.stringify({ buy: d.proposal.id, price: valor, req_id: reqBuy }));
                 }
                 return;
             }
-            // Captura resposta do buy
-            if (d.req_id === reqBuy) {
+            // Captura resposta do buy — a Deriv retorna d.req_id igual ao da proposta original
+            // OU usa echo_req.req_id do buy; aceita ambos para garantir captura
+            const _echoReqId = d.echo_req && d.echo_req.req_id;
+            const _isBuyDoPainel = d.msg_type === 'buy' && (
+                _echoReqId === reqBuy ||
+                d.req_id   === reqProp ||
+                (d.buy && _drvPropId && d.echo_req && d.echo_req.buy === _drvPropId)
+            );
+            if (_isBuyDoPainel) {
+                clearTimeout(_drvHandlerTimeout);
                 ws.removeEventListener('message', handler);
                 _drvUnlockBtns();
                 if (d.error) {
