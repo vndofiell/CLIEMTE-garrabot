@@ -15665,73 +15665,82 @@ def garra_price_action_pro_ui():
         "setInterval(updateClock,1000);"
         "setInterval(function(){if(candles.length){update();analyze();}},3000);"
         "startAutoRefresh();"
-        "var _liveSource='demo';"
-        "function fetchCandles(){"
-        "var ativo=encodeURIComponent($('asset').value);"
-        "var tf=$('tf').value||'1';"
-        "var broker=$('tradeBroker')?$('tradeBroker').value:'quotex';"
-        "var qxAtivo=ativo.replace('%20','_').replace(/ /g,'_')+'_otc';"
-        "var periodoSeg=parseInt(tf)*60;"
-        "var qxUrl='/quotex/candles?ativo='+qxAtivo+'&periodo='+periodoSeg+'&limite=260';"
-        "var drvUrl='/garra-price-action-pro/candles?ativo='+ativo+'&tf='+tf+'&count=260';"
-        "function tryDeriv(){"
-        "fetch(drvUrl).then(function(r){return r.json();}).then(function(d){"
-        "if(d.ok&&d.candles&&d.candles.length>=30){"
-        "setCandles(d.candles,'DERIV AO VIVO \u2022 '+d.total+' velas \u2022 '+d.symbol);"
-        "_liveSource='deriv';"
-        "}else{setDemo();}}).catch(setDemo);}"
-        "fetch(qxUrl).then(function(r){return r.json();}).then(function(d){"
-        "if(d.ok&&d.candles&&d.candles.length>=30){"
-        "setCandles(d.candles,'QUOTEX AO VIVO \u2022 '+d.candles.length+' velas');"
-        "_liveSource='quotex';"
-        "}else{tryDeriv();}}).catch(tryDeriv);}"
-        "function setCandles(raw,label){"
-        "var clean=raw.map(function(c){return{time:Number(c.time||c.epoch||0),"
-        "open:Number(c.open||0),high:Number(c.high||c.max||c.open||0),"
-        "low:Number(c.low||c.min||c.open||0),close:Number(c.close||0),"
-        "volume:Number(c.volume||1)};}).filter(function(c){"
-        "return c.time>0&&c.open>0&&c.close>0;}).sort(function(a,b){return a.time-b.time;});"
-        "if(clean.length<30)return;"
+        "var DERIV_MAP={"
+        "'Volatility 10 Index':'R_10',"
+        "'Volatility 25 Index':'R_25',"
+        "'Volatility 50 Index':'R_50',"
+        "'Volatility 75 Index':'R_75',"
+        "'Volatility 100 Index':'R_100',"
+        "'EURUSD':'frxEURUSD',"
+        "'GBPUSD':'frxGBPUSD'};"
+        "var _derivWs=null,_derivSubscribeId=null;"
+        "function derivSymbol(){return DERIV_MAP[$('asset').value]||'R_25';}"
+        "function derivGranularity(){return parseInt($('tf').value||1)*60;}"
+        "function derivConnectWs(){"
+        "if(_derivWs){try{_derivWs.close();}catch(e){}}"
+        "var sym=derivSymbol(),gran=derivGranularity();"
+        "$('connection').textContent='DERIV: conectando...';"
+        "_derivWs=new WebSocket('wss://ws.binaryws.com/websockets/v3?app_id=1089');"
+        "_derivWs.onopen=function(){"
+        "_derivWs.send(JSON.stringify({ticks_history:sym,adjust_start_time:1,"
+        "count:260,end:'latest',start:1,style:'candles',granularity:gran}));}"
+        "_derivWs.onmessage=function(ev){"
+        "var d=JSON.parse(ev.data);"
+        "if(d.msg_type==='candles'){"
+        "var raw=d.candles||[];"
+        "var clean=raw.map(function(c){return{time:Number(c.epoch),"
+        "open:Number(c.open),high:Number(c.high),low:Number(c.low),"
+        "close:Number(c.close),volume:1};}).filter(function(c){"
+        "return c.time>0&&c.open>0;}).sort(function(a,b){return a.time-b.time;});"
+        "if(clean.length>=30){"
         "candles=clean;update();analyze();"
-        "$('connection').textContent=label;"
+        "$('connection').textContent='DERIV AO VIVO \u2022 '+clean.length+' velas \u2022 '+sym;"
         "$('statusDot').classList.add('live');"
-        "var note=$('srcNote'),tag=$('srcTag');"
-        "if(note)note.innerHTML='';"
-        "if(tag){tag.textContent='AO VIVO';tag.style.color='var(--green)';}}"
-        "function setDemo(){"
-        "_liveSource='demo';"
-        "$('connection').textContent='DEMO \u2022 Corretora n\u00e3o conectada';"
-        "$('statusDot').classList.remove('live');"
         "var tag=$('srcTag');"
-        "if(tag){tag.textContent='DEMO';tag.style.color='var(--gold)';}}"
-        "fetchCandles();"
-        "var _papFetchInterval=setInterval(fetchCandles,25000);"
-        "$('asset').addEventListener('change',function(){clearInterval(_papFetchInterval);fetchCandles();_papFetchInterval=setInterval(fetchCandles,25000);});"
-        "$('tf').addEventListener('change',function(){clearInterval(_papFetchInterval);fetchCandles();_papFetchInterval=setInterval(fetchCandles,25000);});"
+        "if(tag){tag.textContent='AO VIVO';tag.style.color='var(--green)';}"
+        "_derivWs.send(JSON.stringify({ticks_history:sym,adjust_start_time:1,"
+        "count:1,end:'latest',start:1,style:'candles',granularity:gran,subscribe:1}));"
+        "}}"
+        "else if(d.msg_type==='ohlc'&&d.ohlc){"
+        "var o=d.ohlc,ts=Number(o.epoch),i=candles.length-1;"
+        "if(i>=0&&candles[i].time===ts){"
+        "candles[i].open=Number(o.open);candles[i].high=Number(o.high);"
+        "candles[i].low=Number(o.low);candles[i].close=Number(o.close);"
+        "}else if(ts>0&&Number(o.open)>0){"
+        "candles.push({time:ts,open:Number(o.open),high:Number(o.high),"
+        "low:Number(o.low),close:Number(o.close),volume:1});"
+        "if(candles.length>300)candles.shift();}"
+        "update();analyze();}"
+        "else if(d.error){$('connection').textContent='DERIV: erro '+d.error.message;"
+        "$('statusDot').classList.remove('live');}}"
+        "_derivWs.onerror=function(){"
+        "$('connection').textContent='DEMO \u2022 WS erro';"
+        "$('statusDot').classList.remove('live');}"
+        "_derivWs.onclose=function(){setTimeout(derivConnectWs,5000);}}"
+        "derivConnectWs();"
+        "$('asset').addEventListener('change',function(){derivConnectWs();});"
+        "$('tf').addEventListener('change',function(){derivConnectWs();});"
         "var _autoOn=false,_lastAutoSignal='';"
         "function enviarEntrada(dir){"
         "var stake=parseFloat($('tradeStake').value)||1;"
         "var minutos=parseInt($('tradeMinutos').value)||1;"
-        "var broker=$('tradeBroker').value||'quotex';"
-        "var ativo=$('asset').value;"
-        "var qxAtivo=ativo.replace(/ /g,'_')+'_otc';"
-        "var url=broker==='quotex'?'/quotex/operar':'/quotex/operar';"
-        "var payload={ativo:qxAtivo,direcao:dir.toLowerCase(),valor:stake,"
-        "minutos:minutos,alinhar_minuto:true};"
+        "var sym=derivSymbol();"
+        "var modo=$('tradeMode')?$('tradeMode').value:'demo';"
+        "var payload={symbol:sym,direcao:dir.toLowerCase(),valor:stake,"
+        "duracao:minutos,modo:modo};"
         "addTradeLog(dir,'pend','Enviando '+dir+' $'+stake.toFixed(2)+'...');"
-        "fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},"
+        "fetch('/deriv/operar',{method:'POST',"
+        "headers:{'Content-Type':'application/json'},"
         "body:JSON.stringify(payload)})"
         ".then(function(r){return r.json();})"
         ".then(function(d){"
-        "if(d.ok||d.ordem_enviada){"
-        "addTradeLog(dir,'pend',dir+' $'+stake.toFixed(2)+' | aguardando resultado');"
+        "if(d.ok){"
+        "addTradeLog(dir,'pend',dir+' $'+stake.toFixed(2)+' | '+sym+' | aguard. resultado');"
         "}else{"
-        "addTradeLog(dir,'lose','ERRO: '+(d.erro||d.error||'falha'));"
-        "}})"
+        "addTradeLog(dir,'lose','ERRO: '+(d.erro||'falha'));}})"
         ".catch(function(e){addTradeLog(dir,'lose','ERRO: '+e.message);});}"
         "function addTradeLog(dir,cls,msg){"
-        "var log=$('tradeLog');"
-        "if(!log)return;"
+        "var log=$('tradeLog');if(!log)return;"
         "var now=new Date();"
         "var hm=String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');"
         "var el=document.createElement('div');"
@@ -15743,7 +15752,7 @@ def garra_price_action_pro_ui():
         "$('btnPut').onclick=function(){enviarEntrada('PUT');};"
         "$('btnAuto').onclick=function(){"
         "_autoOn=!_autoOn;"
-        "$('btnAuto').textContent=(_autoOn?'\u23f8 AUTO: LIGADO':'\u8635 AUTO: DESLIGADO');"
+        "$('btnAuto').textContent=(_autoOn?'\u23f8 AUTO: LIGADO':'\u21bb AUTO: DESLIGADO');"
         "$('btnAuto').className='btn-auto'+(_autoOn?' on':'');};"
         "var _origAnalyze=analyze;"
         "analyze=function(){"
@@ -15751,11 +15760,17 @@ def garra_price_action_pro_ui():
         "if(_autoOn){"
         "var sig=$('signalText')?$('signalText').textContent:'';"
         "if((sig==='CALL'||sig==='PUT')&&sig!==_lastAutoSignal){"
-        "_lastAutoSignal=sig;"
-        "enviarEntrada(sig);"
-        "}}};"
+        "_lastAutoSignal=sig;enviarEntrada(sig);}}};"
         "window.GARRA_PRICE_ACTION_PRO={"
-        "setCandles:function(data){setCandles(data,'FEED EXTERNO \u2022 '+data.length+' velas');return true;},"
+        "setCandles:function(data){"
+        "var clean=data.map(function(c){return{time:Number(c.time||0),"
+        "open:Number(c.open||0),high:Number(c.high||0),"
+        "low:Number(c.low||0),close:Number(c.close||0),volume:Number(c.volume||1)};}"
+        ").filter(function(c){return c.time>0&&c.open>0;}).sort(function(a,b){return a.time-b.time;});"
+        "if(clean.length<30)return false;"
+        "candles=clean;update();analyze();"
+        "$('connection').textContent='FEED EXTERNO \u2022 '+clean.length+' velas';"
+        "return true;},"
         "analyze:function(){analyze();},"
         "getCandles:function(){return candles.slice();},"
         "getLastSignal:function(){return signalHistory.length?signalHistory[0]:null;}"
@@ -16059,6 +16074,167 @@ def garra_pap_candles():
 
     return jsonify({"ok": True, "candles": candles, "source": "deriv",
                     "symbol": symbol, "total": len(candles)})
+
+
+# ── Rota /deriv/operar — executa CALL/PUT na Deriv via WebSocket + token OAuth ──
+@app.route('/deriv/operar', methods=['POST'])
+def deriv_operar():
+    """
+    Executa uma entrada binária na Deriv usando o access_token OAuth armazenado.
+
+    Payload JSON:
+      {
+        "symbol":   "R_25",          # símbolo Deriv (ex: R_25, frxEURUSD)
+        "direcao":  "call" | "put",  # direção da operação
+        "valor":    1.00,            # stake em USD
+        "duracao":  1,               # duração em minutos (padrão: 1)
+        "modo":     "demo" | "real"  # modo da conta (padrão: demo)
+      }
+    """
+    import time as _time
+    import threading as _th
+
+    dados   = request.get_json(silent=True) or {}
+    symbol  = (dados.get("symbol") or "R_25").strip()
+    direcao = (dados.get("direcao") or "").strip().lower()
+    modo    = (dados.get("modo") or "demo").strip().lower()
+
+    try:
+        valor = float(dados.get("valor") or 1)
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "erro": "Campo 'valor' deve ser numérico."}), 400
+
+    try:
+        duracao_min = int(dados.get("duracao") or 1)
+    except (TypeError, ValueError):
+        duracao_min = 1
+
+    if direcao not in ("call", "put"):
+        return jsonify({"ok": False, "erro": "Campo 'direcao' deve ser 'call' ou 'put'."}), 400
+    if valor <= 0:
+        return jsonify({"ok": False, "erro": "Campo 'valor' deve ser maior que zero."}), 400
+
+    # Resolve token OAuth armazenado
+    with _token_lock:
+        access_token = _token_recebido.get("access_token", "")
+
+    if not access_token:
+        return jsonify({
+            "ok":   False,
+            "erro": "Token Deriv não disponível. Faça login na Deriv primeiro.",
+        }), 401
+
+    # Gera wss_url autenticada via API Deriv
+    tipo_conta = "DEMO" if modo == "demo" else "REAL"
+    try:
+        token_info = _get_token_com_access(access_token, tipo_conta)
+    except Exception as e:
+        return jsonify({"ok": False, "erro": f"Erro ao gerar OTP Deriv: {e}"}), 500
+
+    wss_url = token_info.get("wss_url")
+    if not wss_url:
+        return jsonify({
+            "ok":    False,
+            "erro":  token_info.get("erro", "Falha ao gerar URL WSS"),
+            "detalhe": token_info.get("detalhe", ""),
+        }), 502
+
+    # Duração em segundos alinhada com M1
+    duracao_seg = duracao_min * 60
+
+    # Contrato: CALL = DIGITRISE (não binário), usamos CALL/PUT padrão Deriv
+    # Para opções binárias Rise/Fall: contract_type = CALL | PUT
+    contract_type = "CALL" if direcao == "call" else "PUT"
+
+    # Executa buy via WebSocket autenticado
+    resultado = {}
+    done_evt  = _th.Event()
+
+    def _on_msg(ws, raw):
+        try:
+            d = json.loads(raw)
+            if d.get("msg_type") == "authorize":
+                if d.get("error"):
+                    resultado["ok"]   = False
+                    resultado["erro"] = d["error"].get("message", "Autorização falhou")
+                    done_evt.set()
+                    ws.close()
+                    return
+                # Autorizado — envia ordem buy
+                ws.send(json.dumps({
+                    "buy": 1,
+                    "price": valor,
+                    "parameters": {
+                        "amount":          valor,
+                        "basis":           "stake",
+                        "contract_type":   contract_type,
+                        "currency":        "USD",
+                        "duration":        duracao_seg,
+                        "duration_unit":   "s",
+                        "symbol":          symbol,
+                    }
+                }))
+            elif d.get("msg_type") == "buy":
+                if d.get("error"):
+                    resultado["ok"]       = False
+                    resultado["erro"]     = d["error"].get("message", "Erro no buy")
+                    resultado["code"]     = d["error"].get("code", "")
+                else:
+                    b = d.get("buy", {})
+                    resultado["ok"]           = True
+                    resultado["contract_id"]  = b.get("contract_id")
+                    resultado["buy_price"]    = b.get("buy_price")
+                    resultado["symbol"]       = symbol
+                    resultado["contract_type"] = contract_type
+                    resultado["longcode"]     = b.get("longcode", "")
+                done_evt.set()
+                ws.close()
+        except Exception as ex:
+            resultado["ok"]   = False
+            resultado["erro"] = str(ex)
+            done_evt.set()
+
+    def _on_open(ws):
+        # Pega o token da URL (formato: wss://...?token=XXX ou inclui login na URL)
+        # A wss_url da Deriv já inclui autenticação — enviamos authorize para confirmar
+        import urllib.parse as _up
+        parsed = _up.urlparse(wss_url)
+        qs     = dict(_up.parse_qsl(parsed.query))
+        token_ws = qs.get("token", "")
+        if token_ws:
+            ws.send(json.dumps({"authorize": token_ws}))
+        else:
+            # URL sem token no query string — tenta usar o access_token diretamente
+            ws.send(json.dumps({"authorize": access_token}))
+
+    def _on_error(ws, err):
+        resultado["ok"]   = False
+        resultado["erro"] = str(err)
+        done_evt.set()
+
+    def _on_close(ws, *args):
+        done_evt.set()
+
+    try:
+        import websocket as _wslib
+        wsapp = _wslib.WebSocketApp(
+            wss_url,
+            on_open=_on_open,
+            on_message=_on_msg,
+            on_error=_on_error,
+            on_close=_on_close,
+        )
+        t = _th.Thread(target=lambda: wsapp.run_forever(ping_interval=0), daemon=True)
+        t.start()
+        done_evt.wait(timeout=20)
+    except Exception as ex:
+        return jsonify({"ok": False, "erro": f"Erro WebSocket: {ex}"}), 500
+
+    if not resultado:
+        return jsonify({"ok": False, "erro": "Timeout: sem resposta da Deriv em 20s"}), 504
+
+    status_code = 200 if resultado.get("ok") else 502
+    return jsonify(resultado), status_code
 
 
 if __name__ == "__main__":
