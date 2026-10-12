@@ -33523,7 +33523,7 @@ function _drvProcessarTick(tick) {
         }
     }
 
-    if (_drvModo.rodando && !_drvModo.opBloqueada && _drvModo.modo !== 'manual') {
+    if (_drvModo.rodando && !_drvModo.opBloqueada) {
         _drvAnalisarAutomatic(preco);
     }
 }
@@ -33700,6 +33700,17 @@ function drvChartAbrir() {
         if (l) l.textContent = tipo + ' • $' + parseFloat(bot._lastBalance).toFixed(2);
     }
 
+    // Painel de sinais sempre visível e análise iniciada automaticamente ao abrir
+    const ps = document.getElementById('drv-painel-sinais');
+    if (ps) ps.style.display = 'block';
+    if (!_drvModo.rodando) {
+        _drvModo.rodando = true;
+        _drvModo.opBloqueada = false;
+        const btn = document.getElementById('drv-sinais-toggle');
+        if (btn) { btn.textContent = '⏹ PARAR'; btn.style.borderColor = 'rgba(239,83,80,0.6)'; btn.style.color = '#ef4444'; }
+        _drvAdicionarSinal({ msg: `🔍 Análise iniciada — ${_drvModo.modo}`, cor: '#00ff41' });
+    }
+
     _drvSbIniciar();   // inicia atualização da barra de stats
     drvChartCarregar();
 }
@@ -33809,10 +33820,19 @@ function drvSelecionarModo(modo) {
         el.style.background  = on ? 'rgba(0,255,65,0.06)' : 'transparent';
     });
     const ps = document.getElementById('drv-painel-sinais');
-    if (ps) ps.style.display = modo !== 'manual' ? 'block' : 'none';
+    if (ps) ps.style.display = 'block'; // sempre visível — análise ativa em todos os modos
     const t = document.getElementById('drv-sinais-titulo');
-    if (t) t.textContent = ({price_action:'PRICE ACTION',fluxo:'FLUXO PRO',automatico:'AUTOMÁTICO',hma:'GARRA AI HMA'}[modo]) || 'ANÁLISE';
-    if (_drvModo.rodando) drvToggleAnalise();
+    if (t) t.textContent = ({manual:'ANÁLISE GARRA',price_action:'PRICE ACTION',fluxo:'FLUXO PRO',automatico:'AUTOMÁTICO',hma:'GARRA AI HMA'}[modo]) || 'ANÁLISE';
+    // Reinicia limpando bloqueio e agendamento
+    if (_drvModo.viradaTimer) { clearTimeout(_drvModo.viradaTimer); _drvModo.viradaTimer = null; }
+    _drvModo.opBloqueada = false;
+    // Liga análise automática se não estiver rodando
+    if (!_drvModo.rodando) {
+        _drvModo.rodando = true;
+        const btn = document.getElementById('drv-sinais-toggle');
+        if (btn) { btn.textContent = '⏹ PARAR'; btn.style.borderColor = 'rgba(239,83,80,0.6)'; btn.style.color = '#ef4444'; }
+        _drvAdicionarSinal({ msg: `🔍 Análise iniciada — ${t ? t.textContent : modo}`, cor: '#00ff41' });
+    }
 }
 
 function drvToggleAnalise() {
@@ -34123,7 +34143,7 @@ function _drvAnalisarAutomatic(precoAtual) {
     if (_drvModo.viradaTimer) return;
     const modo = _drvModo.modo;
     let direcao = null, confianca = 0;
-    if (modo === 'price_action' || modo === 'automatico') {
+    if (modo === 'price_action' || modo === 'automatico' || modo === 'manual') {
         const corpo = vela.close - vela.open, amp = Math.abs(vela.high - vela.low);
         if (amp > 0) { confianca = Math.abs(corpo/amp)*100; if (confianca >= 55) direcao = corpo > 0 ? 'call' : 'put'; }
     } else if (modo === 'fluxo') {
@@ -34135,7 +34155,12 @@ function _drvAnalisarAutomatic(precoAtual) {
     }
     if (direcao && confianca >= 55) {
         const cor = direcao === 'call' ? '#27c93f' : '#ef4444';
-        if ((modo === 'automatico' || modo === 'hma') && !_drvModo.opBloqueada) {
+        // Modo manual: exibe sinal de análise mas não opera automaticamente
+        if (modo === 'manual') {
+            _drvAdicionarSinal({ msg: `${direcao==='call'?'▲':'▼'} ANÁLISE ${direcao.toUpperCase()} | conf:${confianca.toFixed(0)}% | use os botões para operar`, cor });
+        }
+        // Todos os outros modos operam automaticamente
+        if (modo !== 'manual' && !_drvModo.opBloqueada) {
             _drvModo.opBloqueada = true;
 
             // Calcula ms até a próxima virada de vela
