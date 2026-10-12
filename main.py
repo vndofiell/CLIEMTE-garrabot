@@ -15331,8 +15331,8 @@ _init_background_threads()
 # ═══════════════════════════════════════════════════════════════════════════════
 @app.route('/garra-price-action-pro/feed')
 def garra_price_action_pro_feed():
-    """Relé SSE do feed Deriv no backend; evita WebSocket direto do navegador.
-    Usa websocket-client, a mesma abordagem de conexão usada pelo scanner Deriv do projeto.
+    """Relé SSE do feed real da Deriv. Usa o mesmo protocolo WebSocket v3
+    empregado pelo scanner do projeto e preserva a causa real dos erros.
     """
     from flask import Response, stream_with_context
     symbol = (request.args.get('symbol') or 'R_25').strip()
@@ -15350,60 +15350,93 @@ def garra_price_action_pro_feed():
         ws = None
         try:
             import websocket as wsclient
-            ws = wsclient.create_connection(
+            # Mesmo endpoint v3 já usado no scanner do main.py; segundo endpoint
+            # como fallback caso o gateway principal esteja indisponível.
+            endpoints = (
                 'wss://ws.binaryws.com/websockets/v3?app_id=1089',
-                timeout=18, enable_multithread=True,
+                'wss://ws.derivws.com/websockets/v3?app_id=1089',
             )
+            connect_errors = []
+            for endpoint in endpoints:
+                try:
+                    ws = wsclient.create_connection(endpoint, timeout=8, enable_multithread=True)
+                    break
+                except Exception as exc:
+                    connect_errors.append(f'{endpoint.split("/")[2]}: {str(exc)[:100]}')
+                    ws = None
+            if ws is None:
+                detail = ' | '.join(connect_errors) or 'nenhum endpoint respondeu'
+                yield 'event: feed_error\ndata: ' + json.dumps({'message':'Falha ao conectar à Deriv: '+detail}) + '\n\n'
+                return
+
+            ws.settimeout(3)
             ws.send(json.dumps({'ticks_history': symbol, 'adjust_start_time': 1,
                                 'count': 500, 'end': 'latest', 'style': 'candles',
                                 'granularity': granularity}))
             history = None
-            deadline = time.time() + 15
-            while time.time() < deadline:
+            deadline = time.monotonic() + 20
+            last_error = None
+            while time.monotonic() < deadline:
                 try:
-                    msg = json.loads(ws.recv())
-                except Exception:
-                    continue
+                    raw = ws.recv()
+                    if not raw:
+                        continue
+                    msg = json.loads(raw)
+                except Exception as exc:
+                    if 'timed out' in str(exc).lower() or 'timeout' in str(exc).lower():
+                        continue
+                    last_error = str(exc)
+                    break
                 if msg.get('error'):
-                    yield 'event: feed_error\ndata: ' + json.dumps({'message': msg['error'].get('message','Erro Deriv')}) + '\n\n'
+                    err = msg['error']
+                    detail = f"{err.get('code','DerivError')}: {err.get('message','Erro retornado pela Deriv')}"
+                    yield 'event: feed_error\ndata: ' + json.dumps({'message':detail}) + '\n\n'
                     return
                 if msg.get('candles'):
                     history = msg['candles']
                     break
             if not history:
-                yield 'event: feed_error\ndata: ' + json.dumps({'message':'A Deriv não retornou histórico de velas'}) + '\n\n'
+                detail = 'tempo esgotado aguardando histórico de velas'
+                if last_error:
+                    detail += ': ' + last_error[:120]
+                yield 'event: feed_error\ndata: ' + json.dumps({'message':detail}) + '\n\n'
                 return
+
             yield 'event: candles\ndata: ' + json.dumps({'symbol':symbol,'granularity':granularity,'candles':history}) + '\n\n'
             ws.send(json.dumps({'ticks': symbol, 'subscribe': 1}))
-            last_ping = time.time()
+            last_keepalive = time.monotonic()
             while True:
                 try:
                     raw = ws.recv()
+                    if not raw:
+                        continue
                     msg = json.loads(raw)
                     if msg.get('error'):
-                        yield 'event: feed_error\ndata: ' + json.dumps({'message':msg['error'].get('message','Erro Deriv')}) + '\n\n'
+                        err = msg['error']
+                        detail = f"{err.get('code','DerivError')}: {err.get('message','Erro retornado pela Deriv')}"
+                        yield 'event: feed_error\ndata: ' + json.dumps({'message':detail}) + '\n\n'
                         break
                     if msg.get('tick'):
                         yield 'event: tick\ndata: ' + json.dumps(msg['tick']) + '\n\n'
-                    elif msg.get('msg_type') == 'ping':
-                        pass
-                    if time.time() - last_ping > 20:
-                        try: ws.ping()
-                        except Exception: pass
-                        last_ping = time.time()
-                except Exception as exc:
-                    # timeout periódico: mantém a conexão viva e envia heartbeat SSE
-                    if 'timed out' in str(exc).lower() or 'timeout' in str(exc).lower():
+                    if time.monotonic() - last_keepalive > 15:
                         yield ': keep-alive\n\n'
+                        last_keepalive = time.monotonic()
+                except Exception as exc:
+                    if 'timed out' in str(exc).lower() or 'timeout' in str(exc).lower():
+                        if time.monotonic() - last_keepalive > 15:
+                            yield ': keep-alive\n\n'
+                            last_keepalive = time.monotonic()
                         continue
-                    raise
+                    yield 'event: feed_error\ndata: ' + json.dumps({'message':'WebSocket interrompido: '+str(exc)[:140]}) + '\n\n'
+                    break
         except GeneratorExit:
             return
         except Exception as exc:
-            yield 'event: feed_error\ndata: ' + json.dumps({'message':str(exc)[:180]}) + '\n\n'
+            yield 'event: feed_error\ndata: ' + json.dumps({'message':type(exc).__name__+': '+str(exc)[:180]}) + '\n\n'
         finally:
             try:
-                if ws is not None: ws.close()
+                if ws is not None:
+                    ws.close()
             except Exception:
                 pass
 
@@ -15412,7 +15445,6 @@ def garra_price_action_pro_feed():
     response.headers['X-Accel-Buffering'] = 'no'
     response.headers['Connection'] = 'keep-alive'
     return response
-
 
 @app.route('/garra-price-action-pro')
 def garra_price_action_pro_ui():
