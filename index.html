@@ -12677,11 +12677,14 @@ function initWebSocket(wssUrl) {
 
         // Compra confirmada → subscreve resultado
         if (data.msg_type === 'buy') {
-            // Ignora buy do painel Deriv Chart — verifica tanto echo_req.req_id quanto req_id direto
-            // Painel usa reqProp:100-299 e reqBuy:300-499
-            const _buyEchoId = (data.echo_req && data.echo_req.req_id) || 0;
-            const _buyReqId  = data.req_id || 0;
+            // Ignora buy do painel Deriv Chart — verificações múltiplas para garantir isolamento
+            const _buyEchoId  = (data.echo_req && data.echo_req.req_id) || 0;
+            const _buyReqId   = data.req_id || 0;
+            const _buyPropId  = data.echo_req && data.echo_req.buy;
+            // 1) req_id na faixa exclusiva do painel (100-499)
             if ((_buyEchoId >= 100 && _buyEchoId < 500) || (_buyReqId >= 100 && _buyReqId < 500)) return;
+            // 2) proposal.id é o que o painel está aguardando
+            if (_buyPropId && typeof _drvChart !== 'undefined' && _drvChart.propPendente === _buyPropId) return;
             if (data.error) { print("⚠️ COMPRA RECUSADA: " + data.error.message, "log-loss"); bot._buying = false; return; }
             const cid   = data.buy && data.buy.contract_id;
             const reqId = data.echo_req && data.echo_req.req_id;
@@ -32806,7 +32809,8 @@ const _drvChart = {
     velaAtual:null, tsAbertura:0,
     opAtiva:null, priceLine:null,
     _sessaoWins:0, _sessaoLosses:0, _sessaoLucro:0,
-    cidsAtivos: new Set(),   // IDs de contratos abertos pelo painel Deriv Chart
+    cidsAtivos:    new Set(),   // IDs de contratos abertos pelo painel Deriv Chart
+    propPendente:  null,        // proposal.id enviado aguardando buy — bot principal ignora
 };
 const _drvModo = {
     modo:'manual', rodando:false, opBloqueada:false, viradaTimer:null,
@@ -33970,9 +33974,9 @@ function drvOperar(direcao) {
 
     const _drvUnlockBtns = () => { if (btnCall) btnCall.disabled = false; if (btnPut) btnPut.disabled = false; };
 
-    // Guarda o proposal.id para identificar o buy correspondente
+    // Guarda o proposal.id para identificar o buy de forma precisa
     let _drvPropId = null;
-    // Timeout de segurança: remove handler se não chegar resposta em 15s
+    // Timeout de segurança: remove handler e desbloqueia se não chegar resposta em 15s
     const _drvHandlerTimeout = setTimeout(() => {
         ws.removeEventListener('message', handler);
         _drvUnlockBtns();
@@ -33982,8 +33986,9 @@ function drvOperar(direcao) {
     const handler = (ev) => {
         try {
             const d = JSON.parse(ev.data);
-            // Captura resposta da proposta pelo req_id
-            if (d.req_id === reqProp && d.msg_type === 'proposal') {
+
+            // ── Passo 1: captura a proposta pelo req_id ──────────────────
+            if (d.msg_type === 'proposal' && d.req_id === reqProp) {
                 if (d.error) {
                     clearTimeout(_drvHandlerTimeout);
                     ws.removeEventListener('message', handler);
@@ -33992,22 +33997,23 @@ function drvOperar(direcao) {
                     _drvModo.opBloqueada = false; return;
                 }
                 if (d.proposal?.id) {
-                    _drvPropId = d.proposal.id;   // guarda para identificar o buy
+                    _drvPropId = d.proposal.id;
+                    _drvChart.propPendente = _drvPropId;  // avisa bot principal para ignorar
                     const estEl = document.getElementById('drv-pagamento-est');
                     if (estEl && d.proposal.payout > 0) estEl.textContent = '$' + parseFloat(d.proposal.payout).toFixed(2);
-                    ws.send(JSON.stringify({ buy: d.proposal.id, price: valor, req_id: reqBuy }));
+                    ws.send(JSON.stringify({ buy: _drvPropId, price: valor, req_id: reqBuy }));
                 }
                 return;
             }
-            // Captura resposta do buy — a Deriv retorna d.req_id igual ao da proposta original
-            // OU usa echo_req.req_id do buy; aceita ambos para garantir captura
-            const _echoReqId = d.echo_req && d.echo_req.req_id;
-            const _isBuyDoPainel = d.msg_type === 'buy' && (
-                _echoReqId === reqBuy ||
-                d.req_id   === reqProp ||
-                (d.buy && _drvPropId && d.echo_req && d.echo_req.buy === _drvPropId)
-            );
-            if (_isBuyDoPainel) {
+
+            // ── Passo 2: captura o buy pelo proposal.id (mais confiável que req_id) ──
+            // A Deriv retorna echo_req.buy = proposal.id enviado no buy
+            if (d.msg_type === 'buy' && _drvPropId) {
+                const _echoBuy = d.echo_req && d.echo_req.buy;
+                const _echoReq = d.echo_req && d.echo_req.req_id;
+                // Aceita se: echo_req.buy === propId OU echo_req.req_id === reqBuy
+                if (_echoBuy !== _drvPropId && _echoReq !== reqBuy) return;
+                _drvChart.propPendente = null;  // limpa flag após capturar buy
                 clearTimeout(_drvHandlerTimeout);
                 ws.removeEventListener('message', handler);
                 _drvUnlockBtns();
