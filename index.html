@@ -34135,6 +34135,107 @@ async function _drvFiltroTopoFundo(ativo, periodo, direcao) {
 }
 
 let _drvAnaliseContador = 0;
+
+// ── Análise GARRA PRICE ACTION PRO ──────────────────────────────────────────
+// Pontuação ponderada: EMA200(25) + EMA9/21(15) + MACD(20) + RSI(15) + Vol(10) + Vela/PA(15)
+// Bloqueia quando: RSI extremo, MACD contrário, vela contrária, tendência contrária
+function _drvPriceActionProAnalisar(vela) {
+    const candles = _drvChart._candles;
+    if (!candles || candles.length < 30) return null;
+    const sorted = [...candles].sort((a, b) => a.time - b.time);
+    const closes = sorted.map(c => c.close);
+    const n = closes.length;
+
+    // ── Indicadores ───────────────────────────────────────────
+    const e9   = _drvEmaArr(closes, 9);
+    const e21  = _drvEmaArr(closes, 21);
+    const e200 = _drvEmaArr(closes, 200);
+    const rv   = _drvRsiArr(closes, 14);
+    const mc   = _drvMacdObj(closes);
+    const vols = sorted.map(c => (c.volume !== undefined ? c.volume : 1));
+    const avgVol = vols.slice(-21, -1).reduce((s, v) => s + v, 0) / 20 || 1;
+    const i = n - 1;
+
+    const rsiVal   = rv[i];
+    const macdUp   = mc.m[i] > mc.s[i];
+    const macdDown = mc.m[i] < mc.s[i];
+    const trendUp  = closes[i] > e200[i];
+    const trendDown= closes[i] < e200[i];
+    const ema9Up   = e9[i] > e21[i];
+    const volOk    = vols[i] > avgVol;
+
+    // ── Price Action: pavios + engolfo + cor da vela ──────────
+    const o = vela.open, h = vela.high, l = vela.low, cl = vela.close;
+    const corpo    = cl - o;
+    const amp      = h - l;
+    const bullCandle = cl > o;
+    const bearCandle = cl < o;
+    let padraoCall = false, padraoPut = false;
+    if (amp > 0) {
+        const pavioInf = Math.min(o, cl) - l;
+        const pavioSup = h - Math.max(o, cl);
+        // Martelo / pin de alta (pavio inferior ≥ 60% da amplitude)
+        if (pavioInf / amp >= 0.55 && Math.abs(corpo) / amp < 0.35) padraoCall = true;
+        // Estrela cadente / pin de baixa (pavio superior ≥ 60%)
+        if (pavioSup / amp >= 0.55 && Math.abs(corpo) / amp < 0.35) padraoPut = true;
+        // Engolfo de alta: vela verde com corpo grande
+        if (bullCandle && Math.abs(corpo) / amp >= 0.65) padraoCall = true;
+        // Engolfo de baixa: vela vermelha com corpo grande
+        if (bearCandle && Math.abs(corpo) / amp >= 0.65) padraoPut = true;
+    }
+
+    // ── Pontuação ─────────────────────────────────────────────
+    let call = 0, put = 0, blockers = [];
+
+    // 1. Tendência EMA 200 (+25)
+    if (trendUp)   call += 25;
+    if (trendDown) put  += 25;
+
+    // 2. Cruzamento EMA 9/21 (+15)
+    if (ema9Up)  call += 15;
+    else         put  += 15;
+
+    // 3. RSI (+15 ou bloqueia)
+    if (rsiVal >= 52 && rsiVal <= 68) call += 15;
+    else if (rsiVal >= 32 && rsiVal <= 48) put += 15;
+    else blockers.push(`RSI extremo (${rsiVal.toFixed(1)})`);
+
+    // 4. MACD (+20)
+    if (macdUp)   call += 20;
+    if (macdDown) put  += 20;
+
+    // 5. Volume relativo (+10)
+    if (volOk) { call += 10; put += 10; }
+
+    // 6. Price Action / vela (+15)
+    if (padraoCall) call += 15;
+    if (padraoPut)  put  += 15;
+
+    // ── Direção e confluência ─────────────────────────────────
+    const dir  = call > put ? 'CALL' : put > call ? 'PUT' : null;
+    const best = Math.min(100, Math.max(call, put));
+
+    if (!dir) return null;
+
+    // ── Filtros bloqueantes ───────────────────────────────────
+    if (dir === 'CALL') {
+        if (!macdUp)    blockers.push('MACD não confirmou');
+        if (!trendUp)   blockers.push('tendência principal baixista');
+        if (bearCandle && !padraoCall) blockers.push('candle não confirmou a direção');
+    }
+    if (dir === 'PUT') {
+        if (!macdDown)  blockers.push('MACD não confirmou');
+        if (!trendDown) blockers.push('tendência principal altista');
+        if (bullCandle && !padraoPut) blockers.push('candle não confirmou a direção');
+    }
+    if (!volOk) blockers.push('volume abaixo da média');
+
+    const ok = best >= 60 && blockers.length === 0;
+
+    return { dir: dir.toLowerCase(), confianca: best, ok, blockers,
+        detalhes: { rsiVal, macdUp, trendUp, trendDown, ema9Up, volOk, padraoCall, padraoPut, bullCandle, bearCandle } };
+}
+
 function _drvAnalisarAutomatic(precoAtual) {
     _drvAnaliseContador++;
     if (_drvAnaliseContador % 5 !== 0) return;
@@ -34143,7 +34244,28 @@ function _drvAnalisarAutomatic(precoAtual) {
     if (_drvModo.viradaTimer) return;
     const modo = _drvModo.modo;
     let direcao = null, confianca = 0;
-    if (modo === 'price_action' || modo === 'automatico' || modo === 'manual') {
+
+    if (modo === 'price_action' || modo === 'manual') {
+        // ── GARRA PRICE ACTION PRO — análise completa ─────────
+        const pa = _drvPriceActionProAnalisar(vela);
+        if (!pa) return;
+        const cor = pa.dir === 'call' ? '#27c93f' : '#ef4444';
+        // Exibe resumo dos indicadores no painel de sinais
+        const { rsiVal, macdUp, trendUp, ema9Up, volOk, bullCandle, padraoCall, padraoPut } = pa.detalhes;
+        _drvAdicionarSinal({ msg:
+            `📊 EMA200:${pa.detalhes.trendUp?'▲Alta':'▼Baixa'} | EMA9/21:${ema9Up?'Alta':'Baixa'} | MACD:${macdUp?'▲':'▼'} | RSI:${rsiVal.toFixed(1)} | Vol:${volOk?'OK':'baixo'}`,
+            cor: '#aaa' });
+        if (!pa.ok) {
+            _drvAdicionarSinal({ msg: `⏸ AGUARDAR — ${pa.blockers.join(' • ')} | conf:${pa.confianca}%`, cor: '#ffbd2e' });
+            return;
+        }
+        if (modo === 'manual') {
+            _drvAdicionarSinal({ msg: `${pa.dir==='call'?'▲':'▼'} SINAL ${pa.dir.toUpperCase()} | conf:${pa.confianca}% | use os botões para operar`, cor });
+            return;
+        }
+        direcao   = pa.dir;
+        confianca = pa.confianca;
+    } else if (modo === 'automatico') {
         const corpo = vela.close - vela.open, amp = Math.abs(vela.high - vela.low);
         if (amp > 0) { confianca = Math.abs(corpo/amp)*100; if (confianca >= 55) direcao = corpo > 0 ? 'call' : 'put'; }
     } else if (modo === 'fluxo') {
@@ -34155,12 +34277,8 @@ function _drvAnalisarAutomatic(precoAtual) {
     }
     if (direcao && confianca >= 55) {
         const cor = direcao === 'call' ? '#27c93f' : '#ef4444';
-        // Modo manual: exibe sinal de análise mas não opera automaticamente
-        if (modo === 'manual') {
-            _drvAdicionarSinal({ msg: `${direcao==='call'?'▲':'▼'} ANÁLISE ${direcao.toUpperCase()} | conf:${confianca.toFixed(0)}% | use os botões para operar`, cor });
-        }
         // Todos os outros modos operam automaticamente
-        if (modo !== 'manual' && !_drvModo.opBloqueada) {
+        if (!_drvModo.opBloqueada) {
             _drvModo.opBloqueada = true;
 
             // Calcula ms até a próxima virada de vela
