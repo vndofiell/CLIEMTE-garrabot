@@ -34009,22 +34009,13 @@ function drvOperar(direcao) {
                 if (d.proposal?.id) {
                     _drvPropId = d.proposal.id;
                     _drvChart.propPendente = _drvPropId;
-                    // Verifica se o WS ainda é o mesmo antes de enviar o buy
-                    const _wsAtual = (typeof bot !== 'undefined') ? bot.ws : null;
-                    const _wsMudou = _wsAtual && _wsAtual !== ws;
-                    const _wsOk    = ws && ws.readyState === WebSocket.OPEN;
-                    _drvAdicionarSinal({ msg: `📋 id=${_drvPropId.slice(0,8)}… amt=${valor} dur=${_durFinal}${_unitFinal} ws=${_wsOk?'OK':'FECHADO'} wsMudou=${_wsMudou}`, cor: _wsOk?'#0ff':'#f44' });
-                    if (!_wsOk) {
-                        clearTimeout(_drvHandlerTimeout);
-                        ws.removeEventListener('message', handler);
-                        _drvUnlockBtns();
-                        _drvChart.propPendente = null;
-                        _drvOpStatusMsg('❌ WS fechado antes do buy', '#f44');
-                        _drvModo.opBloqueada = false; return;
-                    }
+                    // Usa o ask_price da proposta como price no buy (obrigatório pela API Deriv)
+                    const _askPrice = parseFloat(d.proposal.ask_price || valor);
+                    const _wsOk = ws && ws.readyState === WebSocket.OPEN;
+                    _drvAdicionarSinal({ msg: `📋 id=${_drvPropId.slice(0,8)}… ask=${_askPrice} amt=${valor} dur=${_durFinal}${_unitFinal}`, cor: '#0ff' });
                     const estEl = document.getElementById('drv-pagamento-est');
                     if (estEl && d.proposal.payout > 0) estEl.textContent = '$' + parseFloat(d.proposal.payout).toFixed(2);
-                    ws.send(JSON.stringify({ buy: _drvPropId, price: valor, req_id: reqBuy }));
+                    ws.send(JSON.stringify({ buy: _drvPropId, price: _askPrice, req_id: reqBuy }));
                 }
                 return;
             }
