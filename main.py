@@ -15786,11 +15786,22 @@ analyze=function(){
   }
 };
 createCharts();
-candles=makeCandles();
-update();
-analyze();
-$('connection').textContent='AGUARDANDO FEED DERIV...';
+$('connection').textContent='CONECTANDO NA DERIV...';
 derivConnectWs();
+/* fallback: se em 8s o WS nao conectou, busca via fetch HTTP */
+setTimeout(function(){
+  if(candles.length>0&&candles[0].open<50000)return; /* ja tem dados reais */
+  if(candles.length>0)return; /* ja tem alguma coisa */
+  var sym=derivSymbol(),gran=derivGranularity();
+  var url='/garra-price-action-pro/candles?ativo='+encodeURIComponent($('asset').value)+'&tf='+$('tf').value+'&count=300';
+  fetch(url).then(function(r){return r.json();}).then(function(d){
+    if(d.ok&&d.candles&&d.candles.length>=5){
+      candles=d.candles;update();analyze();
+      $('connection').textContent='FEED HTTP \u2022 '+d.candles.length+' velas \u2022 '+sym;
+      $('statusDot').classList.add('live');
+    }
+  }).catch(function(){});
+},8000);
 setInterval(updateClock,1000);
 setInterval(function(){if(candles.length>0){update();analyze();}},3000);
 window.GARRA_PRICE_ACTION_PRO={
@@ -16108,28 +16119,27 @@ def garra_pap_candles():
                     "symbol": symbol, "total": len(candles)})
 
 
-# ── Rota /deriv/operar — executa CALL/PUT na Deriv via WebSocket + token OAuth ──
+# ── Rota /deriv/operar — executa CALL/PUT na Deriv via WebSocket + authorize direto ──
 @app.route('/deriv/operar', methods=['POST'])
 def deriv_operar():
     """
-    Executa uma entrada binária na Deriv usando o access_token OAuth armazenado.
+    Executa uma entrada binária na Deriv usando authorize direto com access_token.
+    Não usa OTP/wss_url — apenas abre WS público e autentica com token.
 
     Payload JSON:
       {
-        "symbol":   "R_25",          # símbolo Deriv (ex: R_25, frxEURUSD)
-        "direcao":  "call" | "put",  # direção da operação
-        "valor":    1.00,            # stake em USD
-        "duracao":  1,               # duração em minutos (padrão: 1)
-        "modo":     "demo" | "real"  # modo da conta (padrão: demo)
+        "symbol":   "R_25",
+        "direcao":  "call" | "put",
+        "valor":    1.00,
+        "duracao":  1,
+        "modo":     "demo" | "real"
       }
     """
-    import time as _time
     import threading as _th
 
     dados   = request.get_json(silent=True) or {}
     symbol  = (dados.get("symbol") or "R_25").strip()
     direcao = (dados.get("direcao") or "").strip().lower()
-    modo    = (dados.get("modo") or "demo").strip().lower()
 
     try:
         valor = float(dados.get("valor") or 1)
@@ -16156,93 +16166,57 @@ def deriv_operar():
             "erro": "Token Deriv não disponível. Faça login na Deriv primeiro.",
         }), 401
 
-    # Gera wss_url autenticada via API Deriv
-    tipo_conta = "DEMO" if modo == "demo" else "REAL"
-    try:
-        token_info = _get_token_com_access(access_token, tipo_conta)
-    except Exception as e:
-        return jsonify({"ok": False, "erro": f"Erro ao gerar OTP Deriv: {e}"}), 500
-
-    wss_url = token_info.get("wss_url")
-    if not wss_url:
-        return jsonify({
-            "ok":    False,
-            "erro":  token_info.get("erro", "Falha ao gerar URL WSS"),
-            "detalhe": token_info.get("detalhe", ""),
-        }), 502
-
-    # Duração em segundos alinhada com M1
-    duracao_seg = duracao_min * 60
-
-    # Contrato: CALL = DIGITRISE (não binário), usamos CALL/PUT padrão Deriv
-    # Para opções binárias Rise/Fall: contract_type = CALL | PUT
+    duracao_seg   = duracao_min * 60
     contract_type = "CALL" if direcao == "call" else "PUT"
 
-    # Executa buy via WebSocket autenticado
     resultado = {}
     done_evt  = _th.Event()
 
     def _on_msg(ws, raw):
         try:
             d = json.loads(raw)
-            if d.get("msg_type") == "authorize":
+            mt = d.get("msg_type", "")
+            if mt == "authorize":
                 if d.get("error"):
                     resultado["ok"]   = False
                     resultado["erro"] = d["error"].get("message", "Autorização falhou")
-                    done_evt.set()
-                    ws.close()
-                    return
-                # Autorizado — envia ordem buy
+                    done_evt.set(); ws.close(); return
+                # Autorizado — envia buy imediatamente
                 ws.send(json.dumps({
                     "buy": 1,
                     "price": valor,
                     "parameters": {
-                        "amount":          valor,
-                        "basis":           "stake",
-                        "contract_type":   contract_type,
-                        "currency":        "USD",
-                        "duration":        duracao_seg,
-                        "duration_unit":   "s",
-                        "symbol":          symbol,
+                        "amount":        valor,
+                        "basis":         "stake",
+                        "contract_type": contract_type,
+                        "currency":      "USD",
+                        "duration":      duracao_seg,
+                        "duration_unit": "s",
+                        "symbol":        symbol,
                     }
                 }))
-            elif d.get("msg_type") == "buy":
+            elif mt == "buy":
                 if d.get("error"):
-                    resultado["ok"]       = False
-                    resultado["erro"]     = d["error"].get("message", "Erro no buy")
-                    resultado["code"]     = d["error"].get("code", "")
+                    resultado["ok"]   = False
+                    resultado["erro"] = d["error"].get("message", "Erro no buy")
+                    resultado["code"] = d["error"].get("code", "")
                 else:
                     b = d.get("buy", {})
-                    resultado["ok"]           = True
-                    resultado["contract_id"]  = b.get("contract_id")
-                    resultado["buy_price"]    = b.get("buy_price")
-                    resultado["symbol"]       = symbol
+                    resultado["ok"]            = True
+                    resultado["contract_id"]   = b.get("contract_id")
+                    resultado["buy_price"]     = b.get("buy_price")
+                    resultado["symbol"]        = symbol
                     resultado["contract_type"] = contract_type
-                    resultado["longcode"]     = b.get("longcode", "")
-                done_evt.set()
-                ws.close()
+                    resultado["longcode"]      = b.get("longcode", "")
+                done_evt.set(); ws.close()
         except Exception as ex:
-            resultado["ok"]   = False
-            resultado["erro"] = str(ex)
-            done_evt.set()
+            resultado["ok"] = False; resultado["erro"] = str(ex); done_evt.set()
 
     def _on_open(ws):
-        # Pega o token da URL (formato: wss://...?token=XXX ou inclui login na URL)
-        # A wss_url da Deriv já inclui autenticação — enviamos authorize para confirmar
-        import urllib.parse as _up
-        parsed = _up.urlparse(wss_url)
-        qs     = dict(_up.parse_qsl(parsed.query))
-        token_ws = qs.get("token", "")
-        if token_ws:
-            ws.send(json.dumps({"authorize": token_ws}))
-        else:
-            # URL sem token no query string — tenta usar o access_token diretamente
-            ws.send(json.dumps({"authorize": access_token}))
+        ws.send(json.dumps({"authorize": access_token}))
 
     def _on_error(ws, err):
-        resultado["ok"]   = False
-        resultado["erro"] = str(err)
-        done_evt.set()
+        resultado["ok"] = False; resultado["erro"] = str(err); done_evt.set()
 
     def _on_close(ws, *args):
         done_evt.set()
@@ -16250,20 +16224,18 @@ def deriv_operar():
     try:
         import websocket as _wslib
         wsapp = _wslib.WebSocketApp(
-            wss_url,
-            on_open=_on_open,
-            on_message=_on_msg,
-            on_error=_on_error,
-            on_close=_on_close,
+            "wss://ws.binaryws.com/websockets/v3?app_id=36544",
+            on_open=_on_open, on_message=_on_msg,
+            on_error=_on_error, on_close=_on_close,
         )
         t = _th.Thread(target=lambda: wsapp.run_forever(ping_interval=0), daemon=True)
         t.start()
-        done_evt.wait(timeout=20)
+        done_evt.wait(timeout=15)
     except Exception as ex:
         return jsonify({"ok": False, "erro": f"Erro WebSocket: {ex}"}), 500
 
     if not resultado:
-        return jsonify({"ok": False, "erro": "Timeout: sem resposta da Deriv em 20s"}), 504
+        return jsonify({"ok": False, "erro": "Timeout: Deriv não respondeu em 15s"}), 504
 
     status_code = 200 if resultado.get("ok") else 502
     return jsonify(resultado), status_code
