@@ -12677,9 +12677,9 @@ function initWebSocket(wssUrl) {
 
         // Compra confirmada → subscreve resultado
         if (data.msg_type === 'buy') {
-            // Ignora buy do painel Deriv Chart (req_id 9700-10089) — ele tem handler próprio
+            // Ignora buy do painel Deriv Chart (req_id 100-499) — ele tem handler próprio
             const _buyReqId = data.echo_req && data.echo_req.req_id;
-            if (_buyReqId >= 9700 && _buyReqId < 10090) return;
+            if (_buyReqId >= 100 && _buyReqId < 500) return;
             if (data.error) { print("⚠️ COMPRA RECUSADA: " + data.error.message, "log-loss"); bot._buying = false; return; }
             const cid   = data.buy && data.buy.contract_id;
             const reqId = data.echo_req && data.echo_req.req_id;
@@ -33924,9 +33924,10 @@ function drvOperar(direcao) {
     else if (ct === 'DIGITEVEN') tipoContrato = direcao === 'call' ? 'DIGITEVEN' : 'DIGITODD';
     else                     tipoContrato = direcao === 'call' ? 'DIGITOVER' : 'DIGITUNDER';
 
-    // req_id do painel Deriv usa faixa 9700-9899 (bot principal usa 10000+)
-    const reqProp = 9700 + Math.floor(Math.random()*190);
-    const reqBuy  = reqProp + 200;  // buy usa faixa separada 9900-9899+200
+    // req_id do painel Deriv Chart usa faixas ABAIXO de 1000 (bot principal usa 10000-99999)
+    // reqProp: 100-299  |  reqBuy: 300-499  → nunca colide com bot principal
+    const reqProp = 100 + Math.floor(Math.random()*200);
+    const reqBuy  = 300 + Math.floor(Math.random()*200);
 
     // Para CALL/PUT a Deriv prefere 'm' (minutos); converte segundos → minutos quando possível
     // Digits usam ticks ('t'), EVEN/ODD não precisam de barreira
@@ -34023,7 +34024,7 @@ function _drvAguardarResultado(contractId, duracao) {
     const ws = (typeof bot !== 'undefined') ? bot.ws : null;
     if (!ws) return;
     setTimeout(() => {
-        const reqId = 9800 + Math.floor(Math.random()*100);
+        const reqId = 500 + Math.floor(Math.random()*200);
         const handler = (ev) => {
             try {
                 const d = JSON.parse(ev.data);
