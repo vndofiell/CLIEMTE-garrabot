@@ -15768,6 +15768,7 @@ function derivConnectWs(){
     /* 2. Conecta WS direto na Deriv para ticks em tempo real */
     var ws=new WebSocket('wss://ws.binaryws.com/websockets/v3?app_id=1089');
     _derivWs=ws;
+    var _pingTimer=null;
     ws.onopen=function(){
       _wsRetry=0;
       /* Primeiro pede historico de candles via WS para ter dados reais */
@@ -15775,9 +15776,20 @@ function derivConnectWs(){
         ticks_history:sym,adjust_start_time:1,count:300,
         end:'latest',start:1,style:'candles',granularity:gran
       }));
+      /* Heartbeat: envia ping a cada 20s para manter conexao viva (igual bot principal) */
+      if(_pingTimer)clearInterval(_pingTimer);
+      _pingTimer=setInterval(function(){
+        if(ws.readyState===WebSocket.OPEN){
+          try{ws.send(JSON.stringify({ping:1}));}catch(e){}
+        } else {
+          clearInterval(_pingTimer);_pingTimer=null;
+        }
+      },20000);
     };
     ws.onmessage=function(ev){
       var d;try{d=JSON.parse(ev.data);}catch(e){return;}
+      /* ignora pong e outros keep-alive */
+      if(d.msg_type==='ping'||d.msg_type==='pong')return;
       if(d.msg_type==='candles'&&d.candles&&d.candles.length>=5){
         var seen2={};
         var nc=d.candles.map(function(c){return{
@@ -15800,7 +15812,7 @@ function derivConnectWs(){
         ws.send(JSON.stringify({ticks:sym,subscribe:1}));
       } else if(d.msg_type==='tick'&&d.tick&&d.tick.symbol===sym){
         processarTick(Number(d.tick.quote),Number(d.tick.epoch));
-        if(_wsRetry===0&&tag&&tag.textContent!=='AO VIVO'){
+        if(tag&&tag.textContent!=='AO VIVO'){
           $('connection').textContent='DERIV AO VIVO \u2022 '+candles.length+' velas \u2022 '+sym;
           $('statusDot').classList.add('live');
           tag.textContent='AO VIVO';tag.style.color='var(--green)';
@@ -15815,6 +15827,7 @@ function derivConnectWs(){
       $('connection').textContent='WS: erro de conex\u00e3o';
     };
     ws.onclose=function(){
+      if(_pingTimer){clearInterval(_pingTimer);_pingTimer=null;}
       if(_derivWs!==ws)return;
       _wsRetry++;
       var delay=Math.min(30000,3000*Math.pow(2,Math.min(_wsRetry-1,4)));
