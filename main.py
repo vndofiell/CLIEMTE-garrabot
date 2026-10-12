@@ -15566,22 +15566,40 @@ function createCharts(){
     .forEach(function(a){if(a[0])a[0].applyOptions({width:$(a[1]).clientWidth,height:a[2]});});
   });
 }
+var _lastCandleLen=0,_lastCandleHash=0;
+function _candleHash(){return candles.length>0?candles[0].time+candles[candles.length-1].time:0;}
 function update(){
   if(!priceChart||!candles.length)return;
   var closes=candles.map(function(c){return c.close;});
   var e9v=ema(closes,cfg.fast),e21v=ema(closes,cfg.slow),e200v=ema(closes,200);
   var rv=rsi(closes,cfg.rsi),m=macd(closes),i=candles.length-1;
   var avg=candles.slice(-21,-1).reduce(function(s,c){return s+c.volume;},0)/20;
-  series.candle.setData(candles);
-  series.e9.setData(candles.map(function(c,j){return{time:c.time,value:e9v[j]};}));
-  series.e21.setData(candles.map(function(c,j){return{time:c.time,value:e21v[j]};}));
-  series.e200.setData(candles.map(function(c,j){return{time:c.time,value:e200v[j]};}));
-  rsiSeries.setData(candles.map(function(c,j){return{time:c.time,value:rv[j]};}));
-  macdHist.setData(candles.map(function(c,j){return{time:c.time,value:m.h[j],color:m.h[j]>=0?'#00d99588':'#ff536488'};}));
-  macdLine.setData(candles.map(function(c,j){return{time:c.time,value:m.m[j]};}));
-  macdSignal.setData(candles.map(function(c,j){return{time:c.time,value:m.s[j]};}));
-  volSeries.setData(candles.map(function(c){return{time:c.time,value:c.volume,color:c.close>=c.open?'#00d99599':'#ff536499'};}));
-  [priceChart,rsiChart,macdChart,volumeChart].forEach(function(ch){ch.timeScale().fitContent();});
+  var newHash=_candleHash();
+  var forceSet=(candles.length!==_lastCandleLen||newHash!==_lastCandleHash);
+  if(forceSet){
+    _lastCandleLen=candles.length;_lastCandleHash=newHash;
+    series.candle.setData(candles);
+    series.e9.setData(candles.map(function(c,j){return{time:c.time,value:e9v[j]};}));
+    series.e21.setData(candles.map(function(c,j){return{time:c.time,value:e21v[j]};}));
+    series.e200.setData(candles.map(function(c,j){return{time:c.time,value:e200v[j]};}));
+    rsiSeries.setData(candles.map(function(c,j){return{time:c.time,value:rv[j]};}));
+    macdHist.setData(candles.map(function(c,j){return{time:c.time,value:m.h[j],color:m.h[j]>=0?'#00d99588':'#ff536488'};}));
+    macdLine.setData(candles.map(function(c,j){return{time:c.time,value:m.m[j]};}));
+    macdSignal.setData(candles.map(function(c,j){return{time:c.time,value:m.s[j]};}));
+    volSeries.setData(candles.map(function(c){return{time:c.time,value:c.volume,color:c.close>=c.open?'#00d99599':'#ff536499'};}));
+    priceChart.timeScale().scrollToRealTime();
+  } else {
+    if(_velaAtual&&series.candle)series.candle.update(_velaAtual);
+    var ult=candles[candles.length-1];
+    if(series.e9)series.e9.update({time:ult.time,value:e9v[i]});
+    if(series.e21)series.e21.update({time:ult.time,value:e21v[i]});
+    if(series.e200)series.e200.update({time:ult.time,value:e200v[i]});
+    if(rsiSeries)rsiSeries.update({time:ult.time,value:rv[i]});
+    if(macdHist)macdHist.update({time:ult.time,value:m.h[i],color:m.h[i]>=0?'#00d99588':'#ff536488'});
+    if(macdLine)macdLine.update({time:ult.time,value:m.m[i]});
+    if(macdSignal)macdSignal.update({time:ult.time,value:m.s[i]});
+    if(volSeries)volSeries.update({time:ult.time,value:ult.volume,color:ult.close>=ult.open?'#00d99599':'#ff536499'});
+  }
   var up=e9v[i]>e21v[i],down=e9v[i]<e21v[i],momUp=m.m[i]>m.s[i],momDown=m.m[i]<m.s[i];
   var volOk=candles[i].volume>avg,trendUp=closes[i]>e200v[i],trendDown=closes[i]<e200v[i];
   var ci=candles[i],body=Math.abs(ci.close-ci.open),pi=candles[Math.max(0,i-1)];
@@ -15680,63 +15698,91 @@ function openModal(){
 function closeModal(){$('modal').classList.remove('show');}
 function derivSymbol(){return DERIV_MAP[$('asset').value]||'R_25';}
 function derivGranularity(){return parseInt($('tf').value||1)*60;}
+/* ── Sistema de candles identico ao _drvFetchCandles + _drvProcessarTick ── */
 var _wsRetry=0;
+var _velaAtual=null,_lastPreco=0,_tickHandler=null;
+
+/* Busca historico via /deriv/candles (igual ao _drvFetchCandles do index.html) */
+function derivFetchCandles(sym,gran,count,callback){
+  var url='/deriv/candles?ativo='+encodeURIComponent(sym)+'&granularity='+gran+'&count='+count;
+  fetch(url).then(function(r){return r.json();}).then(function(d){
+    if(d.ok&&d.candles&&d.candles.length>=5){callback(d.candles);}
+    else{callback([]);}
+  }).catch(function(){callback([]);});
+}
+
+function processarTick(preco,epoch){
+  _lastPreco=preco;
+  var gran=derivGranularity();
+  var tsAb=Math.floor(epoch/gran)*gran;
+  if(_velaAtual&&tsAb===_velaAtual.time){
+    _velaAtual.high=Math.max(_velaAtual.high,preco);
+    _velaAtual.low=Math.min(_velaAtual.low,preco);
+    _velaAtual.close=preco;
+    if(candles.length>0)candles[candles.length-1]=Object.assign({},_velaAtual);
+  } else if(tsAb>(_velaAtual?_velaAtual.time:0)){
+    _velaAtual={time:tsAb,open:preco,high:preco,low:preco,close:preco,volume:1};
+    candles.push(Object.assign({},_velaAtual));
+    if(candles.length>500)candles.shift();
+    _lastCandleLen=0;
+  }
+  update();analyze();
+}
+
+/* Conecta WS apenas para ticks em tempo real (igual ao _drvSubscreverTicks) */
 function derivConnectWs(){
   if(_derivWs){try{_derivWs.close();}catch(e){} _derivWs=null;}
   var sym=derivSymbol(),gran=derivGranularity();
   var tag=$('srcTag');
   var retryMsg=_wsRetry>0?' ('+_wsRetry+')':'';
-  $('connection').textContent='DERIV: conectando'+retryMsg+'...';
-  if(tag){tag.textContent=_wsRetry>0?'RECONECTANDO':'CONECTANDO';tag.style.color='var(--gold)';}
-  var ws=new WebSocket('wss://ws.binaryws.com/websockets/v3?app_id=36544');
-  _derivWs=ws;
-  ws.onopen=function(){
-    _wsRetry=0;
-    ws.send(JSON.stringify({ticks_history:sym,adjust_start_time:1,
-      count:300,end:'latest',start:1,style:'candles',granularity:gran,subscribe:1}));
-  };
-  ws.onmessage=function(ev){
-    var d;try{d=JSON.parse(ev.data);}catch(e){return;}
-    if(d.msg_type==='candles'){
-      var raw=d.candles||[];
-      var clean=raw.map(function(c){return{time:Number(c.epoch),
-        open:Number(c.open),high:Number(c.high),low:Number(c.low),
-        close:Number(c.close),volume:1};
-      }).filter(function(c){return c.time>0&&c.open>0;
+  $('connection').textContent='DERIV: carregando'+retryMsg+'...';
+  if(tag){tag.textContent=_wsRetry>0?'RECONECTANDO':'CARREGANDO';tag.style.color='var(--gold)';}
+
+  /* 1. Busca historico via HTTP (rapido, igual _drvFetchCandles) */
+  derivFetchCandles(sym,gran,300,function(hist){
+    if(hist.length>=5){
+      var seen={};
+      candles=hist.map(function(c){return{
+        time:Number(c.epoch||c.time),open:Number(c.open),high:Number(c.high),
+        low:Number(c.low),close:Number(c.close),volume:1};
+      }).filter(function(c){
+        if(!c.time||!c.open||seen[c.time])return false;
+        seen[c.time]=1;return true;
       }).sort(function(a,b){return a.time-b.time;});
-      if(clean.length>=5){
-        candles=clean;update();analyze();
-        $('connection').textContent='DERIV AO VIVO \u2022 '+clean.length+' velas \u2022 '+sym;
-        $('statusDot').classList.add('live');
-        if(tag){tag.textContent='AO VIVO';tag.style.color='var(--green)';}
-      }
-    } else if(d.msg_type==='ohlc'&&d.ohlc){
-      var oc=d.ohlc,ts=Number(oc.epoch),idx=candles.length-1;
-      if(idx>=0&&candles[idx].time===ts){
-        candles[idx].open=Number(oc.open);candles[idx].high=Number(oc.high);
-        candles[idx].low=Number(oc.low);candles[idx].close=Number(oc.close);
-      } else if(ts>0&&Number(oc.open)>0){
-        candles.push({time:ts,open:Number(oc.open),high:Number(oc.high),
-          low:Number(oc.low),close:Number(oc.close),volume:1});
-        if(candles.length>500)candles.shift();
-      }
+      var ult=candles[candles.length-1];
+      _velaAtual=Object.assign({},ult);
+      _lastPreco=ult.close;
       update();analyze();
-    } else if(d.error){
-      $('connection').textContent='DERIV: '+(d.error.message||'erro');
-      $('statusDot').classList.remove('live');
-      if(tag){tag.textContent='ERRO';tag.style.color='var(--red)';}
+      $('connection').textContent='DERIV AO VIVO \u2022 '+candles.length+' velas \u2022 '+sym;
+      $('statusDot').classList.add('live');
+      if(tag){tag.textContent='AO VIVO';tag.style.color='var(--green)';}
     }
-  };
-  ws.onerror=function(){
-    if(tag){tag.textContent='OFFLINE';tag.style.color='var(--red)';}
-  };
-  ws.onclose=function(){
-    if(_derivWs!==ws)return;
-    _wsRetry++;
-    var delay=Math.min(30000,3000*Math.pow(2,Math.min(_wsRetry-1,4)));
-    $('connection').textContent='WS: reconectando em '+(delay/1000)+'s...';
-    setTimeout(function(){if(_derivWs===ws)derivConnectWs();},delay);
-  };
+    /* 2. Conecta WS para ticks em tempo real */
+    var ws=new WebSocket('wss://ws.binaryws.com/websockets/v3?app_id=36544');
+    _derivWs=ws;
+    ws.onopen=function(){
+      _wsRetry=0;
+      /* Subscreve ticks (igual _drvSubscreverTicks: usa ticks, nao candles) */
+      ws.send(JSON.stringify({ticks:sym,subscribe:1}));
+    };
+    ws.onmessage=function(ev){
+      var d;try{d=JSON.parse(ev.data);}catch(e){return;}
+      if(d.msg_type==='tick'&&d.tick&&d.tick.symbol===sym){
+        processarTick(Number(d.tick.quote),Number(d.tick.epoch));
+      } else if(d.error){
+        $('connection').textContent='DERIV: '+(d.error.message||'erro');
+        if(tag){tag.textContent='ERRO';tag.style.color='var(--red)';}
+      }
+    };
+    ws.onerror=function(){if(tag){tag.textContent='OFFLINE';tag.style.color='var(--red)';}};
+    ws.onclose=function(){
+      if(_derivWs!==ws)return;
+      _wsRetry++;
+      var delay=Math.min(30000,3000*Math.pow(2,Math.min(_wsRetry-1,4)));
+      $('connection').textContent='WS: reconectando em '+(delay/1000)+'s...';
+      setTimeout(function(){if(_derivWs===ws)derivConnectWs();},delay);
+    };
+  });
 }
 function enviarEntrada(dir){
   var stake=parseFloat($('tradeStake').value)||1;
@@ -15802,20 +15848,6 @@ analyze=function(){
 createCharts();
 $('connection').textContent='CONECTANDO NA DERIV...';
 derivConnectWs();
-/* fallback: se em 8s o WS nao conectou, busca via fetch HTTP */
-setTimeout(function(){
-  if(candles.length>0&&candles[0].open<50000)return; /* ja tem dados reais */
-  if(candles.length>0)return; /* ja tem alguma coisa */
-  var sym=derivSymbol(),gran=derivGranularity();
-  var url='/garra-price-action-pro/candles?ativo='+encodeURIComponent($('asset').value)+'&tf='+$('tf').value+'&count=300';
-  fetch(url).then(function(r){return r.json();}).then(function(d){
-    if(d.ok&&d.candles&&d.candles.length>=5){
-      candles=d.candles;update();analyze();
-      $('connection').textContent='FEED HTTP \u2022 '+d.candles.length+' velas \u2022 '+sym;
-      $('statusDot').classList.add('live');
-    }
-  }).catch(function(){});
-},8000);
 setInterval(updateClock,1000);
 setInterval(function(){if(candles.length>0){update();analyze();}},3000);
 window.GARRA_PRICE_ACTION_PRO={
@@ -16131,6 +16163,48 @@ def garra_pap_candles():
 
     return jsonify({"ok": True, "candles": candles, "source": "deriv",
                     "symbol": symbol, "total": len(candles)})
+
+
+# ── Rota /deriv/candles — proxy candles Deriv (usado pelo _drvFetchCandles do index.html) ──
+@app.route('/deriv/candles', methods=['GET'])
+def deriv_candles():
+    """
+    Retorna candles da Deriv. Parâmetros:
+      ativo       — símbolo (ex: R_25, Volatility 25 Index)
+      granularity — segundos por vela (ex: 60=M1, 300=M5)
+      count       — quantidade (default: 150)
+    Reutiliza o cache e a lógica de /garra-price-action-pro/candles.
+    """
+    ativo_nome  = request.args.get("ativo", "R_25")
+    granularity = max(60, int(request.args.get("granularity", 60)))
+    count       = max(10, min(500, int(request.args.get("count", 150))))
+
+    # Resolve símbolo Deriv
+    symbol = _DERIV_SYMBOL_MAP.get(ativo_nome, ativo_nome)
+    tf_min = granularity // 60
+
+    cache_ttl = 20 if tf_min <= 1 else (60 if tf_min <= 5 else 120)
+    cache_key = f"dc_{symbol}_{tf_min}"
+
+    import time as _time
+    now_ts = _time.time()
+
+    with _PAP_CACHE_LOCK:
+        cached = _PAP_CANDLE_CACHE.get(cache_key)
+        if cached and (now_ts - cached["ts"]) < cache_ttl:
+            return jsonify({"ok": True, "candles": cached["data"],
+                            "source": "cache", "symbol": symbol})
+
+    candles = _deriv_candles_ws(symbol, granularity=granularity, count=count)
+    if not candles:
+        candles = _deriv_candles_http(symbol, granularity=granularity, count=count)
+    if not candles:
+        return jsonify({"ok": False, "erro": "Falha ao buscar candles", "candles": [], "symbol": symbol})
+
+    with _PAP_CACHE_LOCK:
+        _PAP_CANDLE_CACHE[cache_key] = {"data": candles, "ts": now_ts}
+
+    return jsonify({"ok": True, "candles": candles, "source": "deriv", "symbol": symbol})
 
 
 # ── Rota /deriv/operar — executa CALL/PUT na Deriv via WebSocket + authorize direto ──
