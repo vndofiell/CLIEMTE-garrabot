@@ -33499,11 +33499,12 @@ function drvToggleAnalise() {
     const btn = document.getElementById('drv-sinais-toggle');
     if (btn) { btn.textContent = _drvModo.rodando ? '⏹ PARAR' : '▶ INICIAR'; btn.style.borderColor = _drvModo.rodando ? 'rgba(239,83,80,0.6)' : 'rgba(0,255,65,0.5)'; btn.style.color = _drvModo.rodando ? '#ef4444' : '#00ff41'; }
     _drvAdicionarSinal({ msg: _drvModo.rodando ? '🔍 Análise iniciada' : '⏹ Análise pausada', cor: _drvModo.rodando ? '#00ff41' : '#ffbd2e' });
-    // Envia mensagem de início ao Telegram quando análise começa
-    if (_drvModo.rodando && typeof tgEnviarInicio === 'function') {
-        tgEnviarInicio();
-    }
-    if (!_drvModo.rodando) {
+    // Inicia/pausa o cronômetro de sessão junto com a análise
+    if (_drvModo.rodando) {
+        if (typeof _timer !== 'undefined') _timer.iniciar();
+        if (typeof tgEnviarInicio === 'function') tgEnviarInicio();
+    } else {
+        if (typeof _timer !== 'undefined') _timer.pausar();
         _drvModo.opBloqueada = false;
         if (_drvModo.viradaTimer) { clearTimeout(_drvModo.viradaTimer); _drvModo.viradaTimer = null; }
     }
@@ -34133,6 +34134,7 @@ function drvResetarSessao() {
     _drvModo.rodando=false; _drvModo.opBloqueada=false;
     if (_drvModo.viradaTimer) { clearTimeout(_drvModo.viradaTimer); _drvModo.viradaTimer = null; }
     _drvEncerrarOpAtiva(null);
+    if (typeof _timer !== 'undefined') _timer.resetar();
     const btn=document.getElementById('drv-sinais-toggle');
     if (btn){btn.textContent='▶ INICIAR';btn.style.borderColor='rgba(0,255,65,0.5)';btn.style.color='#00ff41';}
     _drvRenderizarHistorico(); _drvOpStatusMsg('🔄 Sessão resetada','#ffbd2e');
