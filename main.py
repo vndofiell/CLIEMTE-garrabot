@@ -15566,7 +15566,7 @@ function createCharts(){
     .forEach(function(a){if(a[0])a[0].applyOptions({width:$(a[1]).clientWidth,height:a[2]});});
   });
 }
-var _lastCandleLen=0,_lastCandleHash=0;
+var _lastCandleLen=0,_lastCandleHash=0,_lastClose=0;
 function _candleHash(){return candles.length>0?candles[0].time+candles[candles.length-1].time:0;}
 function update(){
   if(!priceChart||!candles.length)return;
@@ -15575,7 +15575,12 @@ function update(){
   var rv=rsi(closes,cfg.rsi),m=macd(closes),i=candles.length-1;
   var avg=candles.slice(-21,-1).reduce(function(s,c){return s+c.volume;},0)/20;
   var newHash=_candleHash();
+  var curClose=candles[i]?candles[i].close:0;
+  /* forceSet quando: numero de velas mudou, ou primeira/ultima vela mudou (nova vela),
+     ou o close da ultima vela mudou (tick ao vivo na vela atual) */
   var forceSet=(candles.length!==_lastCandleLen||newHash!==_lastCandleHash);
+  var closeChanged=(curClose!==_lastClose);
+  _lastClose=curClose;
   if(forceSet){
     _lastCandleLen=candles.length;_lastCandleHash=newHash;
     series.candle.setData(candles);
@@ -15588,7 +15593,8 @@ function update(){
     macdSignal.setData(candles.map(function(c,j){return{time:c.time,value:m.s[j]};}));
     volSeries.setData(candles.map(function(c){return{time:c.time,value:c.volume,color:c.close>=c.open?'#00d99599':'#ff536499'};}));
     priceChart.timeScale().scrollToRealTime();
-  } else {
+  } else if(closeChanged||_velaAtual){
+    /* Atualiza apenas a vela atual (tick ao vivo) — mais leve que setData */
     if(_velaAtual&&series.candle)series.candle.update(_velaAtual);
     var ult=candles[candles.length-1];
     if(series.e9)series.e9.update({time:ult.time,value:e9v[i]});
@@ -15702,6 +15708,7 @@ function derivGranularity(){return parseInt($('tf').value||1)*60;}
 var _wsRetry=0;
 var _velaAtual=null,_lastPreco=0,_tickHandler=null;
 var _tickPollTimer=null,_tickPollActive=false;
+var _lastTickEpoch=0,_lastTickPrice=0;
 
 /* Busca historico via /deriv/candles */
 function derivFetchCandles(sym,gran,count,callback){
@@ -15715,25 +15722,35 @@ function derivFetchCandles(sym,gran,count,callback){
 /* Polling de ticks via /deriv/tick (servidor mantém WS persistente) */
 function _iniciarTickPolling(sym){
   _tickPollActive=true;
+  _lastTickEpoch=0;_lastTickPrice=0;
   var tag=$('srcTag');
+  var _errCount=0;
   function _poll(){
     if(!_tickPollActive)return;
     fetch('/deriv/tick?symbol='+encodeURIComponent(sym))
       .then(function(r){return r.json();})
       .then(function(d){
+        _errCount=0;
         if(d.ok&&d.price&&d.epoch){
-          processarTick(d.price,d.epoch);
+          var novoTick=(d.epoch!==_lastTickEpoch||Math.abs(d.price-_lastTickPrice)>0.00001);
+          if(novoTick){
+            _lastTickEpoch=d.epoch;
+            _lastTickPrice=d.price;
+            processarTick(d.price,d.epoch);
+          }
           if(tag&&tag.textContent!=='AO VIVO'){
             $('connection').textContent='DERIV AO VIVO \u2022 '+candles.length+' velas \u2022 '+sym;
             $('statusDot').classList.add('live');
             tag.textContent='AO VIVO';tag.style.color='var(--green)';
           }
+        } else if(!d.ok){
+          /* servidor ainda aguardando primeiro tick — nao faz nada, apenas repolla */
         }
-        /* agenda pr\u00f3ximo poll em 1s */
-        _tickPollTimer=setTimeout(_poll,1000);
+        _tickPollTimer=setTimeout(_poll,600);
       })
       .catch(function(){
-        _tickPollTimer=setTimeout(_poll,3000);
+        _errCount++;
+        _tickPollTimer=setTimeout(_poll,Math.min(5000,1000*_errCount));
       });
   }
   if(_tickPollTimer)clearTimeout(_tickPollTimer);
@@ -16318,10 +16335,19 @@ def deriv_tick():
     if not ws_ativo:
         _pap_iniciar_ws_tick(symbol)
 
-    if tick and (_t.time() - tick["ts"]) < 10:
-        return jsonify({"ok": True, "price": tick["price"], "epoch": tick["epoch"], "symbol": symbol})
+    now = _t.time()
+    if tick:
+        idade = now - tick["ts"]
+        if idade < 15:
+            return jsonify({"ok": True, "price": tick["price"], "epoch": tick["epoch"],
+                            "symbol": symbol, "idade_ms": int(idade * 1000)})
+        # Tick muito antigo (>15s) — WS pode ter caído, reinicia
+        with _PAP_TICK_LOCK:
+            _PAP_WS_STORE.pop(symbol, None)
+        _pap_iniciar_ws_tick(symbol)
 
-    return jsonify({"ok": False, "symbol": symbol, "erro": "aguardando"})
+    return jsonify({"ok": False, "symbol": symbol, "erro": "aguardando",
+                    "ws_ativo": ws_ativo})
 
 
 # ── Rota /deriv/operar — executa CALL/PUT na Deriv via WebSocket + authorize direto ──
