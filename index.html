@@ -29371,6 +29371,13 @@ window.addEventListener('load', () => {
                        border:1px solid rgba(0,255,255,0.5); color:#0ff;
                        cursor:pointer; border-radius:3px; font-family:'Share Tech Mono';"
                 onclick="drvToggleMtf()">📊 MTF: ON</button>
+            <!-- Toggle S/R (Topo/Fundo) -->
+            <button id="drv-sr-toggle"
+                title="Filtro S/R: bloqueia entradas perto de topos e fundos recentes"
+                style="font-size:0.56rem; padding:2px 6px; background:rgba(255,189,46,0.08);
+                       border:1px solid rgba(255,189,46,0.5); color:#ffbd2e;
+                       cursor:pointer; border-radius:3px; font-family:'Share Tech Mono';"
+                onclick="drvToggleSR()">📌 S/R: ON</button>
             <button id="drv-sinais-toggle"
                 style="font-size:0.58rem; padding:2px 7px; background:transparent;
                        border:1px solid rgba(0,255,65,0.5); color:#00ff41;
@@ -32824,6 +32831,7 @@ const _drvChart = {
 const _drvModo = {
     modo:'manual', rodando:false, opBloqueada:false, viradaTimer:null,
     mtfAtivo: true,   // Filtro Multi-Timeframe ligado por padrão
+    srAtivo:  true,   // Filtro Topo/Fundo (S/R) ligado por padrão
 };
 
 // ── Gerenciamento do painel Deriv Chart ──────────────────
@@ -33549,6 +33557,24 @@ function drvToggleMtf() {
     _drvAdicionarSinal({ msg: `📊 Filtro MTF ${_drvModo.mtfAtivo ? 'ATIVADO' : 'DESATIVADO'}`, cor: _drvModo.mtfAtivo ? '#0ff' : '#ffbd2e' });
 }
 
+function drvToggleSR() {
+    _drvModo.srAtivo = !_drvModo.srAtivo;
+    const btn = document.getElementById('drv-sr-toggle');
+    if (!btn) return;
+    if (_drvModo.srAtivo) {
+        btn.textContent       = '📌 S/R: ON';
+        btn.style.color       = '#ffbd2e';
+        btn.style.borderColor = 'rgba(255,189,46,0.5)';
+        btn.style.background  = 'rgba(255,189,46,0.08)';
+    } else {
+        btn.textContent       = '📌 S/R: OFF';
+        btn.style.color       = '#555';
+        btn.style.borderColor = '#333';
+        btn.style.background  = 'transparent';
+    }
+    _drvAdicionarSinal({ msg: `📌 Filtro S/R (Topo/Fundo) ${_drvModo.srAtivo ? 'ATIVADO' : 'DESATIVADO'}`, cor: _drvModo.srAtivo ? '#ffbd2e' : '#555' });
+}
+
 // ── Mapa de TFs superiores por duração operada (segundos) ─
 // Deriv usa granularity em segundos: 60=M1, 180=M3, 300=M5,
 // 900=M15, 1800=M30, 3600=H1, 14400=H4
@@ -33841,12 +33867,17 @@ function _drvAnalisarAutomatic(precoAtual) {
 
             // ── Filtros MTF + Tendência + Topo/Fundo (paralelo) ──────
             if (_drvModo.mtfAtivo) {
-                _drvAdicionarSinal({ msg: `🔍 MTF+TENDÊNCIA+S/R validando ${direcao.toUpperCase()} | ${(_atraso/1000).toFixed(0)}s até virada...`, cor: '#0ff' });
-                Promise.all([
+                const _srLabel = _drvModo.srAtivo ? '+S/R' : '';
+                _drvAdicionarSinal({ msg: `🔍 MTF+TENDÊNCIA${_srLabel} validando ${direcao.toUpperCase()} | ${(_atraso/1000).toFixed(0)}s até virada...`, cor: '#0ff' });
+                // Inclui S/R apenas se o toggle estiver ativo
+                const _promises = [
                     _drvValidarMTF(_drvChart.ativo, _drvChart.duracao || 60, direcao),
                     _drvFiltroTendencia(_drvChart.ativo, _drvChart.periodo || 60, direcao),
-                    _drvFiltroTopoFundo(_drvChart.ativo, _drvChart.periodo || 60, direcao),
-                ]).then(([mtf, tend, sr]) => {
+                    _drvModo.srAtivo
+                        ? _drvFiltroTopoFundo(_drvChart.ativo, _drvChart.periodo || 60, direcao)
+                        : Promise.resolve({ aprovado: true, motivo: 'S/R desativado', nivel: null, dist_pct: null }),
+                ];
+                Promise.all(_promises).then(([mtf, tend, sr]) => {
                     if (!_drvModo.rodando || _drvModo.viradaTimer) { _drvModo.opBloqueada = false; return; }
 
                     // ── Resultado MTF ──
@@ -33861,10 +33892,12 @@ function _drvAnalisarAutomatic(precoAtual) {
                     const _adxIco  = tend.adx_forte ? '📈' : '📉';
                     _drvAdicionarSinal({ msg: `${_tendIco} TENDÊNCIA: EMA${tend.ema_dir} | ${_adxIco}ADX:${tend.dx} | score:${tend.score}`, cor: tend.aprovado ? '#27c93f' : '#ef4444' });
 
-                    // ── Resultado Topo/Fundo + Pavios ──
-                    const _srIco  = sr.aprovado ? '✅' : '🚫';
-                    const _pinMsg = sr.pinContra ? ' | 📌PIN↺' : sr.pinFavor ? ' | 📌PIN→' : '';
-                    _drvAdicionarSinal({ msg: `${_srIco} S/R: ${sr.motivo}${_pinMsg}`, cor: sr.aprovado ? '#27c93f' : '#ef4444' });
+                    // ── Resultado Topo/Fundo + Pavios (só exibe se ativo) ──
+                    if (_drvModo.srAtivo) {
+                        const _srIco  = sr.aprovado ? '✅' : '🚫';
+                        const _pinMsg = sr.pinContra ? ' | 📌PIN↺' : sr.pinFavor ? ' | 📌PIN→' : '';
+                        _drvAdicionarSinal({ msg: `${_srIco} S/R: ${sr.motivo}${_pinMsg}`, cor: sr.aprovado ? '#27c93f' : '#ef4444' });
+                    }
 
                     // ── Decisão final ──
                     if (!mtf.aprovado) {
@@ -33878,7 +33911,8 @@ function _drvAnalisarAutomatic(precoAtual) {
                         _drvAdicionarSinal({ msg: `🚫 BLOQUEADO: Tendência fraca/contra (EMA:${tend.ema_dir} ADX:${tend.dx})`, cor: '#ef4444' });
                         _drvModo.opBloqueada = false; return;
                     }
-                    if (!sr.aprovado) {
+                    // S/R só bloqueia se o filtro estiver ativo
+                    if (_drvModo.srAtivo && !sr.aprovado) {
                         _drvAdicionarSinal({ msg: `🚫 BLOQUEADO: ${sr.motivo}`, cor: '#ef4444' });
                         _drvModo.opBloqueada = false; return;
                     }
