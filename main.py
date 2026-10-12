@@ -15443,6 +15443,27 @@ def garra_price_action_pro_ui():
         ".checks label{display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer}"
         ".checks input[type=checkbox]{accent-color:var(--cyan);width:14px;height:14px}"
         ".modalactions{display:flex;gap:10px;justify-content:flex-end}"
+        ".trade-panel{background:linear-gradient(145deg,#0d1a10,#0a130c);"
+        "border:1px solid #00e88f44;border-radius:10px;padding:14px;margin-bottom:12px}"
+        ".trade-panel h3{font-size:12px;letter-spacing:.8px;color:var(--green);margin:0 0 12px}"
+        ".trade-row{display:flex;gap:8px;align-items:center;margin-bottom:10px}"
+        ".trade-row label{font-size:11px;color:var(--muted);min-width:60px}"
+        ".trade-row input,.trade-row select{flex:1;background:#0d151e;"
+        "border:1px solid var(--line);color:var(--txt);border-radius:7px;padding:6px 8px}"
+        ".btn-call{background:linear-gradient(135deg,#0f4228,#1a6b3c);"
+        "border-color:#00e88f66;color:var(--green);font-weight:800;font-size:14px;flex:1}"
+        ".btn-call:hover{border-color:var(--green)}"
+        ".btn-put{background:linear-gradient(135deg,#4a0f1a,#8b1d36);"
+        "border-color:#ff536466;color:var(--red);font-weight:800;font-size:14px;flex:1}"
+        ".btn-put:hover{border-color:var(--red)}"
+        ".btn-auto{width:100%;margin-top:6px;font-size:12px}"
+        ".btn-auto.on{background:linear-gradient(135deg,#1a3b6b,#0f2246);"
+        "border-color:#4c8dff88;color:#4c8dff}"
+        ".trade-log{max-height:110px;overflow-y:auto;margin-top:8px}"
+        ".tlog{font-size:10px;padding:4px 0;border-bottom:1px solid #1a2433;"
+        "display:flex;justify-content:space-between;gap:8px}"
+        ".tlog.win{color:var(--green)}.tlog.lose{color:var(--red)}"
+        ".tlog.pend{color:var(--gold)}"
         "@media(max-width:900px){.main{grid-template-columns:1fr}"
         ".gridstats{grid-template-columns:1fr 1fr}.formgrid{grid-template-columns:1fr}}"
         "@media(max-width:520px){.gridstats{grid-template-columns:1fr 1fr}.chartwrap{height:260px}}"
@@ -15640,44 +15661,101 @@ def garra_price_action_pro_ui():
         "$('analyzeBtn').onclick=analyze;"
         "$('clearHistBtn').onclick=function(){signalHistory=[];renderHistory();};"
         "createCharts();candles=makeCandles();update();analyze();"
-        "$('connection').textContent='DEMO VISUAL \u2022 CARREGANDO FEED REAL...';"
+        "$('connection').textContent='CARREGANDO CANDLES REAIS...';"
         "setInterval(updateClock,1000);"
         "setInterval(function(){if(candles.length){update();analyze();}},3000);"
         "startAutoRefresh();"
-        "function fetchDerivCandles(){"
+        "var _liveSource='demo';"
+        "function fetchCandles(){"
         "var ativo=encodeURIComponent($('asset').value);"
         "var tf=$('tf').value||'1';"
-        "fetch('/garra-price-action-pro/candles?ativo='+ativo+'&tf='+tf+'&count=260')"
+        "var broker=$('tradeBroker')?$('tradeBroker').value:'quotex';"
+        "var qxAtivo=ativo.replace('%20','_').replace(/ /g,'_')+'_otc';"
+        "var periodoSeg=parseInt(tf)*60;"
+        "var qxUrl='/quotex/candles?ativo='+qxAtivo+'&periodo='+periodoSeg+'&limite=260';"
+        "var drvUrl='/garra-price-action-pro/candles?ativo='+ativo+'&tf='+tf+'&count=260';"
+        "function tryDeriv(){"
+        "fetch(drvUrl).then(function(r){return r.json();}).then(function(d){"
+        "if(d.ok&&d.candles&&d.candles.length>=30){"
+        "setCandles(d.candles,'DERIV AO VIVO \u2022 '+d.total+' velas \u2022 '+d.symbol);"
+        "_liveSource='deriv';"
+        "}else{setDemo();}}).catch(setDemo);}"
+        "fetch(qxUrl).then(function(r){return r.json();}).then(function(d){"
+        "if(d.ok&&d.candles&&d.candles.length>=30){"
+        "setCandles(d.candles,'QUOTEX AO VIVO \u2022 '+d.candles.length+' velas');"
+        "_liveSource='quotex';"
+        "}else{tryDeriv();}}).catch(tryDeriv);}"
+        "function setCandles(raw,label){"
+        "var clean=raw.map(function(c){return{time:Number(c.time||c.epoch||0),"
+        "open:Number(c.open||0),high:Number(c.high||c.max||c.open||0),"
+        "low:Number(c.low||c.min||c.open||0),close:Number(c.close||0),"
+        "volume:Number(c.volume||1)};}).filter(function(c){"
+        "return c.time>0&&c.open>0&&c.close>0;}).sort(function(a,b){return a.time-b.time;});"
+        "if(clean.length<30)return;"
+        "candles=clean;update();analyze();"
+        "$('connection').textContent=label;"
+        "$('statusDot').classList.add('live');"
+        "var note=$('srcNote'),tag=$('srcTag');"
+        "if(note)note.innerHTML='';"
+        "if(tag){tag.textContent='AO VIVO';tag.style.color='var(--green)';}}"
+        "function setDemo(){"
+        "_liveSource='demo';"
+        "$('connection').textContent='DEMO \u2022 Corretora n\u00e3o conectada';"
+        "$('statusDot').classList.remove('live');"
+        "var tag=$('srcTag');"
+        "if(tag){tag.textContent='DEMO';tag.style.color='var(--gold)';}}"
+        "fetchCandles();"
+        "var _papFetchInterval=setInterval(fetchCandles,25000);"
+        "$('asset').addEventListener('change',function(){clearInterval(_papFetchInterval);fetchCandles();_papFetchInterval=setInterval(fetchCandles,25000);});"
+        "$('tf').addEventListener('change',function(){clearInterval(_papFetchInterval);fetchCandles();_papFetchInterval=setInterval(fetchCandles,25000);});"
+        "var _autoOn=false,_lastAutoSignal='';"
+        "function enviarEntrada(dir){"
+        "var stake=parseFloat($('tradeStake').value)||1;"
+        "var minutos=parseInt($('tradeMinutos').value)||1;"
+        "var broker=$('tradeBroker').value||'quotex';"
+        "var ativo=$('asset').value;"
+        "var qxAtivo=ativo.replace(/ /g,'_')+'_otc';"
+        "var url=broker==='quotex'?'/quotex/operar':'/quotex/operar';"
+        "var payload={ativo:qxAtivo,direcao:dir.toLowerCase(),valor:stake,"
+        "minutos:minutos,alinhar_minuto:true};"
+        "addTradeLog(dir,'pend','Enviando '+dir+' $'+stake.toFixed(2)+'...');"
+        "fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},"
+        "body:JSON.stringify(payload)})"
         ".then(function(r){return r.json();})"
         ".then(function(d){"
-        "if(d.ok&&Array.isArray(d.candles)&&d.candles.length>=30){"
-        "if(window.GARRA_PRICE_ACTION_PRO&&window.GARRA_PRICE_ACTION_PRO.setCandles(d.candles)){"
-        "$('connection').textContent='DERIV AO VIVO \u2022 '+d.total+' VELAS \u2022 '+d.symbol;"
-        "$('statusDot').classList.add('live');"
-        "}}else{"
-        "$('connection').textContent='DEMO VISUAL \u2022 FEED REAL N\u00c3O DISPON\u00cdVEL';"
-        "$('statusDot').classList.remove('live');"
+        "if(d.ok||d.ordem_enviada){"
+        "addTradeLog(dir,'pend',dir+' $'+stake.toFixed(2)+' | aguardando resultado');"
+        "}else{"
+        "addTradeLog(dir,'lose','ERRO: '+(d.erro||d.error||'falha'));"
         "}})"
-        ".catch(function(){$('connection').textContent='DEMO VISUAL \u2022 SEM CONEX\u00c3O';});"
-        "}"
-        "fetchDerivCandles();"
-        "var _papFetchInterval=setInterval(fetchDerivCandles,25000);"
-        "$('asset').addEventListener('change',function(){clearInterval(_papFetchInterval);fetchDerivCandles();_papFetchInterval=setInterval(fetchDerivCandles,25000);});"
-        "$('tf').addEventListener('change',function(){clearInterval(_papFetchInterval);fetchDerivCandles();_papFetchInterval=setInterval(fetchDerivCandles,25000);});"
+        ".catch(function(e){addTradeLog(dir,'lose','ERRO: '+e.message);});}"
+        "function addTradeLog(dir,cls,msg){"
+        "var log=$('tradeLog');"
+        "if(!log)return;"
+        "var now=new Date();"
+        "var hm=String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');"
+        "var el=document.createElement('div');"
+        "el.className='tlog '+cls;"
+        "el.innerHTML='<span>'+hm+'</span><span style=\"flex:1\">'+msg+'</span>';"
+        "log.insertBefore(el,log.firstChild);"
+        "while(log.children.length>20)log.removeChild(log.lastChild);}"
+        "$('btnCall').onclick=function(){enviarEntrada('CALL');};"
+        "$('btnPut').onclick=function(){enviarEntrada('PUT');};"
+        "$('btnAuto').onclick=function(){"
+        "_autoOn=!_autoOn;"
+        "$('btnAuto').textContent=(_autoOn?'\u23f8 AUTO: LIGADO':'\u8635 AUTO: DESLIGADO');"
+        "$('btnAuto').className='btn-auto'+(_autoOn?' on':'');};"
+        "var _origAnalyze=analyze;"
+        "analyze=function(){"
+        "_origAnalyze();"
+        "if(_autoOn){"
+        "var sig=$('signalText')?$('signalText').textContent:'';"
+        "if((sig==='CALL'||sig==='PUT')&&sig!==_lastAutoSignal){"
+        "_lastAutoSignal=sig;"
+        "enviarEntrada(sig);"
+        "}}};"
         "window.GARRA_PRICE_ACTION_PRO={"
-        "setCandles:function(data){"
-        "if(!Array.isArray(data)||data.length<30)return false;"
-        "var clean=data.map(function(c){"
-        "return{time:Number(c.time),open:Number(c.open),high:Number(c.high),"
-        "low:Number(c.low),close:Number(c.close),volume:Number(c.volume||0)};}"
-        ").filter(function(c){"
-        "return isFinite(c.time)&&isFinite(c.open)&&isFinite(c.high)"
-        "&&isFinite(c.low)&&isFinite(c.close)&&isFinite(c.volume);"
-        "}).sort(function(a,b){return a.time-b.time;});"
-        "if(clean.length<30)return false;"
-        "candles=clean;update();analyze();"
-        "$('connection').textContent='FEED RECEBIDO \u2022 '+clean.length+' CANDLES';"
-        "$('statusDot').classList.add('live');return true;},"
+        "setCandles:function(data){setCandles(data,'FEED EXTERNO \u2022 '+data.length+' velas');return true;},"
         "analyze:function(){analyze();},"
         "getCandles:function(){return candles.slice();},"
         "getLastSignal:function(){return signalHistory.length?signalHistory[0]:null;}"
@@ -15729,7 +15807,7 @@ def garra_price_action_pro_ui():
         "  <div class='indicator'><div class='indhead'><b>RSI (14)</b><span id='rsiLabel'>Aguardando dados</span></div><div id='rsiChart' class='smallchart'></div></div>",
         "  <div class='indicator'><div class='indhead'><b>MACD (12, 26, 9)</b><span id='macdLabel'>Aguardando dados</span></div><div id='macdChart' class='smallchart'></div></div>",
         "  <div class='indicator'><div class='indhead'><b>VOLUME</b><span id='volumeLabel'>Aguardando dados</span></div><div id='volumeChart' class='smallchart vol'></div></div>",
-        "  <div class='footnote'><span class='tag'>MODO VISUAL / DEMONSTRA\u00c7\u00c3O</span> Candles ilustrativos para validar a interface. Para an\u00e1lise real use <code>window.GARRA_PRICE_ACTION_PRO.setCandles([...])</code>.</div>",
+        "  <div class='footnote' id='srcNote'><span class='tag' id='srcTag'>CARREGANDO...</span> Buscando candles reais da corretora conectada.</div>",
         "</section>",
         "<aside class='side'>",
         "  <section class='panel'>",
@@ -15747,19 +15825,31 @@ def garra_price_action_pro_ui():
         "    <div class='kv'><span>RSI</span><b id='rsiState'>&mdash;</b></div>",
         "    <div class='kv'><span>Volume</span><b id='volumeState'>&mdash;</b></div>",
         "    <div class='kv'><span>Filtro de vela</span><b id='candleState'>&mdash;</b></div>",
-        "    <div class='action' style='margin-top:15px'>",
-        "      <button class='primary' id='analyzeBtn'>&#9654; Analisar conflu\u00eancia</button>",
-        "      <button id='settingsBtn2'>&#9881; Configura\u00e7\u00f5es</button>",
+        "    <div class='action' style='margin-top:10px'>",
+        "      <button class='primary' id='analyzeBtn'>&#9654; Analisar</button>",
+        "      <button id='settingsBtn2'>&#9881; Config</button>",
         "    </div>",
         "  </section>",
         "  <section class='panel'>",
-        "    <div class='panelhead'><h2>REGRAS DA ESTRAT\u00c9GIA</h2></div>",
-        "    <div class='kv'><span>Entrada</span><b>Ap\u00f3s fechar a vela</b></div>",
-        "    <div class='kv'><span>Dire\u00e7\u00e3o</span><b>CALL / PUT</b></div>",
-        "    <div class='kv'><span>Confirma\u00e7\u00e3o</span><b>EMA + RSI + MACD</b></div>",
-        "    <div class='kv'><span>Filtro adicional</span><b>Volume relativo</b></div>",
-        "    <div class='kv'><span>Prote\u00e7\u00e3o</span><b>Sem sinal = aguardar</b></div>",
-        "    <p class='footnote'>Indicadores s\u00e3o filtros, n\u00e3o garantem precis\u00e3o ou lucro. Valide em conta demo.</p>",
+        "    <div class='trade-panel'>",
+        "      <h3>&#9889; ENTRADAS AUTOM\u00c1TICAS</h3>",
+        "      <div class='trade-row'>",
+        "        <label>Stake</label>",
+        "        <input id='tradeStake' type='number' min='0.35' step='0.01' value='1.00' style='max-width:90px'>",
+        "        <select id='tradeMode'><option value='demo'>DEMO</option><option value='real'>REAL</option></select>",
+        "      </div>",
+        "      <div class='trade-row'>",
+        "        <label>Expira\u00e7\u00e3o</label>",
+        "        <select id='tradeMinutos'><option value='1'>M1</option><option value='2'>M2</option><option value='5'>M5</option></select>",
+        "        <select id='tradeBroker'><option value='quotex'>Quotex</option><option value='deriv'>Deriv</option></select>",
+        "      </div>",
+        "      <div style='display:flex;gap:8px;margin-bottom:8px'>",
+        "        <button class='btn-call' id='btnCall'>&#9650; CALL</button>",
+        "        <button class='btn-put'  id='btnPut'>&#9660; PUT</button>",
+        "      </div>",
+        "      <button class='btn-auto' id='btnAuto'>&#8635; AUTO: DESLIGADO</button>",
+        "      <div id='tradeLog' class='trade-log'></div>",
+        "    </div>",
         "  </section>",
         "  <section class='panel'>",
         "    <div class='panelhead'><h2>HIST\u00d3RICO DE SINAIS</h2><button id='clearHistBtn' style='font-size:11px;padding:4px 8px'>Limpar</button></div>",
