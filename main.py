@@ -15635,47 +15635,90 @@ function update(){
                trendUp:trendUp,trendDown:trendDown,rv:rv[i],bullPattern:bull,bearPattern:bear,
                close:ci.close,open:ci.open};
 }
+var _analyzeRunning=false;
 function analyze(){
-  if(!window._ind)return;
-  var x=window._ind,call=0,put=0,blockers=[];
-  if(x.trendUp)call+=25;if(x.trendDown)put+=25;
-  if(x.up)call+=15;if(x.down)put+=15;
-  if(x.rv>=52&&x.rv<=68)call+=15;else if(x.rv>=32&&x.rv<=48)put+=15;
-  if(x.momUp)call+=20;if(x.momDown)put+=20;
-  if(x.volOk){call+=10;put+=10;}
-  if(x.bullPattern)call+=15;if(x.bearPattern)put+=15;
-  var dir=call>put?'CALL':put>call?'PUT':'AGUARDAR';
-  var best=Math.max(call,put);
-  if(cfg.useVolume&&!x.volOk)blockers.push('volume sem confirmacao');
-  if(cfg.useMacd&&!((dir==='CALL'&&x.momUp)||(dir==='PUT'&&x.momDown)))blockers.push('MACD nao confirmou');
-  if(cfg.useTrend&&!((dir==='CALL'&&x.trendUp)||(dir==='PUT'&&x.trendDown)))blockers.push('tendencia contraria');
-  if(cfg.useCandle&&((dir==='CALL'&&(x.close<=x.open||x.bearPattern))||(dir==='PUT'&&(x.close>=x.open||x.bullPattern))))blockers.push('candle nao confirmou');
-  if(x.rv>=70||x.rv<=30)blockers.push('RSI extremo');
-  var ok=dir!=='AGUARDAR'&&best>=cfg.confidence&&blockers.length===0;
-  var pct=Math.min(100,best);
-  $('confidence').textContent=pct+'%';
-  $('confidenceBar').style.width=pct+'%';
-  $('signalText').textContent=ok?dir:'AGUARDAR';
-  $('signalText').className='big '+(ok?(dir==='CALL'?'call':'put'):'wait');
-  $('signalReason').textContent=ok?'Confluencia tecnica atendida.':(blockers.length?blockers.join(' \u2022 '):'Pontuacao insuficiente.');
-  var cv=(ok&&dir==='CALL')?'Alta \u2713':(ok&&dir==='PUT')?'Baixa \u2713':'Neutro';
-  $('candleState').textContent=cv;
-  $('candleState').style.color=ok?'var(--green)':'var(--muted)';
-  if(series.candle&&typeof series.candle.setMarkers==='function'){
-    series.candle.setMarkers(ok?[{time:candles[candles.length-1].time,
-      position:dir==='CALL'?'belowBar':'aboveBar',color:dir==='CALL'?'#00e88f':'#ff5364',
-      shape:dir==='CALL'?'arrowUp':'arrowDown',text:dir}]:[]);
-  }
-  if(ok){
-    var now2=new Date();
-    var hm=String(now2.getHours()).padStart(2,'0')+':'+String(now2.getMinutes()).padStart(2,'0')+':'+String(now2.getSeconds()).padStart(2,'0');
-    var mk=hm.slice(0,5),last=signalHistory[0];
-    if(!last||last.minKey!==mk||last.dir!==dir){
-      signalHistory.unshift({time:hm,minKey:mk,dir:dir,pct:pct,asset:$('asset').value});
-      if(signalHistory.length>20)signalHistory.pop();
-      renderHistory();
+  if(!candles||candles.length<30)return;
+  if(_analyzeRunning)return; /* evita chamadas paralelas */
+  _analyzeRunning=true;
+  fetch('/garra-price-action-pro/analisar',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({candles:candles})
+  })
+  .then(function(r){return r.json();})
+  .then(function(d){
+    _analyzeRunning=false;
+    if(!d.ok&&!d.sinal)return;
+    var sinal=d.sinal||'AGUARDAR';
+    var pct=Math.round(d.confianca||0);
+    var motivo=d.motivo||'Aguardando dados.';
+    var bloqueios=d.bloqueios||[];
+    var ind=d.indicadores||{};
+    var ok=(sinal==='CALL'||sinal==='PUT');
+    $('confidence').textContent=pct+'%';
+    $('confidenceBar').style.width=pct+'%';
+    $('signalText').textContent=sinal;
+    $('signalText').className='big '+(sinal==='CALL'?'call':sinal==='PUT'?'put':'wait');
+    $('signalReason').textContent=bloqueios.length?bloqueios.join(' \u2022 '):motivo;
+    /* painel lateral — indicadores */
+    if(ind.tendencia!==undefined){
+      $('trendStat').textContent=ind.tendencia||'\u2014';
+      $('trendStat').style.color=ind.tendencia==='ALTA'?'var(--green)':ind.tendencia==='BAIXA'?'var(--red)':'var(--gold)';
     }
-  }
+    if(ind.rsi!==undefined&&ind.rsi!==null){
+      var rv=Number(ind.rsi);
+      $('rsiStat').textContent=rv.toFixed(1);
+      $('rsiLabel').textContent=rv.toFixed(1)+(rv>70?' \u2022 sobrecompra':rv<30?' \u2022 sobrevenda':rv>50?' \u2022 forca compradora':' \u2022 forca vendedora');
+      $('rsiState').textContent=rv.toFixed(1)+(rv>70?' (SB)':rv<30?' (SV)':'');
+      $('rsiState').style.color=rv>70?'var(--red)':rv<30?'var(--green)':'var(--txt)';
+    }
+    if(ind.volume_relativo!==undefined&&ind.volume_relativo!==null){
+      var vr=Number(ind.volume_relativo);
+      $('volStat').textContent=vr.toFixed(2)+'x';
+      $('volumeState').textContent=vr>=0.8?'Confirmado \u2713':'Baixo \u26a0';
+      $('volumeState').style.color=vr>=0.8?'var(--green)':'var(--gold)';
+      $('volumeLabel').textContent=vr>=0.8?'Volume acima da media':'Volume abaixo da media';
+    }
+    if(ind.ema9!==undefined&&ind.ema21!==undefined&&ind.ema9!==null&&ind.ema21!==null){
+      var up=ind.ema9>ind.ema21,dn=ind.ema9<ind.ema21;
+      $('emaState').textContent=up?'Alta \u2191':dn?'Baixa \u2193':'Neutro';
+      $('emaState').style.color=up?'var(--green)':dn?'var(--red)':'var(--gold)';
+    }
+    if(ind.ema200!==undefined&&ind.ema200!==null){
+      var c200=candles.length?candles[candles.length-1].close:0;
+      var trendUp200=c200>ind.ema200,trendDn200=c200<ind.ema200;
+      $('trendState').textContent=trendUp200?'Acima EMA200':trendDn200?'Abaixo EMA200':'Na EMA200';
+      $('trendState').style.color=trendUp200?'var(--green)':trendDn200?'var(--red)':'var(--gold)';
+    }
+    if(ind.macd!==undefined&&ind.macd_sinal!==undefined&&ind.macd!==null&&ind.macd_sinal!==null){
+      var mUp=ind.macd>ind.macd_sinal,mDn=ind.macd<ind.macd_sinal;
+      $('macdState').textContent=mUp?'Comprador \u2191':mDn?'Vendedor \u2193':'Neutro';
+      $('macdState').style.color=mUp?'var(--green)':mDn?'var(--red)':'var(--gold)';
+      $('macdLabel').textContent=mUp?'MACD acima da sinal':'MACD abaixo da sinal';
+    }
+    var padrao=d.padrao_candle||'';
+    $('candleState').textContent=ok?padrao||sinal:'Neutro';
+    $('candleState').style.color=ok?'var(--green)':'var(--muted)';
+    /* marcador no gr\u00e1fico */
+    if(series.candle&&typeof series.candle.setMarkers==='function'){
+      series.candle.setMarkers(ok?[{time:candles[candles.length-1].time,
+        position:sinal==='CALL'?'belowBar':'aboveBar',
+        color:sinal==='CALL'?'#00e88f':'#ff5364',
+        shape:sinal==='CALL'?'arrowUp':'arrowDown',text:sinal}]:[]);
+    }
+    /* hist\u00f3rico de sinais */
+    if(ok){
+      var now2=new Date();
+      var hm=String(now2.getHours()).padStart(2,'0')+':'+String(now2.getMinutes()).padStart(2,'0')+':'+String(now2.getSeconds()).padStart(2,'0');
+      var mk=hm.slice(0,5),last=signalHistory[0];
+      if(!last||last.minKey!==mk||last.dir!==sinal){
+        signalHistory.unshift({time:hm,minKey:mk,dir:sinal,pct:pct,asset:$('asset').value});
+        if(signalHistory.length>20)signalHistory.pop();
+        renderHistory();
+      }
+    }
+  })
+  .catch(function(){_analyzeRunning=false;});
 }
 function renderHistory(){
   var tbody=$('histBody');
@@ -16245,6 +16288,44 @@ def deriv_candles():
         _PAP_CANDLE_CACHE[cache_key] = {"data": candles, "ts": now_ts}
 
     return jsonify({"ok": True, "candles": candles, "source": "deriv", "symbol": symbol})
+
+
+# ── Rota /garra-price-action-pro/analisar — usa nova engine Python ───────────────
+@app.route('/garra-price-action-pro/analisar', methods=['POST'])
+def garra_pap_analisar():
+    """
+    Analisa velas com a engine GARRA PRICE ACTION PRO (Python puro).
+    Payload JSON:
+      { "candles": [...], "config": {...opcional...} }
+    Retorna o sinal CALL / PUT / AGUARDAR com todos os indicadores.
+    """
+    try:
+        from garra_price_action_pro_engine import (
+            avaliar_garra_price_action_pro,
+            ConfigEstrategia,
+        )
+    except ImportError as e:
+        return jsonify({"ok": False, "erro": f"Engine não encontrada: {e}"}), 500
+
+    dados = request.get_json(force=True, silent=True) or {}
+    candles_raw = dados.get("candles", [])
+
+    if not candles_raw or len(candles_raw) < 10:
+        return jsonify({"ok": False, "erro": "Mínimo de 10 velas necessárias.", "sinal": "AGUARDAR"}), 400
+
+    # Configuração opcional via payload
+    cfg_raw = dados.get("config", {})
+    try:
+        cfg = ConfigEstrategia(**{k: v for k, v in cfg_raw.items()
+                                   if hasattr(ConfigEstrategia, k)}) if cfg_raw else ConfigEstrategia()
+    except Exception:
+        cfg = ConfigEstrategia()
+
+    try:
+        resultado = avaliar_garra_price_action_pro(candles_raw, cfg)
+        return jsonify({"ok": True, **resultado})
+    except Exception as ex:
+        return jsonify({"ok": False, "erro": str(ex), "sinal": "AGUARDAR"}), 500
 
 
 # ── WebSocket persistente no servidor para ticks em tempo real (GARRA PAP) ──────
