@@ -10910,7 +10910,8 @@ function initWebSocket(wssUrl) {
         print("🔒 CONECTADO! BUSCANDO SALDO...", "log-win");
         bot._loginid  = undefined; // reseta para nova conexão
         bot._buying   = false;     // libera flag de compra travado
-        bot.ws.send(json({ authorize: 1 }));
+        // A URL WSS já contém o token OAuth — a Deriv autentica automaticamente
+        // e envia msg_type:'authorize' com loginid sem precisar de request explícito
         bot.ws.send(json({ balance: 1, subscribe: 1 }));
         const _estAtivo = ESTRATEGIAS[bot.estrategia] && ESTRATEGIAS[bot.estrategia].ativo;
         const ativo = _resolverAtivo(_estAtivo);
@@ -10932,8 +10933,16 @@ function initWebSocket(wssUrl) {
     bot.ws.onmessage = (msg) => {
         const data = JSON.parse(msg.data);
         if (data.error) {
-            print("⚠️ ERRO API: " + data.error.message, "log-loss");
-            return;
+            // Ignora erros de req_id do painel Deriv Chart (100-499) — tratados pelo handler próprio
+            const _errReqId = data.req_id || 0;
+            if (_errReqId >= 100 && _errReqId < 500) return;
+            // Erros de buy/proposal do bot principal são tratados adiante — não retorna aqui
+            if (data.msg_type === 'buy' || data.msg_type === 'proposal') {
+                // deixa cair para os handlers específicos abaixo
+            } else {
+                print("⚠️ ERRO API: " + data.error.message, "log-loss");
+                return;
+            }
         }
 
         // Autorização — captura loginid da conta principal
