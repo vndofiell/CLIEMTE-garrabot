@@ -29064,12 +29064,57 @@ window.addEventListener('load', () => {
   <!-- Corpo: gráfico + painel de operação -->
   <div style="display:flex; height:calc(100vh - 78px);">
 
-    <!-- Gráfico de velas -->
-    <div style="flex:1; position:relative; background:#0a100a;">
-      <div id="drv-chart-container" style="width:100%; height:100%;"></div>
+    <!-- Área de gráficos (velas + indicadores) -->
+    <div style="flex:1; position:relative; background:#0a100a; display:flex; flex-direction:column; overflow:hidden;">
 
+      <!-- Legenda EMA / indicadores -->
+      <div id="drv-chart-legend" style="
+          display:flex; align-items:center; gap:10px; padding:3px 10px;
+          background:#0a100a; border-bottom:1px solid rgba(30,60,30,0.5);
+          font-family:'Share Tech Mono',monospace; font-size:0.6rem; flex-wrap:wrap; flex-shrink:0;">
+        <span style="color:#00d9ff;">— EMA 9</span>
+        <span style="color:#4c8dff;">— EMA 21</span>
+        <span style="color:#ffc857;">— EMA 200</span>
+        <span id="drv-leg-ema"   style="color:#aaa; margin-left:4px;"></span>
+        <span style="margin-left:8px; color:#555;">|</span>
+        <span style="color:#b18cff;">RSI: <b id="drv-leg-rsi">—</b></span>
+        <span style="color:#00d9ff;">MACD: <b id="drv-leg-macd">—</b></span>
+        <span style="color:#aaa;">Vol: <b id="drv-leg-vol">—</b></span>
+      </div>
+
+      <!-- Gráfico principal de velas -->
+      <div id="drv-chart-container" style="width:100%; flex:1; min-height:0; position:relative;"></div>
+
+      <!-- RSI -->
+      <div style="
+          display:flex; align-items:center; padding:1px 10px;
+          background:#0a100a; border-top:1px solid rgba(30,60,30,0.5); flex-shrink:0;">
+        <span style="font-size:0.58rem; color:#555; font-family:'Share Tech Mono'; white-space:nowrap; margin-right:8px;">RSI (14)</span>
+        <span id="drv-ind-rsi-label" style="font-size:0.6rem; color:#b18cff; font-family:'Share Tech Mono'; margin-left:auto;"></span>
+      </div>
+      <div id="drv-rsi-container"  style="width:100%; height:64px; flex-shrink:0; background:#0a100a;"></div>
+
+      <!-- MACD -->
+      <div style="
+          display:flex; align-items:center; padding:1px 10px;
+          background:#0a100a; border-top:1px solid rgba(30,60,30,0.5); flex-shrink:0;">
+        <span style="font-size:0.58rem; color:#555; font-family:'Share Tech Mono'; white-space:nowrap; margin-right:8px;">MACD (12, 26, 9)</span>
+        <span id="drv-ind-macd-label" style="font-size:0.6rem; color:#00d9ff; font-family:'Share Tech Mono'; margin-left:auto;"></span>
+      </div>
+      <div id="drv-macd-container" style="width:100%; height:60px; flex-shrink:0; background:#0a100a;"></div>
+
+      <!-- Volume -->
+      <div style="
+          display:flex; align-items:center; padding:1px 10px;
+          background:#0a100a; border-top:1px solid rgba(30,60,30,0.5); flex-shrink:0;">
+        <span style="font-size:0.58rem; color:#555; font-family:'Share Tech Mono'; white-space:nowrap; margin-right:8px;">VOLUME</span>
+        <span id="drv-ind-vol-label" style="font-size:0.6rem; color:#aaa; font-family:'Share Tech Mono'; margin-left:auto;"></span>
+      </div>
+      <div id="drv-vol-container"  style="width:100%; height:52px; flex-shrink:0; background:#0a100a;"></div>
+
+      <!-- Overlays de loading/erro (cobrem toda a área de gráficos) -->
       <div id="drv-vela-timer" style="
-          position:absolute; right:68px;
+          position:absolute; right:68px; top:26px;
           background:rgba(20,30,20,0.95); border:1px solid rgba(255,255,255,0.15);
           color:#c8d0e0; font-family:'Share Tech Mono',monospace;
           font-size:0.74rem; padding:1px 7px; border-radius:3px;
@@ -29079,7 +29124,7 @@ window.addEventListener('load', () => {
       </div>
 
       <div id="drv-op-timer-overlay" style="
-          position:absolute; left:50%; transform:translateX(-50%);
+          position:absolute; left:50%; transform:translateX(-50%); top:36px;
           display:none; pointer-events:none; z-index:8;
           flex-direction:column; align-items:center; gap:3px;">
         <div id="drv-op-timer-bubble" style="
@@ -29122,6 +29167,93 @@ window.addEventListener('load', () => {
                    font-size:0.75rem; cursor:pointer; border-radius:3px;">
           🔄 TENTAR NOVAMENTE
         </button>
+      </div>
+    </div>
+
+    <!-- ── PAINEL ANÁLISE GARRA ── -->
+    <div id="drv-analise-painel" style="
+        width:220px; flex-shrink:0; background:#0a0f0a;
+        border-left:1px solid rgba(0,255,65,0.2);
+        display:flex; flex-direction:column; overflow-y:auto; overflow-x:hidden;
+        font-family:'Share Tech Mono',monospace;">
+
+      <!-- Cabeçalho -->
+      <div style="padding:8px 10px 6px; border-bottom:1px solid rgba(0,255,65,0.15); display:flex; align-items:center; justify-content:space-between;">
+        <span style="font-size:0.68rem; color:#00ff41; letter-spacing:1px;">ANÁLISE GARRA</span>
+        <span id="drv-ap-tag" style="font-size:0.58rem; color:#555; background:rgba(0,255,65,0.08); border:1px solid rgba(0,255,65,0.25); padding:1px 5px; border-radius:3px;">M1</span>
+      </div>
+
+      <!-- Sinal atual -->
+      <div style="padding:10px; border-bottom:1px solid rgba(255,255,255,0.06);">
+        <div style="font-size:0.58rem; color:#555; letter-spacing:1px; margin-bottom:6px;">SINAL ATUAL</div>
+        <div id="drv-ap-sinal" style="font-size:1.4rem; font-weight:bold; color:#ffc857; letter-spacing:2px;">AGUARDAR</div>
+        <div id="drv-ap-motivo" style="font-size:0.6rem; color:#555; margin-top:4px; line-height:1.4;">Aguardando dados...</div>
+        <!-- Barra de confluência -->
+        <div style="height:3px; background:#1a2a1a; border-radius:2px; margin-top:8px; overflow:hidden;">
+          <div id="drv-ap-conf-bar" style="height:100%; width:0%; background:#00ff41; border-radius:2px; transition:width 0.4s;"></div>
+        </div>
+        <div style="display:flex; justify-content:space-between; margin-top:4px;">
+          <span style="font-size:0.58rem; color:#555;">Confluência</span>
+          <span id="drv-ap-conf-pct" style="font-size:0.68rem; color:#00ff41; font-weight:bold;">0%</span>
+        </div>
+      </div>
+
+      <!-- Indicadores -->
+      <div style="padding:8px 10px; border-bottom:1px solid rgba(255,255,255,0.06);">
+        <div style="display:flex; flex-direction:column; gap:6px;">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <span style="font-size:0.62rem; color:#555;">EMA 9 / 21</span>
+            <b id="drv-ap-ema" style="font-size:0.68rem; color:#aaa;">—</b>
+          </div>
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <span style="font-size:0.62rem; color:#555;">EMA 200</span>
+            <b id="drv-ap-ema200" style="font-size:0.68rem; color:#aaa;">—</b>
+          </div>
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <span style="font-size:0.62rem; color:#555;">MACD</span>
+            <b id="drv-ap-macd" style="font-size:0.68rem; color:#aaa;">—</b>
+          </div>
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <span style="font-size:0.62rem; color:#555;">RSI</span>
+            <b id="drv-ap-rsi" style="font-size:0.68rem; color:#aaa;">—</b>
+          </div>
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <span style="font-size:0.62rem; color:#555;">Volume</span>
+            <b id="drv-ap-vol" style="font-size:0.68rem; color:#aaa;">—</b>
+          </div>
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <span style="font-size:0.62rem; color:#555;">Filtro de vela</span>
+            <b id="drv-ap-vela" style="font-size:0.68rem; color:#aaa;">—</b>
+          </div>
+        </div>
+      </div>
+
+      <!-- Regras da estratégia -->
+      <div style="padding:8px 10px;">
+        <div style="font-size:0.62rem; color:#555; letter-spacing:1px; margin-bottom:8px;">REGRAS DA ESTRATÉGIA</div>
+        <div style="display:flex; flex-direction:column; gap:5px;">
+          <div style="display:flex; justify-content:space-between;">
+            <span style="font-size:0.6rem; color:#555;">Entrada</span>
+            <b style="font-size:0.6rem; color:#aaa;">Após fechar a vela</b>
+          </div>
+          <div style="display:flex; justify-content:space-between;">
+            <span style="font-size:0.6rem; color:#555;">Direção</span>
+            <b style="font-size:0.6rem; color:#aaa;">CALL / PUT</b>
+          </div>
+          <div style="display:flex; justify-content:space-between;">
+            <span style="font-size:0.6rem; color:#555;">Confirmação</span>
+            <b style="font-size:0.6rem; color:#aaa;">EMA + RSI + MACD</b>
+          </div>
+          <div style="display:flex; justify-content:space-between;">
+            <span style="font-size:0.6rem; color:#555;">Filtro adicional</span>
+            <b style="font-size:0.6rem; color:#aaa;">Volume relativo</b>
+          </div>
+          <div style="display:flex; justify-content:space-between;">
+            <span style="font-size:0.6rem; color:#555;">Proteção</span>
+            <b style="font-size:0.6rem; color:#aaa;">Sem sinal = aguardar</b>
+          </div>
+        </div>
+        <p style="font-size:0.56rem; color:#333; margin-top:10px; line-height:1.5;">Indicadores são filtros, não garantem precisão ou lucro.</p>
       </div>
     </div>
 
@@ -32833,6 +32965,12 @@ const _drvChart = {
     _sessaoWins:0, _sessaoLosses:0, _sessaoLucro:0,
     cidsAtivos:    new Set(),   // IDs de contratos abertos pelo painel Deriv Chart
     propPendente:  null,        // proposal.id enviado aguardando buy — bot principal ignora
+    // Indicadores
+    _candles: null, _tickCount: 0,
+    _se9: null, _se21: null, _se200: null,
+    rsiChart: null, _rsiSeries: null,
+    macdChart: null, _macdHist: null, _macdLine: null, _macdSignal: null,
+    volChart: null, _volSeries: null,
 };
 const _drvModo = {
     modo:'manual', rodando:false, opBloqueada:false, viradaTimer:null,
@@ -33336,16 +33474,36 @@ function _drvProcessarTick(tick) {
     if (elD) elD.textContent = dir;
 
     if (!_drvChart.series) return;
+    let novaVela = false;
     if (_drvChart.velaAtual && tsAb === _drvChart.velaAtual.time) {
         const v = _drvChart.velaAtual;
         v.high = Math.max(v.high, preco); v.low = Math.min(v.low, preco); v.close = preco;
+        v.volume = (v.volume || 0) + 1;
         _drvChart.series.update(v);
     } else if (tsAb > (_drvChart.velaAtual?.time || 0)) {
-        _drvChart.velaAtual = { time: tsAb, open: preco, high: preco, low: preco, close: preco };
+        _drvChart.velaAtual = { time: tsAb, open: preco, high: preco, low: preco, close: preco, volume: 1 };
         _drvChart.series.update(_drvChart.velaAtual);
         _drvChart.chart.timeScale().scrollToRealTime();
+        novaVela = true;
+        // Adiciona a nova vela ao array de candles
+        if (_drvChart._candles) {
+            _drvChart._candles.push({ ...{ time: tsAb, open: preco, high: preco, low: preco, close: preco, volume: 1 } });
+            if (_drvChart._candles.length > 500) _drvChart._candles.shift();
+        }
+    } else if (_drvChart._candles) {
+        // Atualiza close da última vela no array
+        const last = _drvChart._candles[_drvChart._candles.length - 1];
+        if (last && last.time === tsAb) {
+            last.high = Math.max(last.high, preco); last.low = Math.min(last.low, preco);
+            last.close = preco; last.volume = (last.volume || 0) + 1;
+        }
     }
     _drvChart.lastPreco = preco; _drvChart.tsAbertura = tsAb;
+    // Atualiza indicadores a cada 5 ticks ou nova vela
+    if (_drvChart._candles) {
+        _drvChart._tickCount = (_drvChart._tickCount || 0) + 1;
+        if (novaVela || _drvChart._tickCount % 5 === 0) _drvAtualizarIndicadores(_drvChart._candles);
+    }
 
     // Timer de vela
     const restam = Math.max(0, (tsAb + periodo) - epoch);
@@ -33370,32 +33528,158 @@ function _drvProcessarTick(tick) {
     }
 }
 
+// ── Helpers de indicadores ────────────────────────────────
+function _drvEmaArr(vals, period) {
+    const k = 2 / (period + 1);
+    const out = [vals[0]];
+    for (let i = 1; i < vals.length; i++) out.push(vals[i] * k + out[i-1] * (1 - k));
+    return out;
+}
+function _drvRsiArr(vals, period) {
+    const out = new Array(vals.length).fill(50);
+    for (let i = period; i < vals.length; i++) {
+        let up = 0, dn = 0;
+        for (let j = i - period + 1; j <= i; j++) { const d = vals[j] - vals[j-1]; if (d > 0) up += d; else dn -= d; }
+        out[i] = dn === 0 ? 100 : 100 - 100 / (1 + up / dn);
+    }
+    return out;
+}
+function _drvMacdObj(vals) {
+    const a = _drvEmaArr(vals, 12), b = _drvEmaArr(vals, 26);
+    const m = vals.map((_, i) => a[i] - b[i]);
+    const s = _drvEmaArr(m, 9);
+    return { m, s, h: m.map((x, i) => x - s[i]) };
+}
+
+// Atualiza subgráficos e painel Análise Garra a partir dos candles armazenados
+function _drvAtualizarIndicadores(candles) {
+    if (!candles || candles.length < 10 || typeof LightweightCharts === 'undefined') return;
+    const sorted = [...candles].sort((a, b) => a.time - b.time);
+    const closes = sorted.map(c => c.close);
+    const e9   = _drvEmaArr(closes, 9);
+    const e21  = _drvEmaArr(closes, 21);
+    const e200 = _drvEmaArr(closes, 200);
+    const rv   = _drvRsiArr(closes, 14);
+    const mc   = _drvMacdObj(closes);
+    const n    = sorted.length;
+    const vols = sorted.map(c => (c.volume !== undefined ? c.volume : 1));
+    const avgVol = vols.slice(-21, -1).reduce((s, v) => s + v, 0) / 20 || 1;
+
+    if (_drvChart._se9)   _drvChart._se9.setData(sorted.map((c, i) => ({ time: c.time, value: e9[i]  })));
+    if (_drvChart._se21)  _drvChart._se21.setData(sorted.map((c, i) => ({ time: c.time, value: e21[i] })));
+    if (_drvChart._se200) _drvChart._se200.setData(sorted.map((c, i) => ({ time: c.time, value: e200[i]})));
+    if (_drvChart._rsiSeries) _drvChart._rsiSeries.setData(sorted.map((c, i) => ({ time: c.time, value: rv[i] })));
+    if (_drvChart._macdHist)  _drvChart._macdHist.setData(sorted.map((c, i) => ({ time: c.time, value: mc.h[i], color: mc.h[i] >= 0 ? '#00d99588' : '#ff536488' })));
+    if (_drvChart._macdLine)  _drvChart._macdLine.setData(sorted.map((c, i) => ({ time: c.time, value: mc.m[i] })));
+    if (_drvChart._macdSignal)_drvChart._macdSignal.setData(sorted.map((c, i) => ({ time: c.time, value: mc.s[i] })));
+    if (_drvChart._volSeries) _drvChart._volSeries.setData(sorted.map(c => ({ time: c.time, value: c.volume !== undefined ? c.volume : 1, color: c.close >= c.open ? '#00d99599' : '#ff536499' })));
+
+    // Legenda
+    const i = n - 1;
+    const rsiVal = rv[i], macdAbove = mc.m[i] > mc.s[i];
+    const volRel = (vols[i] / avgVol).toFixed(2);
+    const up9_21 = e9[i] > e21[i], trendUp = closes[i] > e200[i], trendDown = closes[i] < e200[i];
+    const el = id => document.getElementById(id);
+    if (el('drv-leg-rsi'))  el('drv-leg-rsi').textContent  = rsiVal.toFixed(1) + (rsiVal > 70 ? ' • sobrecompra' : rsiVal < 30 ? ' • sobrevenda' : rsiVal > 50 ? ' • compradora' : ' • vendedora');
+    if (el('drv-leg-macd')) el('drv-leg-macd').textContent = macdAbove ? 'acima da sinal' : 'abaixo da sinal';
+    if (el('drv-leg-vol'))  el('drv-leg-vol').textContent  = volRel + 'x';
+    if (el('drv-ind-rsi-label'))  el('drv-ind-rsi-label').textContent  = rsiVal.toFixed(1) + (rsiVal > 70 ? ' • sobrecompra' : rsiVal < 30 ? ' • sobrevenda' : '');
+    if (el('drv-ind-macd-label')) el('drv-ind-macd-label').textContent = macdAbove ? 'MACD acima da sinal' : 'MACD abaixo da sinal';
+    if (el('drv-ind-vol-label'))  el('drv-ind-vol-label').textContent  = parseFloat(volRel) > 1 ? 'Volume acima da média' : 'Volume abaixo da média';
+
+    // Painel Análise Garra
+    const momUp = mc.m[i] > mc.s[i], momDown = mc.m[i] < mc.s[i];
+    const volOk = vols[i] > avgVol;
+    const bullC = sorted[i].close > sorted[i].open, bearC = sorted[i].close < sorted[i].open;
+    let call = 0, put = 0, blockers = [];
+    if (trendUp)   call += 25; if (trendDown)  put += 25;
+    if (up9_21)    call += 15; if (!up9_21)    put += 15;
+    if (rsiVal >= 52 && rsiVal <= 68) call += 15;
+    else if (rsiVal >= 32 && rsiVal <= 48) put += 15;
+    else blockers.push('RSI extremo');
+    if (momUp)  call += 20; if (momDown) put += 20;
+    if (volOk)  { call += 10; put += 10; } else blockers.push('volume baixo');
+    if (bullC)  call += 15; if (bearC)   put += 15;
+    const dir  = call > put ? 'CALL' : put > call ? 'PUT' : 'AGUARDAR';
+    const best = Math.min(100, Math.max(call, put));
+    if (dir === 'CALL') { if (!momUp) blockers.push('MACD não confirmou'); if (!trendUp) blockers.push('tendência baixista'); if (!bullC) blockers.push('candle não confirmou'); }
+    if (dir === 'PUT')  { if (!momDown) blockers.push('MACD não confirmou'); if (!trendDown) blockers.push('tendência altista'); if (!bearC) blockers.push('candle não confirmou'); }
+    const ok = dir !== 'AGUARDAR' && best >= 70 && blockers.length === 0;
+    if (el('drv-ap-sinal'))    { el('drv-ap-sinal').textContent = ok ? dir : 'AGUARDAR'; el('drv-ap-sinal').style.color = ok ? (dir==='CALL'?'#00e88f':'#ff5364') : '#ffc857'; }
+    if (el('drv-ap-motivo'))   el('drv-ap-motivo').textContent = ok ? 'Confluência técnica atendida.' : (blockers.length ? blockers.join(' • ') : 'Pontuação insuficiente; aguardar nova vela.');
+    if (el('drv-ap-conf-bar')) el('drv-ap-conf-bar').style.width = best + '%';
+    if (el('drv-ap-conf-pct')) el('drv-ap-conf-pct').textContent = best + '%';
+    if (el('drv-ap-ema'))    { el('drv-ap-ema').textContent    = up9_21 ? 'Alta' : 'Baixa';          el('drv-ap-ema').style.color    = up9_21   ? '#00e88f' : '#ff5364'; }
+    if (el('drv-ap-ema200')) { el('drv-ap-ema200').textContent = trendUp ? 'Alta' : trendDown ? 'Baixa' : 'Neutro'; el('drv-ap-ema200').style.color = trendUp  ? '#00e88f' : trendDown ? '#ff5364' : '#aaa'; }
+    if (el('drv-ap-macd'))   { el('drv-ap-macd').textContent   = momUp ? 'Comprador' : momDown ? 'Vendedor' : 'Neutro'; el('drv-ap-macd').style.color  = momUp    ? '#00e88f' : momDown   ? '#ff5364' : '#aaa'; }
+    if (el('drv-ap-rsi'))    { el('drv-ap-rsi').textContent    = rsiVal.toFixed(1);                   el('drv-ap-rsi').style.color    = rsiVal>70? '#ff5364' : rsiVal<30 ? '#00e88f' : '#aaa'; }
+    if (el('drv-ap-vol'))    { el('drv-ap-vol').textContent    = volOk ? 'Confirmado' : 'Fraco';      el('drv-ap-vol').style.color    = volOk    ? '#00e88f' : '#ff5364'; }
+    if (el('drv-ap-vela'))   { el('drv-ap-vela').textContent   = bullC ? 'Vela verde' : bearC ? 'Vela vermelha' : 'Neutro'; el('drv-ap-vela').style.color  = bullC    ? '#00e88f' : bearC     ? '#ff5364' : '#aaa'; }
+    const mins = _drvChart.periodo ? Math.round(_drvChart.periodo / 60) : 1;
+    if (el('drv-ap-tag')) el('drv-ap-tag').textContent = 'M' + mins;
+    try {
+        if (_drvChart.rsiChart)  _drvChart.rsiChart.timeScale().scrollToRealTime();
+        if (_drvChart.macdChart) _drvChart.macdChart.timeScale().scrollToRealTime();
+        if (_drvChart.volChart)  _drvChart.volChart.timeScale().scrollToRealTime();
+    } catch(_) {}
+}
+
 // ── Inicializa gráfico ────────────────────────────────────
 function _drvIniciarChart() {
     if (_drvChart.chart) return;
     const container = document.getElementById('drv-chart-container');
     if (!container || typeof LightweightCharts === 'undefined') return;
-    _drvChart.chart = LightweightCharts.createChart(container, {
-        width: container.clientWidth || 800, height: container.clientHeight || 500,
+    const commonOpts = {
         layout: { background: { color: '#0a100a' }, textColor: '#6a8a6a' },
-        grid: { vertLines: { color: 'rgba(30,60,30,0.7)' }, horzLines: { color: 'rgba(30,60,30,0.7)' } },
-        crosshair: {
-            mode: LightweightCharts.CrosshairMode.Normal,
-            vertLine: { color: 'rgba(0,255,65,0.3)', style:1, labelBackgroundColor:'#0d1a0d' },
-            horzLine: { color: 'rgba(0,255,65,0.3)', style:1, labelBackgroundColor:'#0d1a0d' },
-        },
-        rightPriceScale: { borderColor:'rgba(30,60,30,0.8)', textColor:'#6a8a6a', scaleMargins:{top:0.1,bottom:0.1} },
+        grid: { vertLines: { color: 'rgba(30,60,30,0.5)' }, horzLines: { color: 'rgba(30,60,30,0.5)' } },
+        crosshair: { mode: LightweightCharts.CrosshairMode.Normal, vertLine: { color: 'rgba(0,255,65,0.3)', style:1, labelBackgroundColor:'#0d1a0d' }, horzLine: { color: 'rgba(0,255,65,0.3)', style:1, labelBackgroundColor:'#0d1a0d' } },
+        rightPriceScale: { borderColor:'rgba(30,60,30,0.8)', textColor:'#6a8a6a' },
         timeScale: { borderColor:'rgba(30,60,30,0.8)', textColor:'#6a8a6a', timeVisible:true, secondsVisible:false, rightOffset:5, barSpacing:8, minBarSpacing:2 },
         handleScale: { axisPressedMouseMove: { time:true, price:true } },
+    };
+    // Gráfico principal de velas
+    _drvChart.chart = LightweightCharts.createChart(container, {
+        ...commonOpts,
+        width: container.clientWidth || 800, height: container.clientHeight || 300,
+        rightPriceScale: { ...commonOpts.rightPriceScale, scaleMargins:{top:0.1,bottom:0.05} },
     });
     _drvChart.series = _drvChart.chart.addCandlestickSeries({
         upColor:'#00c853', downColor:'#ef5350', borderVisible:false,
         wickUpColor:'#00c853', wickDownColor:'#ef5350',
     });
+    // EMA series
+    _drvChart._se9   = _drvChart.chart.addLineSeries({ color:'#00d9ff', lineWidth:1, priceLineVisible:false, lastValueVisible:false });
+    _drvChart._se21  = _drvChart.chart.addLineSeries({ color:'#4c8dff', lineWidth:1, priceLineVisible:false, lastValueVisible:false });
+    _drvChart._se200 = _drvChart.chart.addLineSeries({ color:'#ffc857', lineWidth:1, priceLineVisible:false, lastValueVisible:false });
+    // RSI
+    const rsiCont = document.getElementById('drv-rsi-container');
+    if (rsiCont) {
+        _drvChart.rsiChart = LightweightCharts.createChart(rsiCont, { ...commonOpts, width: rsiCont.clientWidth, height: 64, rightPriceScale: { visible: false }, timeScale: { visible: false } });
+        _drvChart._rsiSeries = _drvChart.rsiChart.addLineSeries({ color:'#b18cff', lineWidth:2, priceLineVisible:false });
+        _drvChart._rsiSeries.createPriceLine({ price:70, color:'#ff5364', lineStyle:2, lineWidth:1, axisLabelVisible:false });
+        _drvChart._rsiSeries.createPriceLine({ price:30, color:'#00d995', lineStyle:2, lineWidth:1, axisLabelVisible:false });
+        _drvChart._rsiSeries.createPriceLine({ price:50, color:'#526176', lineStyle:2, lineWidth:1, axisLabelVisible:false });
+    }
+    // MACD
+    const macdCont = document.getElementById('drv-macd-container');
+    if (macdCont) {
+        _drvChart.macdChart = LightweightCharts.createChart(macdCont, { ...commonOpts, width: macdCont.clientWidth, height: 60, rightPriceScale: { visible: false }, timeScale: { visible: false } });
+        _drvChart._macdHist   = _drvChart.macdChart.addHistogramSeries({ priceLineVisible:false, lastValueVisible:false });
+        _drvChart._macdLine   = _drvChart.macdChart.addLineSeries({ color:'#00d9ff', lineWidth:1, priceLineVisible:false, lastValueVisible:false });
+        _drvChart._macdSignal = _drvChart.macdChart.addLineSeries({ color:'#ff9f43', lineWidth:1, priceLineVisible:false, lastValueVisible:false });
+    }
+    // Volume
+    const volCont = document.getElementById('drv-vol-container');
+    if (volCont) {
+        _drvChart.volChart = LightweightCharts.createChart(volCont, { ...commonOpts, width: volCont.clientWidth, height: 52, rightPriceScale: { visible: false }, timeScale: { borderColor:'rgba(30,60,30,0.8)', timeVisible:true } });
+        _drvChart._volSeries = _drvChart.volChart.addHistogramSeries({ priceFormat:{ type:'volume' }, priceLineVisible:false, lastValueVisible:false });
+    }
     window.addEventListener('resize', () => {
-        if (_drvChart.chart && document.getElementById('modal-drv-chart').style.display !== 'none') {
-            _drvChart.chart.applyOptions({ width: container.clientWidth, height: container.clientHeight });
-        }
+        if (document.getElementById('modal-drv-chart').style.display === 'none') return;
+        _drvChart.chart.applyOptions({ width: container.clientWidth, height: container.clientHeight });
+        if (_drvChart.rsiChart && rsiCont)   _drvChart.rsiChart.applyOptions({ width: rsiCont.clientWidth });
+        if (_drvChart.macdChart && macdCont) _drvChart.macdChart.applyOptions({ width: macdCont.clientWidth });
+        if (_drvChart.volChart && volCont)   _drvChart.volChart.applyOptions({ width: volCont.clientWidth });
     });
 }
 
@@ -33451,7 +33735,7 @@ async function drvChartCarregar() {
         }
         const seen = new Set();
         const candles = raw
-            .map(c => ({ time: parseInt(c.epoch), open: parseFloat(c.open), high: parseFloat(c.high), low: parseFloat(c.low), close: parseFloat(c.close) }))
+            .map(c => ({ time: parseInt(c.epoch), open: parseFloat(c.open), high: parseFloat(c.high), low: parseFloat(c.low), close: parseFloat(c.close), volume: 1 }))
             .sort((a,b) => a.time - b.time)
             .filter(c => { if (seen.has(c.time)) return false; seen.add(c.time); return true; });
 
@@ -33464,6 +33748,9 @@ async function drvChartCarregar() {
         _drvChart.tsAbertura = ult.time;
         _drvChart.velaAtual  = { ...ult };
         _drvChart.lastPreco  = ult.close;
+        // Salva candles para atualização dos indicadores
+        _drvChart._candles = candles;
+        _drvAtualizarIndicadores(candles);
 
         if (loadEl) loadEl.style.display = 'none';
         _drvSubscreverTicks();
