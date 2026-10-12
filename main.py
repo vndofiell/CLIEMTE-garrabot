@@ -15666,16 +15666,22 @@ function openModal(){
 function closeModal(){$('modal').classList.remove('show');}
 function derivSymbol(){return DERIV_MAP[$('asset').value]||'R_25';}
 function derivGranularity(){return parseInt($('tf').value||1)*60;}
+var _wsRetry=0;
 function derivConnectWs(){
-  if(_derivWs){try{_derivWs.close();}catch(e){}}
+  if(_derivWs){try{_derivWs.close();}catch(e){} _derivWs=null;}
   var sym=derivSymbol(),gran=derivGranularity();
-  $('connection').textContent='DERIV: conectando...';
-  _derivWs=new WebSocket('wss://ws.binaryws.com/websockets/v3?app_id=1089');
-  _derivWs.onopen=function(){
-    _derivWs.send(JSON.stringify({ticks_history:sym,adjust_start_time:1,
-      count:260,end:'latest',start:1,style:'candles',granularity:gran}));
+  var tag=$('srcTag');
+  var retryMsg=_wsRetry>0?' ('+_wsRetry+')':'';
+  $('connection').textContent='DERIV: conectando'+retryMsg+'...';
+  if(tag){tag.textContent=_wsRetry>0?'RECONECTANDO':'CONECTANDO';tag.style.color='var(--gold)';}
+  var ws=new WebSocket('wss://ws.binaryws.com/websockets/v3?app_id=36544');
+  _derivWs=ws;
+  ws.onopen=function(){
+    _wsRetry=0;
+    ws.send(JSON.stringify({ticks_history:sym,adjust_start_time:1,
+      count:300,end:'latest',start:1,style:'candles',granularity:gran,subscribe:1}));
   };
-  _derivWs.onmessage=function(ev){
+  ws.onmessage=function(ev){
     var d;try{d=JSON.parse(ev.data);}catch(e){return;}
     if(d.msg_type==='candles'){
       var raw=d.candles||[];
@@ -15684,13 +15690,11 @@ function derivConnectWs(){
         close:Number(c.close),volume:1};
       }).filter(function(c){return c.time>0&&c.open>0;
       }).sort(function(a,b){return a.time-b.time;});
-      if(clean.length>=30){
+      if(clean.length>=5){
         candles=clean;update();analyze();
         $('connection').textContent='DERIV AO VIVO \u2022 '+clean.length+' velas \u2022 '+sym;
         $('statusDot').classList.add('live');
-        var tag=$('srcTag');if(tag){tag.textContent='AO VIVO';tag.style.color='var(--green)';}
-        _derivWs.send(JSON.stringify({ticks_history:sym,adjust_start_time:1,
-          count:1,end:'latest',start:1,style:'candles',granularity:gran,subscribe:1}));
+        if(tag){tag.textContent='AO VIVO';tag.style.color='var(--green)';}
       }
     } else if(d.msg_type==='ohlc'&&d.ohlc){
       var oc=d.ohlc,ts=Number(oc.epoch),idx=candles.length-1;
@@ -15700,16 +15704,25 @@ function derivConnectWs(){
       } else if(ts>0&&Number(oc.open)>0){
         candles.push({time:ts,open:Number(oc.open),high:Number(oc.high),
           low:Number(oc.low),close:Number(oc.close),volume:1});
-        if(candles.length>300)candles.shift();
+        if(candles.length>500)candles.shift();
       }
       update();analyze();
     } else if(d.error){
-      $('connection').textContent='DERIV ERR: '+d.error.message;
+      $('connection').textContent='DERIV: '+(d.error.message||'erro');
       $('statusDot').classList.remove('live');
+      if(tag){tag.textContent='ERRO';tag.style.color='var(--red)';}
     }
   };
-  _derivWs.onerror=function(){$('connection').textContent='WS: erro';$('statusDot').classList.remove('live');};
-  _derivWs.onclose=function(){setTimeout(derivConnectWs,5000);};
+  ws.onerror=function(){
+    if(tag){tag.textContent='OFFLINE';tag.style.color='var(--red)';}
+  };
+  ws.onclose=function(){
+    if(_derivWs!==ws)return;
+    _wsRetry++;
+    var delay=Math.min(30000,3000*Math.pow(2,Math.min(_wsRetry-1,4)));
+    $('connection').textContent='WS: reconectando em '+(delay/1000)+'s...';
+    setTimeout(function(){if(_derivWs===ws)derivConnectWs();},delay);
+  };
 }
 function enviarEntrada(dir){
   var stake=parseFloat($('tradeStake').value)||1;
