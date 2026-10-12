@@ -34002,12 +34002,14 @@ function drvOperar(direcao) {
                     clearTimeout(_drvHandlerTimeout);
                     ws.removeEventListener('message', handler);
                     _drvUnlockBtns();
+                    _drvAdicionarSinal({ msg: `❌ Proposta rejeitada: ${d.error.message} | reqProp=${reqProp}`, cor: '#f44' });
                     _drvOpStatusMsg('❌ Proposta rejeitada: ' + d.error.message, '#f44');
                     _drvModo.opBloqueada = false; return;
                 }
                 if (d.proposal?.id) {
                     _drvPropId = d.proposal.id;
-                    _drvChart.propPendente = _drvPropId;  // avisa bot principal para ignorar
+                    _drvChart.propPendente = _drvPropId;
+                    _drvAdicionarSinal({ msg: `📋 Proposta OK id=${_drvPropId.slice(0,8)}… → enviando buy req=${reqBuy}`, cor: '#0ff' });
                     const estEl = document.getElementById('drv-pagamento-est');
                     if (estEl && d.proposal.payout > 0) estEl.textContent = '$' + parseFloat(d.proposal.payout).toFixed(2);
                     ws.send(JSON.stringify({ buy: _drvPropId, price: valor, req_id: reqBuy }));
@@ -34015,14 +34017,18 @@ function drvOperar(direcao) {
                 return;
             }
 
-            // ── Passo 2: captura o buy pelo proposal.id (mais confiável que req_id) ──
-            // A Deriv retorna echo_req.buy = proposal.id enviado no buy
-            if (d.msg_type === 'buy' && _drvPropId) {
+            // ── Passo 2: captura o buy ──────────────────────────────────
+            // Aceita qualquer msg_type:'buy' cujo echo_req.buy bate com propId
+            // OU echo_req.req_id bate com reqBuy
+            if (d.msg_type === 'buy') {
                 const _echoBuy = d.echo_req && d.echo_req.buy;
                 const _echoReq = d.echo_req && d.echo_req.req_id;
-                // Aceita se: echo_req.buy === propId OU echo_req.req_id === reqBuy
+                // Se não temos propId ainda, não é nosso buy
+                if (!_drvPropId) return;
+                // Verifica se é nosso buy
                 if (_echoBuy !== _drvPropId && _echoReq !== reqBuy) return;
-                _drvChart.propPendente = null;  // limpa flag após capturar buy
+                _drvAdicionarSinal({ msg: `🔍 Buy capturado: echoBuy=${_echoBuy ? _echoBuy.slice(0,8)+'…' : 'null'} echoReq=${_echoReq} err=${d.error ? d.error.message : 'ok'}`, cor: d.error ? '#f44' : '#0ff' });
+                _drvChart.propPendente = null;
                 clearTimeout(_drvHandlerTimeout);
                 ws.removeEventListener('message', handler);
                 _drvUnlockBtns();
