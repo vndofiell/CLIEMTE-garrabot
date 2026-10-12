@@ -15744,7 +15744,7 @@ function derivConnectWs(){
       var seen={};
       candles=hist.map(function(c){return{
         time:Number(c.epoch||c.time),open:Number(c.open),high:Number(c.high),
-        low:Number(c.low),close:Number(c.close),volume:1};
+        low:Number(c.low),close:Number(c.close),volume:Number(c.volume||1)};
       }).filter(function(c){
         if(!c.time||!c.open||seen[c.time])return false;
         seen[c.time]=1;return true;
@@ -15753,33 +15753,73 @@ function derivConnectWs(){
       _velaAtual=Object.assign({},ult);
       _lastPreco=ult.close;
       update();analyze();
-      $('connection').textContent='DERIV AO VIVO \u2022 '+candles.length+' velas \u2022 '+sym;
-      $('statusDot').classList.add('live');
-      if(tag){tag.textContent='AO VIVO';tag.style.color='var(--green)';}
+      $('connection').textContent='DERIV \u2022 '+candles.length+' velas \u2022 '+sym+' \u2022 conectando ao vivo...';
+      if(tag){tag.textContent='HIST\u00d3RICO OK';tag.style.color='var(--cyan)';}
+    } else {
+      /* Sem dados do servidor: usa candles sint\u00e9ticos para o gr\u00e1fico aparecer */
+      candles=makeCandles(260);
+      var ult2=candles[candles.length-1];
+      _velaAtual=Object.assign({},ult2);
+      _lastPreco=ult2.close;
+      update();analyze();
+      $('connection').textContent='MODO OFFLINE \u2022 dados simulados';
+      if(tag){tag.textContent='SIMULADO';tag.style.color='var(--gold)';}
     }
-    /* 2. Conecta WS para ticks em tempo real */
-    var ws=new WebSocket('wss://ws.binaryws.com/websockets/v3?app_id=36544');
+    /* 2. Conecta WS direto na Deriv para ticks em tempo real */
+    var ws=new WebSocket('wss://ws.binaryws.com/websockets/v3?app_id=1089');
     _derivWs=ws;
     ws.onopen=function(){
       _wsRetry=0;
-      /* Subscreve ticks (igual _drvSubscreverTicks: usa ticks, nao candles) */
-      ws.send(JSON.stringify({ticks:sym,subscribe:1}));
+      /* Primeiro pede historico de candles via WS para ter dados reais */
+      ws.send(JSON.stringify({
+        ticks_history:sym,adjust_start_time:1,count:300,
+        end:'latest',start:1,style:'candles',granularity:gran
+      }));
     };
     ws.onmessage=function(ev){
       var d;try{d=JSON.parse(ev.data);}catch(e){return;}
-      if(d.msg_type==='tick'&&d.tick&&d.tick.symbol===sym){
+      if(d.msg_type==='candles'&&d.candles&&d.candles.length>=5){
+        var seen2={};
+        var nc=d.candles.map(function(c){return{
+          time:Number(c.epoch||c.time),open:Number(c.open),high:Number(c.high),
+          low:Number(c.low),close:Number(c.close),volume:1};
+        }).filter(function(c){
+          if(!c.time||!c.open||seen2[c.time])return false;
+          seen2[c.time]=1;return true;
+        }).sort(function(a,b){return a.time-b.time;});
+        candles=nc;
+        var ult3=candles[candles.length-1];
+        _velaAtual=Object.assign({},ult3);
+        _lastPreco=ult3.close;
+        _lastCandleLen=0;
+        update();analyze();
+        $('connection').textContent='DERIV AO VIVO \u2022 '+candles.length+' velas \u2022 '+sym;
+        $('statusDot').classList.add('live');
+        if(tag){tag.textContent='AO VIVO';tag.style.color='var(--green)';}
+        /* Subscreve ticks apos ter o historico */
+        ws.send(JSON.stringify({ticks:sym,subscribe:1}));
+      } else if(d.msg_type==='tick'&&d.tick&&d.tick.symbol===sym){
         processarTick(Number(d.tick.quote),Number(d.tick.epoch));
+        if(_wsRetry===0&&tag&&tag.textContent!=='AO VIVO'){
+          $('connection').textContent='DERIV AO VIVO \u2022 '+candles.length+' velas \u2022 '+sym;
+          $('statusDot').classList.add('live');
+          tag.textContent='AO VIVO';tag.style.color='var(--green)';
+        }
       } else if(d.error){
         $('connection').textContent='DERIV: '+(d.error.message||'erro');
         if(tag){tag.textContent='ERRO';tag.style.color='var(--red)';}
       }
     };
-    ws.onerror=function(){if(tag){tag.textContent='OFFLINE';tag.style.color='var(--red)';}};
+    ws.onerror=function(){
+      if(tag){tag.textContent='OFFLINE';tag.style.color='var(--red)';}
+      $('connection').textContent='WS: erro de conex\u00e3o';
+    };
     ws.onclose=function(){
       if(_derivWs!==ws)return;
       _wsRetry++;
       var delay=Math.min(30000,3000*Math.pow(2,Math.min(_wsRetry-1,4)));
-      $('connection').textContent='WS: reconectando em '+(delay/1000)+'s...';
+      $('connection').textContent='WS: reconectando em '+(delay/1000)+'s... ('+_wsRetry+')';
+      if(tag){tag.textContent='RECONECTANDO';tag.style.color='var(--gold)';}
       setTimeout(function(){if(_derivWs===ws)derivConnectWs();},delay);
     };
   });
