@@ -9494,7 +9494,7 @@ def _buscar_ticks_ativo(ativo: str, count: int = 60) -> list:
     # Fallback: endpoint WebSocket via HTTP Long-Poll (Deriv JSON API)
     try:
         resp2 = requests.get(
-            f"https://ws.binaryws.com/websockets/v3?app_id=1089",
+            f"https://ws.binaryws.com/websockets/v3?app_id=36544",
             timeout=5, verify=False,
         )
     except Exception:
@@ -9561,7 +9561,7 @@ def _buscar_ticks_ws_sync(ativo: str, count: int = 60) -> list:
             }))
 
         wsapp = _ws.WebSocketApp(
-            "wss://ws.binaryws.com/websockets/v3?app_id=1089",
+            "wss://ws.derivws.com/websockets/v3?app_id=36544",
             on_message=_on_message,
             on_open=_on_open,
         )
@@ -15353,13 +15353,13 @@ def garra_price_action_pro_feed():
             # Mesmo endpoint v3 já usado no scanner do main.py; segundo endpoint
             # como fallback caso o gateway principal esteja indisponível.
             endpoints = (
-                'wss://ws.binaryws.com/websockets/v3?app_id=1089',
-                'wss://ws.derivws.com/websockets/v3?app_id=1089',
+                'wss://ws.derivws.com/websockets/v3?app_id=36544',
+                'wss://ws.binaryws.com/websockets/v3?app_id=36544',
             )
             connect_errors = []
             for endpoint in endpoints:
                 try:
-                    ws = wsclient.create_connection(endpoint, timeout=8, enable_multithread=True)
+                    ws = wsclient.create_connection(endpoint, timeout=15, enable_multithread=True)
                     break
                 except Exception as exc:
                     connect_errors.append(f'{endpoint.split("/")[2]}: {str(exc)[:100]}')
