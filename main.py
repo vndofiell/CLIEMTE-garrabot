@@ -15379,33 +15379,43 @@ $('signalReason').textContent=ok?'Confluência técnica atendida; confirmar apen
 if(series.candle&&typeof series.candle.setMarkers==='function'){series.candle.setMarkers(ok?[{time:candles[candles.length-1].time,position:dir==='CALL'?'belowBar':'aboveBar',color:dir==='CALL'?'#00e88f':'#ff5364',shape:dir==='CALL'?'arrowUp':'arrowDown',text:dir}]:[]);}}
 
 function openModal(){$('cfgAsset').value=$('asset').value;$('cfgTf').value=$('tf').value;$('cfgRsi').value=cfg.rsi;$('cfgConfidence').value=cfg.confidence;$('cfgEmaFast').value=cfg.fast;$('cfgEmaSlow').value=cfg.slow;$('useVolume').checked=cfg.useVolume;$('useMacd').checked=cfg.useMacd;$('useTrend').checked=cfg.useTrend;$('useCandle').checked=cfg.useCandle;$('modal').classList.add('show')}function closeModal(){$('modal').classList.remove('show')}
-let liveSocket=null,liveReconnect=null,liveGeneration=0,liveSymbol=null,liveGranularity=60,liveTickCount=0;
+let liveSocket=null,liveReconnect=null,liveGeneration=0,liveSymbol=null,liveGranularity=60,liveTickCount=0,liveWatchdog=null,liveLastMessage=0,livePing=null,historyLoaded=false;
 const derivSymbols={'Volatility 10 Index':'R_10','Volatility 25 Index':'R_25','Volatility 50 Index':'R_50','Volatility 75 Index':'R_75','Volatility 100 Index':'R_100','EURUSD':'frxEURUSD','GBPUSD':'frxGBPUSD'};
-function setConnection(message,ok=false){$('connection').textContent=message;const dot=document.querySelector('.dot');if(dot)dot.style.background=ok?'var(--green)':'var(--gold)';}
-function stopLiveFeed(){liveGeneration++;if(liveReconnect){clearTimeout(liveReconnect);liveReconnect=null;}if(liveSocket){try{liveSocket.onclose=null;liveSocket.close();}catch(e){}liveSocket=null;}}
+function setConnection(message,ok=false){$('connection').textContent=message;const dot=document.querySelector('.dot');if(dot){dot.style.background=ok?'var(--green)':'var(--gold)';dot.style.boxShadow=ok?'0 0 10px #00e88f88':'0 0 10px #ffc85755';}}
+function stopLiveFeed(){liveGeneration++;if(liveReconnect){clearTimeout(liveReconnect);liveReconnect=null;}if(liveWatchdog){clearTimeout(liveWatchdog);liveWatchdog=null;}if(livePing){clearInterval(livePing);livePing=null;}if(liveSocket){try{liveSocket.onclose=null;liveSocket.onerror=null;liveSocket.close();}catch(e){}liveSocket=null;}}
+function scheduleReconnect(generation,why){if(generation!==liveGeneration)return;setConnection(why+' • reconectando em 3s');if(liveReconnect)clearTimeout(liveReconnect);liveReconnect=setTimeout(()=>{if(generation===liveGeneration)startLiveFeed();},3000);}
 function startLiveFeed(){
-  stopLiveFeed();const generation=liveGeneration;liveSymbol=derivSymbols[$('asset').value]||'R_25';liveGranularity=(Number($('tf').value)||1)*60;liveTickCount=0;
+  stopLiveFeed();const generation=liveGeneration;liveSymbol=derivSymbols[$('asset').value]||'R_25';liveGranularity=(Number($('tf').value)||1)*60;liveTickCount=0;historyLoaded=false;liveLastMessage=Date.now();
   setConnection('CONECTANDO À DERIV • '+liveSymbol);
-  try{liveSocket=new WebSocket('wss://ws.derivws.com/websockets/v3?app_id=1089');}catch(e){setConnection('ERRO AO ABRIR WEBSOCKET');return;}
-  liveSocket.onopen=()=>{if(generation!==liveGeneration)return;setConnection('CONECTADO • CARREGANDO CANDLES');liveSocket.send(JSON.stringify({ticks_history:liveSymbol,adjust_start_time:1,count:500,end:'latest',style:'candles',granularity:liveGranularity}));};
-  liveSocket.onmessage=(event)=>{if(generation!==liveGeneration)return;let msg;try{msg=JSON.parse(event.data);}catch(e){return;}
-    if(msg.error){setConnection('ERRO FEED: '+msg.error.message);return;}
+  try{liveSocket=new WebSocket('wss://ws.derivws.com/websockets/v3?app_id=1089');}catch(e){scheduleReconnect(generation,'ERRO AO ABRIR WEBSOCKET');return;}
+  liveWatchdog=setTimeout(()=>{if(generation===liveGeneration&&(!liveSocket||liveSocket.readyState!==WebSocket.OPEN)){try{liveSocket&&liveSocket.close();}catch(e){}scheduleReconnect(generation,'TEMPO ESGOTADO NA CONEXÃO');}},12000);
+  liveSocket.onopen=()=>{if(generation!==liveGeneration)return;if(liveWatchdog){clearTimeout(liveWatchdog);liveWatchdog=null;}liveLastMessage=Date.now();setConnection('CONECTADO • SOLICITANDO HISTÓRICO');liveSocket.send(JSON.stringify({ticks_history:liveSymbol,adjust_start_time:1,count:500,end:'latest',style:'candles',granularity:liveGranularity}));
+    livePing=setInterval(()=>{if(generation!==liveGeneration)return;if(!liveSocket||liveSocket.readyState!==WebSocket.OPEN)return;if(Date.now()-liveLastMessage>25000){try{liveSocket.close();}catch(e){}scheduleReconnect(generation,'SEM RESPOSTA DA DERIV');return;}try{liveSocket.send(JSON.stringify({ping:1}));}catch(e){scheduleReconnect(generation,'FALHA NO ENVIO');}},10000);
+  };
+  liveSocket.onmessage=(event)=>{if(generation!==liveGeneration)return;liveLastMessage=Date.now();let msg;try{msg=JSON.parse(event.data);}catch(e){setConnection('RESPOSTA INVÁLIDA DA DERIV');return;}
+    if(msg.error){const em=String(msg.error.message||'erro desconhecido');setConnection('ERRO DERIV: '+em);console.error('[GARRA FEED]',msg.error);if(/Invalid app_id|app_id/i.test(em)){scheduleReconnect(generation,'APP_ID REJEITADO');}return;}
+    if(msg.msg_type==='ping'||msg.ping)return;
     if(msg.candles&&Array.isArray(msg.candles)){
-      const loaded=msg.candles.map(c=>({time:Number(c.epoch),open:Number(c.open),high:Number(c.high),low:Number(c.low),close:Number(c.close),volume:0})).filter(c=>Number.isFinite(c.time)&&[c.open,c.high,c.low,c.close].every(Number.isFinite));
-      if(loaded.length>=30){candles=loaded;update();analyze();setConnection('DERIV AO VIVO • '+liveSymbol+' • M'+$('tf').value,true);}
-      liveSocket.send(JSON.stringify({ticks:liveSymbol,subscribe:1}));return;
+      const loaded=msg.candles.map(c=>({time:Number(c.epoch),open:Number(c.open),high:Number(c.high),low:Number(c.low),close:Number(c.close),volume:0})).filter(c=>Number.isFinite(c.time)&&[c.open,c.high,c.low,c.close].every(Number.isFinite)).sort((a,b)=>a.time-b.time);
+      if(loaded.length>=30){candles=loaded;historyLoaded=true;update();analyze();setConnection('HISTÓRICO OK • AGUARDANDO TICKS • '+liveSymbol,true);}
+      else{setConnection('HISTÓRICO INSUFICIENTE ('+loaded.length+' CANDLES)');}
+      // Solicita ticks somente após receber a resposta do histórico.
+      if(liveSocket&&liveSocket.readyState===WebSocket.OPEN)liveSocket.send(JSON.stringify({ticks:liveSymbol,subscribe:1}));
+      return;
     }
     if(msg.tick){const tick=msg.tick,epoch=Number(tick.epoch),price=Number(tick.quote);if(!Number.isFinite(epoch)||!Number.isFinite(price))return;
+      if(!historyLoaded){setConnection('TICK RECEBIDO • AGUARDANDO HISTÓRICO');return;}
       const bucket=Math.floor(epoch/liveGranularity)*liveGranularity;let last=candles[candles.length-1];
       if(!last||bucket>last.time){const open=last?last.close:price;candles.push({time:bucket,open,high:price,low:price,close:price,volume:1});}
       else if(bucket===last.time){last.high=Math.max(last.high,price);last.low=Math.min(last.low,price);last.close=price;last.volume=(last.volume||0)+1;}
       else{return;}
       if(candles.length>600)candles=candles.slice(-600);
-      liveTickCount++;update();analyze();setConnection('DERIV AO VIVO • '+liveSymbol+' • ticks '+liveTickCount,true);
+      liveTickCount++;update();analyze();setConnection('DERIV AO VIVO • '+liveSymbol+' • '+liveTickCount+' TICKS',true);return;
     }
+    if(msg.subscription&&msg.msg_type==='tick')return;
   };
-  liveSocket.onerror=()=>{if(generation===liveGeneration)setConnection('FALHA NO FEED • VERIFIQUE A INTERNET');};
-  liveSocket.onclose=()=>{if(generation!==liveGeneration)return;setConnection('FEED DESCONECTADO • TENTANDO RECONECTAR');liveReconnect=setTimeout(()=>{if(generation===liveGeneration)startLiveFeed();},3000);};
+  liveSocket.onerror=(e)=>{if(generation!==liveGeneration)return;console.error('[GARRA FEED] WebSocket error',e);setConnection('ERRO DE REDE • VERIFIQUE FIREWALL/INTERNET');};
+  liveSocket.onclose=(e)=>{if(generation!==liveGeneration)return;const reason=e&&e.code?('CÓDIGO '+e.code):'CONEXÃO FECHADA';if(livePing){clearInterval(livePing);livePing=null;}scheduleReconnect(generation,'FEED DESCONECTADO ('+reason+')');};
 }
 $('settingsBtn').onclick=openModal;$('settingsBtn2').onclick=openModal;$('closeModal').onclick=closeModal;$('cancelSettings').onclick=closeModal;$('modal').onclick=e=>{if(e.target===$('modal'))closeModal()};$('saveSettings').onclick=()=>{cfg={rsi:Math.max(2,Math.min(50,+$('cfgRsi').value||14)),confidence:Math.max(50,Math.min(95,+$('cfgConfidence').value||70)),fast:Math.max(2,+$('cfgEmaFast').value||9),slow:Math.max(5,+$('cfgEmaSlow').value||21),useVolume:$('useVolume').checked,useMacd:$('useMacd').checked,useTrend:$('useTrend').checked,useCandle:$('useCandle').checked};$('asset').value=$('cfgAsset').value;$('tf').value=$('cfgTf').value;$('modeTag').textContent='M'+$('tf').value;update();analyze();closeModal();startLiveFeed()};$('asset').onchange=()=>{$('assetStat').textContent=$('asset').value;startLiveFeed()};$('tf').onchange=()=>{$('modeTag').textContent='M'+$('tf').value;startLiveFeed()};$('analyzeBtn').onclick=analyze;
 createCharts();candles=makeCandles();update();analyze();startLiveFeed();
