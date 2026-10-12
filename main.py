@@ -15484,7 +15484,17 @@ def garra_price_action_pro_ui():
         "var candles=[],priceChart,rsiChart,macdChart,volumeChart,series={},"
         "rsiSeries,macdLine,macdSignal,macdHist,volSeries;"
         "var cfg={rsi:14,confidence:70,fast:9,slow:21,useVolume:true,useMacd:true,useTrend:true,useCandle:true};"
-        "var signalHistory=[],autoRefreshTimer=null;"
+        "var signalHistory=[];"
+        "var _autoOn=false,_lastAutoSignal='';"
+        "var _derivWs=null;"
+        "var DERIV_MAP={"
+        "'Volatility 10 Index':'R_10',"
+        "'Volatility 25 Index':'R_25',"
+        "'Volatility 50 Index':'R_50',"
+        "'Volatility 75 Index':'R_75',"
+        "'Volatility 100 Index':'R_100',"
+        "'EURUSD':'frxEURUSD',"
+        "'GBPUSD':'frxGBPUSD'};"
         "function makeCandles(n){n=n||260;var arr=[],p=10000,now=Math.floor(Date.now()/60000)*60;"
         "for(var i=n;i>0;i--){var drift=Math.sin(i/14)*1.5+(Math.random()-.49)*5;"
         "var o=p,c=Math.max(1,o+drift),h=Math.max(o,c)+Math.random()*2.5,l=Math.min(o,c)-Math.random()*2.5;"
@@ -15633,15 +15643,6 @@ def garra_price_action_pro_ui():
         "$('useTrend').checked=cfg.useTrend;$('useCandle').checked=cfg.useCandle;"
         "$('modal').classList.add('show');}"
         "function closeModal(){$('modal').classList.remove('show');}"
-        "var DERIV_MAP={"
-        "'Volatility 10 Index':'R_10',"
-        "'Volatility 25 Index':'R_25',"
-        "'Volatility 50 Index':'R_50',"
-        "'Volatility 75 Index':'R_75',"
-        "'Volatility 100 Index':'R_100',"
-        "'EURUSD':'frxEURUSD',"
-        "'GBPUSD':'frxGBPUSD'};"
-        "var _derivWs=null;"
         "function derivSymbol(){return DERIV_MAP[$('asset').value]||'R_25';}"
         "function derivGranularity(){return parseInt($('tf').value||1)*60;}"
         "function derivConnectWs(){"
@@ -15685,7 +15686,6 @@ def garra_price_action_pro_ui():
         "$('connection').textContent='WS: erro de conex\u00e3o';"
         "$('statusDot').classList.remove('live');}"
         "_derivWs.onclose=function(){setTimeout(derivConnectWs,5000);}}"
-        "window.addEventListener('load',function(){"
         "$('settingsBtn').onclick=openModal;$('settingsBtn2').onclick=openModal;"
         "$('closeModal').onclick=closeModal;$('cancelSettings').onclick=closeModal;"
         "$('modal').onclick=function(e){if(e.target===$('modal'))closeModal();};"
@@ -15712,16 +15712,11 @@ def garra_price_action_pro_ui():
         "$('btnAuto').textContent=(_autoOn?'\u23f8 AUTO: LIGADO':'\u21bb AUTO: DESLIGADO');"
         "$('btnAuto').className='btn-auto'+(_autoOn?' on':'');};"
         "createCharts();"
-        "if(window.LightweightCharts){"
         "candles=makeCandles();update();analyze();"
         "$('connection').textContent='AGUARDANDO FEED DERIV...';"
         "derivConnectWs();"
-        "}else{"
-        "$('connection').textContent='ERRO: cdn n\u00e3o carregou - recarregue a p\u00e1gina';}"
-        "});"
         "setInterval(updateClock,1000);"
         "setInterval(function(){if(candles.length>0){update();analyze();}},3000);"
-        "var _autoOn=false,_lastAutoSignal='';"
         "function enviarEntrada(dir){"
         "var stake=parseFloat($('tradeStake').value)||1;"
         "var minutos=parseInt($('tradeMinutos').value)||1;"
@@ -15782,7 +15777,6 @@ def garra_price_action_pro_ui():
         "<meta charset='utf-8'>",
         "<meta name='viewport' content='width=device-width,initial-scale=1'>",
         "<title>GARRA PRICE ACTION PRO \u2014 M1</title>",
-        "<script src='https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.2/dist/lightweight-charts.standalone.production.js'></script>",
         "<style>" + _css + "</style>",
         "</head>",
         "<body>",
@@ -15890,6 +15884,7 @@ def garra_price_action_pro_ui():
         "  </div>",
         "  <div class='modalactions'><button id='cancelSettings'>Cancelar</button><button class='primary' id='saveSettings'>Aplicar configura\u00e7\u00e3o</button></div>",
         "</div></div>",
+        "<script src='https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.2/dist/lightweight-charts.standalone.production.js'></script>",
         "<script>" + _js + "</script>",
         "</body></html>",
     ])
