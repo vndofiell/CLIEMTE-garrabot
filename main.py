@@ -15640,10 +15640,30 @@ def garra_price_action_pro_ui():
         "$('analyzeBtn').onclick=analyze;"
         "$('clearHistBtn').onclick=function(){signalHistory=[];renderHistory();};"
         "createCharts();candles=makeCandles();update();analyze();"
-        "$('connection').textContent='DEMO VISUAL \u2022 FEED REAL N\u00c3O CONECTADO';"
+        "$('connection').textContent='DEMO VISUAL \u2022 CARREGANDO FEED REAL...';"
         "setInterval(updateClock,1000);"
         "setInterval(function(){if(candles.length){update();analyze();}},3000);"
         "startAutoRefresh();"
+        "function fetchDerivCandles(){"
+        "var ativo=encodeURIComponent($('asset').value);"
+        "var tf=$('tf').value||'1';"
+        "fetch('/garra-price-action-pro/candles?ativo='+ativo+'&tf='+tf+'&count=260')"
+        ".then(function(r){return r.json();})"
+        ".then(function(d){"
+        "if(d.ok&&Array.isArray(d.candles)&&d.candles.length>=30){"
+        "if(window.GARRA_PRICE_ACTION_PRO&&window.GARRA_PRICE_ACTION_PRO.setCandles(d.candles)){"
+        "$('connection').textContent='DERIV AO VIVO \u2022 '+d.total+' VELAS \u2022 '+d.symbol;"
+        "$('statusDot').classList.add('live');"
+        "}}else{"
+        "$('connection').textContent='DEMO VISUAL \u2022 FEED REAL N\u00c3O DISPON\u00cdVEL';"
+        "$('statusDot').classList.remove('live');"
+        "}})"
+        ".catch(function(){$('connection').textContent='DEMO VISUAL \u2022 SEM CONEX\u00c3O';});"
+        "}"
+        "fetchDerivCandles();"
+        "var _papFetchInterval=setInterval(fetchDerivCandles,25000);"
+        "$('asset').addEventListener('change',function(){clearInterval(_papFetchInterval);fetchDerivCandles();_papFetchInterval=setInterval(fetchDerivCandles,25000);});"
+        "$('tf').addEventListener('change',function(){clearInterval(_papFetchInterval);fetchDerivCandles();_papFetchInterval=setInterval(fetchDerivCandles,25000);});"
         "window.GARRA_PRICE_ACTION_PRO={"
         "setCandles:function(data){"
         "if(!Array.isArray(data)||data.length<30)return false;"
@@ -15773,6 +15793,182 @@ def garra_price_action_pro_ui():
     return Response(page, mimetype='text/html; charset=utf-8', headers={'Cache-Control': 'no-store'})
 
 
+# ── API de candles reais da Deriv para o GARRA PRICE ACTION PRO ──────────────
+_DERIV_SYMBOL_MAP = {
+    "Volatility 10 Index":  "R_10",
+    "Volatility 25 Index":  "R_25",
+    "Volatility 50 Index":  "R_50",
+    "Volatility 75 Index":  "R_75",
+    "Volatility 100 Index": "R_100",
+    "EURUSD":               "frxEURUSD",
+    "GBPUSD":               "frxGBPUSD",
+    "AUDUSD":               "frxAUDUSD",
+    "USDJPY":               "frxUSDJPY",
+}
+
+def _deriv_candles_ws(symbol: str, granularity: int = 60, count: int = 260) -> list:
+    """
+    Busca candles OHLCV via WebSocket público da Deriv (app_id=1089).
+    Retorna lista de dicts {time, open, high, low, close, volume} ou [].
+    granularity: segundos por vela (60=M1, 300=M5, 900=M15)
+    """
+    try:
+        import websocket as _ws
+        import threading as _th
+
+        result = []
+        done   = _th.Event()
+
+        def _on_message(ws, raw):
+            try:
+                d = json.loads(raw)
+                if d.get("msg_type") == "candles":
+                    for c in d.get("candles", []):
+                        ts    = int(c.get("epoch", 0))
+                        o     = float(c.get("open",  0))
+                        h     = float(c.get("high",  0))
+                        lo    = float(c.get("low",   0))
+                        cl    = float(c.get("close", 0))
+                        vol   = float(c.get("ask", 1) or 1)  # Deriv não envia volume real
+                        if ts and o:
+                            result.append({"time": ts, "open": o, "high": h,
+                                           "low": lo, "close": cl, "volume": vol})
+                    done.set()
+                    ws.close()
+                elif d.get("error"):
+                    done.set()
+                    ws.close()
+            except Exception:
+                done.set()
+
+        def _on_open(ws):
+            ws.send(json.dumps({
+                "ticks_history": symbol,
+                "adjust_start_time": 1,
+                "count": count,
+                "end": "latest",
+                "start": 1,
+                "style": "candles",
+                "granularity": granularity,
+            }))
+
+        def _on_error(ws, err):
+            done.set()
+
+        wsapp = _ws.WebSocketApp(
+            "wss://ws.binaryws.com/websockets/v3?app_id=1089",
+            on_open=_on_open,
+            on_message=_on_message,
+            on_error=_on_error,
+        )
+        t = _th.Thread(target=lambda: wsapp.run_forever(ping_interval=0), daemon=True)
+        t.start()
+        done.wait(timeout=12)
+        result.sort(key=lambda x: x["time"])
+        return result
+    except Exception:
+        return []
+
+
+def _deriv_candles_http(symbol: str, granularity: int = 60, count: int = 260) -> list:
+    """
+    Fallback: tenta buscar candles via requisição HTTP ao endpoint público Deriv.
+    """
+    try:
+        end_ts  = int(__import__("time").time())
+        start_ts = end_ts - granularity * count
+        resp = requests.post(
+            "https://api.deriv.com/",
+            json={
+                "ticks_history": symbol,
+                "adjust_start_time": 1,
+                "count": count,
+                "end": "latest",
+                "start": 1,
+                "style": "candles",
+                "granularity": granularity,
+            },
+            timeout=10,
+            verify=False,
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            candles_raw = data.get("candles", [])
+            result = []
+            for c in candles_raw:
+                ts  = int(c.get("epoch", 0))
+                o   = float(c.get("open",  0))
+                h   = float(c.get("high",  0))
+                lo  = float(c.get("low",   0))
+                cl  = float(c.get("close", 0))
+                if ts and o:
+                    result.append({"time": ts, "open": o, "high": h,
+                                   "low": lo, "close": cl, "volume": 1.0})
+            result.sort(key=lambda x: x["time"])
+            return result
+    except Exception:
+        pass
+    return []
+
+
+# Cache simples para não sobrecarregar o WebSocket da Deriv
+_PAP_CANDLE_CACHE: dict = {}
+_PAP_CACHE_LOCK = threading.Lock()
+
+
+@app.route('/garra-price-action-pro/candles', methods=['GET'])
+def garra_pap_candles():
+    """
+    Retorna candles reais da Deriv para o painel GARRA PRICE ACTION PRO.
+    Parâmetros:
+      ativo      — nome exibido (ex: "Volatility 25 Index") ou símbolo direto (ex: "R_25")
+      tf         — timeframe em minutos: 1, 5 ou 15 (default: 1)
+      count      — quantidade de velas (default: 260, max: 500)
+    Cache: 25s para M1, 60s para M5, 120s para M15.
+    """
+    ativo_nome = request.args.get("ativo", "Volatility 25 Index")
+    tf_min     = max(1, min(60, int(request.args.get("tf", 1))))
+    count      = max(30, min(500, int(request.args.get("count", 260))))
+
+    # Resolve o símbolo Deriv
+    symbol = _DERIV_SYMBOL_MAP.get(ativo_nome, ativo_nome)
+    granularity = tf_min * 60  # minutos → segundos
+
+    cache_ttl = 25 if tf_min == 1 else (60 if tf_min == 5 else 120)
+    cache_key = f"{symbol}_{tf_min}"
+
+    import time as _time
+    now_ts = _time.time()
+
+    # Verifica cache
+    with _PAP_CACHE_LOCK:
+        cached = _PAP_CANDLE_CACHE.get(cache_key)
+        if cached and (now_ts - cached["ts"]) < cache_ttl:
+            return jsonify({"ok": True, "candles": cached["data"],
+                            "source": "cache", "symbol": symbol,
+                            "total": len(cached["data"])})
+
+    # Busca via WebSocket (preferencial)
+    candles = _deriv_candles_ws(symbol, granularity=granularity, count=count)
+
+    # Fallback HTTP se WS falhou
+    if not candles:
+        candles = _deriv_candles_http(symbol, granularity=granularity, count=count)
+
+    if not candles:
+        return jsonify({"ok": False, "erro": "Falha ao buscar candles da Deriv.",
+                        "candles": [], "symbol": symbol})
+
+    # Garante volume mínimo para o frontend
+    for c in candles:
+        if not c.get("volume") or c["volume"] <= 0:
+            c["volume"] = 1.0
+
+    with _PAP_CACHE_LOCK:
+        _PAP_CANDLE_CACHE[cache_key] = {"data": candles, "ts": now_ts}
+
+    return jsonify({"ok": True, "candles": candles, "source": "deriv",
+                    "symbol": symbol, "total": len(candles)})
 
 
 if __name__ == "__main__":
