@@ -33957,7 +33957,8 @@ function drvOperar(direcao) {
     }
 
     const propPayload = {
-        proposal: 1,
+        proposal:  1,
+        subscribe: 1,   // mantém o proposal vivo até o buy ser enviado
         amount: valor,
         basis: 'stake',
         contract_type: tipoContrato,
@@ -33987,8 +33988,10 @@ function drvOperar(direcao) {
     let _drvPropId = null;
     // Timeout de segurança: remove handler e desbloqueia se não chegar resposta em 15s
     const _drvHandlerTimeout = setTimeout(() => {
+        if (_drvPropId) ws.send(JSON.stringify({ forget: _drvPropId }));
         ws.removeEventListener('message', handler);
         _drvUnlockBtns();
+        _drvChart.propPendente = null;
         _drvModo.opBloqueada = false;
     }, 15000);
 
@@ -34030,7 +34033,8 @@ function drvOperar(direcao) {
                 if (!_drvPropId) return;
                 // Verifica se é nosso buy
                 if (_echoBuy !== _drvPropId && _echoReq !== reqBuy) return;
-                _drvAdicionarSinal({ msg: `🔍 Buy capturado: echoBuy=${_echoBuy ? _echoBuy.slice(0,8)+'…' : 'null'} echoReq=${_echoReq} err=${d.error ? d.error.message : 'ok'}`, cor: d.error ? '#f44' : '#0ff' });
+                // Cancela a subscrição do proposal (subscribe:1) — libera recursos no servidor Deriv
+                if (_drvPropId) ws.send(JSON.stringify({ forget: _drvPropId }));
                 _drvChart.propPendente = null;
                 clearTimeout(_drvHandlerTimeout);
                 ws.removeEventListener('message', handler);
