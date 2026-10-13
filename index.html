@@ -34107,9 +34107,9 @@ async function _drvScannerAnalisarAtivo(sym, periodo) {
         if (ema9Up)    call += 15; else             put  += 15;
         if (rsiVal >= 52 && rsiVal <= 68) call += 15;
         else if (rsiVal >= 32 && rsiVal <= 48) put += 15;
-        else blockers.push('RSI extremo');
+        else if (rsiVal > 75 || rsiVal < 25) blockers.push('RSI extremo');
         if (macdUp)    call += 20; if (macdDown)   put  += 20;
-        if (volOk)     { call += 10; put += 10; } else blockers.push('volume baixo');
+        // Volume: só pontua se tiver dados reais, nunca bloqueia
         if (padraoCall) call += 15; if (padraoPut)  put  += 15;
 
         const dir  = call > put ? 'CALL' : put > call ? 'PUT' : null;
@@ -34119,14 +34119,16 @@ async function _drvScannerAnalisarAtivo(sym, periodo) {
         if (dir === 'CALL') {
             if (!macdUp)   blockers.push('MACD ❌');
             if (!trendUp)  blockers.push('tendência ❌');
-            if (bearC && !padraoCall) blockers.push('vela ❌');
+            // Vela só bloqueia se fortemente contrária (corpo > 60% da amplitude)
+            const _a = vela.high - vela.low;
+            if (bearC && _a > 0 && Math.abs(vela.close - vela.open) / _a >= 0.6 && !padraoCall) blockers.push('vela ❌');
         }
         if (dir === 'PUT') {
             if (!macdDown)  blockers.push('MACD ❌');
             if (!trendDown) blockers.push('tendência ❌');
-            if (bullC && !padraoPut) blockers.push('vela ❌');
+            const _a = vela.high - vela.low;
+            if (bullC && _a > 0 && Math.abs(vela.close - vela.open) / _a >= 0.6 && !padraoPut) blockers.push('vela ❌');
         }
-        if (!volOk) blockers.push('vol ❌');
         const ok = best >= _drvScannerScoreMin && blockers.length === 0;
         return { sym, nome:'', dir, score: best, ok, blockers, rsiVal, macdUp, trendUp, ema9Up, volOk, padraoCall, padraoPut };
     } catch(_) { return null; }
@@ -34542,21 +34544,25 @@ function _drvPriceActionProAnalisar(vela) {
     if (ema9Up)  call += 15;
     else         put  += 15;
 
-    // 3. RSI (+15 ou bloqueia)
+    // 3. RSI (+15 ou bloqueia apenas se extremo)
     if (rsiVal >= 52 && rsiVal <= 68) call += 15;
     else if (rsiVal >= 32 && rsiVal <= 48) put += 15;
-    else blockers.push(`RSI extremo (${rsiVal.toFixed(1)})`);
+    else if (rsiVal > 75 || rsiVal < 25) blockers.push(`RSI extremo (${rsiVal.toFixed(1)})`);
+    // RSI entre 68-75 ou 25-32: zona neutra, não bloqueia mas não pontua
 
     // 4. MACD (+20)
     if (macdUp)   call += 20;
     if (macdDown) put  += 20;
 
-    // 5. Volume relativo (+10)
-    if (volOk) { call += 10; put += 10; }
+    // 5. Volume — só pontua se tiver volume real (ticks > 1); nunca bloqueia
+    // (candles históricos da Deriv não têm volume — ignorado como filtro)
+    const temVolReal = vols.some(v => v > 1);
+    if (temVolReal && volOk) { call += 10; put += 10; }
 
     // 6. Price Action / vela (+15)
     if (padraoCall) call += 15;
     if (padraoPut)  put  += 15;
+    // Vela neutra (doji): não penaliza
 
     // ── Direção e confluência ─────────────────────────────────
     const dir  = call > put ? 'CALL' : put > call ? 'PUT' : null;
@@ -34564,20 +34570,23 @@ function _drvPriceActionProAnalisar(vela) {
 
     if (!dir) return null;
 
-    // ── Filtros bloqueantes ───────────────────────────────────
+    // ── Filtros bloqueantes (apenas os críticos) ──────────────
     if (dir === 'CALL') {
-        if (!macdUp)    blockers.push('MACD não confirmou');
-        if (!trendUp)   blockers.push('tendência principal baixista');
-        if (bearCandle && !padraoCall) blockers.push('candle não confirmou a direção');
+        if (!macdUp)   blockers.push('MACD não confirmou');
+        if (!trendUp)  blockers.push('tendência baixista');
+        // Vela vermelha só bloqueia se for fortemente bearish (corpo > 60% da amplitude)
+        if (bearCandle && amp > 0 && Math.abs(corpo) / amp >= 0.6 && !padraoCall)
+            blockers.push('candle não confirmou a direção');
     }
     if (dir === 'PUT') {
         if (!macdDown)  blockers.push('MACD não confirmou');
-        if (!trendDown) blockers.push('tendência principal altista');
-        if (bullCandle && !padraoPut) blockers.push('candle não confirmou a direção');
+        if (!trendDown) blockers.push('tendência altista');
+        if (bullCandle && amp > 0 && Math.abs(corpo) / amp >= 0.6 && !padraoPut)
+            blockers.push('candle não confirmou a direção');
     }
-    if (!volOk) blockers.push('volume abaixo da média');
+    // Volume NÃO bloqueia — apenas pontua quando real
 
-    const ok = best >= 60 && blockers.length === 0;
+    const ok = best >= 55 && blockers.length === 0;
 
     return { dir: dir.toLowerCase(), confianca: best, ok, blockers,
         detalhes: { rsiVal, macdUp, trendUp, trendDown, ema9Up, volOk, padraoCall, padraoPut, bullCandle, bearCandle } };
