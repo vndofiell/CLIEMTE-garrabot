@@ -1821,8 +1821,18 @@
         <div class="modal-sub">Clique em uma estratégia para configurar</div>
         <div class="modal-grid" id="lista-estrategias"></div>
 
+        <!-- ── JUROS COMPOSTOS ── -->
+        <div style="margin:14px 0 6px; font-size:0.62rem; color:#444; letter-spacing:2px; font-family:'Share Tech Mono';">▸ JUROS COMPOSTOS</div>
+        <div style="display:flex; flex-direction:column; gap:6px; margin-bottom:8px;">
+            <button class="modal-item-btn" onclick="fecharModal('modal-estrategia'); jcAbrirPlanilha();"
+                style="border-color:rgba(0,255,100,0.5); color:#00ff64; text-align:left;">
+                💹 Planilha JC
+                <span class="modal-desc" id="modal-est-jc-status">Inativo</span>
+            </button>
+        </div>
+
         <!-- ── FERRAMENTAS AVANÇADAS ── -->
-        <div style="margin:14px 0 6px; font-size:0.62rem; color:#444; letter-spacing:2px; font-family:'Share Tech Mono';">▸ FERRAMENTAS AVANÇADAS</div>
+        <div style="margin:8px 0 6px; font-size:0.62rem; color:#444; letter-spacing:2px; font-family:'Share Tech Mono';">▸ FERRAMENTAS AVANÇADAS</div>
         <div style="display:flex; flex-direction:column; gap:6px; margin-bottom:14px;">
             <button class="modal-item-btn" onclick="fecharModal('modal-estrategia'); abrirModalCyberSort();"
                 style="border-color:rgba(0,255,65,0.45); color:#00ff41; text-align:left;">
@@ -29451,6 +29461,24 @@ window.addEventListener('load', () => {
         </div>
       </div>
 
+      <!-- Planilha JC — integração com meta diária como Stop Win -->
+      <div style="padding:8px 12px; border-bottom:1px solid rgba(255,255,255,0.06);">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:5px;">
+          <span style="font-size:0.62rem; color:#555; letter-spacing:1px;">JUROS COMPOSTOS</span>
+          <span id="drv-jc-meta-badge" style="display:none; font-size:0.58rem; color:#00ff64; background:rgba(0,255,100,0.08); border:1px solid rgba(0,255,100,0.3); padding:2px 6px; border-radius:3px; font-family:'Share Tech Mono';">📋 META ATIVA</span>
+        </div>
+        <button onclick="jcAbrirPlanilha()"
+            style="width:100%; padding:7px; background:rgba(0,255,100,0.06); border:1px solid rgba(0,255,100,0.35);
+                   color:#00ff64; font-family:'Share Tech Mono'; font-size:0.7rem;
+                   cursor:pointer; border-radius:4px; text-align:left; letter-spacing:1px;">
+          💹 Planilha JC
+          <span id="drv-jc-status" style="font-size:0.6rem; color:#555; margin-left:6px;">Inativo</span>
+        </button>
+        <div id="drv-jc-meta-info" style="display:none; margin-top:5px; font-size:0.6rem; color:#00ff64; font-family:'Share Tech Mono';">
+          🎯 Stop Win = Meta do Dia: <span id="drv-jc-meta-val" style="font-weight:bold;">$--</span>
+        </div>
+      </div>
+
       <!-- Stop Win / Stop Loss — inputs ocultos, valores sincronizados do painel principal -->
       <input id="drv-stop-win"  type="hidden" value="0">
       <input id="drv-stop-loss" type="hidden" value="999">
@@ -35206,6 +35234,7 @@ function drvResetarPlacar() {
 
 // ── Barra de stats — sincroniza com o bot principal ───────
 let _drvSbTimer = null;
+const _drvSb    = {};   // cache para fetch JC dentro de _drvSbAtualizar
 function _drvSbAtualizar() {
     const g = id => { const el = document.getElementById(id); return el ? el.textContent.trim() : ''; };
     const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
@@ -35255,11 +35284,41 @@ function _drvSbAtualizar() {
         ? (_DRV_MGR_MAP[_drvMgr.tipo] || _drvMgr.tipo || '--').replace(/[^\w\s]/gu,'').trim()
         : g('hd-mgmt');
     set('drv-hd-mgmt', _drvMgrNome);
-    // Sincroniza SW/SL ocultos com os valores do bot principal
+    // Sincroniza SW/SL ocultos — se JC ativo, Stop Win = meta do dia
     const _drvSwEl = document.getElementById('drv-stop-win');
     const _drvSlEl = document.getElementById('drv-stop-loss');
-    if (_drvSwEl && typeof bot !== 'undefined') _drvSwEl.value = bot.stopWin  < 999 ? bot.stopWin  : 0;
     if (_drvSlEl && typeof bot !== 'undefined') _drvSlEl.value = bot.stopLoss < 999 ? bot.stopLoss : 999;
+    // Tenta buscar meta JC (usa cache para não fazer fetch a cada segundo)
+    if (_drvSwEl) {
+        if (!_drvSb._jcTs || Date.now() - _drvSb._jcTs > 5000) {
+            _drvSb._jcTs = Date.now();
+            fetch('/jc-meta').then(r => r.json()).then(m => {
+                const badge   = document.getElementById('drv-jc-meta-badge');
+                const info    = document.getElementById('drv-jc-meta-info');
+                const metaVal = document.getElementById('drv-jc-meta-val');
+                const status  = document.getElementById('drv-jc-status');
+                const statusMod = document.getElementById('modal-est-jc-status');
+                if (m.ativo && m.meta_hoje > 0) {
+                    // JC ativo: Stop Win = meta do dia
+                    _drvSwEl.value = m.meta_hoje.toFixed(2);
+                    if (badge)   { badge.style.display = 'inline'; }
+                    if (info)    { info.style.display = 'block'; }
+                    if (metaVal) { metaVal.textContent = '$' + m.meta_hoje.toFixed(2); }
+                    if (status)  { status.textContent = `Dia ${m.dia_atual} • Meta $${m.meta_hoje.toFixed(2)}`; status.style.color = '#00ff64'; }
+                    if (statusMod) { statusMod.textContent = `Dia ${m.dia_atual} • Meta $${m.meta_hoje.toFixed(2)}`; statusMod.style.color = '#00ff64'; }
+                } else {
+                    // JC inativo: usa SW do bot principal normalmente
+                    if (typeof bot !== 'undefined') _drvSwEl.value = bot.stopWin < 999 ? bot.stopWin : 0;
+                    if (badge)   { badge.style.display = 'none'; }
+                    if (info)    { info.style.display = 'none'; }
+                    if (status)  { status.textContent = 'Inativo'; status.style.color = '#555'; }
+                    if (statusMod) { statusMod.textContent = 'Inativo'; statusMod.style.color = '#555'; }
+                }
+            }).catch(() => {
+                if (typeof bot !== 'undefined' && _drvSwEl) _drvSwEl.value = bot.stopWin < 999 ? bot.stopWin : 0;
+            });
+        }
+    }
     set('drv-hd-strat',  g('hd-strat'));
     set('drv-hd-timer',  g('hd-timer'));
 }
