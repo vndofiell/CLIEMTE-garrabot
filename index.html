@@ -1820,6 +1820,42 @@
         <div class="modal-title">📊 ESTRATÉGIA</div>
         <div class="modal-sub">Clique em uma estratégia para configurar</div>
         <div class="modal-grid" id="lista-estrategias"></div>
+
+        <!-- ── FERRAMENTAS AVANÇADAS ── -->
+        <div style="margin:14px 0 6px; font-size:0.62rem; color:#444; letter-spacing:2px; font-family:'Share Tech Mono';">▸ FERRAMENTAS AVANÇADAS</div>
+        <div style="display:flex; flex-direction:column; gap:6px; margin-bottom:14px;">
+            <button class="modal-item-btn" onclick="fecharModal('modal-estrategia'); abrirModalCyberSort();"
+                style="border-color:rgba(0,255,65,0.45); color:#00ff41; text-align:left;">
+                ⚙ Cyber Sort
+                <span class="modal-desc">Visualizar Quick Sort</span>
+            </button>
+            <button class="modal-item-btn" onclick="fecharModal('modal-estrategia'); ltsAbrirModal();"
+                style="border-color:rgba(255,0,128,0.45); color:#ff4fa3; text-align:left;">
+                🔴 Live Tick Sort
+                <span class="modal-desc">Sort em tempo real</span>
+            </button>
+            <button class="modal-item-btn" onclick="fecharModal('modal-estrategia'); dbsAbrirModal();"
+                style="border-color:rgba(99,102,241,0.45); color:#a5b4fc; text-align:left;">
+                🎰 Digit Barrier 356
+                <span class="modal-desc">Scanner multi-ativo</span>
+            </button>
+            <button class="modal-item-btn" onclick="fecharModal('modal-estrategia'); dsAbrirModal();"
+                style="border-color:rgba(250,204,21,0.45); color:#facc15; text-align:left;">
+                🎯 Digit Sniper PRO
+                <span class="modal-desc">Scanner de dígitos</span>
+            </button>
+            <button class="modal-item-btn" onclick="fecharModal('modal-estrategia'); dmAbrirModal();"
+                style="border-color:rgba(0,255,136,0.45); color:#00ff88; text-align:left;">
+                🧬 Digit Matrix PRO
+                <span class="modal-desc">Matrix de análise</span>
+            </button>
+            <button class="modal-item-btn" onclick="fecharModal('modal-estrategia'); window.open('/garra-price-action-pro','_blank');"
+                style="border-color:rgba(56,189,248,0.45); color:#38bdf8; text-align:left;">
+                📈 Garra Price Action PRO
+                <span class="modal-desc">EMA · RSI · MACD · Volume</span>
+            </button>
+        </div>
+
         <button class="modal-cancel" onclick="fecharModal('modal-estrategia')">✕ Cancelar</button>
     </div>
 </div>
@@ -2631,42 +2667,6 @@
         style="border-color:rgba(255,189,46,0.5);color:#fbbf24;font-size:0.78rem;padding:5px 10px;margin-top:4px;">
         💳 Conta Secundária
         <span class="cmd-label" id="lbl-multi-contas" style="color:#57606a;">Demo / Real</span>
-    </button>
-    <button class="cmd-btn" id="btn-cyber-sort"
-        onclick="abrirModalCyberSort()"
-        style="border-color:rgba(0,255,65,0.5);color:#00ff41;font-size:0.78rem;padding:5px 10px;margin-top:4px;">
-        ⚙ Cyber Sort
-        <span class="cmd-label" style="color:#57606a;">Visualizar Quick Sort</span>
-    </button>
-    <button class="cmd-btn" id="btn-live-tick-sort"
-        onclick="ltsAbrirModal()"
-        style="border-color:rgba(255,0,128,0.55);color:#ff4fa3;font-size:0.78rem;padding:5px 10px;margin-top:4px;">
-        🔴 Live Tick Sort
-        <span class="cmd-label" style="color:#57606a;">Sort em tempo real</span>
-    </button>
-    <button class="cmd-btn" id="btn-digit-barrier-356"
-        onclick="dbsAbrirModal()"
-        style="border-color:rgba(99,102,241,0.55);color:#a5b4fc;font-size:0.78rem;padding:5px 10px;margin-top:4px;">
-        🎰 Digit Barrier 356
-        <span class="cmd-label" style="color:#57606a;">Scanner multi-ativo</span>
-    </button>
-    <button class="cmd-btn" id="btn-digit-sniper"
-        onclick="dsAbrirModal()"
-        style="border-color:rgba(250,204,21,0.5);color:#facc15;font-size:0.78rem;padding:5px 10px;margin-top:4px;">
-        🎯 Digit Sniper PRO
-        <span class="cmd-label" style="color:#57606a;">Scanner de dígitos</span>
-    </button>
-    <button class="cmd-btn" id="btn-digit-matrix"
-        onclick="dmAbrirModal()"
-        style="border-color:rgba(0,255,136,0.5);color:#00ff88;font-size:0.78rem;padding:5px 10px;margin-top:4px;">
-        🧬 Digit Matrix PRO
-        <span class="cmd-label" style="color:#57606a;">Matrix de análise</span>
-    </button>
-    <button class="cmd-btn" id="btn-garra-price-action-pro"
-        onclick="window.open('/garra-price-action-pro','_blank')"
-        style="border-color:rgba(56,189,248,0.55);color:#38bdf8;font-size:0.78rem;padding:5px 10px;margin-top:4px;">
-        📈 Garra Price Action PRO
-        <span class="cmd-label" style="color:#57606a;">EMA · RSI · MACD · Volume</span>
     </button>
 
     <!-- ── MODAL DIGIT MATRIX SNIPER PRO ────────────────────────── -->
