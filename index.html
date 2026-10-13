@@ -34276,12 +34276,21 @@ async function drvScannerVarrer() {
 
     // Melhor candidato
     const melhor = resultados.find(r => r.ok && r.dir);
+
+    // Se há operação ativa, exibe aviso no status e não troca de par
+    if (_drvChart.opAtiva) {
+        if (statusEl) statusEl.textContent = `⏸ Op. em andamento — scanner aguardando resultado...`;
+        _drvScannerRodando = false;
+        return;
+    }
+
     if (statusEl) statusEl.textContent = melhor
         ? `✅ Melhor: ${melhor.nome} → ${melhor.dir} (${melhor.score}pts)`
         : `Nenhum sinal limpo — aguardando...`;
 
     // ── Troca automática de mercado e auto-operar ───────────
-    if (_drvScannerMultiAtivo && melhor && !_drvScannerPausado) {
+    // Não troca de par enquanto houver operação ativa — aguarda o resultado primeiro
+    if (_drvScannerMultiAtivo && melhor && !_drvScannerPausado && !_drvChart.opAtiva) {
         // Troca o gráfico automaticamente para o melhor mercado
         await _drvScannerTrocarAtivo(melhor.sym, melhor.nome, melhor.dir, melhor.score);
         // Exibe último sinal no painel
