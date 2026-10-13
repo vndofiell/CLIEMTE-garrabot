@@ -29497,38 +29497,49 @@ window.addEventListener('load', () => {
           border:1px solid #333; background:rgba(0,0,0,0.3);">
       </div>
 
-      <!-- Painel de sinais automáticos -->
-      <div id="drv-painel-sinais" style="display:none; border-top:1px solid rgba(255,255,255,0.06); width:100%;">
-        <div style="padding:8px 12px 6px; display:flex; justify-content:space-between; align-items:center;">
+      <!-- Painel de sinais automáticos — sempre visível -->
+      <div id="drv-painel-sinais" style="display:block; border-top:1px solid rgba(255,255,255,0.06); width:100%;">
+
+        <!-- Botão START/STOP grande e sempre visível -->
+        <div style="padding:10px 12px 6px;">
+          <button id="drv-sinais-toggle"
+              onclick="drvToggleAnalise()"
+              style="width:100%; padding:13px 8px;
+                     background:rgba(0,255,65,0.1);
+                     border:2px solid #00ff41; color:#00ff41;
+                     font-family:'Share Tech Mono'; font-size:0.85rem;
+                     font-weight:bold; letter-spacing:2px;
+                     cursor:pointer; border-radius:6px;
+                     display:flex; align-items:center; justify-content:center; gap:8px;">
+            <span style="font-size:1.1rem;">▶</span> INICIAR OPERAÇÕES
+          </button>
+        </div>
+
+        <!-- Linha de filtros: título + MTF + S/R -->
+        <div style="padding:2px 12px 6px; display:flex; justify-content:space-between; align-items:center;">
           <span id="drv-sinais-titulo" style="font-size:0.6rem; color:#555; letter-spacing:1px;">ANÁLISE</span>
           <div style="display:flex; gap:5px; align-items:center;">
-            <!-- Toggle MTF -->
             <button id="drv-mtf-toggle"
-                title="Filtro Multi-Timeframe: valida TFs superiores antes de entrar"
+                title="Filtro Multi-Timeframe"
                 style="font-size:0.56rem; padding:2px 6px; background:rgba(0,255,255,0.08);
                        border:1px solid rgba(0,255,255,0.5); color:#0ff;
                        cursor:pointer; border-radius:3px; font-family:'Share Tech Mono';"
                 onclick="drvToggleMtf()">📊 MTF: ON</button>
-            <!-- Toggle S/R (Topo/Fundo) -->
             <button id="drv-sr-toggle"
-                title="Filtro S/R: bloqueia entradas perto de topos e fundos recentes"
+                title="Filtro S/R: Topo/Fundo"
                 style="font-size:0.56rem; padding:2px 6px; background:rgba(255,189,46,0.08);
                        border:1px solid rgba(255,189,46,0.5); color:#ffbd2e;
                        cursor:pointer; border-radius:3px; font-family:'Share Tech Mono';"
                 onclick="drvToggleSR()">📌 S/R: ON</button>
-            <button id="drv-sinais-toggle"
-                style="font-size:0.58rem; padding:2px 7px; background:transparent;
-                       border:1px solid rgba(0,255,65,0.5); color:#00ff41;
-                       cursor:pointer; border-radius:3px; font-family:'Share Tech Mono';"
-                onclick="drvToggleAnalise()">▶ INICIAR</button>
           </div>
         </div>
+
         <div id="drv-sinais-lista" style="
             padding:0 6px 8px;
             display:flex; flex-direction:column; gap:4px;
             overflow-y:auto; max-height:420px; min-height:80px;">
           <div style="color:#333; font-size:0.62rem; text-align:center; margin-top:20px; padding:0 8px;">
-            Clique em ▶ INICIAR para começar a análise
+            Pressione ▶ INICIAR OPERAÇÕES para começar
           </div>
         </div>
       </div>
@@ -33700,16 +33711,8 @@ function drvChartAbrir() {
         if (l) l.textContent = tipo + ' • $' + parseFloat(bot._lastBalance).toFixed(2);
     }
 
-    // Painel de sinais sempre visível e análise iniciada automaticamente ao abrir
-    const ps = document.getElementById('drv-painel-sinais');
-    if (ps) ps.style.display = 'block';
-    if (!_drvModo.rodando) {
-        _drvModo.rodando = true;
-        _drvModo.opBloqueada = false;
-        const btn = document.getElementById('drv-sinais-toggle');
-        if (btn) { btn.textContent = '⏹ PARAR'; btn.style.borderColor = 'rgba(239,83,80,0.6)'; btn.style.color = '#ef4444'; }
-        _drvAdicionarSinal({ msg: `🔍 Análise iniciada — ${_drvModo.modo}`, cor: '#00ff41' });
-    }
+    // Garante que o botão START reflita o estado atual ao abrir
+    _drvAtualizarBotaoStart();
 
     _drvSbIniciar();   // inicia atualização da barra de stats
     drvChartCarregar();
@@ -33811,6 +33814,23 @@ function drvSetContrato(ct) {
 }
 
 // ── Modos ─────────────────────────────────────────────────
+// Atualiza visual do botão START/STOP grande
+function _drvAtualizarBotaoStart() {
+    const btn = document.getElementById('drv-sinais-toggle');
+    if (!btn) return;
+    if (_drvModo.rodando) {
+        btn.innerHTML = '<span style="font-size:1.1rem;">⏹</span> PARAR OPERAÇÕES';
+        btn.style.background    = 'rgba(239,83,80,0.12)';
+        btn.style.borderColor   = '#ef4444';
+        btn.style.color         = '#ef4444';
+    } else {
+        btn.innerHTML = '<span style="font-size:1.1rem;">▶</span> INICIAR OPERAÇÕES';
+        btn.style.background    = 'rgba(0,255,65,0.10)';
+        btn.style.borderColor   = '#00ff41';
+        btn.style.color         = '#00ff41';
+    }
+}
+
 function drvSelecionarModo(modo) {
     _drvModo.modo = modo;
     document.querySelectorAll('.drv-modo-item').forEach(el => {
@@ -33819,28 +33839,22 @@ function drvSelecionarModo(modo) {
         el.style.borderColor = on ? 'rgba(0,255,65,0.5)' : 'rgba(255,255,255,0.06)';
         el.style.background  = on ? 'rgba(0,255,65,0.06)' : 'transparent';
     });
-    const ps = document.getElementById('drv-painel-sinais');
-    if (ps) ps.style.display = 'block'; // sempre visível — análise ativa em todos os modos
     const t = document.getElementById('drv-sinais-titulo');
     if (t) t.textContent = ({manual:'ANÁLISE GARRA',price_action:'PRICE ACTION',fluxo:'FLUXO PRO',automatico:'AUTOMÁTICO',hma:'GARRA AI HMA'}[modo]) || 'ANÁLISE';
-    // Reinicia limpando bloqueio e agendamento
+    // Limpa bloqueio e agendamento ao trocar de modo (mas não inicia sozinho)
     if (_drvModo.viradaTimer) { clearTimeout(_drvModo.viradaTimer); _drvModo.viradaTimer = null; }
     _drvModo.opBloqueada = false;
-    // Liga análise automática se não estiver rodando
-    if (!_drvModo.rodando) {
-        _drvModo.rodando = true;
-        const btn = document.getElementById('drv-sinais-toggle');
-        if (btn) { btn.textContent = '⏹ PARAR'; btn.style.borderColor = 'rgba(239,83,80,0.6)'; btn.style.color = '#ef4444'; }
-        _drvAdicionarSinal({ msg: `🔍 Análise iniciada — ${t ? t.textContent : modo}`, cor: '#00ff41' });
+    // Se já estava rodando, registra a troca no painel
+    if (_drvModo.rodando) {
+        _drvAdicionarSinal({ msg: `🔄 Modo alterado — ${t ? t.textContent : modo}`, cor: '#0ff' });
     }
+    _drvAtualizarBotaoStart();
 }
 
 function drvToggleAnalise() {
     _drvModo.rodando = !_drvModo.rodando;
-    const btn = document.getElementById('drv-sinais-toggle');
-    if (btn) { btn.textContent = _drvModo.rodando ? '⏹ PARAR' : '▶ INICIAR'; btn.style.borderColor = _drvModo.rodando ? 'rgba(239,83,80,0.6)' : 'rgba(0,255,65,0.5)'; btn.style.color = _drvModo.rodando ? '#ef4444' : '#00ff41'; }
-    _drvAdicionarSinal({ msg: _drvModo.rodando ? '🔍 Análise iniciada' : '⏹ Análise pausada', cor: _drvModo.rodando ? '#00ff41' : '#ffbd2e' });
-    // Inicia/pausa o cronômetro de sessão junto com a análise
+    _drvAtualizarBotaoStart();
+    _drvAdicionarSinal({ msg: _drvModo.rodando ? '🟢 OPERAÇÕES INICIADAS' : '🔴 OPERAÇÕES PAUSADAS', cor: _drvModo.rodando ? '#00ff41' : '#ef4444' });
     if (_drvModo.rodando) {
         if (typeof _timer !== 'undefined') _timer.iniciar();
         if (typeof tgEnviarInicio === 'function') tgEnviarInicio();
