@@ -33927,10 +33927,17 @@ function drvToggleAnalise() {
     if (_drvModo.rodando) {
         if (typeof _timer !== 'undefined') _timer.iniciar();
         if (typeof tgEnviarInicio === 'function') tgEnviarInicio();
+        // Se o scanner multi estiver ativo, inicia o ciclo junto
+        if (_drvScannerMultiAtivo && !_drvScannerTimer) {
+            drvScannerVarrer();
+            _drvScannerTimer = setInterval(drvScannerVarrer, 10000);
+        }
     } else {
         if (typeof _timer !== 'undefined') _timer.pausar();
         _drvModo.opBloqueada = false;
         if (_drvModo.viradaTimer) { clearTimeout(_drvModo.viradaTimer); _drvModo.viradaTimer = null; }
+        // Para o scanner junto
+        if (_drvScannerTimer) { clearInterval(_drvScannerTimer); _drvScannerTimer = null; }
     }
 }
 
@@ -33994,9 +34001,10 @@ let _drvScannerAberto    = false;
 let _drvScannerAutoAtivo = false;
 let _drvScannerTimer     = null;
 let _drvScannerScoreMin  = 75;
-let _drvScannerRodando   = false;  // evita sobreposição de varreduras
+let _drvScannerRodando   = false;
+let _drvScannerMultiAtivo = false; // scanner multi ligado (integrado ao INICIAR OPERAÇÕES)
 
-// Abre/fecha o painel do scanner
+// Abre/fecha o painel visual do scanner — o scanner em si corre junto com INICIAR OPERAÇÕES
 function drvScannerToggle() {
     _drvScannerAberto = !_drvScannerAberto;
     const p = document.getElementById('drv-scanner-painel');
@@ -34004,14 +34012,31 @@ function drvScannerToggle() {
     if (_drvScannerAberto) {
         if (p) { p.style.display = 'flex'; }
         if (b) { b.style.borderColor = '#0ff'; b.style.color = '#0ff'; b.style.background = 'rgba(0,255,255,0.12)'; }
-        // Inicia ciclo de varredura
+        // Ativa o multi e faz varredura imediata
+        _drvScannerMultiAtivo = true;
         drvScannerVarrer();
-        _drvScannerTimer = setInterval(drvScannerVarrer, 10000);
+        if (!_drvScannerTimer) _drvScannerTimer = setInterval(drvScannerVarrer, 10000);
     } else {
         if (p) { p.style.display = 'none'; }
         if (b) { b.style.borderColor = 'rgba(0,255,255,0.5)'; b.style.color = '#0ff'; b.style.background = 'rgba(0,255,255,0.06)'; }
+        _drvScannerMultiAtivo = false;
         if (_drvScannerTimer) { clearInterval(_drvScannerTimer); _drvScannerTimer = null; }
     }
+}
+
+// Troca o gráfico para o ativo escolhido pelo scanner (atualiza select + candles + ticks)
+async function _drvScannerTrocarAtivo(sym, nome, dir, score) {
+    if (_drvChart.ativo === sym) return; // já está nesse ativo
+    const sel = document.getElementById('drv-ativo-sel');
+    if (sel) sel.value = sym;
+    _drvChart.ativo = sym;
+    _drvAdicionarSinal({ msg: `🔀 MULTI → ${nome} | ${dir} | ${score}pts`, cor: dir === 'CALL' ? '#27c93f' : '#ef4444' });
+    // Atualiza tag no painel análise
+    const tagEl = document.getElementById('drv-ap-tag');
+    const mins = _drvChart.periodo ? Math.round(_drvChart.periodo / 60) : 1;
+    if (tagEl) tagEl.textContent = 'M' + mins;
+    // Recarrega velas e reinicia ticks para o novo ativo
+    await drvChartCarregar();
 }
 
 // Liga/desliga auto-operar
@@ -34145,24 +34170,30 @@ async function drvScannerVarrer() {
         ? `✅ Melhor: ${melhor.nome} → ${melhor.dir} (${melhor.score}pts)`
         : `Nenhum sinal limpo — aguardando...`;
 
-    // Auto-operar se ativo e há sinal e operações não estão bloqueadas
-    if (_drvScannerAutoAtivo && melhor && !_drvModo.opBloqueada && _drvModo.rodando) {
-        // Troca o gráfico para o ativo do melhor sinal e opera
-        const sel = document.getElementById('drv-ativo-sel');
-        if (sel) { sel.value = melhor.sym; }
-        _drvChart.ativo = melhor.sym;
-        // Registra no painel de sinais
-        _drvAdicionarSinal({ msg: `🎯 SCANNER → ${melhor.nome} | ${melhor.dir} | score:${melhor.score}pts`, cor: melhor.dir === 'CALL' ? '#27c93f' : '#ef4444' });
-        // Recarrega candles do ativo escolhido e opera
-        await drvChartCarregar();
-        setTimeout(() => {
-            if (!_drvModo.opBloqueada) drvOperar(melhor.dir.toLowerCase());
-        }, 1500);
-        // Exibe último sinal
+    // ── Troca automática de mercado e auto-operar ───────────
+    // Sempre troca o gráfico para o melhor mercado quando o scanner multi estiver ativo
+    if (_drvScannerMultiAtivo && melhor) {
+        // Troca o gráfico automaticamente (mesmo sem auto-operar)
+        await _drvScannerTrocarAtivo(melhor.sym, melhor.nome, melhor.dir, melhor.score);
+        // Exibe último sinal no painel
         const ul = document.getElementById('drv-scan-ultimo');
         if (ul) {
             ul.style.display = 'block';
-            ul.textContent = `[${agora}] 🎯 ${melhor.nome} → ${melhor.dir} | ${melhor.score}pts`;
+            ul.innerHTML = `[${agora}] 🎯 <b>${melhor.nome}</b> → <span style="color:${melhor.dir==='CALL'?'#27c93f':'#ef4444'}">${melhor.dir}</span> | ${melhor.score}pts`;
+        }
+        // Auto-operar se o botão auto estiver ligado, operações ativas e não bloqueadas
+        if (_drvScannerAutoAtivo && !_drvModo.opBloqueada && _drvModo.rodando) {
+            _drvModo.opBloqueada = true;
+            // Calcula tempo até a virada da vela
+            const _periodo = _drvChart.periodo || 60;
+            const _tsAb    = _drvChart.tsAbertura || (Math.floor(Date.now() / 1000 / _periodo) * _periodo);
+            const _msFalta = Math.max(0, (_tsAb + _periodo) * 1000 - Date.now());
+            const _atraso  = _msFalta < 400 ? 0 : _msFalta;
+            _drvAdicionarSinal({ msg: `⏳ AUTO-MULTI → ${melhor.nome} | ${melhor.dir} | virada em ${(_atraso/1000).toFixed(0)}s`, cor: melhor.dir === 'CALL' ? '#27c93f' : '#ef4444' });
+            setTimeout(() => {
+                if (!_drvModo.rodando) { _drvModo.opBloqueada = false; return; }
+                drvOperar(melhor.dir.toLowerCase());
+            }, _atraso);
         }
     }
 
@@ -34195,16 +34226,9 @@ function _drvScannerRenderizar(resultados, periodo) {
             <span style="text-align:center; font-size:0.8rem;">${r.macdUp?'▲':'▼'}</span>
             <span style="text-align:center; color:${r.volOk?'#27c93f':'#ef4444'}; font-size:0.8rem;">${r.volOk?'✓':'✗'}</span>
             <span style="text-align:right; color:${corScore}; font-weight:bold;">${r.score}</span>`;
-        if (r.ok) {
-            row.title = `Clique para ir a ${r.nome}`;
-            row.onclick = () => {
-                const sel = document.getElementById('drv-ativo-sel');
-                if (sel) { sel.value = r.sym; }
-                _drvChart.ativo = r.sym;
-                drvChartCarregar();
-                _drvAdicionarSinal({ msg: `🔍 Scanner → selecionado ${r.nome} | ${r.dir} | ${r.score}pts`, cor: r.dir==='CALL'?'#27c93f':'#ef4444' });
-            };
-        }
+        // Qualquer linha é clicável para trocar o gráfico
+        row.title = r.ok ? `✅ Clique para ir a ${r.nome}` : `Ver ${r.nome}`;
+        row.onclick = () => _drvScannerTrocarAtivo(r.sym, r.nome, r.dir || '', r.score);
         tabela.appendChild(row);
     }
 }
