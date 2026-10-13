@@ -33507,6 +33507,16 @@ function _drvSubscreverTicks() {
                 if (d.msg_type === 'tick' && d.tick && d.tick.symbol === _drvChart.ativo) {
                     _drvProcessarTick(d.tick);
                 }
+                // Atualiza saldo em tempo real sempre que chegar balance via WS
+                if (d.msg_type === 'balance' && d.balance && d.balance.balance !== undefined) {
+                    const _saldo = parseFloat(d.balance.balance);
+                    const sEl = document.getElementById('drv-chart-saldo');
+                    const tEl = document.getElementById('drv-chart-tipo');
+                    const lEl = document.getElementById('lbl-drv-chart');
+                    if (sEl) sEl.textContent = '$' + _saldo.toFixed(2);
+                    if (tEl && d.balance.loginid) tEl.textContent = d.balance.loginid.startsWith('VRTC') ? 'DEMO' : 'REAL';
+                    if (lEl && tEl) lEl.textContent = tEl.textContent + ' • $' + _saldo.toFixed(2);
+                }
             } catch(_) {}
         };
         ws.addEventListener('message', _drvChart._tickHandler);
