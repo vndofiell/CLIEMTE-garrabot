@@ -33573,7 +33573,8 @@ function _drvProcessarTick(tick) {
     } else if (tsAb > (_drvChart.velaAtual?.time || 0)) {
         _drvChart.velaAtual = { time: tsAb, open: preco, high: preco, low: preco, close: preco, volume: 1 };
         _drvChart.series.update(_drvChart.velaAtual);
-        _drvChart.chart.timeScale().scrollToRealTime();
+        // Só rola para o tempo real se NÃO houver operação ativa (congela o gráfico durante a operação)
+        if (!_drvChart.opAtiva) _drvChart.chart.timeScale().scrollToRealTime();
         novaVela = true;
         // Adiciona a nova vela ao array de candles
         if (_drvChart._candles) {
@@ -33724,7 +33725,7 @@ function _drvIniciarChart() {
         grid: { vertLines: { color: 'rgba(30,60,30,0.5)' }, horzLines: { color: 'rgba(30,60,30,0.5)' } },
         crosshair: { mode: LightweightCharts.CrosshairMode.Normal, vertLine: { color: 'rgba(0,255,65,0.3)', style:1, labelBackgroundColor:'#0d1a0d' }, horzLine: { color: 'rgba(0,255,65,0.3)', style:1, labelBackgroundColor:'#0d1a0d' } },
         rightPriceScale: { borderColor:'rgba(30,60,30,0.8)', textColor:'#6a8a6a' },
-        timeScale: { borderColor:'rgba(30,60,30,0.8)', textColor:'#6a8a6a', timeVisible:true, secondsVisible:false, rightOffset:5, barSpacing:8, minBarSpacing:2 },
+        timeScale: { borderColor:'rgba(30,60,30,0.8)', textColor:'#6a8a6a', timeVisible:true, secondsVisible:false, rightOffset:12, barSpacing:8, minBarSpacing:2 },
         handleScale: { axisPressedMouseMove: { time:true, price:true } },
     };
     // Gráfico principal de velas
@@ -33834,7 +33835,7 @@ async function drvChartCarregar() {
 
         if (_drvChart.series) {
             _drvChart.series.setData(candles);
-            _drvChart.chart.timeScale().applyOptions({ barSpacing:8, rightOffset:5 });
+            _drvChart.chart.timeScale().applyOptions({ barSpacing:8, rightOffset:12 });
             _drvChart.chart.timeScale().scrollToRealTime();
         }
         const ult = candles[candles.length - 1];
@@ -35102,11 +35103,23 @@ function _drvIniciarOpAtiva(op) {
     if (!_drvChart.series) return;
     const corDir = op.direcao === 'call' ? '#00c853' : '#ef5350';
     const tsV = _drvChart.tsAbertura || Math.floor(Date.now()/1000/60)*60;
-    try { _drvChart.series.setMarkers([{ time:tsV, position:op.direcao==='call'?'belowBar':'aboveBar', color:corDir, shape:op.direcao==='call'?'arrowUp':'arrowDown', text:'$'+parseFloat(op.valor).toFixed(2), size:1.5 }]); } catch(_) {}
+    try { _drvChart.series.setMarkers([{ time:tsV, position:op.direcao==='call'?'belowBar':'aboveBar', color:corDir, shape:op.direcao==='call'?'arrowUp':'arrowDown', text:'$'+parseFloat(op.valor).toFixed(2), size:2 }]); } catch(_) {}
     try {
         if (_drvChart.priceLine) { _drvChart.series.removePriceLine(_drvChart.priceLine); _drvChart.priceLine=null; }
-        if (op.precoEntrada > 0) _drvChart.priceLine = _drvChart.series.createPriceLine({ price:op.precoEntrada, color:corDir, lineWidth:1, lineStyle:2, axisLabelVisible:true, title:op.direcao==='call'?'▲ ENTRADA':'▼ ENTRADA' });
+        if (op.precoEntrada > 0) {
+            // Linha sólida e grossa — fácil de identificar o ponto exato de entrada
+            _drvChart.priceLine = _drvChart.series.createPriceLine({
+                price: op.precoEntrada,
+                color: op.direcao === 'call' ? '#00ff88' : '#ff4d4d',
+                lineWidth: 3,
+                lineStyle: 0,   // 0 = sólida
+                axisLabelVisible: true,
+                title: op.direcao === 'call' ? '▲ ENTRADA' : '▼ ENTRADA',
+            });
+        }
     } catch(_) {}
+    // Congela o gráfico no ponto da entrada (impede que novos ticks façam scroll)
+    try { _drvChart.chart.timeScale().scrollToRealTime(); } catch(_) {}
     const linhaEl=document.getElementById('drv-op-linha-entrada'), timerEl=document.getElementById('drv-op-timer-overlay'), bubbleEl=document.getElementById('drv-op-timer-bubble');
     if (linhaEl) { linhaEl.style.borderColor=corDir; linhaEl.style.display='block'; }
     if (timerEl) timerEl.style.display='flex';
@@ -35137,11 +35150,13 @@ function _drvEncerrarOpAtiva(resultado) {
     if (resultado && _drvChart.series && _drvChart.opAtiva) {
         const win=resultado==='win', corRes=win?'#00c853':'#ef5350', periodo=_drvChart.periodo||60, tsSaida=(_drvChart.opAtiva.tsVelaAtual||0)+periodo;
         try { _drvChart.series.setMarkers([
-            { time:_drvChart.opAtiva.tsVelaAtual||Math.floor(Date.now()/1000), position:_drvChart.opAtiva.direcao==='call'?'belowBar':'aboveBar', color:_drvChart.opAtiva.corDir, shape:_drvChart.opAtiva.direcao==='call'?'arrowUp':'arrowDown', text:'$'+parseFloat(_drvChart.opAtiva.valor).toFixed(2), size:1.5 },
-            { time:tsSaida, position:win?'aboveBar':'belowBar', color:corRes, shape:'circle', text:win?'✓ WIN':'✗ LOSS', size:1.2 }
+            { time:_drvChart.opAtiva.tsVelaAtual||Math.floor(Date.now()/1000), position:_drvChart.opAtiva.direcao==='call'?'belowBar':'aboveBar', color:_drvChart.opAtiva.corDir, shape:_drvChart.opAtiva.direcao==='call'?'arrowUp':'arrowDown', text:'$'+parseFloat(_drvChart.opAtiva.valor).toFixed(2), size:2 },
+            { time:tsSaida, position:win?'aboveBar':'belowBar', color:corRes, shape:'circle', text:win?'✓ WIN':'✗ LOSS', size:1.4 }
         ]); } catch(_) {}
     } else if (_drvChart.series) { try { _drvChart.series.setMarkers([]); } catch(_) {} }
     _drvChart.opAtiva = null;
+    // Retoma scroll automático após encerramento da operação
+    try { if (_drvChart.chart) _drvChart.chart.timeScale().scrollToRealTime(); } catch(_) {}
 }
 
 function _drvOpStatusMsg(msg, cor) { const el=document.getElementById('drv-op-status'); if(!el)return; el.style.display='block'; el.style.color=cor||'#aaa'; el.style.borderColor=cor||'#333'; el.textContent=msg; }
