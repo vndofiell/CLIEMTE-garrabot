@@ -29635,7 +29635,7 @@ window.addEventListener('load', () => {
       <div style="color:#0ff; font-size:0.78rem; letter-spacing:2px; font-weight:bold;">🔍 SCANNER MULTI-MERCADO</div>
       <div id="drv-scan-status" style="font-size:0.58rem; color:#555; margin-top:2px;">Aguardando início...</div>
     </div>
-    <button onclick="drvScannerToggle()"
+    <button onclick="drvScannerFecharPainel()" title="Fechar painel (scanner continua ativo)"
         style="background:transparent; border:1px solid #555; color:#555;
                padding:3px 8px; font-family:'Share Tech Mono'; font-size:0.68rem;
                cursor:pointer; border-radius:3px;">✕</button>
@@ -33870,6 +33870,9 @@ function _drvRecalcPagamento() {
 document.addEventListener('DOMContentLoaded', () => {
     const inp = document.getElementById('drv-valor-input');
     if (inp) inp.addEventListener('input', () => { _drvChart.valor = parseFloat(inp.value||1); _drvRecalcPagamento(); });
+    // Restaura estado do scanner multi-mercado (ativo/auto-operar/score-min)
+    // Aguarda 1s para garantir que o DOM está completamente pronto
+    setTimeout(_drvScannerRestaurarEstado, 1000);
 });
 function drvSetContrato(ct) {
     _drvChart.contrato = ct;
@@ -33997,31 +34000,124 @@ const _DRV_SCANNER_ATIVOS = [
     { sym: 'frxGBPUSD', nome: 'GBP/USD' },
 ];
 
-let _drvScannerAberto    = false;
-let _drvScannerAutoAtivo = false;
-let _drvScannerTimer     = null;
-let _drvScannerScoreMin  = 75;
-let _drvScannerRodando   = false;
-let _drvScannerMultiAtivo = false; // scanner multi ligado (integrado ao INICIAR OPERAÇÕES)
+let _drvScannerAberto     = false;
+let _drvScannerAutoAtivo  = false;
+let _drvScannerTimer      = null;
+let _drvScannerScoreMin   = 75;
+let _drvScannerRodando    = false;
+let _drvScannerMultiAtivo = false; // scanner ATIVO (independente do painel estar visível)
+let _drvScannerPausado    = false; // pausado aguardando resultado de uma operação
 
-// Abre/fecha o painel visual do scanner — o scanner em si corre junto com INICIAR OPERAÇÕES
-function drvScannerToggle() {
-    _drvScannerAberto = !_drvScannerAberto;
-    const p = document.getElementById('drv-scanner-painel');
+// Atualiza visual do botão MULTI e do X do painel
+function _drvScannerAtualizarBotao() {
     const b = document.getElementById('drv-scanner-btn');
-    if (_drvScannerAberto) {
-        if (p) { p.style.display = 'flex'; }
-        if (b) { b.style.borderColor = '#0ff'; b.style.color = '#0ff'; b.style.background = 'rgba(0,255,255,0.12)'; }
-        // Ativa o multi e faz varredura imediata
-        _drvScannerMultiAtivo = true;
+    if (!b) return;
+    if (_drvScannerMultiAtivo) {
+        b.textContent = '🔍 MULTI ON';
+        b.style.borderColor = '#0ff'; b.style.color = '#0ff';
+        b.style.background  = 'rgba(0,255,255,0.18)';
+        b.style.fontWeight  = 'bold';
+    } else {
+        b.textContent = '🔍 MULTI';
+        b.style.borderColor = 'rgba(0,255,255,0.5)'; b.style.color = '#0ff';
+        b.style.background  = 'rgba(0,255,255,0.06)';
+        b.style.fontWeight  = 'normal';
+    }
+}
+
+// Salva/restaura estado do scanner no localStorage
+function _drvScannerSalvarEstado() {
+    try {
+        localStorage.setItem('_drvScanner', JSON.stringify({
+            ativo:     _drvScannerMultiAtivo,
+            autoAtivo: _drvScannerAutoAtivo,
+            scoreMin:  _drvScannerScoreMin,
+        }));
+    } catch(_) {}
+}
+
+// Botão MULTI: alterna o scanner ligado/desligado (não apenas o painel)
+function drvScannerToggle() {
+    _drvScannerMultiAtivo = !_drvScannerMultiAtivo;
+    _drvScannerAtualizarBotao();
+    _drvScannerSalvarEstado();
+    const p = document.getElementById('drv-scanner-painel');
+
+    if (_drvScannerMultiAtivo) {
+        // Abre o painel e inicia varredura
+        _drvScannerAberto = true;
+        if (p) p.style.display = 'flex';
+        _drvScannerPausado = false;
         drvScannerVarrer();
         if (!_drvScannerTimer) _drvScannerTimer = setInterval(drvScannerVarrer, 10000);
+        const s = document.getElementById('drv-scan-status');
+        if (s) s.textContent = '🟢 Scanner ativo — varrendo mercados...';
     } else {
-        if (p) { p.style.display = 'none'; }
-        if (b) { b.style.borderColor = 'rgba(0,255,255,0.5)'; b.style.color = '#0ff'; b.style.background = 'rgba(0,255,255,0.06)'; }
-        _drvScannerMultiAtivo = false;
+        // Desativa completamente
+        _drvScannerAberto = false;
+        if (p) p.style.display = 'none';
         if (_drvScannerTimer) { clearInterval(_drvScannerTimer); _drvScannerTimer = null; }
+        _drvScannerAutoAtivo = false;
+        const btn = document.getElementById('drv-scan-auto-btn');
+        if (btn) { btn.innerHTML = '▶ AUTO-OPERAR NO MELHOR'; btn.style.borderColor='#00ff41'; btn.style.color='#00ff41'; btn.style.background='rgba(0,255,65,0.08)'; }
+        const s = document.getElementById('drv-scan-status');
+        if (s) s.textContent = 'Scanner desativado';
     }
+}
+
+// Fecha apenas o painel visual sem desativar o scanner
+function drvScannerFecharPainel() {
+    _drvScannerAberto = false;
+    const p = document.getElementById('drv-scanner-painel');
+    if (p) p.style.display = 'none';
+    // Scanner continua rodando em background — atualiza botão para indicar ativo sem painel
+    _drvScannerAtualizarBotao();
+}
+
+// Reinicia o scanner após resultado de operação
+function _drvScannerRetomarAposResultado() {
+    if (!_drvScannerMultiAtivo || !_drvScannerPausado) return;
+    _drvScannerPausado = false;
+    const s = document.getElementById('drv-scan-status');
+    if (s) s.textContent = '🔄 Retomando varredura...';
+    // Pequena pausa antes de reiniciar para deixar o mercado estabilizar
+    setTimeout(() => {
+        if (_drvScannerMultiAtivo && !_drvScannerTimer) {
+            drvScannerVarrer();
+            _drvScannerTimer = setInterval(drvScannerVarrer, 10000);
+        }
+    }, 3000);
+}
+
+// Restaura estado do scanner salvo no localStorage (chamado ao carregar a página)
+function _drvScannerRestaurarEstado() {
+    try {
+        const raw = localStorage.getItem('_drvScanner');
+        if (!raw) return;
+        const est = JSON.parse(raw);
+        if (est.scoreMin) {
+            _drvScannerScoreMin = est.scoreMin;
+            const rng = document.getElementById('drv-scan-score-range');
+            const lbl = document.getElementById('drv-scan-score-min');
+            if (rng) rng.value = est.scoreMin;
+            if (lbl) lbl.textContent = est.scoreMin + ' pts';
+        }
+        if (est.autoAtivo) {
+            _drvScannerAutoAtivo = true;
+            const btn = document.getElementById('drv-scan-auto-btn');
+            if (btn) { btn.innerHTML = '⏹ PARAR AUTO-OPERAR'; btn.style.borderColor='#ef4444'; btn.style.color='#ef4444'; btn.style.background='rgba(239,68,68,0.08)'; }
+        }
+        if (est.ativo) {
+            _drvScannerMultiAtivo = true;
+            _drvScannerPausado = false;
+            _drvScannerAtualizarBotao();
+            // Inicia varredura em background sem abrir o painel
+            drvScannerVarrer();
+            if (!_drvScannerTimer) _drvScannerTimer = setInterval(drvScannerVarrer, 10000);
+            const s = document.getElementById('drv-scan-status');
+            if (s) s.textContent = '🟢 Scanner ativo (restaurado) — varrendo mercados...';
+        }
+    } catch(_) {}
 }
 
 // Troca o gráfico para o ativo escolhido pelo scanner (atualiza select + candles + ticks)
@@ -34042,6 +34138,7 @@ async function _drvScannerTrocarAtivo(sym, nome, dir, score) {
 // Liga/desliga auto-operar
 function drvScannerToggleAuto() {
     _drvScannerAutoAtivo = !_drvScannerAutoAtivo;
+    _drvScannerSalvarEstado();
     const btn = document.getElementById('drv-scan-auto-btn');
     if (btn) {
         if (_drvScannerAutoAtivo) {
@@ -34173,9 +34270,8 @@ async function drvScannerVarrer() {
         : `Nenhum sinal limpo — aguardando...`;
 
     // ── Troca automática de mercado e auto-operar ───────────
-    // Sempre troca o gráfico para o melhor mercado quando o scanner multi estiver ativo
-    if (_drvScannerMultiAtivo && melhor) {
-        // Troca o gráfico automaticamente (mesmo sem auto-operar)
+    if (_drvScannerMultiAtivo && melhor && !_drvScannerPausado) {
+        // Troca o gráfico automaticamente para o melhor mercado
         await _drvScannerTrocarAtivo(melhor.sym, melhor.nome, melhor.dir, melhor.score);
         // Exibe último sinal no painel
         const ul = document.getElementById('drv-scan-ultimo');
@@ -34183,17 +34279,22 @@ async function drvScannerVarrer() {
             ul.style.display = 'block';
             ul.innerHTML = `[${agora}] 🎯 <b>${melhor.nome}</b> → <span style="color:${melhor.dir==='CALL'?'#27c93f':'#ef4444'}">${melhor.dir}</span> | ${melhor.score}pts`;
         }
-        // Auto-operar se o botão auto estiver ligado, operações ativas e não bloqueadas
+        // Auto-operar se ligado, operações ativas e não bloqueadas
         if (_drvScannerAutoAtivo && !_drvModo.opBloqueada && _drvModo.rodando) {
+            // ── PAUSA o scanner até o resultado desta operação ──
+            _drvScannerPausado = true;
+            if (_drvScannerTimer) { clearInterval(_drvScannerTimer); _drvScannerTimer = null; }
+            const s = document.getElementById('drv-scan-status');
+            if (s) s.textContent = `⏸ Pausado — aguardando resultado em ${melhor.nome}...`;
+
             _drvModo.opBloqueada = true;
-            // Calcula tempo até a virada da vela
             const _periodo = _drvChart.periodo || 60;
             const _tsAb    = _drvChart.tsAbertura || (Math.floor(Date.now() / 1000 / _periodo) * _periodo);
             const _msFalta = Math.max(0, (_tsAb + _periodo) * 1000 - Date.now());
             const _atraso  = _msFalta < 400 ? 0 : _msFalta;
             _drvAdicionarSinal({ msg: `⏳ AUTO-MULTI → ${melhor.nome} | ${melhor.dir} | virada em ${(_atraso/1000).toFixed(0)}s`, cor: melhor.dir === 'CALL' ? '#27c93f' : '#ef4444' });
             setTimeout(() => {
-                if (!_drvModo.rodando) { _drvModo.opBloqueada = false; return; }
+                if (!_drvModo.rodando) { _drvModo.opBloqueada = false; _drvScannerPausado = false; return; }
                 drvOperar(melhor.dir.toLowerCase());
             }, _atraso);
         }
@@ -34966,6 +35067,8 @@ function _drvAguardarResultado(contractId, duracao) {
             }
             _drvAplicarGerenciamento(win, lucro);
             _drvOpStatusMsg(`${win?'✅ WIN':'❌ LOSS'} ${win?'+':''}$${lucro.toFixed(2)}`, win ? '#27c93f' : '#f44');
+            // ── Retoma o scanner após resultado (se estava pausado) ──
+            _drvScannerRetomarAposResultado();
         } catch(_) {}
     };
     ws.addEventListener('message', handler);
@@ -34978,6 +35081,7 @@ function _drvAguardarResultado(contractId, duracao) {
             _finalizado = true;
             ws.removeEventListener('message', handler);
             _drvModo.opBloqueada = false;
+            _drvScannerRetomarAposResultado();
         }
     }, (duracao + 30) * 1000);
 }
