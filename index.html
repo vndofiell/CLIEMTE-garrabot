@@ -29014,6 +29014,12 @@ window.addEventListener('load', () => {
         <span id="drv-chart-tipo"
             style="font-size:0.62rem; color:#555; border:1px solid #333;
                    padding:2px 6px; border-radius:3px;">DEMO</span>
+        <button id="drv-scanner-btn" onclick="drvScannerToggle()"
+            style="background:rgba(0,255,255,0.06); border:1px solid rgba(0,255,255,0.5); color:#0ff;
+                   padding:4px 10px; font-family:'Share Tech Mono'; font-size:0.7rem;
+                   cursor:pointer; border-radius:3px; letter-spacing:1px;">
+          🔍 MULTI
+        </button>
         <button onclick="drvChartFechar()"
             style="background:transparent; border:1px solid #f44; color:#f44;
                    padding:4px 10px; font-family:'Share Tech Mono'; font-size:0.7rem;
@@ -29610,6 +29616,69 @@ window.addEventListener('load', () => {
     </div>
   </div>
 </div>
+
+
+<!-- ══════════════════════════════════════════════════════════
+     PAINEL — SCANNER MULTI-MERCADO (sobreposto ao modal-drv-chart)
+════════════════════════════════════════════════════════════ -->
+<div id="drv-scanner-painel" style="
+    display:none; position:fixed; top:0; right:0;
+    width:320px; height:100vh; z-index:9950;
+    background:#070d07; border-left:1px solid rgba(0,255,65,0.35);
+    font-family:'Share Tech Mono',monospace;
+    display:none; flex-direction:column; overflow:hidden;">
+
+  <!-- Cabeçalho -->
+  <div style="padding:10px 12px 8px; border-bottom:1px solid rgba(0,255,65,0.25);
+              display:flex; align-items:center; justify-content:space-between; flex-shrink:0;">
+    <div>
+      <div style="color:#0ff; font-size:0.78rem; letter-spacing:2px; font-weight:bold;">🔍 SCANNER MULTI-MERCADO</div>
+      <div id="drv-scan-status" style="font-size:0.58rem; color:#555; margin-top:2px;">Aguardando início...</div>
+    </div>
+    <button onclick="drvScannerToggle()"
+        style="background:transparent; border:1px solid #555; color:#555;
+               padding:3px 8px; font-family:'Share Tech Mono'; font-size:0.68rem;
+               cursor:pointer; border-radius:3px;">✕</button>
+  </div>
+
+  <!-- Botão AUTO-OPERAR -->
+  <div style="padding:8px 12px; border-bottom:1px solid rgba(255,255,255,0.05); flex-shrink:0;">
+    <button id="drv-scan-auto-btn" onclick="drvScannerToggleAuto()"
+        style="width:100%; padding:9px; background:rgba(0,255,65,0.08);
+               border:2px solid #00ff41; color:#00ff41;
+               font-family:'Share Tech Mono'; font-size:0.75rem; font-weight:bold;
+               letter-spacing:1px; cursor:pointer; border-radius:5px;">
+      ▶ AUTO-OPERAR NO MELHOR
+    </button>
+    <div style="display:flex; justify-content:space-between; margin-top:5px; font-size:0.58rem; color:#555;">
+      <span>Score mín. para entrar:</span>
+      <span id="drv-scan-score-min" style="color:#0ff;">75 pts</span>
+    </div>
+    <input type="range" id="drv-scan-score-range" min="50" max="95" value="75" step="5"
+        oninput="document.getElementById('drv-scan-score-min').textContent=this.value+' pts'; _drvScannerScoreMin=parseInt(this.value);"
+        style="width:100%; margin-top:3px; accent-color:#0ff;">
+  </div>
+
+  <!-- Último sinal do scanner -->
+  <div id="drv-scan-ultimo" style="
+      display:none; margin:6px 12px 0; padding:6px 8px; border-radius:4px;
+      border:1px solid rgba(0,255,65,0.4); background:rgba(0,255,65,0.06);
+      font-size:0.65rem; color:#00ff41; flex-shrink:0;">
+  </div>
+
+  <!-- Tabela de mercados -->
+  <div style="flex:1; overflow-y:auto; padding:6px 8px 12px;">
+    <div id="drv-scan-tabela" style="display:flex; flex-direction:column; gap:4px;"></div>
+  </div>
+
+  <!-- Rodapé: última varredura -->
+  <div style="padding:6px 12px; border-top:1px solid rgba(255,255,255,0.05);
+              font-size:0.58rem; color:#333; flex-shrink:0;">
+    Última varredura: <span id="drv-scan-ultima-hora">--:--:--</span>
+    &nbsp;·&nbsp; Intervalo: 10s
+  </div>
+</div>
+
 
 
 
@@ -33901,6 +33970,246 @@ function drvToggleSR() {
     }
     _drvAdicionarSinal({ msg: `📌 Filtro S/R (Topo/Fundo) ${_drvModo.srAtivo ? 'ATIVADO' : 'DESATIVADO'}`, cor: _drvModo.srAtivo ? '#ffbd2e' : '#555' });
 }
+
+// ══════════════════════════════════════════════════════════════════════
+// SCANNER MULTI-MERCADO — analisa todos os ativos em paralelo
+// e opera automaticamente no melhor sinal
+// ══════════════════════════════════════════════════════════════════════
+const _DRV_SCANNER_ATIVOS = [
+    { sym: 'R_10',      nome: 'Vol 10' },
+    { sym: 'R_25',      nome: 'Vol 25' },
+    { sym: 'R_50',      nome: 'Vol 50' },
+    { sym: 'R_75',      nome: 'Vol 75' },
+    { sym: 'R_100',     nome: 'Vol 100' },
+    { sym: '1HZ10V',    nome: 'Vol 10 (1s)' },
+    { sym: '1HZ25V',    nome: 'Vol 25 (1s)' },
+    { sym: '1HZ50V',    nome: 'Vol 50 (1s)' },
+    { sym: '1HZ75V',    nome: 'Vol 75 (1s)' },
+    { sym: '1HZ100V',   nome: 'Vol 100 (1s)' },
+    { sym: 'frxEURUSD', nome: 'EUR/USD' },
+    { sym: 'frxGBPUSD', nome: 'GBP/USD' },
+];
+
+let _drvScannerAberto    = false;
+let _drvScannerAutoAtivo = false;
+let _drvScannerTimer     = null;
+let _drvScannerScoreMin  = 75;
+let _drvScannerRodando   = false;  // evita sobreposição de varreduras
+
+// Abre/fecha o painel do scanner
+function drvScannerToggle() {
+    _drvScannerAberto = !_drvScannerAberto;
+    const p = document.getElementById('drv-scanner-painel');
+    const b = document.getElementById('drv-scanner-btn');
+    if (_drvScannerAberto) {
+        if (p) { p.style.display = 'flex'; }
+        if (b) { b.style.borderColor = '#0ff'; b.style.color = '#0ff'; b.style.background = 'rgba(0,255,255,0.12)'; }
+        // Inicia ciclo de varredura
+        drvScannerVarrer();
+        _drvScannerTimer = setInterval(drvScannerVarrer, 10000);
+    } else {
+        if (p) { p.style.display = 'none'; }
+        if (b) { b.style.borderColor = 'rgba(0,255,255,0.5)'; b.style.color = '#0ff'; b.style.background = 'rgba(0,255,255,0.06)'; }
+        if (_drvScannerTimer) { clearInterval(_drvScannerTimer); _drvScannerTimer = null; }
+    }
+}
+
+// Liga/desliga auto-operar
+function drvScannerToggleAuto() {
+    _drvScannerAutoAtivo = !_drvScannerAutoAtivo;
+    const btn = document.getElementById('drv-scan-auto-btn');
+    if (btn) {
+        if (_drvScannerAutoAtivo) {
+            btn.innerHTML = '⏹ PARAR AUTO-OPERAR';
+            btn.style.borderColor = '#ef4444'; btn.style.color = '#ef4444';
+            btn.style.background  = 'rgba(239,68,68,0.08)';
+        } else {
+            btn.innerHTML = '▶ AUTO-OPERAR NO MELHOR';
+            btn.style.borderColor = '#00ff41'; btn.style.color = '#00ff41';
+            btn.style.background  = 'rgba(0,255,65,0.08)';
+        }
+    }
+    const s = document.getElementById('drv-scan-status');
+    if (s) s.textContent = _drvScannerAutoAtivo ? '🟢 Auto-operar ATIVO' : 'Auto-operar desativado';
+}
+
+// Analisa um ativo com o motor PRICE ACTION PRO usando candles buscados via WS
+async function _drvScannerAnalisarAtivo(sym, periodo) {
+    try {
+        const raw = await _drvFetchCandles(sym, periodo, 60);
+        if (!raw || raw.length < 30) return null;
+        const sorted = raw.map(c => ({
+            time: parseInt(c.epoch), open: parseFloat(c.open),
+            high: parseFloat(c.high), low: parseFloat(c.low),
+            close: parseFloat(c.close), volume: 1
+        })).sort((a, b) => a.time - b.time);
+
+        const closes = sorted.map(c => c.close);
+        const n      = sorted.length;
+        const e9     = _drvEmaArr(closes, 9);
+        const e21    = _drvEmaArr(closes, 21);
+        const e200   = _drvEmaArr(closes, 200);
+        const rv     = _drvRsiArr(closes, 14);
+        const mc     = _drvMacdObj(closes);
+        const vols   = sorted.map(c => c.volume || 1);
+        const avgVol = vols.slice(-21, -1).reduce((s, v) => s + v, 0) / 20 || 1;
+        const i      = n - 1;
+        const vela   = sorted[i];
+
+        const rsiVal    = rv[i];
+        const macdUp    = mc.m[i] > mc.s[i];
+        const macdDown  = mc.m[i] < mc.s[i];
+        const trendUp   = closes[i] > e200[i];
+        const trendDown = closes[i] < e200[i];
+        const ema9Up    = e9[i] > e21[i];
+        const volOk     = vols[i] > avgVol;
+        const bullC     = vela.close > vela.open;
+        const bearC     = vela.close < vela.open;
+        const amp       = vela.high - vela.low;
+        const corpo     = vela.close - vela.open;
+        let padraoCall = false, padraoPut = false;
+        if (amp > 0) {
+            const pavInf = Math.min(vela.open, vela.close) - vela.low;
+            const pavSup = vela.high - Math.max(vela.open, vela.close);
+            if (pavInf / amp >= 0.55 && Math.abs(corpo) / amp < 0.35) padraoCall = true;
+            if (pavSup / amp >= 0.55 && Math.abs(corpo) / amp < 0.35) padraoPut = true;
+            if (bullC && Math.abs(corpo) / amp >= 0.65) padraoCall = true;
+            if (bearC && Math.abs(corpo) / amp >= 0.65) padraoPut = true;
+        }
+
+        let call = 0, put = 0, blockers = [];
+        if (trendUp)   call += 25; if (trendDown)  put  += 25;
+        if (ema9Up)    call += 15; else             put  += 15;
+        if (rsiVal >= 52 && rsiVal <= 68) call += 15;
+        else if (rsiVal >= 32 && rsiVal <= 48) put += 15;
+        else blockers.push('RSI extremo');
+        if (macdUp)    call += 20; if (macdDown)   put  += 20;
+        if (volOk)     { call += 10; put += 10; } else blockers.push('volume baixo');
+        if (padraoCall) call += 15; if (padraoPut)  put  += 15;
+
+        const dir  = call > put ? 'CALL' : put > call ? 'PUT' : null;
+        const best = Math.min(100, Math.max(call, put));
+        if (!dir) return { sym, nome:'', dir:null, score:best, blockers, rsiVal, macdUp, trendUp, ema9Up, volOk };
+
+        if (dir === 'CALL') {
+            if (!macdUp)   blockers.push('MACD ❌');
+            if (!trendUp)  blockers.push('tendência ❌');
+            if (bearC && !padraoCall) blockers.push('vela ❌');
+        }
+        if (dir === 'PUT') {
+            if (!macdDown)  blockers.push('MACD ❌');
+            if (!trendDown) blockers.push('tendência ❌');
+            if (bullC && !padraoPut) blockers.push('vela ❌');
+        }
+        if (!volOk) blockers.push('vol ❌');
+        const ok = best >= _drvScannerScoreMin && blockers.length === 0;
+        return { sym, nome:'', dir, score: best, ok, blockers, rsiVal, macdUp, trendUp, ema9Up, volOk, padraoCall, padraoPut };
+    } catch(_) { return null; }
+}
+
+// Varredura completa de todos os ativos
+async function drvScannerVarrer() {
+    if (_drvScannerRodando) return;
+    _drvScannerRodando = true;
+    const periodo = parseInt(document.getElementById('drv-periodo-sel')?.value || 60);
+    const statusEl = document.getElementById('drv-scan-status');
+    const horaEl   = document.getElementById('drv-scan-ultima-hora');
+    if (statusEl) statusEl.textContent = '⏳ Varrendo ' + _DRV_SCANNER_ATIVOS.length + ' mercados...';
+
+    // Analisa todos em paralelo (5 por vez para não sobrecarregar o WS)
+    const resultados = [];
+    const chunks = [];
+    for (let i = 0; i < _DRV_SCANNER_ATIVOS.length; i += 4)
+        chunks.push(_DRV_SCANNER_ATIVOS.slice(i, i + 4));
+
+    for (const chunk of chunks) {
+        const lote = await Promise.all(chunk.map(a => _drvScannerAnalisarAtivo(a.sym, periodo)));
+        lote.forEach((r, idx) => {
+            if (r) { r.nome = chunk[idx].nome; resultados.push(r); }
+        });
+    }
+
+    // Ordena por score desc
+    resultados.sort((a, b) => (b.ok ? 1 : 0) - (a.ok ? 1 : 0) || b.score - a.score);
+
+    // Renderiza tabela
+    _drvScannerRenderizar(resultados, periodo);
+
+    // Hora da última varredura
+    const agora = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    if (horaEl) horaEl.textContent = agora;
+
+    // Melhor candidato
+    const melhor = resultados.find(r => r.ok && r.dir);
+    if (statusEl) statusEl.textContent = melhor
+        ? `✅ Melhor: ${melhor.nome} → ${melhor.dir} (${melhor.score}pts)`
+        : `Nenhum sinal limpo — aguardando...`;
+
+    // Auto-operar se ativo e há sinal e operações não estão bloqueadas
+    if (_drvScannerAutoAtivo && melhor && !_drvModo.opBloqueada && _drvModo.rodando) {
+        // Troca o gráfico para o ativo do melhor sinal e opera
+        const sel = document.getElementById('drv-ativo-sel');
+        if (sel) { sel.value = melhor.sym; }
+        _drvChart.ativo = melhor.sym;
+        // Registra no painel de sinais
+        _drvAdicionarSinal({ msg: `🎯 SCANNER → ${melhor.nome} | ${melhor.dir} | score:${melhor.score}pts`, cor: melhor.dir === 'CALL' ? '#27c93f' : '#ef4444' });
+        // Recarrega candles do ativo escolhido e opera
+        await drvChartCarregar();
+        setTimeout(() => {
+            if (!_drvModo.opBloqueada) drvOperar(melhor.dir.toLowerCase());
+        }, 1500);
+        // Exibe último sinal
+        const ul = document.getElementById('drv-scan-ultimo');
+        if (ul) {
+            ul.style.display = 'block';
+            ul.textContent = `[${agora}] 🎯 ${melhor.nome} → ${melhor.dir} | ${melhor.score}pts`;
+        }
+    }
+
+    _drvScannerRodando = false;
+}
+
+// Renderiza a tabela de resultados do scanner
+function _drvScannerRenderizar(resultados, periodo) {
+    const tabela = document.getElementById('drv-scan-tabela');
+    if (!tabela) return;
+    tabela.innerHTML = '';
+
+    // Cabeçalho
+    const hdr = document.createElement('div');
+    hdr.style.cssText = 'display:grid; grid-template-columns:80px 1fr 44px 44px 44px 40px; gap:3px; padding:3px 4px; font-size:0.56rem; color:#555; border-bottom:1px solid rgba(255,255,255,0.05); margin-bottom:3px;';
+    hdr.innerHTML = '<span>ATIVO</span><span style="text-align:center">DIR</span><span style="text-align:center">RSI</span><span style="text-align:center">MACD</span><span style="text-align:center">VOL</span><span style="text-align:right">SCORE</span>';
+    tabela.appendChild(hdr);
+
+    for (const r of resultados) {
+        const row = document.createElement('div');
+        const corBorda = r.ok ? (r.dir === 'CALL' ? 'rgba(39,201,63,0.5)' : 'rgba(244,68,68,0.5)') : 'rgba(255,255,255,0.06)';
+        const corFundo = r.ok ? (r.dir === 'CALL' ? 'rgba(39,201,63,0.05)' : 'rgba(244,68,68,0.05)') : 'transparent';
+        const corDir   = r.dir === 'CALL' ? '#27c93f' : r.dir === 'PUT' ? '#ef4444' : '#555';
+        const corScore = r.score >= _drvScannerScoreMin ? '#00ff41' : r.score >= 60 ? '#ffbd2e' : '#555';
+        row.style.cssText = `display:grid; grid-template-columns:80px 1fr 44px 44px 44px 40px; gap:3px; padding:5px 4px; font-size:0.62rem; border:1px solid ${corBorda}; background:${corFundo}; border-radius:4px; cursor:${r.ok?'pointer':'default'}; align-items:center;`;
+        row.innerHTML = `
+            <span style="color:#c8d0e0; font-size:0.6rem;">${r.nome}</span>
+            <span style="color:${corDir}; font-weight:bold; font-size:0.68rem;">${r.dir || 'AGUARDAR'}</span>
+            <span style="text-align:center; color:${r.rsiVal>70||r.rsiVal<30?'#ef4444':'#aaa'}; font-size:0.6rem;">${r.rsiVal?.toFixed(0)||'--'}</span>
+            <span style="text-align:center; font-size:0.8rem;">${r.macdUp?'▲':'▼'}</span>
+            <span style="text-align:center; color:${r.volOk?'#27c93f':'#ef4444'}; font-size:0.8rem;">${r.volOk?'✓':'✗'}</span>
+            <span style="text-align:right; color:${corScore}; font-weight:bold;">${r.score}</span>`;
+        if (r.ok) {
+            row.title = `Clique para ir a ${r.nome}`;
+            row.onclick = () => {
+                const sel = document.getElementById('drv-ativo-sel');
+                if (sel) { sel.value = r.sym; }
+                _drvChart.ativo = r.sym;
+                drvChartCarregar();
+                _drvAdicionarSinal({ msg: `🔍 Scanner → selecionado ${r.nome} | ${r.dir} | ${r.score}pts`, cor: r.dir==='CALL'?'#27c93f':'#ef4444' });
+            };
+        }
+        tabela.appendChild(row);
+    }
+}
+
+
 
 // ── Mapa de TFs superiores por duração operada (segundos) ─
 // Deriv usa granularity em segundos: 60=M1, 180=M3, 300=M5,
