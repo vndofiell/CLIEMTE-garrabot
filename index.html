@@ -6699,15 +6699,9 @@ function jcExibirModalMetaBatida(d) {
     if (barra) { barra.parentElement.parentElement.style.display = ''; barra.style.width = '0%'; }
     if (corpo)  corpo.innerHTML  = montar(cotBRL).replace(/\n/g, '<br>').replace(/<b>(.*?)<\/b>/g,'<b style="color:#ffd600">$1</b>').replace(/<i>(.*?)<\/i>/g,'<i style="color:#57606a">$1</i>');
     if (diaInf) diaInf.textContent = `Dia ${d.dia} encerrado ✅  →  Próximo: Dia ${d.proximo_dia}`;
-    // Mostra o modal
-    const modal = document.getElementById('modal-meta-jc');
-    if (modal) {
-        modal.style.display = 'flex';
-        // Anima a barra de progresso
-        setTimeout(() => { if (barra) barra.style.width = '100%'; }, 100);
-        // Dispara confetti
-        _mjcConfetti();
-    }
+    // Mostra o modal — move para o final do body para ficar acima de tudo
+    _mjcMostrar();
+    setTimeout(() => { if (barra) barra.style.width = '100%'; }, 100);
     // Tenta buscar cotação real e atualiza o corpo
     fetch('https://economia.awesomeapi.com.br/json/last/USD-BRL', { mode: 'cors' })
         .then(r => r.json())
@@ -6740,11 +6734,25 @@ function stopWinExibirModal(lucro, wins, losses, banca, estrategia, gerenciament
     // Oculta elementos exclusivos do JC
     if (barra)  { barra.parentElement.parentElement.style.display = 'none'; }
     if (diaInf) { diaInf.textContent = ''; }
-    const modal = document.getElementById('modal-meta-jc');
-    if (modal) {
-        modal.style.display = 'flex';
-        _mjcConfetti();
+    _mjcMostrar();
+}
+
+// ── Exibe o modal META BATIDA sempre na frente de tudo ──────────────────────
+// Move o modal para o final do <body> antes de exibir, garantindo que fique
+// acima do gráfico Deriv e de qualquer outro modal independente do z-index.
+function _mjcMostrar() {
+    const modal   = document.getElementById('modal-meta-jc');
+    const confetti = document.getElementById('mjc-confetti');
+    if (!modal) return;
+    // Move para o final do body se não for o último filho
+    if (modal.parentNode && modal !== modal.parentNode.lastElementChild) {
+        modal.parentNode.appendChild(modal);
     }
+    if (confetti && confetti.parentNode && confetti !== confetti.parentNode.lastElementChild) {
+        confetti.parentNode.appendChild(confetti);
+    }
+    modal.style.display = 'flex';
+    _mjcConfetti();
 }
 
 // ── Confetti para o modal META ATINGIDA ─────────────────────────────────────
