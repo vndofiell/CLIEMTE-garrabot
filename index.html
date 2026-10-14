@@ -33469,11 +33469,11 @@ function _drvEnviarStopNotif(isWin, sessaoLucro) {
             taxa_acerto:     taxa,
             modo:            mgr,
             estrategia:      '📊 Gráfico Deriv — ' + ativo,
-            seq_win:         0,
-            seq_loss:        0,
-            max_win_consec:  0,
-            max_loss_consec: 0,
-            max_stake:       _drvMgr.valorBase || 0,
+            seq_win:         _drvChart._seqWin        || 0,
+            seq_loss:        _drvChart._seqLoss       || 0,
+            max_win_consec:  _drvChart._maxWinConsec  || 0,
+            max_loss_consec: _drvChart._maxLossConsec || 0,
+            max_stake:       _drvChart._maxStake      || _drvMgr.valorBase || 0,
             conta:           'PRINCIPAL',
         };
 
@@ -35170,7 +35170,23 @@ function _drvAguardarResultado(contractId, duracao) {
             _drvChart._sessaoLosses += win ? 0 : 1;
             _drvChart._sessaoLucro  += lucro;
 
-            const _drvStakeUsada = _drvMgr.valorBase || parseFloat(document.getElementById('drv-valor-input')?.value || 1);
+            // ── Rastreio de sequência e max stake para Telegram ──
+            const _drvStakeUsada = _drvMgr.valorAtual || _drvMgr.valorBase || parseFloat(document.getElementById('drv-valor-input')?.value || 1);
+            if (!_drvChart._seqWin)      _drvChart._seqWin      = 0;
+            if (!_drvChart._seqLoss)     _drvChart._seqLoss     = 0;
+            if (!_drvChart._maxWinConsec) _drvChart._maxWinConsec = 0;
+            if (!_drvChart._maxLossConsec) _drvChart._maxLossConsec = 0;
+            if (!_drvChart._maxStake)    _drvChart._maxStake    = 0;
+            if (win) {
+                _drvChart._seqWin++;
+                _drvChart._seqLoss = 0;
+                if (_drvChart._seqWin > _drvChart._maxWinConsec) _drvChart._maxWinConsec = _drvChart._seqWin;
+            } else {
+                _drvChart._seqLoss++;
+                _drvChart._seqWin = 0;
+                if (_drvChart._seqLoss > _drvChart._maxLossConsec) _drvChart._maxLossConsec = _drvChart._seqLoss;
+            }
+            if (_drvStakeUsada > _drvChart._maxStake) _drvChart._maxStake = _drvStakeUsada;
             const _drvProxStake  = _drvMgr.valorAtual || _drvStakeUsada;
             if (typeof bot !== 'undefined') {
                 bot.profit += lucro;
@@ -35295,6 +35311,7 @@ function _drvRenderizarHistorico() {
 // ── Reset ──────────────────────────────────────────────────
 function drvResetarSessao() {
     _drvChart.historico=[]; _drvChart._sessaoWins=0; _drvChart._sessaoLosses=0; _drvChart._sessaoLucro=0;
+    _drvChart._seqWin=0; _drvChart._seqLoss=0; _drvChart._maxWinConsec=0; _drvChart._maxLossConsec=0; _drvChart._maxStake=0;
     _drvChart.cidsAtivos.clear();
     if (_drvChart._processados) _drvChart._processados.clear();
     _drvModo.rodando=false; _drvModo.opBloqueada=false;
@@ -35308,6 +35325,7 @@ function drvResetarSessao() {
 }
 function drvResetarPlacar() {
     _drvChart._sessaoWins=0;_drvChart._sessaoLosses=0;_drvChart._sessaoLucro=0;_drvChart.historico=[];
+    _drvChart._seqWin=0; _drvChart._seqLoss=0; _drvChart._maxWinConsec=0; _drvChart._maxLossConsec=0; _drvChart._maxStake=0;
     _drvRenderizarHistorico(); _drvOpStatusMsg('🗑️ Placar zerado','#f87171');
 }
 
