@@ -33432,13 +33432,67 @@ function _drvAplicarGerenciamento(win, lucro) {
     if (sw > 0 && _drvMgr.sessaoLucro >= sw) {
         _drvAdicionarSinal({ msg: `🏆 STOP WIN atingido! Lucro: +$${_drvMgr.sessaoLucro.toFixed(2)}`, cor: '#27c93f' });
         drvToggleAnalise();
+        // Envia notificação Telegram/WhatsApp com dados da sessão Deriv
+        _drvEnviarStopNotif(true, _drvMgr.sessaoLucro);
     }
     if (sl > 0 && _drvMgr.sessaoLucro <= -sl) {
         _drvAdicionarSinal({ msg: `🛑 STOP LOSS atingido! Perda: -$${Math.abs(_drvMgr.sessaoLucro).toFixed(2)}`, cor: '#f44' });
         drvToggleAnalise();
+        // Envia notificação Telegram/WhatsApp com dados da sessão Deriv
+        _drvEnviarStopNotif(false, _drvMgr.sessaoLucro);
     }
 
     drvMgrSincronizarInput();
+}
+
+// Envia notificação de Stop Win / Stop Loss para Telegram e WhatsApp
+// com os dados completos da sessão do painel Deriv
+function _drvEnviarStopNotif(isWin, sessaoLucro) {
+    setTimeout(() => {
+        const saldo   = parseFloat((document.getElementById('hd-balance')?.textContent || '0').replace('$','').replace(',','')) || 0;
+        const wins    = _drvChart._sessaoWins   || 0;
+        const losses  = _drvChart._sessaoLosses || 0;
+        const total   = wins + losses;
+        const taxa    = total > 0 ? ((wins / total) * 100).toFixed(1) : '0.0';
+        const ativo   = _drvChart.ativo || 'Deriv';
+        const mgr     = (typeof _DRV_MGR_MAP !== 'undefined') ? (_DRV_MGR_MAP[_drvMgr.tipo] || _drvMgr.tipo) : _drvMgr.tipo;
+
+        const payload = {
+            stop_win:        isWin,
+            stop_loss:       !isWin,
+            lucro:           parseFloat(sessaoLucro.toFixed(2)),
+            banca:           saldo,
+            wins:            wins,
+            losses:          losses,
+            taxa_acerto:     taxa,
+            modo:            mgr,
+            estrategia:      '📊 Gráfico Deriv — ' + ativo,
+            seq_win:         0,
+            seq_loss:        0,
+            max_win_consec:  0,
+            max_loss_consec: 0,
+            max_stake:       _drvMgr.valorBase || 0,
+            conta:           'PRINCIPAL',
+        };
+
+        // Telegram
+        if (typeof _tgCfg !== 'undefined' && _tgCfg.enabled && _tgCfg.stopwin && _tgCfg.token && _tgCfg.chat_id) {
+            fetch('/tg-send', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token: _tgCfg.token, chat_id: _tgCfg.chat_id, ...payload }),
+            }).catch(() => {});
+        }
+
+        // WhatsApp
+        if (typeof _waNotifAtivo !== 'undefined' && _waNotifAtivo) {
+            fetch('/wa-send', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            }).catch(() => {});
+        }
+    }, 1200);
 }
 
 // Reinicia o gerenciamento (chamado no Reset Sessão)
