@@ -29032,7 +29032,7 @@ window.addEventListener('load', () => {
         <span id="drv-chart-tipo"
             style="font-size:0.62rem; color:#555; border:1px solid #333;
                    padding:2px 6px; border-radius:3px;">DEMO</span>
-        <button id="drv-scanner-btn" onclick="drvScannerToggle()"
+        <button id="drv-scanner-btn" onclick="drvScannerBtnClicar()"
             style="background:rgba(0,255,255,0.06); border:1px solid rgba(0,255,255,0.5); color:#0ff;
                    padding:4px 10px; font-family:'Share Tech Mono'; font-size:0.7rem;
                    cursor:pointer; border-radius:3px; letter-spacing:1px;">
@@ -34229,6 +34229,23 @@ function _drvScannerSalvarEstado() {
 }
 
 // Botão MULTI: alterna o scanner ligado/desligado (não apenas o painel)
+// Clique no botão MULTI do header:
+// - Scanner INATIVO → liga e abre o painel
+// - Scanner ATIVO   → só abre/reabre o painel (NÃO desliga)
+// Para desligar, usa o botão ✕ dentro do próprio painel
+function drvScannerBtnClicar() {
+    if (_drvScannerMultiAtivo) {
+        // Já está ativo: apenas abre o painel sem desligar
+        const p = document.getElementById('drv-scanner-painel');
+        if (p) p.style.display = 'flex';
+        _drvScannerAberto = true;
+        _drvScannerAtualizarBotao();
+    } else {
+        // Inativo: liga o scanner e abre o painel
+        drvScannerToggle();
+    }
+}
+
 function drvScannerToggle() {
     _drvScannerMultiAtivo = !_drvScannerMultiAtivo;
     _drvScannerAtualizarBotao();
