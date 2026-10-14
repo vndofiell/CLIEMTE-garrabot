@@ -29679,10 +29679,16 @@ window.addEventListener('load', () => {
       <div style="color:#0ff; font-size:0.78rem; letter-spacing:2px; font-weight:bold;">🔍 SCANNER MULTI-MERCADO</div>
       <div id="drv-scan-status" style="font-size:0.58rem; color:#555; margin-top:2px;">Aguardando início...</div>
     </div>
-    <button onclick="drvScannerFecharPainel()" title="Fechar painel (scanner continua ativo)"
-        style="background:transparent; border:1px solid #555; color:#555;
-               padding:3px 8px; font-family:'Share Tech Mono'; font-size:0.68rem;
-               cursor:pointer; border-radius:3px;">✕</button>
+    <div style="display:flex; gap:5px; align-items:center;">
+      <button onclick="drvScannerToggle()" title="Desligar scanner"
+          style="background:rgba(239,68,68,0.08); border:1px solid rgba(239,68,68,0.5); color:#ef4444;
+                 padding:3px 8px; font-family:'Share Tech Mono'; font-size:0.62rem;
+                 cursor:pointer; border-radius:3px; letter-spacing:1px;">⏹ DESLIGAR</button>
+      <button onclick="drvScannerFecharPainel()" title="Fechar painel (scanner continua ativo)"
+          style="background:transparent; border:1px solid #555; color:#555;
+                 padding:3px 8px; font-family:'Share Tech Mono'; font-size:0.68rem;
+                 cursor:pointer; border-radius:3px;">✕</button>
+    </div>
   </div>
 
   <!-- Botão AUTO-OPERAR -->
@@ -34243,10 +34249,17 @@ function _drvScannerSalvarEstado() {
 // Para desligar, usa o botão ✕ dentro do próprio painel
 function drvScannerBtnClicar() {
     if (_drvScannerMultiAtivo) {
-        // Já está ativo: apenas abre o painel sem desligar
+        // Scanner já ativo: abre/fecha o painel (NUNCA desliga o scanner)
         const p = document.getElementById('drv-scanner-painel');
-        if (p) p.style.display = 'flex';
-        _drvScannerAberto = true;
+        if (_drvScannerAberto) {
+            // Painel aberto → fecha o painel (scanner continua ativo)
+            _drvScannerAberto = false;
+            if (p) p.style.display = 'none';
+        } else {
+            // Painel fechado → reabre o painel
+            _drvScannerAberto = true;
+            if (p) p.style.display = 'flex';
+        }
         _drvScannerAtualizarBotao();
     } else {
         // Inativo: liga o scanner e abre o painel
