@@ -33434,6 +33434,8 @@ function _drvAplicarGerenciamento(win, lucro) {
         drvToggleAnalise();
         // Envia notificação Telegram/WhatsApp com dados da sessão Deriv
         _drvEnviarStopNotif(true, _drvMgr.sessaoLucro);
+        // Se JC está ativo, registra o dia e avança para o próximo
+        _drvJcRegistrarSeAtivo(_drvMgr.sessaoLucro);
     }
     if (sl > 0 && _drvMgr.sessaoLucro <= -sl) {
         _drvAdicionarSinal({ msg: `🛑 STOP LOSS atingido! Perda: -$${Math.abs(_drvMgr.sessaoLucro).toFixed(2)}`, cor: '#f44' });
@@ -33493,6 +33495,29 @@ function _drvEnviarStopNotif(isWin, sessaoLucro) {
             }).catch(() => {});
         }
     }, 1200);
+}
+
+// Registra o dia na Planilha JC se ela estiver ativa (chamado no Stop Win do painel Deriv)
+function _drvJcRegistrarSeAtivo(lucroSessao) {
+    // Consulta o servidor para saber se JC está ativo
+    fetch('/jc-meta').then(r => r.json()).then(m => {
+        if (!m.ativo || !m.meta_hoje) return; // JC inativo — nada a fazer
+        const wins    = _drvChart._sessaoWins   || 0;
+        const losses  = _drvChart._sessaoLosses || 0;
+        const saldo   = parseFloat((document.getElementById('hd-balance')?.textContent || '0').replace('$','').replace(',','')) || 0;
+        const mgr     = (typeof _DRV_MGR_MAP !== 'undefined') ? (_DRV_MGR_MAP[_drvMgr.tipo] || _drvMgr.tipo) : _drvMgr.tipo;
+        // Chama jcOnMetaBatida que: registra dia, avança para o próximo, exibe modal troféu
+        if (typeof jcOnMetaBatida === 'function') {
+            jcOnMetaBatida(
+                parseFloat(lucroSessao.toFixed(2)),
+                wins,
+                losses,
+                saldo,
+                '📊 Gráfico Deriv — ' + (_drvChart.ativo || 'Deriv'),
+                mgr
+            );
+        }
+    }).catch(() => {});
 }
 
 // Reinicia o gerenciamento (chamado no Reset Sessão)
