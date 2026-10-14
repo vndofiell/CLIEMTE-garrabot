@@ -20811,6 +20811,19 @@ _wakeLockAtivar();
                     try { dsOperar(); } catch(_) {}
                 }
             }
+            // ── Painel Deriv: compensa entrada perdida durante bloqueio de tela ──
+            if (typeof _drvModo !== 'undefined' && _drvModo.rodando && !_drvModo.opBloqueada) {
+                // Se havia uma entrada agendada e o timestamp já passou, dispara agora
+                if (_drvModo.viradaTs > 0 && Date.now() >= _drvModo.viradaTs && _drvModo.viradaDirecao) {
+                    const _dirPendente = _drvModo.viradaDirecao;
+                    console.log('⚡ Deriv: entrada perdida durante bloqueio — disparando agora:', _dirPendente);
+                    _drvModo.viradaTs      = 0;
+                    _drvModo.viradaDirecao = null;
+                    _drvModo.viradaTimer   = null;
+                    _drvWorkerCancelar();
+                    try { drvOperar(_dirPendente); } catch(_) {}
+                }
+            }
         }, 1000);
     });
 
@@ -33077,9 +33090,75 @@ const _drvChart = {
 };
 const _drvModo = {
     modo:'manual', rodando:false, opBloqueada:false, viradaTimer:null,
+    viradaTs: 0,        // timestamp ms do disparo agendado (para compensar throttling)
+    viradaDirecao: null,// direção pendente ao acordar do background
     mtfAtivo: true,   // Filtro Multi-Timeframe ligado por padrão
     srAtivo:  true,   // Filtro Topo/Fundo (S/R) ligado por padrão
 };
+
+// ── Web Worker inline — timer imune ao throttling de tela bloqueada ──────────
+// Criado como Blob URL para não precisar de arquivo externo.
+// O worker recebe { cmd:'start', id, ms } e responde { id } quando o tempo esgota.
+// Também envia { id } se a aba acordar após a tela ser desbloqueada via postMessage.
+let _drvWorker = null;
+(function _criarDrvWorker() {
+    try {
+        const src = `
+            const timers = {};
+            self.onmessage = function(e) {
+                const { cmd, id, ms } = e.data;
+                if (cmd === 'start') {
+                    if (timers[id]) clearTimeout(timers[id]);
+                    timers[id] = setTimeout(() => {
+                        delete timers[id];
+                        self.postMessage({ id });
+                    }, ms);
+                } else if (cmd === 'cancel') {
+                    if (timers[id]) { clearTimeout(timers[id]); delete timers[id]; }
+                }
+            };
+        `;
+        _drvWorker = new Worker(URL.createObjectURL(new Blob([src], { type: 'text/javascript' })));
+    } catch(_) { _drvWorker = null; }
+})();
+
+// Agenda entrada via Web Worker (imune ao throttling).
+// Fallback para setTimeout se o worker não estiver disponível.
+let _drvWorkerPendingId = null;
+let _drvWorkerCallback  = null;
+function _drvWorkerAgendar(ms, callback) {
+    _drvWorkerCancelar();
+    _drvWorkerCallback = callback;
+    const id = Date.now();
+    _drvWorkerPendingId = id;
+    if (_drvWorker) {
+        _drvWorker.onmessage = (e) => {
+            if (e.data.id !== id) return;
+            _drvWorkerPendingId = null;
+            const cb = _drvWorkerCallback;
+            _drvWorkerCallback = null;
+            if (cb) cb();
+        };
+        _drvWorker.postMessage({ cmd: 'start', id, ms: Math.max(0, ms) });
+    } else {
+        // Fallback para setTimeout
+        _drvModo.viradaTimer = setTimeout(() => {
+            _drvModo.viradaTimer = null;
+            _drvWorkerPendingId = null;
+            const cb = _drvWorkerCallback;
+            _drvWorkerCallback = null;
+            if (cb) cb();
+        }, Math.max(0, ms));
+    }
+}
+function _drvWorkerCancelar() {
+    if (_drvWorker && _drvWorkerPendingId) {
+        _drvWorker.postMessage({ cmd: 'cancel', id: _drvWorkerPendingId });
+    }
+    _drvWorkerPendingId = null;
+    _drvWorkerCallback  = null;
+    if (_drvModo.viradaTimer) { _drvWorkerCancelar(); _drvModo.viradaTimer = null; _drvModo.viradaTs = 0; _drvModo.viradaDirecao = null; }
+}
 
 // ── Gerenciamento do painel Deriv Chart ──────────────────
 const _drvMgr = {
@@ -34027,7 +34106,7 @@ function drvSelecionarModo(modo) {
     const t = document.getElementById('drv-sinais-titulo');
     if (t) t.textContent = ({manual:'ANÁLISE GARRA',price_action:'PRICE ACTION',fluxo:'FLUXO PRO',automatico:'AUTOMÁTICO',hma:'GARRA AI HMA'}[modo]) || 'ANÁLISE';
     // Limpa bloqueio e agendamento ao trocar de modo (mas não inicia sozinho)
-    if (_drvModo.viradaTimer) { clearTimeout(_drvModo.viradaTimer); _drvModo.viradaTimer = null; }
+    if (_drvModo.viradaTimer) { _drvWorkerCancelar(); _drvModo.viradaTimer = null; _drvModo.viradaTs = 0; _drvModo.viradaDirecao = null; }
     _drvModo.opBloqueada = false;
     // Se já estava rodando, registra a troca no painel
     if (_drvModo.rodando) {
@@ -34051,7 +34130,7 @@ function drvToggleAnalise() {
     } else {
         if (typeof _timer !== 'undefined') _timer.pausar();
         _drvModo.opBloqueada = false;
-        if (_drvModo.viradaTimer) { clearTimeout(_drvModo.viradaTimer); _drvModo.viradaTimer = null; }
+        if (_drvModo.viradaTimer) { _drvWorkerCancelar(); _drvModo.viradaTimer = null; _drvModo.viradaTs = 0; _drvModo.viradaDirecao = null; }
         // Para o scanner junto
         if (_drvScannerTimer) { clearInterval(_drvScannerTimer); _drvScannerTimer = null; }
     }
@@ -34873,11 +34952,19 @@ function _drvAnalisarAutomatic(precoAtual) {
                     ? ` | MTF:${infoMtf.consenso} (✅${infoMtf.vFavor} ❌${infoMtf.vContra})`
                     : '';
                 _drvAdicionarSinal({ msg: `${direcao==='call'?'▲':'▼'} SINAL ${direcao.toUpperCase()} | conf:${confianca.toFixed(0)}%${mtfLabel} | ⏳ virada em ${(_atraso/1000).toFixed(0)}s...`, cor });
-                _drvModo.viradaTimer = setTimeout(() => {
-                    _drvModo.viradaTimer = null;
+                // Salva timestamp-alvo e direção para compensar se tela bloquear
+                _drvModo.viradaTs      = Date.now() + _atraso;
+                _drvModo.viradaDirecao = direcao;
+                // Usa Web Worker para timer imune ao throttling (tela bloqueada/minimizada)
+                _drvWorkerAgendar(_atraso, () => {
+                    _drvModo.viradaTimer    = null;
+                    _drvModo.viradaTs       = 0;
+                    _drvModo.viradaDirecao  = null;
                     if (!_drvModo.rodando) { _drvModo.opBloqueada = false; return; }
                     drvOperar(direcao);
-                }, _atraso);
+                });
+                // Mantém viradaTimer como flag de "entrada agendada" (usado em outros guards)
+                _drvModo.viradaTimer = true;
             };
 
             // ── Filtros MTF + Tendência + Topo/Fundo (paralelo) ──────
@@ -35315,7 +35402,7 @@ function drvResetarSessao() {
     _drvChart.cidsAtivos.clear();
     if (_drvChart._processados) _drvChart._processados.clear();
     _drvModo.rodando=false; _drvModo.opBloqueada=false;
-    if (_drvModo.viradaTimer) { clearTimeout(_drvModo.viradaTimer); _drvModo.viradaTimer = null; }
+    if (_drvModo.viradaTimer) { _drvWorkerCancelar(); _drvModo.viradaTimer = null; _drvModo.viradaTs = 0; _drvModo.viradaDirecao = null; }
     _drvEncerrarOpAtiva(null);
     if (typeof _timer !== 'undefined') _timer.resetar();
     const btn=document.getElementById('drv-sinais-toggle');
