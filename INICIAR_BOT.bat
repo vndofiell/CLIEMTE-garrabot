@@ -22,11 +22,21 @@ timeout /t 2 /nobreak >nul
 
 :: Tenta iniciar ngrok com dominio fixo
 echo  Tentando iniciar ngrok com dominio fixo...
-start "" /B "%NGROK%" http --domain=%DOMINIO% 5000
-timeout /t 4 /nobreak >nul
+start "" /B "%NGROK%" http --domain=%DOMINIO% 5000 >> ngrok_log.txt 2>&1
+echo  Aguardando ngrok subir...
+timeout /t 8 /nobreak >nul
+
+:: Confirma que o ngrok esta respondendo antes de iniciar o bot
+:CHECK_NGROK
+curl -s http://localhost:4040/api/tunnels | findstr "public_url" >nul 2>&1
+if errorlevel 1 (
+    echo  Aguardando ngrok...
+    timeout /t 3 /nobreak >nul
+    goto CHECK_NGROK
+)
+echo  Ngrok detectado! Iniciando bot...
 
 :: Inicia bot local
-echo  Iniciando bot local...
 set PYTHONIOENCODING=utf-8
 set PYTHONUTF8=1
 cd /d "%PASTA%"
