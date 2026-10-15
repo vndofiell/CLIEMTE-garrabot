@@ -34818,16 +34818,18 @@ async function _drvFiltroTopoFundo(ativo, periodo, direcao) {
 let _drvAnaliseContador = 0;
 
 // ── Análise GARRA PRICE ACTION PRO ──────────────────────────────────────────
-// Pontuação ponderada: EMA200(25) + EMA9/21(15) + MACD(20) + RSI(15) + Vol(10) + Vela/PA(15)
-// Bloqueia quando: RSI extremo, MACD contrário, vela contrária, tendência contrária
-function _drvPriceActionProAnalisar(vela) {
+// Pontuação ponderada: EMA200(25) + EMA9/21(15) + MACD(20) + RSI(15) + PA_contexto(25)
+// Usa VELA FECHADA (sorted[-2]). Analisa contexto histórico: sequência, engolfo real,
+// reversão em topo/fundo local, momentum de 5 velas. Volume bloqueia quando fraco.
+function _drvPriceActionProAnalisar(_velaIgnorada) {
     const candles = _drvChart._candles;
     if (!candles || candles.length < 30) return null;
     const sorted = [...candles].sort((a, b) => a.time - b.time);
     const closes = sorted.map(c => c.close);
     const n = closes.length;
+    if (n < 5) return null;
 
-    // ── Indicadores ───────────────────────────────────────────
+    // ── Indicadores sobre série completa ──────────────────────
     const e9   = _drvEmaArr(closes, 9);
     const e21  = _drvEmaArr(closes, 21);
     const e200 = _drvEmaArr(closes, 200);
@@ -34837,33 +34839,83 @@ function _drvPriceActionProAnalisar(vela) {
     const avgVol = vols.slice(-21, -1).reduce((s, v) => s + v, 0) / 20 || 1;
     const i = n - 1;
 
-    const rsiVal   = rv[i];
-    const macdUp   = mc.m[i] > mc.s[i];
-    const macdDown = mc.m[i] < mc.s[i];
-    const trendUp  = closes[i] > e200[i];
-    const trendDown= closes[i] < e200[i];
-    const ema9Up   = e9[i] > e21[i];
-    const volOk    = vols[i] > avgVol;
+    // ── Usa ÚLTIMA VELA FECHADA (n-2) — nunca a vela em formação ──
+    const iF = n - 2; // índice da última fechada
+    const vF = sorted[iF];          // vela fechada
+    const vP = sorted[iF - 1] || vF; // vela anterior
+    const vP2= sorted[iF - 2] || vP; // 2 velas atrás
 
-    // ── Price Action: pavios + engolfo + cor da vela ──────────
-    const o = vela.open, h = vela.high, l = vela.low, cl = vela.close;
-    const corpo    = cl - o;
-    const amp      = h - l;
+    const rsiVal   = rv[iF];
+    const macdUp   = mc.m[iF] > mc.s[iF];
+    const macdDown = mc.m[iF] < mc.s[iF];
+    const trendUp  = closes[iF] > e200[iF];
+    const trendDown= closes[iF] < e200[iF];
+    const ema9Up   = e9[iF] > e21[iF];
+    const volOk    = vols[iF] > avgVol * 0.8; // 80% da média = aceitável
+
+    // ── Análise de padrão da vela fechada + contexto ──────────
+    const o  = vF.open,  h  = vF.high,  l  = vF.low,  cl = vF.close;
+    const oP = vP.open,  hP = vP.high,  lP = vP.low,  cP = vP.close;
+    const oP2= vP2.open, cP2= vP2.close;
+
+    const corpo  = cl - o;
+    const amp    = h - l || 1e-9;
     const bullCandle = cl > o;
     const bearCandle = cl < o;
-    let padraoCall = false, padraoPut = false;
-    if (amp > 0) {
-        const pavioInf = Math.min(o, cl) - l;
-        const pavioSup = h - Math.max(o, cl);
-        // Martelo / pin de alta (pavio inferior ≥ 60% da amplitude)
-        if (pavioInf / amp >= 0.55 && Math.abs(corpo) / amp < 0.35) padraoCall = true;
-        // Estrela cadente / pin de baixa (pavio superior ≥ 60%)
-        if (pavioSup / amp >= 0.55 && Math.abs(corpo) / amp < 0.35) padraoPut = true;
-        // Engolfo de alta: vela verde com corpo grande
-        if (bullCandle && Math.abs(corpo) / amp >= 0.65) padraoCall = true;
-        // Engolfo de baixa: vela vermelha com corpo grande
-        if (bearCandle && Math.abs(corpo) / amp >= 0.65) padraoPut = true;
+
+    const pavioInf = Math.min(o, cl) - l;
+    const pavioSup = h - Math.max(o, cl);
+
+    let padraoCall = false, padraoPut = false, nomesPadrao = [];
+
+    // 1. Martelo (reversão de alta) — pavio inferior ≥ 55% + corpo pequeno
+    if (pavioInf / amp >= 0.55 && Math.abs(corpo) / amp < 0.35) {
+        padraoCall = true; nomesPadrao.push('MARTELO');
     }
+    // 2. Estrela cadente (reversão de baixa) — pavio superior ≥ 55% + corpo pequeno
+    if (pavioSup / amp >= 0.55 && Math.abs(corpo) / amp < 0.35) {
+        padraoPut = true; nomesPadrao.push('SHOOTING_STAR');
+    }
+    // 3. Engolfo de alta REAL (vela fechada engolfa a anterior)
+    if (bullCandle && bearCandle === false && cP < oP
+            && o <= cP && cl >= oP) {
+        padraoCall = true; nomesPadrao.push('ENGOLFO_ALTA');
+    }
+    // 4. Engolfo de baixa REAL
+    if (bearCandle && cP > oP && o >= cP && cl <= oP) {
+        padraoPut = true; nomesPadrao.push('ENGOLFO_BAIXA');
+    }
+    // 5. Marubozu — corpo forte sem pavios (continuação de movimento)
+    if (bullCandle && Math.abs(corpo) / amp >= 0.80) {
+        padraoCall = true; nomesPadrao.push('MARUBOZU_ALTA');
+    }
+    if (bearCandle && Math.abs(corpo) / amp >= 0.80) {
+        padraoPut = true; nomesPadrao.push('MARUBOZU_BAIXA');
+    }
+
+    // ── Contexto histórico: últimas 5 velas fechadas ──────────
+    const ctx5 = sorted.slice(Math.max(0, iF - 4), iF + 1);
+    const nCtx  = ctx5.length;
+    const verdes  = ctx5.filter(v => v.close > v.open).length;
+    const vermelhas = ctx5.filter(v => v.close < v.open).length;
+    // Momentum de 5 velas: predominância de cor = continuação
+    const momCallCtx = verdes   >= 4; // 4+ velas verdes  = impulso de alta forte
+    const momPutCtx  = vermelhas >= 4; // 4+ velas vermelhas = impulso de baixa forte
+    // Sequência de 3+ vermelhas antes de uma verde = possível reversão de alta
+    const seq3Vermelhas = ctx5.slice(0, 3).every(v => v.close < v.open);
+    const seq3Verdes    = ctx5.slice(0, 3).every(v => v.close > v.open);
+    const reversaoAlta  = seq3Vermelhas && bullCandle;
+    const reversaoBaixa = seq3Verdes    && bearCandle;
+
+    // ── Topo e fundo local (últimas 20 velas fechadas) ────────
+    const ctx20 = sorted.slice(Math.max(0, iF - 19), iF);
+    const topoLocal  = ctx20.length ? Math.max(...ctx20.map(v => v.high))  : h;
+    const fundoLocal = ctx20.length ? Math.min(...ctx20.map(v => v.low))   : l;
+    const rangeLocal = topoLocal - fundoLocal || 1e-9;
+    const pctDoTopo  = (topoLocal  - cl) / rangeLocal;
+    const pctDoFundo = (cl - fundoLocal) / rangeLocal;
+    const pertoTopo  = pctDoTopo  < 0.10; // dentro dos 10% superiores do range
+    const pertoFundo = pctDoFundo < 0.10; // dentro dos 10% inferiores do range
 
     // ── Pontuação ─────────────────────────────────────────────
     let call = 0, put = 0, blockers = [];
@@ -34876,25 +34928,20 @@ function _drvPriceActionProAnalisar(vela) {
     if (ema9Up)  call += 15;
     else         put  += 15;
 
-    // 3. RSI (+15 ou bloqueia apenas se extremo)
-    if (rsiVal >= 52 && rsiVal <= 68) call += 15;
-    else if (rsiVal >= 32 && rsiVal <= 48) put += 15;
-    else if (rsiVal > 75 || rsiVal < 25) blockers.push(`RSI extremo (${rsiVal.toFixed(1)})`);
-    // RSI entre 68-75 ou 25-32: zona neutra, não bloqueia mas não pontua
-
-    // 4. MACD (+20)
+    // 3. MACD (+20)
     if (macdUp)   call += 20;
     if (macdDown) put  += 20;
 
-    // 5. Volume — só pontua se tiver volume real (ticks > 1); nunca bloqueia
-    // (candles históricos da Deriv não têm volume — ignorado como filtro)
-    const temVolReal = vols.some(v => v > 1);
-    if (temVolReal && volOk) { call += 10; put += 10; }
+    // 4. RSI (+10 ou bloqueia se extremo)
+    if (rsiVal >= 52 && rsiVal <= 68) call += 10;
+    else if (rsiVal >= 32 && rsiVal <= 48) put += 10;
+    else if (rsiVal > 75 || rsiVal < 25) blockers.push(`RSI extremo (${rsiVal.toFixed(1)})`);
 
-    // 6. Price Action / vela (+15)
-    if (padraoCall) call += 15;
-    if (padraoPut)  put  += 15;
-    // Vela neutra (doji): não penaliza
+    // 5. Padrão de vela + contexto histórico (+25 total)
+    if (padraoCall || momCallCtx || reversaoAlta)  call += 15;
+    if (padraoPut  || momPutCtx  || reversaoBaixa) put  += 15;
+    if (padraoCall || reversaoAlta)  call += 10; // bônus por padrão técnico
+    if (padraoPut  || reversaoBaixa) put  += 10;
 
     // ── Direção e confluência ─────────────────────────────────
     const dir  = call > put ? 'CALL' : put > call ? 'PUT' : null;
@@ -34902,27 +34949,40 @@ function _drvPriceActionProAnalisar(vela) {
 
     if (!dir) return null;
 
-    // ── Filtros bloqueantes — alinhamento triplo obrigatório ──
+    // ── Filtros bloqueantes ────────────────────────────────────
     if (dir === 'CALL') {
-        if (!ema9Up)   blockers.push('EMA9/21 baixista');   // EMA rápida contra
-        if (!trendUp)  blockers.push('tendência baixista'); // EMA200 contra
+        if (!ema9Up)   blockers.push('EMA9/21 baixista');
+        if (!trendUp)  blockers.push('tendência baixista');
         if (!macdUp)   blockers.push('MACD não confirmou');
-        if (bearCandle && amp > 0 && Math.abs(corpo) / amp >= 0.6 && !padraoCall)
-            blockers.push('candle não confirmou a direção');
+        // Bloqueia CALL perto de topo local (resistência)
+        if (pertoTopo && !reversaoAlta) blockers.push('perto de topo — resistência');
+        // Bloqueia CALL se há 3+ velas vermelhas consecutivas sem reversão confirmada
+        if (momPutCtx && !padraoCall && !reversaoAlta) blockers.push('impulso de baixa (4+ velas vermelhas)');
+        if (bearCandle && Math.abs(corpo) / amp >= 0.6 && !padraoCall)
+            blockers.push('candle não confirmou');
     }
     if (dir === 'PUT') {
-        if (ema9Up)     blockers.push('EMA9/21 altista');   // EMA rápida contra
-        if (!trendDown) blockers.push('tendência altista'); // EMA200 contra
+        if (ema9Up)     blockers.push('EMA9/21 altista');
+        if (!trendDown) blockers.push('tendência altista');
         if (!macdDown)  blockers.push('MACD não confirmou');
-        if (bullCandle && amp > 0 && Math.abs(corpo) / amp >= 0.6 && !padraoPut)
-            blockers.push('candle não confirmou a direção');
+        // Bloqueia PUT perto de fundo local (suporte)
+        if (pertoFundo && !reversaoBaixa) blockers.push('perto de fundo — suporte');
+        // Bloqueia PUT se há 3+ velas verdes consecutivas sem reversão confirmada
+        if (momCallCtx && !padraoPut && !reversaoBaixa) blockers.push('impulso de alta (4+ velas verdes)');
+        if (bullCandle && Math.abs(corpo) / amp >= 0.6 && !padraoPut)
+            blockers.push('candle não confirmou');
     }
-    // Volume NÃO bloqueia — apenas pontua quando real
+
+    // Volume bloqueia quando fraco (dados reais de tick disponíveis)
+    const temVolReal = vols.some(v => v > 1);
+    if (temVolReal && !volOk) blockers.push('volume fraco');
 
     const ok = best >= 55 && blockers.length === 0;
 
     return { dir: dir.toLowerCase(), confianca: best, ok, blockers,
-        detalhes: { rsiVal, macdUp, trendUp, trendDown, ema9Up, volOk, padraoCall, padraoPut, bullCandle, bearCandle } };
+        detalhes: { rsiVal, macdUp, trendUp, trendDown, ema9Up, volOk,
+                    padraoCall, padraoPut, bullCandle, bearCandle,
+                    nomesPadrao, pertoTopo, pertoFundo, momCallCtx, momPutCtx } };
 }
 
 function _drvAnalisarAutomatic(precoAtual) {
@@ -34939,10 +34999,13 @@ function _drvAnalisarAutomatic(precoAtual) {
         const pa = _drvPriceActionProAnalisar(vela);
         if (!pa) return;
         const cor = pa.dir === 'call' ? '#27c93f' : '#ef4444';
-        // Exibe resumo dos indicadores no painel de sinais
-        const { rsiVal, macdUp, trendUp, ema9Up, volOk, bullCandle, padraoCall, padraoPut } = pa.detalhes;
+        // Exibe resumo dos indicadores + padrões de vela no painel de sinais
+        const { rsiVal, macdUp, trendUp, ema9Up, volOk, nomesPadrao, pertoTopo, pertoFundo, momCallCtx, momPutCtx } = pa.detalhes;
+        const _paLabel = nomesPadrao && nomesPadrao.length ? ` | PA:${nomesPadrao.join('+')}` : '';
+        const _ctxLabel = momCallCtx ? ' | CTX:IMPULSO↑' : momPutCtx ? ' | CTX:IMPULSO↓' : '';
+        const _srLabel  = pertoTopo ? ' | ⚠️TOPO' : pertoFundo ? ' | ⚠️FUNDO' : '';
         _drvAdicionarSinal({ msg:
-            `📊 EMA200:${pa.detalhes.trendUp?'▲Alta':'▼Baixa'} | EMA9/21:${ema9Up?'Alta':'Baixa'} | MACD:${macdUp?'▲':'▼'} | RSI:${rsiVal.toFixed(1)} | Vol:${volOk?'OK':'baixo'}`,
+            `📊 EMA200:${trendUp?'▲Alta':'▼Baixa'} | EMA9/21:${ema9Up?'Alta':'Baixa'} | MACD:${macdUp?'▲':'▼'} | RSI:${rsiVal.toFixed(1)} | Vol:${volOk?'OK':'baixo'}${_paLabel}${_ctxLabel}${_srLabel}`,
             cor: '#aaa' });
         if (!pa.ok) {
             _drvAdicionarSinal({ msg: `⏸ AGUARDAR — ${pa.blockers.join(' • ')} | conf:${pa.confianca}%`, cor: '#ffbd2e' });
