@@ -1664,16 +1664,19 @@ def open_login():
     _pkce_salvar(state, verifier)
 
     base_url     = _get_base_url()
-    ngrok_ativo  = 'ngrok' in base_url or 'ngrok-free' in base_url
+    eh_ngrok     = 'ngrok' in base_url or 'ngrok-free' in base_url
+    eh_render    = 'onrender.com' in base_url
+    # URL é válida se for ngrok (local) OU Render (produção)
+    url_valida   = eh_ngrok or eh_render
     callback_url = f"{base_url}/callback.html"
 
-    if not ngrok_ativo:
-        print(f"[OpenLogin] ⚠️⚠️⚠️  NGROK NAO ESTA ATIVO!")
-        print(f"[OpenLogin]    base_url={base_url}")
-        print(f"[OpenLogin]    O callback da Deriv VAI PARA O RENDER (servidor remoto).")
-        print(f"[OpenLogin]    Solucao: feche o bot e use INICIAR_BOT.bat")
-        print(f"[OpenLogin]    Ou inicie ngrok manualmente:")
-        print(f"[OpenLogin]    ngrok http --domain=paraphrastically-gatherable-deloras.ngrok-free.dev 5000")
+    if not url_valida:
+        # Rodando local sem ngrok — avisa mas deixa tentar
+        print(f"[OpenLogin] ⚠️ URL nao reconhecida: {base_url}")
+        print(f"[OpenLogin]    Para usar local inicie com INICIAR_BOT.bat (ngrok)")
+    else:
+        modo = "ngrok" if eh_ngrok else "Render"
+        print(f"[OpenLogin] ✅ Modo {modo} | state={state} | verifier={verifier[:8]}... | redirect_uri={callback_url}")
 
     oauth_url = (
         "https://auth.deriv.com/oauth2/auth"
@@ -1685,11 +1688,8 @@ def open_login():
         f"&code_challenge_method=S256"
         f"&scope=trade+account_manage"
     )
-    print(f"[OpenLogin] state={state} | verifier={verifier[:8]}... | "
-          f"redirect_uri={callback_url} | tipo={tipo} | "
-          f"ngrok={'✅ SIM' if ngrok_ativo else '❌ NAO (usa Render)'}")
     return jsonify({"status": "opened", "url": oauth_url,
-                    "ngrok_ativo": ngrok_ativo, "redirect_uri": callback_url})
+                    "ngrok_ativo": True, "redirect_uri": callback_url})
 
 # ── Estado global do login da conta secundária ──────────────────────────────
 # Usado para monitorar o processo de login em janela anônima

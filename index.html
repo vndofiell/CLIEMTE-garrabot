@@ -8056,15 +8056,6 @@ function escolherConta(tipo) {
             return response.json();
         })
         .then(data => {
-            if (data.ngrok_ativo === false) {
-                print("⚠️ NGROK NAO ESTA ATIVO!", "log-loss");
-                print("⚠️ O callback da Deriv vai para o servidor Render (remoto).", "log-loss");
-                print("⚠️ Feche o bot e use INICIAR_BOT.bat para iniciar com ngrok.", "log-loss");
-                print("⚠️ Ou abra um terminal e execute:", "log-loss");
-                print('   ngrok http --domain=paraphrastically-gatherable-deloras.ngrok-free.dev 5000', "log-loss");
-                if (_abaLogin) _abaLogin.close();
-                return;
-            }
             if (!data.url) {
                 print("❌ Servidor nao retornou URL de login. Tente novamente.", "log-loss");
                 if (_abaLogin) _abaLogin.close();
