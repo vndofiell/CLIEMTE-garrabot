@@ -10903,8 +10903,17 @@ function initWebSocket(wssUrl) {
                 }
             }
 
-            // Reconecta sempre que bot._wssUrl existir (desconexão não foi intencional).
-            // Preserva estratégia, gerenciamento e todas as configs configuradas.
+            // OTP ainda pode ser válido — só reconecta automaticamente se bot rodando ou DBS ativo
+            if (!bot.running && !_dbsEstaAtivo()) {
+                // Bot parado: tenta obter nova URL silenciosamente para próxima vez
+                const _urlSilenciosa = await _wsObterNovaUrl();
+                if (_urlSilenciosa) {
+                    bot._wssUrl = _urlSilenciosa; // atualiza para reconexão futura
+                }
+                _wsReconectando = false;
+                return;
+            }
+
             print(`📡 Reconectando automaticamente... (tentativa ${_tentativa})`, "log-info");
             try { initWebSocket(bot._wssUrl); } catch(_) {}
             _wsReconTimer = setTimeout(async () => {
@@ -34387,8 +34396,6 @@ async function _drvScannerAnalisarAtivo(sym, periodo) {
 
         const closes = sorted.map(c => c.close);
         const n      = sorted.length;
-        if (n < 5) return null;
-
         const e9     = _drvEmaArr(closes, 9);
         const e21    = _drvEmaArr(closes, 21);
         const e200   = _drvEmaArr(closes, 200);
@@ -34396,114 +34403,56 @@ async function _drvScannerAnalisarAtivo(sym, periodo) {
         const mc     = _drvMacdObj(closes);
         const vols   = sorted.map(c => c.volume || 1);
         const avgVol = vols.slice(-21, -1).reduce((s, v) => s + v, 0) / 20 || 1;
+        const i      = n - 1;
+        const vela   = sorted[i];
 
-        // Usa ÚLTIMA VELA FECHADA (n-2), igual ao Price Action
-        const iF    = n - 2;
-        const iAtual = n - 1;  // vela em formação — usada para veto duplo MACD
-        const vF    = sorted[iF];
-        const vP    = sorted[iF - 1] || vF;
-
-        const rsiVal    = rv[iF];
-        const macdUp    = mc.m[iF] > mc.s[iF];
-        const macdDown  = mc.m[iF] < mc.s[iF];
-        // MACD da vela atual (mais recente) — veto adicional
-        const macdAtualUp   = mc.m[iAtual] > mc.s[iAtual];
-        const macdAtualDown = mc.m[iAtual] < mc.s[iAtual];
-        const trendUp   = closes[iF] > e200[iF];
-        const trendDown = closes[iF] < e200[iF];
-        const ema9Up    = e9[iF] > e21[iF];
-        const volOk     = vols[iF] > avgVol * 0.8;
-        const bullC     = vF.close > vF.open;
-        const bearC     = vF.close < vF.open;
-        const amp       = vF.high - vF.low || 1e-9;
-        const corpo     = vF.close - vF.open;
-
-        // ── Padrões de vela ──────────────────────────────────────
-        const pavInf = Math.min(vF.open, vF.close) - vF.low;
-        const pavSup = vF.high - Math.max(vF.open, vF.close);
+        const rsiVal    = rv[i];
+        const macdUp    = mc.m[i] > mc.s[i];
+        const macdDown  = mc.m[i] < mc.s[i];
+        const trendUp   = closes[i] > e200[i];
+        const trendDown = closes[i] < e200[i];
+        const ema9Up    = e9[i] > e21[i];
+        const volOk     = vols[i] > avgVol;
+        const bullC     = vela.close > vela.open;
+        const bearC     = vela.close < vela.open;
+        const amp       = vela.high - vela.low;
+        const corpo     = vela.close - vela.open;
         let padraoCall = false, padraoPut = false;
-        if (pavInf / amp >= 0.55 && Math.abs(corpo) / amp < 0.35) padraoCall = true;
-        if (pavSup / amp >= 0.55 && Math.abs(corpo) / amp < 0.35) padraoPut = true;
-        // Engolfo real
-        if (bullC && vP.close < vP.open && vF.open <= vP.close && vF.close >= vP.open) padraoCall = true;
-        if (bearC && vP.close > vP.open && vF.open >= vP.close && vF.close <= vP.open) padraoPut  = true;
-        // Marubozu
-        if (bullC && Math.abs(corpo) / amp >= 0.80) padraoCall = true;
-        if (bearC && Math.abs(corpo) / amp >= 0.80) padraoPut  = true;
-
-        // ── Contexto 5 velas ─────────────────────────────────────
-        const ctx5      = sorted.slice(Math.max(0, iF - 4), iF + 1);
-        const verdes    = ctx5.filter(v => v.close > v.open).length;
-        const vermelhas = ctx5.filter(v => v.close < v.open).length;
-        const momCallCtx   = verdes    >= 4;
-        const momPutCtx    = vermelhas >= 4;
-        const seq3Verm     = ctx5.slice(0, 3).every(v => v.close < v.open);
-        const seq3Verd     = ctx5.slice(0, 3).every(v => v.close > v.open);
-        const reversaoAlta = seq3Verm && bullC;
-        const reversaoBaixa= seq3Verd && bearC;
-
-        // ── Topo/fundo local (20 velas) ──────────────────────────
-        const ctx20    = sorted.slice(Math.max(0, iF - 19), iF);
-        const topoL    = ctx20.length ? Math.max(...ctx20.map(v => v.high)) : vF.high;
-        const fundoL   = ctx20.length ? Math.min(...ctx20.map(v => v.low))  : vF.low;
-        const rangeL   = topoL - fundoL || 1e-9;
-        const pertoTopo  = (topoL  - vF.close) / rangeL < 0.10;
-        const pertoFundo = (vF.close - fundoL)  / rangeL < 0.10;
-
-        // ── Detecção de gap na abertura (salto sobre EMA) ────────
-        // Gap = abertura da vela fechada > máxima da anterior (gap de alta)
-        //     OU abertura < mínima da anterior (gap de baixa)
-        // Gap sobre EMA = abertura pulou a EMA sem tocar — sinal de fraqueza
-        const _gapAlta  = vF.open > vP.high;  // vela abriu acima do topo anterior
-        const _gapBaixa = vF.open < vP.low;   // vela abriu abaixo do fundo anterior
-        // Gap sobre EMA9: vF abriu de um lado e EMA9 ficou no meio
-        const _ema9Val  = e9[iF];
-        const _gapSobreEma = (_gapAlta  && vP.high < _ema9Val && vF.open > _ema9Val) ||
-                             (_gapBaixa && vP.low  > _ema9Val && vF.open < _ema9Val);
-
-        // ── Pontuação — MACD atual (n-1) usado como gate de momentum ──
-        // Se MACD atual é contrário, price action não pontua (sinal fraco)
-        const _macdGateCall = macdUp && macdAtualUp;     // ambos compradores
-        const _macdGatePut  = macdDown && macdAtualDown; // ambos vendedores
+        if (amp > 0) {
+            const pavInf = Math.min(vela.open, vela.close) - vela.low;
+            const pavSup = vela.high - Math.max(vela.open, vela.close);
+            if (pavInf / amp >= 0.55 && Math.abs(corpo) / amp < 0.35) padraoCall = true;
+            if (pavSup / amp >= 0.55 && Math.abs(corpo) / amp < 0.35) padraoPut = true;
+            if (bullC && Math.abs(corpo) / amp >= 0.65) padraoCall = true;
+            if (bearC && Math.abs(corpo) / amp >= 0.65) padraoPut = true;
+        }
 
         let call = 0, put = 0, blockers = [];
         if (trendUp)   call += 25; if (trendDown)  put  += 25;
         if (ema9Up)    call += 15; else             put  += 15;
-        if (_macdGateCall) call += 20; if (_macdGatePut) put += 20;
-        if (rsiVal >= 52 && rsiVal <= 68) call += 10;
-        else if (rsiVal >= 32 && rsiVal <= 48) put += 10;
+        if (rsiVal >= 52 && rsiVal <= 68) call += 15;
+        else if (rsiVal >= 32 && rsiVal <= 48) put += 15;
         else if (rsiVal > 75 || rsiVal < 25) blockers.push('RSI extremo');
-        // Price Action só pontua quando MACD confirma a direção
-        if (_macdGateCall && (padraoCall || momCallCtx || reversaoAlta))  call += 15;
-        if (_macdGatePut  && (padraoPut  || momPutCtx  || reversaoBaixa)) put  += 15;
-        if (_macdGateCall && (padraoCall || reversaoAlta))  call += 10;
-        if (_macdGatePut  && (padraoPut  || reversaoBaixa)) put  += 10;
+        if (macdUp)    call += 20; if (macdDown)   put  += 20;
+        // Volume: só pontua se tiver dados reais, nunca bloqueia
+        if (padraoCall) call += 15; if (padraoPut)  put  += 15;
 
         const dir  = call > put ? 'CALL' : put > call ? 'PUT' : null;
         const best = Math.min(100, Math.max(call, put));
         if (!dir) return { sym, nome:'', dir:null, score:best, blockers, rsiVal, macdUp, trendUp, ema9Up, volOk };
 
-        // ── Filtros bloqueantes (idênticos ao Price Action) ───────
-        // Gap sobre EMA bloqueia SEMPRE — falso rompimento
-        if (_gapSobreEma) blockers.push('gap sobre EMA ❌');
-
         if (dir === 'CALL') {
-            if (!ema9Up)   blockers.push('EMA9/21 ❌');
-            if (!trendUp)  blockers.push('EMA200 ❌');
-            // Veto duplo MACD: vela fechada E vela atual devem ser compradoras
-            if (!macdUp || !macdAtualUp)   blockers.push('MACD ❌');
-            if (pertoTopo && !reversaoAlta) blockers.push('topo ❌');
-            if (momPutCtx && !padraoCall && !reversaoAlta) blockers.push('impulso baixa ❌');
-            if (bearC && Math.abs(corpo) / amp >= 0.6 && !padraoCall) blockers.push('vela ❌');
+            if (!macdUp)   blockers.push('MACD ❌');
+            if (!trendUp)  blockers.push('tendência ❌');
+            // Vela só bloqueia se fortemente contrária (corpo > 60% da amplitude)
+            const _a = vela.high - vela.low;
+            if (bearC && _a > 0 && Math.abs(vela.close - vela.open) / _a >= 0.6 && !padraoCall) blockers.push('vela ❌');
         }
         if (dir === 'PUT') {
-            if (ema9Up)     blockers.push('EMA9/21 ❌');
-            if (!trendDown) blockers.push('EMA200 ❌');
-            // Veto duplo MACD: vela fechada E vela atual devem ser vendedoras
-            if (!macdDown || !macdAtualDown) blockers.push('MACD ❌');
-            if (pertoFundo && !reversaoBaixa) blockers.push('fundo ❌');
-            if (momCallCtx && !padraoPut && !reversaoBaixa) blockers.push('impulso alta ❌');
-            if (bullC && Math.abs(corpo) / amp >= 0.6 && !padraoPut) blockers.push('vela ❌');
+            if (!macdDown)  blockers.push('MACD ❌');
+            if (!trendDown) blockers.push('tendência ❌');
+            const _a = vela.high - vela.low;
+            if (bullC && _a > 0 && Math.abs(vela.close - vela.open) / _a >= 0.6 && !padraoPut) blockers.push('vela ❌');
         }
         const ok = best >= _drvScannerScoreMin && blockers.length === 0;
         return { sym, nome:'', dir, score: best, ok, blockers, rsiVal, macdUp, trendUp, ema9Up, volOk, padraoCall, padraoPut };
@@ -34753,8 +34702,8 @@ async function _drvFiltroTendencia(ativo, periodo, direcao) {
     const emaDist = Math.abs(ema9 - ema21) / (ema21 || 1) * 10000; // em bps
     score += Math.min(20, emaDist * 2);
 
-    // EMA é condição obrigatória — ADX reforça mas nunca substitui o alinhamento de tendência
-    const aprovado = ema_ok && score >= 20;
+    // Aprova se EMA alinhada OU (ADX forte + score ≥ 40)
+    const aprovado = ema_ok || (adx_forte && score >= 40);
 
     const resumo = `EMA9>${ema9.toFixed(4)} EMA21>${ema21.toFixed(4)} dir:${ema_dir} ADX:${dx.toFixed(0)} score:${score.toFixed(0)}`;
     return { aprovado, ema_dir, adx_forte, score: Math.round(score), dx: Math.round(dx), resumo };
@@ -34875,18 +34824,16 @@ async function _drvFiltroTopoFundo(ativo, periodo, direcao) {
 let _drvAnaliseContador = 0;
 
 // ── Análise GARRA PRICE ACTION PRO ──────────────────────────────────────────
-// Pontuação ponderada: EMA200(25) + EMA9/21(15) + MACD(20) + RSI(15) + PA_contexto(25)
-// Usa VELA FECHADA (sorted[-2]). Analisa contexto histórico: sequência, engolfo real,
-// reversão em topo/fundo local, momentum de 5 velas. Volume bloqueia quando fraco.
-function _drvPriceActionProAnalisar(_velaIgnorada) {
+// Pontuação ponderada: EMA200(25) + EMA9/21(15) + MACD(20) + RSI(15) + Vol(10) + Vela/PA(15)
+// Bloqueia quando: RSI extremo, MACD contrário, vela contrária, tendência contrária
+function _drvPriceActionProAnalisar(vela) {
     const candles = _drvChart._candles;
     if (!candles || candles.length < 30) return null;
     const sorted = [...candles].sort((a, b) => a.time - b.time);
     const closes = sorted.map(c => c.close);
     const n = closes.length;
-    if (n < 5) return null;
 
-    // ── Indicadores sobre série completa ──────────────────────
+    // ── Indicadores ───────────────────────────────────────────
     const e9   = _drvEmaArr(closes, 9);
     const e21  = _drvEmaArr(closes, 21);
     const e200 = _drvEmaArr(closes, 200);
@@ -34896,99 +34843,35 @@ function _drvPriceActionProAnalisar(_velaIgnorada) {
     const avgVol = vols.slice(-21, -1).reduce((s, v) => s + v, 0) / 20 || 1;
     const i = n - 1;
 
-    // ── Usa ÚLTIMA VELA FECHADA (n-2) — nunca a vela em formação ──
-    const iF = n - 2; // índice da última fechada
-    const vF = sorted[iF];          // vela fechada
-    const vP = sorted[iF - 1] || vF; // vela anterior
-    const vP2= sorted[iF - 2] || vP; // 2 velas atrás
+    const rsiVal   = rv[i];
+    const macdUp   = mc.m[i] > mc.s[i];
+    const macdDown = mc.m[i] < mc.s[i];
+    const trendUp  = closes[i] > e200[i];
+    const trendDown= closes[i] < e200[i];
+    const ema9Up   = e9[i] > e21[i];
+    const volOk    = vols[i] > avgVol;
 
-    const rsiVal   = rv[iF];
-    const macdUp   = mc.m[iF] > mc.s[iF];
-    const macdDown = mc.m[iF] < mc.s[iF];
-    const trendUp  = closes[iF] > e200[iF];
-    const trendDown= closes[iF] < e200[iF];
-    const ema9Up   = e9[iF] > e21[iF];
-    const volOk    = vols[iF] > avgVol * 0.8; // 80% da média = aceitável
-
-    // ── Análise de padrão da vela fechada + contexto ──────────
-    const o  = vF.open,  h  = vF.high,  l  = vF.low,  cl = vF.close;
-    const oP = vP.open,  hP = vP.high,  lP = vP.low,  cP = vP.close;
-    const oP2= vP2.open, cP2= vP2.close;
-
-    const corpo  = cl - o;
-    const amp    = h - l || 1e-9;
+    // ── Price Action: pavios + engolfo + cor da vela ──────────
+    const o = vela.open, h = vela.high, l = vela.low, cl = vela.close;
+    const corpo    = cl - o;
+    const amp      = h - l;
     const bullCandle = cl > o;
     const bearCandle = cl < o;
-
-    const pavioInf = Math.min(o, cl) - l;
-    const pavioSup = h - Math.max(o, cl);
-
-    let padraoCall = false, padraoPut = false, nomesPadrao = [];
-
-    // 1. Martelo (reversão de alta) — pavio inferior ≥ 55% + corpo pequeno
-    if (pavioInf / amp >= 0.55 && Math.abs(corpo) / amp < 0.35) {
-        padraoCall = true; nomesPadrao.push('MARTELO');
-    }
-    // 2. Estrela cadente (reversão de baixa) — pavio superior ≥ 55% + corpo pequeno
-    if (pavioSup / amp >= 0.55 && Math.abs(corpo) / amp < 0.35) {
-        padraoPut = true; nomesPadrao.push('SHOOTING_STAR');
-    }
-    // 3. Engolfo de alta REAL (vela fechada engolfa a anterior)
-    if (bullCandle && bearCandle === false && cP < oP
-            && o <= cP && cl >= oP) {
-        padraoCall = true; nomesPadrao.push('ENGOLFO_ALTA');
-    }
-    // 4. Engolfo de baixa REAL
-    if (bearCandle && cP > oP && o >= cP && cl <= oP) {
-        padraoPut = true; nomesPadrao.push('ENGOLFO_BAIXA');
-    }
-    // 5. Marubozu — corpo forte sem pavios (continuação de movimento)
-    if (bullCandle && Math.abs(corpo) / amp >= 0.80) {
-        padraoCall = true; nomesPadrao.push('MARUBOZU_ALTA');
-    }
-    if (bearCandle && Math.abs(corpo) / amp >= 0.80) {
-        padraoPut = true; nomesPadrao.push('MARUBOZU_BAIXA');
+    let padraoCall = false, padraoPut = false;
+    if (amp > 0) {
+        const pavioInf = Math.min(o, cl) - l;
+        const pavioSup = h - Math.max(o, cl);
+        // Martelo / pin de alta (pavio inferior ≥ 60% da amplitude)
+        if (pavioInf / amp >= 0.55 && Math.abs(corpo) / amp < 0.35) padraoCall = true;
+        // Estrela cadente / pin de baixa (pavio superior ≥ 60%)
+        if (pavioSup / amp >= 0.55 && Math.abs(corpo) / amp < 0.35) padraoPut = true;
+        // Engolfo de alta: vela verde com corpo grande
+        if (bullCandle && Math.abs(corpo) / amp >= 0.65) padraoCall = true;
+        // Engolfo de baixa: vela vermelha com corpo grande
+        if (bearCandle && Math.abs(corpo) / amp >= 0.65) padraoPut = true;
     }
 
-    // ── Contexto histórico: últimas 5 velas fechadas ──────────
-    const ctx5 = sorted.slice(Math.max(0, iF - 4), iF + 1);
-    const nCtx  = ctx5.length;
-    const verdes  = ctx5.filter(v => v.close > v.open).length;
-    const vermelhas = ctx5.filter(v => v.close < v.open).length;
-    // Momentum de 5 velas: predominância de cor = continuação
-    const momCallCtx = verdes   >= 4; // 4+ velas verdes  = impulso de alta forte
-    const momPutCtx  = vermelhas >= 4; // 4+ velas vermelhas = impulso de baixa forte
-    // Sequência de 3+ vermelhas antes de uma verde = possível reversão de alta
-    const seq3Vermelhas = ctx5.slice(0, 3).every(v => v.close < v.open);
-    const seq3Verdes    = ctx5.slice(0, 3).every(v => v.close > v.open);
-    const reversaoAlta  = seq3Vermelhas && bullCandle;
-    const reversaoBaixa = seq3Verdes    && bearCandle;
-
-    // ── Topo e fundo local (últimas 20 velas fechadas) ────────
-    const ctx20 = sorted.slice(Math.max(0, iF - 19), iF);
-    const topoLocal  = ctx20.length ? Math.max(...ctx20.map(v => v.high))  : h;
-    const fundoLocal = ctx20.length ? Math.min(...ctx20.map(v => v.low))   : l;
-    const rangeLocal = topoLocal - fundoLocal || 1e-9;
-    const pctDoTopo  = (topoLocal  - cl) / rangeLocal;
-    const pctDoFundo = (cl - fundoLocal) / rangeLocal;
-    const pertoTopo  = pctDoTopo  < 0.10; // dentro dos 10% superiores do range
-    const pertoFundo = pctDoFundo < 0.10; // dentro dos 10% inferiores do range
-
-    // ── Detecção de gap sobre EMA (falso rompimento) ──────────
-    // Gap = vela fechada abriu acima da máxima anterior (gap de alta)
-    //     OU abriu abaixo da mínima anterior (gap de baixa)
-    // Gap sobre EMA9 = a vela saltou a EMA sem tocar → fraqueza, reversão provável
-    const _gapAlta    = o > vP.high;   // abriu acima do topo anterior
-    const _gapBaixa   = o < vP.low;    // abriu abaixo do fundo anterior
-    const _ema9Val    = e9[iF];
-    const _gapSobreEma = (_gapAlta  && vP.high < _ema9Val && o > _ema9Val) ||
-                         (_gapBaixa && vP.low  > _ema9Val && o < _ema9Val);
-
-    // ── Pontuação — MACD atual (n-1) usado como gate de momentum ──
-    // Price Action só pontua quando MACD confirma — evita scores altos sem momentum
-    const _macdGateCall = macdUp && macdAtualUp;
-    const _macdGatePut  = macdDown && macdAtualDown;
-
+    // ── Pontuação ─────────────────────────────────────────────
     let call = 0, put = 0, blockers = [];
 
     // 1. Tendência EMA 200 (+25)
@@ -34999,20 +34882,25 @@ function _drvPriceActionProAnalisar(_velaIgnorada) {
     if (ema9Up)  call += 15;
     else         put  += 15;
 
-    // 3. MACD duplo — só pontua se vela fechada E atual confirmam (+20)
-    if (_macdGateCall) call += 20;
-    if (_macdGatePut)  put  += 20;
-
-    // 4. RSI (+10 ou bloqueia se extremo)
-    if (rsiVal >= 52 && rsiVal <= 68) call += 10;
-    else if (rsiVal >= 32 && rsiVal <= 48) put += 10;
+    // 3. RSI (+15 ou bloqueia apenas se extremo)
+    if (rsiVal >= 52 && rsiVal <= 68) call += 15;
+    else if (rsiVal >= 32 && rsiVal <= 48) put += 15;
     else if (rsiVal > 75 || rsiVal < 25) blockers.push(`RSI extremo (${rsiVal.toFixed(1)})`);
+    // RSI entre 68-75 ou 25-32: zona neutra, não bloqueia mas não pontua
 
-    // 5. Padrão de vela + contexto histórico (+25 total) — só quando MACD confirma
-    if (_macdGateCall && (padraoCall || momCallCtx || reversaoAlta))  call += 15;
-    if (_macdGatePut  && (padraoPut  || momPutCtx  || reversaoBaixa)) put  += 15;
-    if (_macdGateCall && (padraoCall || reversaoAlta))  call += 10;
-    if (_macdGatePut  && (padraoPut  || reversaoBaixa)) put  += 10;
+    // 4. MACD (+20)
+    if (macdUp)   call += 20;
+    if (macdDown) put  += 20;
+
+    // 5. Volume — só pontua se tiver volume real (ticks > 1); nunca bloqueia
+    // (candles históricos da Deriv não têm volume — ignorado como filtro)
+    const temVolReal = vols.some(v => v > 1);
+    if (temVolReal && volOk) { call += 10; put += 10; }
+
+    // 6. Price Action / vela (+15)
+    if (padraoCall) call += 15;
+    if (padraoPut)  put  += 15;
+    // Vela neutra (doji): não penaliza
 
     // ── Direção e confluência ─────────────────────────────────
     const dir  = call > put ? 'CALL' : put > call ? 'PUT' : null;
@@ -35020,49 +34908,26 @@ function _drvPriceActionProAnalisar(_velaIgnorada) {
 
     if (!dir) return null;
 
-    // ── Filtros bloqueantes ────────────────────────────────────
-    // Veto duplo de MACD: vela fechada E vela atual devem confirmar
-    const macdAtualUp   = mc.m[i] > mc.s[i];   // MACD da vela em formação (mais recente)
-    const macdAtualDown = mc.m[i] < mc.s[i];
-
-    // Gap sobre EMA bloqueia SEMPRE — falso rompimento
-    if (_gapSobreEma) blockers.push('gap sobre EMA — falso rompimento');
-
+    // ── Filtros bloqueantes (apenas os críticos) ──────────────
     if (dir === 'CALL') {
-        if (!ema9Up)   blockers.push('EMA9/21 baixista');
+        if (!macdUp)   blockers.push('MACD não confirmou');
         if (!trendUp)  blockers.push('tendência baixista');
-        // MACD: bloqueia se QUALQUER dos dois (fechada ou atual) está vendedor
-        if (!macdUp || !macdAtualUp)   blockers.push('MACD não confirmou');
-        // Bloqueia CALL perto de topo local (resistência)
-        if (pertoTopo && !reversaoAlta) blockers.push('perto de topo — resistência');
-        // Bloqueia CALL se há 3+ velas vermelhas consecutivas sem reversão confirmada
-        if (momPutCtx && !padraoCall && !reversaoAlta) blockers.push('impulso de baixa (4+ velas vermelhas)');
-        if (bearCandle && Math.abs(corpo) / amp >= 0.6 && !padraoCall)
-            blockers.push('candle não confirmou');
+        // Vela vermelha só bloqueia se for fortemente bearish (corpo > 60% da amplitude)
+        if (bearCandle && amp > 0 && Math.abs(corpo) / amp >= 0.6 && !padraoCall)
+            blockers.push('candle não confirmou a direção');
     }
     if (dir === 'PUT') {
-        if (ema9Up)     blockers.push('EMA9/21 altista');
+        if (!macdDown)  blockers.push('MACD não confirmou');
         if (!trendDown) blockers.push('tendência altista');
-        // MACD: bloqueia se QUALQUER dos dois está comprador
-        if (!macdDown || !macdAtualDown) blockers.push('MACD não confirmou');
-        // Bloqueia PUT perto de fundo local (suporte)
-        if (pertoFundo && !reversaoBaixa) blockers.push('perto de fundo — suporte');
-        // Bloqueia PUT se há 3+ velas verdes consecutivas sem reversão confirmada
-        if (momCallCtx && !padraoPut && !reversaoBaixa) blockers.push('impulso de alta (4+ velas verdes)');
-        if (bullCandle && Math.abs(corpo) / amp >= 0.6 && !padraoPut)
-            blockers.push('candle não confirmou');
+        if (bullCandle && amp > 0 && Math.abs(corpo) / amp >= 0.6 && !padraoPut)
+            blockers.push('candle não confirmou a direção');
     }
-
-    // Volume bloqueia quando fraco (dados reais de tick disponíveis)
-    const temVolReal = vols.some(v => v > 1);
-    if (temVolReal && !volOk) blockers.push('volume fraco');
+    // Volume NÃO bloqueia — apenas pontua quando real
 
     const ok = best >= 55 && blockers.length === 0;
 
     return { dir: dir.toLowerCase(), confianca: best, ok, blockers,
-        detalhes: { rsiVal, macdUp, trendUp, trendDown, ema9Up, volOk,
-                    padraoCall, padraoPut, bullCandle, bearCandle,
-                    nomesPadrao, pertoTopo, pertoFundo, momCallCtx, momPutCtx } };
+        detalhes: { rsiVal, macdUp, trendUp, trendDown, ema9Up, volOk, padraoCall, padraoPut, bullCandle, bearCandle } };
 }
 
 function _drvAnalisarAutomatic(precoAtual) {
@@ -35079,13 +34944,10 @@ function _drvAnalisarAutomatic(precoAtual) {
         const pa = _drvPriceActionProAnalisar(vela);
         if (!pa) return;
         const cor = pa.dir === 'call' ? '#27c93f' : '#ef4444';
-        // Exibe resumo dos indicadores + padrões de vela no painel de sinais
-        const { rsiVal, macdUp, trendUp, ema9Up, volOk, nomesPadrao, pertoTopo, pertoFundo, momCallCtx, momPutCtx } = pa.detalhes;
-        const _paLabel = nomesPadrao && nomesPadrao.length ? ` | PA:${nomesPadrao.join('+')}` : '';
-        const _ctxLabel = momCallCtx ? ' | CTX:IMPULSO↑' : momPutCtx ? ' | CTX:IMPULSO↓' : '';
-        const _srLabel  = pertoTopo ? ' | ⚠️TOPO' : pertoFundo ? ' | ⚠️FUNDO' : '';
+        // Exibe resumo dos indicadores no painel de sinais
+        const { rsiVal, macdUp, trendUp, ema9Up, volOk, bullCandle, padraoCall, padraoPut } = pa.detalhes;
         _drvAdicionarSinal({ msg:
-            `📊 EMA200:${trendUp?'▲Alta':'▼Baixa'} | EMA9/21:${ema9Up?'Alta':'Baixa'} | MACD:${macdUp?'▲':'▼'} | RSI:${rsiVal.toFixed(1)} | Vol:${volOk?'OK':'baixo'}${_paLabel}${_ctxLabel}${_srLabel}`,
+            `📊 EMA200:${pa.detalhes.trendUp?'▲Alta':'▼Baixa'} | EMA9/21:${ema9Up?'Alta':'Baixa'} | MACD:${macdUp?'▲':'▼'} | RSI:${rsiVal.toFixed(1)} | Vol:${volOk?'OK':'baixo'}`,
             cor: '#aaa' });
         if (!pa.ok) {
             _drvAdicionarSinal({ msg: `⏸ AGUARDAR — ${pa.blockers.join(' • ')} | conf:${pa.confianca}%`, cor: '#ffbd2e' });

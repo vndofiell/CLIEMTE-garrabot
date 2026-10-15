@@ -1398,7 +1398,7 @@ setInterval(function(){
             with _token_lock:
                 _token_recebido["access_token"]      = access_token
                 _token_recebido["ts"]                = time.time()
-                _token_recebido["_bot_confirmou"]    = True   # marca imediatamente — callback fecha sozinho
+                _token_recebido["_bot_confirmou"]    = False
                 _token_recebido.pop("_pkce_verifier", None)
             print(f"[Callback] Token PRINCIPAL armazenado: {access_token[:10]}... ({len(access_token)} chars)")
 
@@ -1409,14 +1409,15 @@ setInterval(function(){
                 '<span style="color:#aaa">&#9658; Feche esta aba<br>'
                 '&#9658; Clique em <b style="color:#00ff41">+ Conectar</b> no modal</span>')
 
-        # Login principal — token já confirmado, inicia countdown imediatamente
+        # Login principal — aguarda o bot confirmar antes de iniciar countdown
         sucesso_body = """
 <div class="icone">&#9989;</div>
 <div class="titulo" style="color:#00ff41;text-shadow:0 0 14px #00ff41">ACESSO AUTORIZADO</div>
-<div id="stmsg" class="msg">BOT CONECTADO COM SUCESSO!</div>
-<div id="cnt-area" class="cnt-wrap">FECHANDO EM <span id="cnt" class="cnt-num">5</span> SEGUNDOS...</div>
-<button class="btn" onclick="window.close()">&#10005; FECHAR ESTA ABA</button>
-<script>
+<div id="stmsg" class="msg">AGUARDANDO BOT CONECTAR<span id="dots">...</span></div>
+<div id="cnt-area" class="cnt-wrap" style="display:none">FECHANDO EM <span id="cnt" class="cnt-num">5</span> SEGUNDOS...</div>
+<button class="btn" onclick="window.close()">&#10005; FECHAR ESTA ABA</button>"""
+
+        sucesso_js = """<script>
 (function(){
 var cv=document.getElementById('mx'),ctx=cv.getContext('2d');
 var ch='GARRABOT01ABCDEFｦｧｨｩｪｫｬｭｮｯｰｱｲｳｴｵｶｷｸｹｺ0123456789$#@%&'.split('');
@@ -1434,11 +1435,33 @@ setInterval(function(){
     drops[i]++;
   }
 },50);
-var c=5,t=setInterval(function(){c--;var e=document.getElementById('cnt');if(e)e.textContent=c;if(c<=0){clearInterval(t);window.close();}},1000);
+var dotF=['...','.. ','.','.  '],dotI=0;
+var dotT=setInterval(function(){var d=document.getElementById('dots');if(d)d.textContent=dotF[dotI++%4];},400);
+var tries=0;
+function startCountdown(){
+  clearInterval(dotT);
+  var s=document.getElementById('stmsg');
+  if(s){s.innerHTML='BOT CONECTADO COM SUCESSO!';s.style.color='#00ff41';}
+  var a=document.getElementById('cnt-area');if(a)a.style.display='block';
+  var c=5,t=setInterval(function(){c--;var e=document.getElementById('cnt');if(e)e.textContent=c;if(c<=0){clearInterval(t);window.close();}},1000);
+}
+function poll(){
+  fetch('/auth/token-confirmado').then(function(r){return r.json();}).then(function(d){
+    if(d.ok){startCountdown();}
+    else{tries++;if(tries<30)setTimeout(poll,1000);else{
+      // Bot demorou — fecha automaticamente após 2s (token já está salvo)
+      clearInterval(dotT);
+      var s=document.getElementById('stmsg');
+      if(s){s.innerHTML='✅ TOKEN SALVO — fechando...';s.style.color='#00ff41';}
+      setTimeout(function(){window.close();},2000);
+    }}
+  }).catch(function(){tries++;if(tries<30)setTimeout(poll,1000);});
+}
+setTimeout(poll,1000);
 })();
 </script>"""
 
-        return Response(MATRIX_HEAD + sucesso_body + MATRIX_FOOT, mimetype='text/html')
+        return Response(MATRIX_HEAD + sucesso_body + MATRIX_FOOT + sucesso_js, mimetype='text/html')
     except Exception as e:
         print(f"[Callback] Erro: {e}")
         return _html('&#10060;', 'ERRO DE CONEXAO', '#ff4444',
@@ -2004,29 +2027,60 @@ def _get_token_com_access(access_token: str, tipo: str):
 
 @app.route('/get-token')
 def get_token():
-    """Gera WSS URL usando o token armazenado localmente (recebido via /callback.html).
+    """Gera WSS URL usando o token armazenado localmente (recebido via /pegar-token-robo).
     
-    - Enquanto não há token (aguardando login): retorna token_nao_encontrado
-    - Quando o token chega (ts recente): gera OTP e retorna wss_url
-    - Token válido por até 23h (access_token OAuth da Deriv dura ~24h)
+    IMPORTANTE: o OTP da Deriv expira em ~30s após gerado.
+    Para evitar usar OTPs velhos, esta rota SÓ gera a wss_url quando o
+    frontend acabou de fazer o login (token_ts muito recente — últimos 20s).
+    Para polls anteriores ao login retorna apenas {wss_url: null}.
     """
     try:
+        # 1. Tenta usar token armazenado localmente (recebido do Netlify)
         with _token_lock:
             access_token = _token_recebido.get("access_token", "")
             token_ts     = _token_recebido.get("ts", 0)
+            bot_confirmou = _token_recebido.get("_bot_confirmou", False)
 
-        # Sem token — aguardando login
-        if not access_token:
-            return jsonify({"wss_url": None, "erro": "token_nao_encontrado"})
+        # Token existe e é recente (últimos 10 minutos) — mas só gera OTP se
+        # veio de um login novo (token_ts < 20s) OU ainda não foi confirmado
+        if access_token and (time.time() - token_ts) < 600:
+            # Se o bot já confirmou e o token tem mais de 20s, não regera OTP
+            # (evita gerar OTPs novos durante re-polls que vão expirar antes de serem usados)
+            idade_token = time.time() - token_ts
+            if bot_confirmou and idade_token > 20:
+                # Já conectou antes — aguarda novo login
+                return jsonify({"wss_url": None, "erro": "token_nao_encontrado"})
+            
+            print(f"[Token] Usando token local (idade={idade_token:.0f}s): {access_token[:10]}...")
+            # Marca que o bot leu o token (sinaliza para a página de callback)
+            with _token_lock:
+                _token_recebido["_bot_confirmou"] = True
+            tipo = _access_token.get("tipo", "DEMO")
+            return jsonify(_get_token_com_access(access_token, tipo))
 
-        # Token expirado (>23h)
-        if (time.time() - token_ts) >= 82800:
-            return jsonify({"wss_url": None, "erro": "token_expirado"})
+        # 2. Fallback: tenta buscar do RENDER_URL (compatibilidade)
+        try:
+            res = requests.get(RENDER_URL, timeout=5)
+            if res.status_code == 200:
+                data = res.json()
+                access_token = (
+                    data.get("token") or
+                    data.get("access_token") or
+                    (data.get("data") or {}).get("token") or ""
+                )
+                if isinstance(access_token, dict):
+                    access_token = access_token.get("token") or access_token.get("access_token") or ""
+                access_token = str(access_token).strip().strip('"') if access_token else ""
+                if access_token and access_token not in ("None", "null"):
+                    with _token_lock:
+                        _token_recebido["access_token"] = access_token
+                        _token_recebido["ts"]           = time.time()
+                    tipo = _access_token.get("tipo", "DEMO")
+                    return jsonify(_get_token_com_access(access_token, tipo))
+        except Exception:
+            pass
 
-        idade_token = time.time() - token_ts
-        print(f"[Token] Gerando OTP (token age={idade_token:.0f}s): {access_token[:10]}...")
-        tipo = _access_token.get("tipo", "DEMO")
-        return jsonify(_get_token_com_access(access_token, tipo))
+        return jsonify({"wss_url": None, "erro": "token_nao_encontrado"})
 
     except Exception as e:
         err = str(e)
@@ -2064,10 +2118,9 @@ def get_token_force():
 def clear_token():
     """Limpa o token armazenado localmente — chamado quando o usuário inicia uma nova conexão."""
     with _token_lock:
-        _token_recebido["access_token"]   = ""
-        _token_recebido["ts"]             = 0
+        _token_recebido["access_token"] = ""
+        _token_recebido["ts"]           = 0
         _token_recebido["_bot_confirmou"] = False
-        _token_recebido["_wss_gerado"]    = False
     _render_token_cache["token"] = ""
     _render_token_cache["ts"]    = 0
     print("[Token] Token limpo pelo front-end (nova conexão iniciada).")
