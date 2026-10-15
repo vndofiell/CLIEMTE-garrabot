@@ -34399,12 +34399,16 @@ async function _drvScannerAnalisarAtivo(sym, periodo) {
 
         // Usa ÚLTIMA VELA FECHADA (n-2), igual ao Price Action
         const iF    = n - 2;
+        const iAtual = n - 1;  // vela em formação — usada para veto duplo MACD
         const vF    = sorted[iF];
         const vP    = sorted[iF - 1] || vF;
 
         const rsiVal    = rv[iF];
         const macdUp    = mc.m[iF] > mc.s[iF];
         const macdDown  = mc.m[iF] < mc.s[iF];
+        // MACD da vela atual (mais recente) — veto adicional
+        const macdAtualUp   = mc.m[iAtual] > mc.s[iAtual];
+        const macdAtualDown = mc.m[iAtual] < mc.s[iAtual];
         const trendUp   = closes[iF] > e200[iF];
         const trendDown = closes[iF] < e200[iF];
         const ema9Up    = e9[iF] > e21[iF];
@@ -34467,7 +34471,8 @@ async function _drvScannerAnalisarAtivo(sym, periodo) {
         if (dir === 'CALL') {
             if (!ema9Up)   blockers.push('EMA9/21 ❌');
             if (!trendUp)  blockers.push('EMA200 ❌');
-            if (!macdUp)   blockers.push('MACD ❌');
+            // Veto duplo MACD: vela fechada E vela atual devem ser compradoras
+            if (!macdUp || !macdAtualUp)   blockers.push('MACD ❌');
             if (pertoTopo && !reversaoAlta) blockers.push('topo ❌');
             if (momPutCtx && !padraoCall && !reversaoAlta) blockers.push('impulso baixa ❌');
             if (bearC && Math.abs(corpo) / amp >= 0.6 && !padraoCall) blockers.push('vela ❌');
@@ -34475,7 +34480,8 @@ async function _drvScannerAnalisarAtivo(sym, periodo) {
         if (dir === 'PUT') {
             if (ema9Up)     blockers.push('EMA9/21 ❌');
             if (!trendDown) blockers.push('EMA200 ❌');
-            if (!macdDown)  blockers.push('MACD ❌');
+            // Veto duplo MACD: vela fechada E vela atual devem ser vendedoras
+            if (!macdDown || !macdAtualDown) blockers.push('MACD ❌');
             if (pertoFundo && !reversaoBaixa) blockers.push('fundo ❌');
             if (momCallCtx && !padraoPut && !reversaoBaixa) blockers.push('impulso alta ❌');
             if (bullC && Math.abs(corpo) / amp >= 0.6 && !padraoPut) blockers.push('vela ❌');
@@ -34982,10 +34988,15 @@ function _drvPriceActionProAnalisar(_velaIgnorada) {
     if (!dir) return null;
 
     // ── Filtros bloqueantes ────────────────────────────────────
+    // Veto duplo de MACD: vela fechada E vela atual devem confirmar
+    const macdAtualUp   = mc.m[i] > mc.s[i];   // MACD da vela em formação (mais recente)
+    const macdAtualDown = mc.m[i] < mc.s[i];
+
     if (dir === 'CALL') {
         if (!ema9Up)   blockers.push('EMA9/21 baixista');
         if (!trendUp)  blockers.push('tendência baixista');
-        if (!macdUp)   blockers.push('MACD não confirmou');
+        // MACD: bloqueia se QUALQUER dos dois (fechada ou atual) está vendedor
+        if (!macdUp || !macdAtualUp)   blockers.push('MACD não confirmou');
         // Bloqueia CALL perto de topo local (resistência)
         if (pertoTopo && !reversaoAlta) blockers.push('perto de topo — resistência');
         // Bloqueia CALL se há 3+ velas vermelhas consecutivas sem reversão confirmada
@@ -34996,7 +35007,8 @@ function _drvPriceActionProAnalisar(_velaIgnorada) {
     if (dir === 'PUT') {
         if (ema9Up)     blockers.push('EMA9/21 altista');
         if (!trendDown) blockers.push('tendência altista');
-        if (!macdDown)  blockers.push('MACD não confirmou');
+        // MACD: bloqueia se QUALQUER dos dois está comprador
+        if (!macdDown || !macdAtualDown) blockers.push('MACD não confirmou');
         // Bloqueia PUT perto de fundo local (suporte)
         if (pertoFundo && !reversaoBaixa) blockers.push('perto de fundo — suporte');
         // Bloqueia PUT se há 3+ velas verdes consecutivas sem reversão confirmada
