@@ -5945,6 +5945,51 @@ def tg_send():
 _render_token_cache: dict = {"token": "", "ts": 0}
 
 # Diagnóstico: veja o JSON bruto do Render (salva token em cache)
+@app.route('/debug-token')
+def debug_token():
+    """Diagnóstico completo: mostra estado do token e testa a API da Deriv ao vivo."""
+    with _token_lock:
+        access_token = _token_recebido.get("access_token", "")
+        token_ts     = _token_recebido.get("ts", 0)
+        bot_confirmou = _token_recebido.get("_bot_confirmou", False)
+
+    idade = round(time.time() - token_ts, 1) if token_ts else None
+    info  = {
+        "tem_token":     bool(access_token),
+        "token_preview": access_token[:12] + "..." if access_token else "",
+        "idade_segundos": idade,
+        "bot_confirmou": bot_confirmou,
+        "base_url":      _get_base_url(),
+        "callback_url":  f"{_get_base_url()}/callback.html",
+        "api_base":      API_BASE,
+    }
+
+    if not access_token:
+        info["resultado"] = "SEM TOKEN — faça login primeiro"
+        return jsonify(info)
+
+    # Testa a API da Deriv com o token atual
+    try:
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "Deriv-App-ID":  APP_ID,
+            "Content-Type":  "application/json"
+        }
+        res = requests.get(f"{API_BASE}/accounts", headers=headers, timeout=10)
+        info["api_status"]   = res.status_code
+        info["api_resposta"] = res.text[:400]
+        if res.status_code == 200:
+            contas = res.json().get("data", [])
+            info["contas"] = [{"id": c.get("account_id"), "tipo": c.get("account_type"), "virtual": c.get("is_virtual")} for c in contas]
+            info["resultado"] = "API OK"
+        else:
+            info["resultado"] = f"ERRO API: {res.status_code}"
+    except Exception as e:
+        info["erro_api"] = str(e)
+        info["resultado"] = "EXCECAO ao chamar API"
+
+    return jsonify(info)
+
 @app.route('/debug-render')
 def debug_render():
     global _render_token_cache
