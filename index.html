@@ -8046,16 +8046,25 @@ function escolherConta(tipo) {
     // 3. Limpa token antigo no servidor para evitar retorno de sessão velha
     fetch('/clear-token', { method: 'POST' }).catch(() => {});
 
-    // 4. Abre o login no navegador (o servidor envia a URL e o browser abre ela)
+    // 4. Abre a janela ANTES do fetch (clique direto do usuário — evita bloqueio de popup)
+    //    Depois redireciona ela para a URL recebida do servidor
+    const _abaLogin = window.open('about:blank', '_blank');
+
     fetch('/open-login?tipo=' + tipo)
         .then(response => response.json())
         .then(data => {
-            if (data.url) {
-                window.open(data.url, '_blank');
+            if (data.url && _abaLogin) {
+                _abaLogin.location.href = data.url;
+            } else if (!_abaLogin) {
+                // Popup foi bloqueado — redireciona na mesma aba como fallback
+                if (data.url) window.location.href = data.url;
             }
             print("AGUARDANDO LOGIN NA ABA QUE ABRIU...", "log-info");
         })
-        .catch(() => print("ERRO AO ABRIR NAVEGADOR.", "log-loss"));
+        .catch(() => {
+            if (_abaLogin) _abaLogin.close();
+            print("ERRO AO ABRIR NAVEGADOR.", "log-loss");
+        });
 
     // 5. Loop de checagem do Token — cancelado automaticamente se nova conexão for iniciada
     (async () => {
