@@ -34450,6 +34450,17 @@ async function _drvScannerAnalisarAtivo(sym, periodo) {
         const pertoTopo  = (topoL  - vF.close) / rangeL < 0.10;
         const pertoFundo = (vF.close - fundoL)  / rangeL < 0.10;
 
+        // ── Detecção de gap na abertura (salto sobre EMA) ────────
+        // Gap = abertura da vela fechada > máxima da anterior (gap de alta)
+        //     OU abertura < mínima da anterior (gap de baixa)
+        // Gap sobre EMA = abertura pulou a EMA sem tocar — sinal de fraqueza
+        const _gapAlta  = vF.open > vP.high;  // vela abriu acima do topo anterior
+        const _gapBaixa = vF.open < vP.low;   // vela abriu abaixo do fundo anterior
+        // Gap sobre EMA9: vF abriu de um lado e EMA9 ficou no meio
+        const _ema9Val  = e9[iF];
+        const _gapSobreEma = (_gapAlta  && vP.high < _ema9Val && vF.open > _ema9Val) ||
+                             (_gapBaixa && vP.low  > _ema9Val && vF.open < _ema9Val);
+
         // ── Pontuação — MACD atual (n-1) usado como gate de momentum ──
         // Se MACD atual é contrário, price action não pontua (sinal fraco)
         const _macdGateCall = macdUp && macdAtualUp;     // ambos compradores
@@ -34473,6 +34484,9 @@ async function _drvScannerAnalisarAtivo(sym, periodo) {
         if (!dir) return { sym, nome:'', dir:null, score:best, blockers, rsiVal, macdUp, trendUp, ema9Up, volOk };
 
         // ── Filtros bloqueantes (idênticos ao Price Action) ───────
+        // Gap sobre EMA bloqueia SEMPRE — falso rompimento
+        if (_gapSobreEma) blockers.push('gap sobre EMA ❌');
+
         if (dir === 'CALL') {
             if (!ema9Up)   blockers.push('EMA9/21 ❌');
             if (!trendUp)  blockers.push('EMA200 ❌');
@@ -34960,6 +34974,16 @@ function _drvPriceActionProAnalisar(_velaIgnorada) {
     const pertoTopo  = pctDoTopo  < 0.10; // dentro dos 10% superiores do range
     const pertoFundo = pctDoFundo < 0.10; // dentro dos 10% inferiores do range
 
+    // ── Detecção de gap sobre EMA (falso rompimento) ──────────
+    // Gap = vela fechada abriu acima da máxima anterior (gap de alta)
+    //     OU abriu abaixo da mínima anterior (gap de baixa)
+    // Gap sobre EMA9 = a vela saltou a EMA sem tocar → fraqueza, reversão provável
+    const _gapAlta    = o > vP.high;   // abriu acima do topo anterior
+    const _gapBaixa   = o < vP.low;    // abriu abaixo do fundo anterior
+    const _ema9Val    = e9[iF];
+    const _gapSobreEma = (_gapAlta  && vP.high < _ema9Val && o > _ema9Val) ||
+                         (_gapBaixa && vP.low  > _ema9Val && o < _ema9Val);
+
     // ── Pontuação — MACD atual (n-1) usado como gate de momentum ──
     // Price Action só pontua quando MACD confirma — evita scores altos sem momentum
     const _macdGateCall = macdUp && macdAtualUp;
@@ -35000,6 +35024,9 @@ function _drvPriceActionProAnalisar(_velaIgnorada) {
     // Veto duplo de MACD: vela fechada E vela atual devem confirmar
     const macdAtualUp   = mc.m[i] > mc.s[i];   // MACD da vela em formação (mais recente)
     const macdAtualDown = mc.m[i] < mc.s[i];
+
+    // Gap sobre EMA bloqueia SEMPRE — falso rompimento
+    if (_gapSobreEma) blockers.push('gap sobre EMA — falso rompimento');
 
     if (dir === 'CALL') {
         if (!ema9Up)   blockers.push('EMA9/21 baixista');
