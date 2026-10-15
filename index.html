@@ -34450,18 +34450,23 @@ async function _drvScannerAnalisarAtivo(sym, periodo) {
         const pertoTopo  = (topoL  - vF.close) / rangeL < 0.10;
         const pertoFundo = (vF.close - fundoL)  / rangeL < 0.10;
 
-        // ── Pontuação ─────────────────────────────────────────────
+        // ── Pontuação — MACD atual (n-1) usado como gate de momentum ──
+        // Se MACD atual é contrário, price action não pontua (sinal fraco)
+        const _macdGateCall = macdUp && macdAtualUp;     // ambos compradores
+        const _macdGatePut  = macdDown && macdAtualDown; // ambos vendedores
+
         let call = 0, put = 0, blockers = [];
         if (trendUp)   call += 25; if (trendDown)  put  += 25;
         if (ema9Up)    call += 15; else             put  += 15;
-        if (macdUp)    call += 20; if (macdDown)    put  += 20;
+        if (_macdGateCall) call += 20; if (_macdGatePut) put += 20;
         if (rsiVal >= 52 && rsiVal <= 68) call += 10;
         else if (rsiVal >= 32 && rsiVal <= 48) put += 10;
         else if (rsiVal > 75 || rsiVal < 25) blockers.push('RSI extremo');
-        if (padraoCall || momCallCtx || reversaoAlta)  call += 15;
-        if (padraoPut  || momPutCtx  || reversaoBaixa) put  += 15;
-        if (padraoCall || reversaoAlta)  call += 10;
-        if (padraoPut  || reversaoBaixa) put  += 10;
+        // Price Action só pontua quando MACD confirma a direção
+        if (_macdGateCall && (padraoCall || momCallCtx || reversaoAlta))  call += 15;
+        if (_macdGatePut  && (padraoPut  || momPutCtx  || reversaoBaixa)) put  += 15;
+        if (_macdGateCall && (padraoCall || reversaoAlta))  call += 10;
+        if (_macdGatePut  && (padraoPut  || reversaoBaixa)) put  += 10;
 
         const dir  = call > put ? 'CALL' : put > call ? 'PUT' : null;
         const best = Math.min(100, Math.max(call, put));
@@ -34955,7 +34960,11 @@ function _drvPriceActionProAnalisar(_velaIgnorada) {
     const pertoTopo  = pctDoTopo  < 0.10; // dentro dos 10% superiores do range
     const pertoFundo = pctDoFundo < 0.10; // dentro dos 10% inferiores do range
 
-    // ── Pontuação ─────────────────────────────────────────────
+    // ── Pontuação — MACD atual (n-1) usado como gate de momentum ──
+    // Price Action só pontua quando MACD confirma — evita scores altos sem momentum
+    const _macdGateCall = macdUp && macdAtualUp;
+    const _macdGatePut  = macdDown && macdAtualDown;
+
     let call = 0, put = 0, blockers = [];
 
     // 1. Tendência EMA 200 (+25)
@@ -34966,20 +34975,20 @@ function _drvPriceActionProAnalisar(_velaIgnorada) {
     if (ema9Up)  call += 15;
     else         put  += 15;
 
-    // 3. MACD (+20)
-    if (macdUp)   call += 20;
-    if (macdDown) put  += 20;
+    // 3. MACD duplo — só pontua se vela fechada E atual confirmam (+20)
+    if (_macdGateCall) call += 20;
+    if (_macdGatePut)  put  += 20;
 
     // 4. RSI (+10 ou bloqueia se extremo)
     if (rsiVal >= 52 && rsiVal <= 68) call += 10;
     else if (rsiVal >= 32 && rsiVal <= 48) put += 10;
     else if (rsiVal > 75 || rsiVal < 25) blockers.push(`RSI extremo (${rsiVal.toFixed(1)})`);
 
-    // 5. Padrão de vela + contexto histórico (+25 total)
-    if (padraoCall || momCallCtx || reversaoAlta)  call += 15;
-    if (padraoPut  || momPutCtx  || reversaoBaixa) put  += 15;
-    if (padraoCall || reversaoAlta)  call += 10; // bônus por padrão técnico
-    if (padraoPut  || reversaoBaixa) put  += 10;
+    // 5. Padrão de vela + contexto histórico (+25 total) — só quando MACD confirma
+    if (_macdGateCall && (padraoCall || momCallCtx || reversaoAlta))  call += 15;
+    if (_macdGatePut  && (padraoPut  || momPutCtx  || reversaoBaixa)) put  += 15;
+    if (_macdGateCall && (padraoCall || reversaoAlta))  call += 10;
+    if (_macdGatePut  && (padraoPut  || reversaoBaixa)) put  += 10;
 
     // ── Direção e confluência ─────────────────────────────────
     const dir  = call > put ? 'CALL' : put > call ? 'PUT' : null;
