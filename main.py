@@ -1380,12 +1380,19 @@ setInterval(function(){
             headers={"Content-Type": "application/x-www-form-urlencoded"},
             timeout=15
         )
-        print(f"[Callback] token exchange: status={r.status_code} body={r.text[:300]}")
+        _callback_url_usado = _callback_url
+        print(f"[Callback] redirect_uri usado: {_callback_url_usado}")
+        print(f"[Callback] token exchange: status={r.status_code} body={r.text[:500]}")
         data         = r.json()
         access_token = (data.get("access_token") or "").strip()
         if not access_token:
+            erro_api  = data.get("error", "")
+            erro_desc = data.get("error_description", r.text[:200])
             return _html('&#10060;', 'FALHA NA AUTENTICACAO', '#ff4444',
-                f'access_token nao retornado.<br><small style="color:#555">{r.text[:150]}</small><br><br>Feche e tente novamente.')
+                f'<b>Erro:</b> {erro_api}<br>'
+                f'<b>Detalhe:</b> {erro_desc}<br><br>'
+                f'<b>redirect_uri usado:</b><br><small style="color:#888">{_callback_url_usado}</small><br><br>'
+                f'Feche e tente novamente.')
         # Verifica se é login da conta secundária (aguardando = True)
         _eh_secundaria = False
         with _token_sec_lock:
