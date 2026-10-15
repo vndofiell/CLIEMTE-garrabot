@@ -211,14 +211,15 @@ class AI02PriceAction:
     """
     Analisa padrão de velas: corpo, pavio, engolfo, martelo, etc.
     Só analisa a vela FECHADA (velas[-2]) — nunca a vela em formação.
+    Inclui contexto histórico de 5 velas e detecção de topo/fundo local.
     """
 
     def analisar(self, velas: list) -> dict:
-        if len(velas) < 3:
+        if len(velas) < 5:
             return self._neutro("Velas insuficientes")
 
         vela  = velas[-2]   # última FECHADA
-        prev  = velas[-3]
+        prev  = velas[-3]   # vela anterior
 
         ab, fc = vela["abertura"],   vela["fechamento"]
         mx, mn = vela["maxima"],     vela["minima"]
@@ -237,7 +238,7 @@ class AI02PriceAction:
         if corpo / rng < 0.10:
             return self._neutro("DOJI — indecisão")
 
-        # Corpo dominante (Marubozu)
+        # Corpo dominante (Marubozu) — continuação
         if corpo / rng > 0.75:
             if bullish: score_call += 30; padroes.append("MARUBOZU_ALTA")
             else:       score_put  += 30; padroes.append("MARUBOZU_BAIXA")
@@ -252,21 +253,53 @@ class AI02PriceAction:
             score_put += 25
             padroes.append("SHOOTING_STAR" if bearish else "PIN_BAR_PUT")
 
-        # Engolfo de alta
+        # Engolfo REAL de alta (vela atual engolfa completamente a anterior)
         if (bullish and prev["fechamento"] < prev["abertura"]
                 and ab <= prev["fechamento"] and fc >= prev["abertura"]):
             score_call += 30; padroes.append("ENGOLFO_ALTA")
 
-        # Engolfo de baixa
+        # Engolfo REAL de baixa
         if (bearish and prev["fechamento"] > prev["abertura"]
                 and ab >= prev["fechamento"] and fc <= prev["abertura"]):
             score_put += 30; padroes.append("ENGOLFO_BAIXA")
 
-        # Confirmação de fechamento
+        # Confirmação de fechamento forte
         if bullish and (fc - mn) / rng > 0.65:
             score_call += 15
         if bearish and (mx - fc) / rng > 0.65:
             score_put += 15
+
+        # ── Contexto histórico: últimas 5 velas fechadas ─────────
+        ctx5      = velas[-6:-1]   # 5 velas fechadas antes da atual
+        verdes    = sum(1 for v in ctx5 if v["fechamento"] > v["abertura"])
+        vermelhas = sum(1 for v in ctx5 if v["fechamento"] < v["abertura"])
+
+        # Momentum: 4+ velas na mesma direção = continuação forte
+        if verdes    >= 4: score_call += 20; padroes.append("IMPULSO_ALTA")
+        if vermelhas >= 4: score_put  += 20; padroes.append("IMPULSO_BAIXA")
+
+        # Reversão: 3 velas opostas + vela atual na nova direção
+        seq3_baixa = all(v["fechamento"] < v["abertura"] for v in ctx5[:3])
+        seq3_alta  = all(v["fechamento"] > v["abertura"] for v in ctx5[:3])
+        if seq3_baixa and bullish: score_call += 20; padroes.append("REVERSAO_ALTA")
+        if seq3_alta  and bearish: score_put  += 20; padroes.append("REVERSAO_BAIXA")
+
+        # ── Topo/fundo local (últimas 20 velas) ──────────────────
+        ctx20     = velas[-22:-2]
+        if ctx20:
+            topo_local  = max(v["maxima"]  for v in ctx20)
+            fundo_local = min(v["minima"]  for v in ctx20)
+            range_local = topo_local - fundo_local or 1e-9
+            pct_topo    = (topo_local  - fc) / range_local
+            pct_fundo   = (fc - fundo_local) / range_local
+            perto_topo  = pct_topo  < 0.10   # dentro dos 10% superiores
+            perto_fundo = pct_fundo < 0.10   # dentro dos 10% inferiores
+
+            # Bloqueia CALL perto de resistência / PUT perto de suporte
+            if bullish and perto_topo  and not any(p in padroes for p in ("REVERSAO_ALTA", "ENGOLFO_ALTA")):
+                return self._neutro(f"CALL bloqueado — perto de topo ({pct_topo*100:.1f}% do range)")
+            if bearish and perto_fundo and not any(p in padroes for p in ("REVERSAO_BAIXA", "ENGOLFO_BAIXA")):
+                return self._neutro(f"PUT bloqueado — perto de fundo ({pct_fundo*100:.1f}% do range)")
 
         if score_call >= score_put and score_call > 0:
             return {
