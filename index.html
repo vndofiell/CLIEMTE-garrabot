@@ -10903,17 +10903,8 @@ function initWebSocket(wssUrl) {
                 }
             }
 
-            // OTP ainda pode ser válido — só reconecta automaticamente se bot rodando ou DBS ativo
-            if (!bot.running && !_dbsEstaAtivo()) {
-                // Bot parado: tenta obter nova URL silenciosamente para próxima vez
-                const _urlSilenciosa = await _wsObterNovaUrl();
-                if (_urlSilenciosa) {
-                    bot._wssUrl = _urlSilenciosa; // atualiza para reconexão futura
-                }
-                _wsReconectando = false;
-                return;
-            }
-
+            // Reconecta sempre que bot._wssUrl existir (desconexão não foi intencional).
+            // Preserva estratégia, gerenciamento e todas as configs configuradas.
             print(`📡 Reconectando automaticamente... (tentativa ${_tentativa})`, "log-info");
             try { initWebSocket(bot._wssUrl); } catch(_) {}
             _wsReconTimer = setTimeout(async () => {
