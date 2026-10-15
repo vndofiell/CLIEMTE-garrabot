@@ -1365,7 +1365,9 @@ setInterval(function(){
             '&#9658; No bot, clique em conectar novamente</b>')
 
     # Troca o code pelo access_token
+    # redirect_uri deve ser idêntico ao usado no authorize — resolve dinamicamente
     try:
+        _callback_url = f"{_get_base_url()}/callback.html"
         r = requests.post(
             "https://auth.deriv.com/oauth2/token",
             data={
@@ -1373,7 +1375,7 @@ setInterval(function(){
                 "client_id":     APP_ID,
                 "code":          code,
                 "code_verifier": verifier,
-                "redirect_uri":  CALLBACK_URL,
+                "redirect_uri":  _callback_url,
             },
             headers={"Content-Type": "application/x-www-form-urlencoded"},
             timeout=15
@@ -1534,7 +1536,11 @@ def open_login():
     # Evita que o callback roube o token do login principal para a secundária
     with _token_sec_lock:
         _token_secundaria["aguardando"] = False
-    return jsonify({"status": "opened", "url": SITE_LOGIN})
+    # Resolve URL dinamicamente — funciona mesmo se o ngrok reiniciou
+    base_url  = _get_base_url()
+    site_login = f"{base_url}/login"
+    print(f"[Login] URL gerada dinamicamente: {site_login}")
+    return jsonify({"status": "opened", "url": site_login})
 
 # ── Estado global do login da conta secundária ──────────────────────────────
 # Usado para monitorar o processo de login em janela anônima

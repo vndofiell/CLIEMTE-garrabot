@@ -126,7 +126,8 @@
     }
     // ── Fluxo normal ─────────────────────────────────────────────────
     else {
-        fetch('https://garrabot.duckdns.org/auth/deriv', {
+        var serverOrigin = window.location.origin;
+        fetch(serverOrigin + '/auth/deriv', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ code: code, verifier: verifier })
