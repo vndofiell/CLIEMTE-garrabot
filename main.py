@@ -1404,24 +1404,32 @@ setInterval(function(){
                 print(f"[Callback] Token SECUNDÁRIA armazenado: {access_token[:10]}...")
 
         if not _eh_secundaria:
-            # Gera OTP imediatamente enquanto o token é fresquíssimo
-            tipo_conta = str(_access_token.get("tipo", "DEMO")).upper()
-            print(f"[Callback] Gerando OTP imediatamente para conta {tipo_conta}...")
-            try:
-                _resultado_otp = _get_token_com_access(access_token, tipo_conta)
-            except Exception as _e:
-                _resultado_otp = {}
-                print(f"[Callback] Erro ao gerar OTP: {_e}")
-
+            # Salva token imediatamente
             with _token_lock:
-                _token_recebido["access_token"]      = access_token
-                _token_recebido["ts"]                = time.time()
-                _token_recebido["_bot_confirmou"]    = False
+                _token_recebido["access_token"]    = access_token
+                _token_recebido["ts"]              = time.time()
+                _token_recebido["_bot_confirmou"]  = False
+                _token_recebido["_wss_url_cache"]  = ""
+                _token_recebido["_conta_id_cache"] = ""
                 _token_recebido.pop("_pkce_verifier", None)
-                # Guarda wss_url pré-gerada para o poll retornar instantaneamente
-                _token_recebido["_wss_url_cache"]    = _resultado_otp.get("wss_url", "")
-                _token_recebido["_conta_id_cache"]   = _resultado_otp.get("conta_id", "")
-            print(f"[Callback] Token PRINCIPAL armazenado: {access_token[:10]}... | wss_url: {'OK' if _resultado_otp.get('wss_url') else 'FALHOU'}")
+            print(f"[Callback] Token PRINCIPAL armazenado: {access_token[:10]}... ({len(access_token)} chars)")
+
+            # Gera OTP em background para não bloquear a resposta do callback
+            tipo_conta = str(_access_token.get("tipo", "DEMO")).upper()
+            def _gerar_otp_bg(tok, tipo):
+                try:
+                    print(f"[Callback-BG] Gerando OTP para conta {tipo}...")
+                    res = _get_token_com_access(tok, tipo)
+                    if res.get("wss_url"):
+                        with _token_lock:
+                            _token_recebido["_wss_url_cache"]  = res["wss_url"]
+                            _token_recebido["_conta_id_cache"] = res.get("conta_id", "")
+                        print(f"[Callback-BG] OTP gerado e cacheado com sucesso!")
+                    else:
+                        print(f"[Callback-BG] OTP falhou: {res}")
+                except Exception as _e:
+                    print(f"[Callback-BG] Erro: {_e}")
+            threading.Thread(target=_gerar_otp_bg, args=(access_token, tipo_conta), daemon=True).start()
 
         # Login secundário — fecha imediatamente sem esperar bot
         if _eh_secundaria:
