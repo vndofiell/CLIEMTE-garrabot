@@ -34693,8 +34693,8 @@ async function _drvFiltroTendencia(ativo, periodo, direcao) {
     const emaDist = Math.abs(ema9 - ema21) / (ema21 || 1) * 10000; // em bps
     score += Math.min(20, emaDist * 2);
 
-    // Aprova se EMA alinhada OU (ADX forte + score ≥ 40)
-    const aprovado = ema_ok || (adx_forte && score >= 40);
+    // EMA é condição obrigatória — ADX reforça mas nunca substitui o alinhamento de tendência
+    const aprovado = ema_ok && score >= 20;
 
     const resumo = `EMA9>${ema9.toFixed(4)} EMA21>${ema21.toFixed(4)} dir:${ema_dir} ADX:${dx.toFixed(0)} score:${score.toFixed(0)}`;
     return { aprovado, ema_dir, adx_forte, score: Math.round(score), dx: Math.round(dx), resumo };
