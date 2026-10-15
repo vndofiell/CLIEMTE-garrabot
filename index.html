@@ -8051,19 +8051,39 @@ function escolherConta(tipo) {
     const _abaLogin = window.open('about:blank', '_blank');
 
     fetch('/open-login?tipo=' + tipo)
-        .then(response => response.json())
-        .then(data => {
-            if (data.url && _abaLogin) {
-                _abaLogin.location.href = data.url;
-            } else if (!_abaLogin) {
-                // Popup foi bloqueado — redireciona na mesma aba como fallback
-                if (data.url) window.location.href = data.url;
-            }
-            print("AGUARDANDO LOGIN NA ABA QUE ABRIU...", "log-info");
+        .then(response => {
+            if (!response.ok) throw new Error('HTTP ' + response.status);
+            return response.json();
         })
-        .catch(() => {
+        .then(data => {
+            if (data.ngrok_ativo === false) {
+                print("⚠️ NGROK NAO ESTA ATIVO!", "log-loss");
+                print("⚠️ O callback da Deriv vai para o servidor Render (remoto).", "log-loss");
+                print("⚠️ Feche o bot e use INICIAR_BOT.bat para iniciar com ngrok.", "log-loss");
+                print("⚠️ Ou abra um terminal e execute:", "log-loss");
+                print('   ngrok http --domain=paraphrastically-gatherable-deloras.ngrok-free.dev 5000', "log-loss");
+                if (_abaLogin) _abaLogin.close();
+                return;
+            }
+            if (!data.url) {
+                print("❌ Servidor nao retornou URL de login. Tente novamente.", "log-loss");
+                if (_abaLogin) _abaLogin.close();
+                return;
+            }
+            print("🔗 redirect_uri: " + (data.redirect_uri || data.url), "log-info");
+            if (_abaLogin && !_abaLogin.closed) {
+                _abaLogin.location.href = data.url;
+                print("AGUARDANDO LOGIN NA ABA QUE ABRIU...", "log-info");
+            } else {
+                // Popup bloqueado — abre direto na mesma aba
+                print("⚠️ Popup bloqueado. Abrindo na mesma aba...", "log-loss");
+                window.location.href = data.url;
+            }
+        })
+        .catch(err => {
             if (_abaLogin) _abaLogin.close();
-            print("ERRO AO ABRIR NAVEGADOR.", "log-loss");
+            print("❌ ERRO ao chamar /open-login: " + (err && err.message ? err.message : String(err)), "log-loss");
+            print("Verifique se o bot esta rodando e recarregue a pagina.", "log-loss");
         });
 
     // 5. Loop de checagem do Token — cancelado automaticamente se nova conexão for iniciada
@@ -21033,9 +21053,29 @@ let deferredPrompt = null;
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
+    // Força atualização do SW — desregistra versões antigas que cacheavam rotas de API
+    navigator.serviceWorker.getRegistrations().then((regs) => {
+      regs.forEach((reg) => {
+        reg.update();
+        if (reg.active && reg.active.scriptURL) {
+          reg.active.postMessage('SKIP_WAITING');
+        }
+      });
+    });
+
     navigator.serviceWorker.register('/sw.js')
       .then((reg) => {
         console.log('✅ SW registrado:', reg.scope);
+        // Força ativação imediata se há novo SW esperando
+        if (reg.waiting) reg.waiting.postMessage('SKIP_WAITING');
+        reg.addEventListener('updatefound', () => {
+          const novo = reg.installing;
+          if (novo) novo.addEventListener('statechange', () => {
+            if (novo.state === 'installed' && navigator.serviceWorker.controller) {
+              novo.postMessage('SKIP_WAITING');
+            }
+          });
+        });
         if ('Notification' in window && Notification.permission === 'default') {
           setTimeout(() => Notification.requestPermission(), 2000);
         }

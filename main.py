@@ -1233,6 +1233,7 @@ def admin_panel():
         return "<h1>admin.html não encontrado</h1>", 404
 
 @app.route('/')
+@app.route('/index.html')
 def index():
     with open('index.html', 'r', encoding='utf-8') as f:
         html = f.read()
@@ -1251,9 +1252,18 @@ def callback_html():
     Lê o ?code da URL, troca pelo access_token e mostra tela de sucesso/erro."""
     from flask import Response
 
-    erro_param = request.args.get('error', '')
-    erro_desc  = request.args.get('error_description', '')
-    code       = request.args.get('code', '').strip()
+    erro_param  = request.args.get('error', '')
+    erro_desc   = request.args.get('error_description', '')
+    code        = request.args.get('code', '').strip()
+    _all_params = dict(request.args)
+
+    # ── LOG COMPLETO DE ENTRADA ────────────────────────────────────────────────
+    print(f"[Callback] *** CHEGOU *** params={list(_all_params.keys())} "
+          f"code={'OK('+code[:8]+')' if code else 'VAZIO'} "
+          f"error='{erro_param}' "
+          f"state='{request.args.get('state','')}' "
+          f"ip={request.remote_addr}")
+    # ─────────────────────────────────────────────────────────────────────────
 
     # ── HTML base com Matrix rain — usado por todas as telas do callback ──────
     MATRIX_HEAD = """<!DOCTYPE html><html lang="pt-br"><head>
@@ -1349,15 +1359,48 @@ setInterval(function(){
         used_codes.add(code)
 
     # ── Tem code — PKCE server-side: usa verifier armazenado na sessao ────────
-    # Como o server-side nao tem sessionStorage, usamos o verifier do estado global
-    # O verifier e gerado no frontend e enviado para a VPS antes do redirect
-    verifier = request.args.get('verifier', '').strip()
-    if not verifier:
-        # Tenta buscar do estado global (salvo pelo /store-verifier)
-        with _token_lock:
-            verifier = _token_recebido.get('_pkce_verifier', '')
+    # Prioridade de busca do verifier:
+    # 1. Parâmetro ?verifier= na URL (enviado explicitamente)
+    # 2. _pkce_store[state] — indexado pelo state OAuth (session_id)
+    # 3. _pkce_verifier global — fallback retrocompatível
+    verifier    = request.args.get('verifier', '').strip()
+    state_param = request.args.get('state', '').strip()
+
+    # ── LOG DE DIAGNÓSTICO ────────────────────────────────────────────────────
+    with _token_lock:
+        _store_keys    = list(_token_recebido.get('_pkce_store', {}).keys())
+        _global_ver    = _token_recebido.get('_pkce_verifier', '')
+        _global_sid    = _token_recebido.get('_session_id', '')
+    print(f"[Callback:PKCE] code={code[:8]}... state_param='{state_param}' "
+          f"verifier_url='{verifier[:8] if verifier else ''}' "
+          f"pkce_store_keys={_store_keys} "
+          f"global_verifier={'OK('+_global_ver[:8]+')' if _global_ver else 'VAZIO'} "
+          f"global_session_id='{_global_sid}'")
+    # ─────────────────────────────────────────────────────────────────────────
 
     if not verifier:
+        with _token_lock:
+            # 1. Busca pelo session_id/state em memória
+            if state_param:
+                _pkce_store = _token_recebido.get('_pkce_store', {})
+                verifier = _pkce_store.get(state_param, '')
+                print(f"[Callback:PKCE] Mem state='{state_param}' -> "
+                      f"{'OK' if verifier else 'NAO ENCONTRADO'}")
+            # 2. Fallback: chave global em memória
+            if not verifier:
+                verifier = _token_recebido.get('_pkce_verifier', '')
+                print(f"[Callback:PKCE] Mem global -> "
+                      f"{'OK' if verifier else 'NAO ENCONTRADO'}")
+
+    # 3. Fallback: busca no arquivo (persiste entre reinicializações e entre Render/local)
+    if not verifier and state_param:
+        verifier = _pkce_buscar(state_param)
+        print(f"[Callback:PKCE] Arquivo state='{state_param}' -> "
+              f"{'OK('+verifier[:8]+')' if verifier else 'NAO ENCONTRADO'}")
+
+    if not verifier:
+        print(f"[Callback:PKCE] *** SESSAO EXPIRADA — verifier nao encontrado em memoria nem em arquivo! "
+              f"state='{state_param}' store_keys={_store_keys} ***")
         return _html('&#128260;', 'SESSAO EXPIRADA', '#ffbd2e',
             'O verificador PKCE nao foi encontrado.<br>'
             'A sessao expirou ou a aba foi recarregada.<br><br>'
@@ -1418,6 +1461,12 @@ setInterval(function(){
                 _token_recebido["ts"]                = time.time()
                 _token_recebido["_bot_confirmou"]    = False
                 _token_recebido.pop("_pkce_verifier", None)
+                # Limpa também o verifier indexado por session_id
+                if state_param:
+                    _token_recebido.get("_pkce_store", {}).pop(state_param, None)
+            # Remove do arquivo também
+            if state_param:
+                _pkce_remover(state_param)
                 # Guarda wss_url pré-gerada para o poll retornar instantaneamente
                 _token_recebido["_wss_url_cache"]    = _resultado_otp.get("wss_url", "")
                 _token_recebido["_conta_id_cache"]   = _resultado_otp.get("conta_id", "")
@@ -1525,17 +1574,30 @@ def store_verifier():
     session_id = (dados.get("session_id") or "").strip()
     if verifier:
         with _token_lock:
+            # Armazena por session_id para suportar múltiplas sessões simultâneas
+            if session_id:
+                _pkce_store = _token_recebido.setdefault("_pkce_store", {})
+                _pkce_store[session_id] = verifier
+            # Compatibilidade retroativa: também salva como chave global
             _token_recebido["_pkce_verifier"] = verifier
             if session_id:
                 _token_recebido["_session_id"] = session_id
+            _todas_keys = list(_token_recebido.get("_pkce_store", {}).keys())
 
-        # Rodando local — token chegará diretamente via /callback.html (ngrok)
-        # Não precisa de relay para a Oracle
-        print(f"[LocalAuth] Verifier armazenado — aguardando callback da Deriv via ngrok...")
+        # Salva em arquivo também (persiste entre reinicializações)
+        if session_id:
+            _pkce_salvar(session_id, verifier)
+
+        print(f"[StoreVerifier] ✅ Verifier salvo | "
+              f"session_id='{session_id[:8] if session_id else 'VAZIO'}' | "
+              f"verifier={verifier[:8]}... | "
+              f"ip={request.remote_addr} | "
+              f"store_keys_total={len(_todas_keys)}")
 
         resp = app.make_response(jsonify({"ok": True}))
         resp.headers['Access-Control-Allow-Origin'] = '*'
         return resp
+    print(f"[StoreVerifier] ❌ Verifier vazio recebido | ip={request.remote_addr} | dados={dados}")
     return jsonify({"ok": False, "erro": "verifier vazio"}), 400
 
 
@@ -1546,6 +1608,33 @@ def login_deriv():
         html = f.read()
     from flask import Response
     return Response(html, mimetype='text/html')
+
+@app.route('/debug-ngrok', methods=['GET'])
+def debug_ngrok():
+    """Diagnóstico do túnel ngrok — mostra se está ativo e qual URL está sendo usada."""
+    base_url  = _get_base_url()
+    ngrok_ok  = 'ngrok' in base_url or 'ngrok-free' in base_url
+    try:
+        import requests as _req
+        t = _req.get("http://localhost:4040/api/tunnels", timeout=2).json()
+        tunnels = t.get("tunnels", [])
+    except Exception as e:
+        tunnels = []
+        tunnel_err = str(e)
+    else:
+        tunnel_err = None
+    return jsonify({
+        "base_url":   base_url,
+        "ngrok_ativo": ngrok_ok,
+        "tunnels":    [{"proto": x.get("proto"), "url": x.get("public_url")} for x in tunnels],
+        "erro":       tunnel_err,
+        "aviso":      None if ngrok_ok else (
+            "⚠️ NGROK NAO DETECTADO! O callback da Deriv vai para o Render (servidor remoto). "
+            "Use INICIAR_BOT.bat para iniciar com ngrok, ou inicie ngrok manualmente: "
+            "ngrok http --domain=paraphrastically-gatherable-deloras.ngrok-free.dev 5000"
+        ),
+    })
+
 
 @app.route('/open-login')
 def open_login():
@@ -1565,13 +1654,27 @@ def open_login():
     ).rstrip(b'=').decode()
     state = secrets.token_hex(8)
 
-    # Salva verifier para usar na troca do code
+    # Salva verifier em memória E em arquivo (sobrevive a reinicializações)
     with _token_lock:
+        _pkce_store = _token_recebido.setdefault("_pkce_store", {})
+        _pkce_store[state] = verifier
+        # Compatibilidade retroativa
         _token_recebido["_pkce_verifier"] = verifier
         _token_recebido["_session_id"]    = state
+    _pkce_salvar(state, verifier)
 
-    base_url      = _get_base_url()
-    callback_url  = f"{base_url}/callback.html"
+    base_url     = _get_base_url()
+    ngrok_ativo  = 'ngrok' in base_url or 'ngrok-free' in base_url
+    callback_url = f"{base_url}/callback.html"
+
+    if not ngrok_ativo:
+        print(f"[OpenLogin] ⚠️⚠️⚠️  NGROK NAO ESTA ATIVO!")
+        print(f"[OpenLogin]    base_url={base_url}")
+        print(f"[OpenLogin]    O callback da Deriv VAI PARA O RENDER (servidor remoto).")
+        print(f"[OpenLogin]    Solucao: feche o bot e use INICIAR_BOT.bat")
+        print(f"[OpenLogin]    Ou inicie ngrok manualmente:")
+        print(f"[OpenLogin]    ngrok http --domain=paraphrastically-gatherable-deloras.ngrok-free.dev 5000")
+
     oauth_url = (
         "https://auth.deriv.com/oauth2/auth"
         f"?response_type=code"
@@ -1582,8 +1685,11 @@ def open_login():
         f"&code_challenge_method=S256"
         f"&scope=trade+account_manage"
     )
-    print(f"[Login] URL OAuth gerada — redirect_uri={callback_url}")
-    return jsonify({"status": "opened", "url": oauth_url})
+    print(f"[OpenLogin] state={state} | verifier={verifier[:8]}... | "
+          f"redirect_uri={callback_url} | tipo={tipo} | "
+          f"ngrok={'✅ SIM' if ngrok_ativo else '❌ NAO (usa Render)'}")
+    return jsonify({"status": "opened", "url": oauth_url,
+                    "ngrok_ativo": ngrok_ativo, "redirect_uri": callback_url})
 
 # ── Estado global do login da conta secundária ──────────────────────────────
 # Usado para monitorar o processo de login em janela anônima
@@ -1897,6 +2003,54 @@ def _sec_login_selenium(tipo: str):
 _token_recebido: dict = {"access_token": "", "ts": 0}
 _token_lock = threading.Lock()
 
+# ── Persistência do verifier PKCE em arquivo ─────────────────────────────────
+# Garante que o verifier sobrevive a reinicializações do servidor
+# e está disponível tanto no bot local quanto no Render
+_PKCE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "pkce_store.json")
+
+def _pkce_salvar(state: str, verifier: str):
+    """Salva verifier no arquivo pkce_store.json indexado por state."""
+    try:
+        try:
+            with open(_PKCE_FILE, "r", encoding="utf-8") as f:
+                dados = json.load(f)
+        except Exception:
+            dados = {}
+        dados[state] = {"verifier": verifier, "ts": time.time()}
+        # Limpa entradas com mais de 1 hora (expiradas)
+        agora = time.time()
+        dados = {k: v for k, v in dados.items() if agora - v.get("ts", 0) < 3600}
+        dados[state] = {"verifier": verifier, "ts": agora}
+        with open(_PKCE_FILE, "w", encoding="utf-8") as f:
+            json.dump(dados, f)
+    except Exception as e:
+        print(f"[PKCE] Erro ao salvar verifier: {e}")
+
+def _pkce_buscar(state: str) -> str:
+    """Busca verifier no arquivo pkce_store.json pelo state."""
+    try:
+        with open(_PKCE_FILE, "r", encoding="utf-8") as f:
+            dados = json.load(f)
+        entrada = dados.get(state, {})
+        verifier = entrada.get("verifier", "")
+        # Rejeita se expirado (> 1 hora)
+        if verifier and time.time() - entrada.get("ts", 0) < 3600:
+            return verifier
+    except Exception:
+        pass
+    return ""
+
+def _pkce_remover(state: str):
+    """Remove verifier do arquivo após uso bem-sucedido."""
+    try:
+        with open(_PKCE_FILE, "r", encoding="utf-8") as f:
+            dados = json.load(f)
+        dados.pop(state, None)
+        with open(_PKCE_FILE, "w", encoding="utf-8") as f:
+            json.dump(dados, f)
+    except Exception:
+        pass
+
 @app.route('/auth/deriv', methods=['POST', 'OPTIONS'])
 def auth_deriv():
     """Recebe o code PKCE do Netlify callback.html, troca pelo access_token na Deriv e armazena."""
@@ -2162,7 +2316,7 @@ def clear_token():
         _token_recebido["_bot_confirmou"] = False
     _render_token_cache["token"] = ""
     _render_token_cache["ts"]    = 0
-    print("[Token] Token limpo pelo front-end (nova conexão iniciada).")
+    print("[Token] Token limpo. Aguardando /open-login do frontend...")
     return jsonify({"ok": True})
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -3581,6 +3735,80 @@ def rota_quotex_candles():
                         "total": len(result)})
     except Exception as e:
         import traceback; traceback.print_exc()
+        return jsonify({"ok": False, "erro": str(e), "candles": []})
+
+
+# ── Rota: candles históricos Deriv via WebSocket proxy ───────────────────────
+@app.route('/deriv/candles', methods=['GET'])
+def rota_deriv_candles():
+    """Proxy de candles históricos da Deriv (ativos Volatility Index etc.).
+    Parâmetros: ?ativo=R_10&granularity=60&count=60
+    Usa WebSocket síncrono com websocket-client (já usado em _buscar_ticks_ws_sync).
+    """
+    ativo       = request.args.get("ativo",       "R_10")
+    granularity = int(request.args.get("granularity", 60))
+    count       = int(request.args.get("count",       60))
+
+    try:
+        import websocket as _ws_mod
+        import threading as _th
+
+        candles_recebidos = []
+        evento = _th.Event()
+
+        def _on_message(ws, msg):
+            try:
+                d = json.loads(msg)
+                if d.get("msg_type") == "candles":
+                    candles_recebidos.extend(d.get("candles", []))
+                    evento.set()
+                    ws.close()
+                elif d.get("error"):
+                    evento.set()
+                    ws.close()
+            except Exception:
+                pass
+
+        def _on_open(ws):
+            ws.send(json.dumps({
+                "ticks_history":    ativo,
+                "adjust_start_time": 1,
+                "count":            count,
+                "end":              "latest",
+                "granularity":      granularity,
+                "style":            "candles",
+            }))
+
+        wsapp = _ws_mod.WebSocketApp(
+            "wss://ws.derivws.com/websockets/v3?app_id=36544",
+            on_message=_on_message,
+            on_open=_on_open,
+        )
+        t = _th.Thread(target=lambda: wsapp.run_forever(ping_interval=0), daemon=True)
+        t.start()
+        evento.wait(timeout=10)
+
+        if not candles_recebidos:
+            return jsonify({"ok": False, "erro": "Sem candles retornados", "candles": []})
+
+        result = []
+        for c in candles_recebidos:
+            ts = int(c.get("epoch") or 0)
+            o  = float(c.get("open")  or 0)
+            h  = float(c.get("high")  or o)
+            l  = float(c.get("low")   or o)
+            cl = float(c.get("close") or o)
+            if ts > 0 and o > 0:
+                result.append({"time": ts, "open": o, "high": h, "low": l, "close": cl})
+
+        result.sort(key=lambda x: x["time"])
+        return jsonify({"ok": True, "candles": result, "ativo": ativo,
+                        "granularity": granularity, "total": len(result)})
+
+    except ImportError:
+        # websocket-client não instalado — retorna lista vazia (frontend usa fallback WS)
+        return jsonify({"ok": False, "erro": "websocket-client não disponível", "candles": []})
+    except Exception as e:
         return jsonify({"ok": False, "erro": str(e), "candles": []})
 
 
