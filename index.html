@@ -29124,7 +29124,7 @@ window.addEventListener('load', () => {
         <span style="font-size:0.58rem; color:#555; font-family:'Share Tech Mono'; white-space:nowrap; margin-right:8px;">RSI (14)</span>
         <span id="drv-ind-rsi-label" style="font-size:0.6rem; color:#b18cff; font-family:'Share Tech Mono'; margin-left:auto;"></span>
       </div>
-      <div id="drv-rsi-container"  style="width:100%; height:90px; flex-shrink:0; background:#0a100a;"></div>
+      <div id="drv-rsi-container"  style="width:100%; height:64px; flex-shrink:0; background:#0a100a;"></div>
 
       <!-- MACD -->
       <div style="
@@ -29133,7 +29133,7 @@ window.addEventListener('load', () => {
         <span style="font-size:0.58rem; color:#555; font-family:'Share Tech Mono'; white-space:nowrap; margin-right:8px;">MACD (12, 26, 9)</span>
         <span id="drv-ind-macd-label" style="font-size:0.6rem; color:#00d9ff; font-family:'Share Tech Mono'; margin-left:auto;"></span>
       </div>
-      <div id="drv-macd-container" style="width:100%; height:85px; flex-shrink:0; background:#0a100a;"></div>
+      <div id="drv-macd-container" style="width:100%; height:60px; flex-shrink:0; background:#0a100a;"></div>
 
       <!-- Volume -->
       <div style="
@@ -29142,7 +29142,7 @@ window.addEventListener('load', () => {
         <span style="font-size:0.58rem; color:#555; font-family:'Share Tech Mono'; white-space:nowrap; margin-right:8px;">VOLUME</span>
         <span id="drv-ind-vol-label" style="font-size:0.6rem; color:#aaa; font-family:'Share Tech Mono'; margin-left:auto;"></span>
       </div>
-      <div id="drv-vol-container"  style="width:100%; height:70px; flex-shrink:0; background:#0a100a;"></div>
+      <div id="drv-vol-container"  style="width:100%; height:52px; flex-shrink:0; background:#0a100a;"></div>
 
       <!-- Overlays de loading/erro (cobrem toda a área de gráficos) -->
       <div id="drv-vela-timer" style="
@@ -33940,7 +33940,7 @@ function _drvIniciarChart() {
     // RSI
     const rsiCont = document.getElementById('drv-rsi-container');
     if (rsiCont) {
-        _drvChart.rsiChart = LightweightCharts.createChart(rsiCont, { ...commonOpts, width: rsiCont.clientWidth, height: 90, rightPriceScale: { visible: false }, timeScale: { visible: false } });
+        _drvChart.rsiChart = LightweightCharts.createChart(rsiCont, { ...commonOpts, width: rsiCont.clientWidth, height: 64, rightPriceScale: { visible: false }, timeScale: { visible: false } });
         _drvChart._rsiSeries = _drvChart.rsiChart.addLineSeries({ color:'#b18cff', lineWidth:2, priceLineVisible:false });
         _drvChart._rsiSeries.createPriceLine({ price:70, color:'#ff5364', lineStyle:2, lineWidth:1, axisLabelVisible:false });
         _drvChart._rsiSeries.createPriceLine({ price:30, color:'#00d995', lineStyle:2, lineWidth:1, axisLabelVisible:false });
@@ -33949,7 +33949,7 @@ function _drvIniciarChart() {
     // MACD
     const macdCont = document.getElementById('drv-macd-container');
     if (macdCont) {
-        _drvChart.macdChart = LightweightCharts.createChart(macdCont, { ...commonOpts, width: macdCont.clientWidth, height: 85, rightPriceScale: { visible: false }, timeScale: { visible: false } });
+        _drvChart.macdChart = LightweightCharts.createChart(macdCont, { ...commonOpts, width: macdCont.clientWidth, height: 60, rightPriceScale: { visible: false }, timeScale: { visible: false } });
         _drvChart._macdHist   = _drvChart.macdChart.addHistogramSeries({ priceLineVisible:false, lastValueVisible:false });
         _drvChart._macdLine   = _drvChart.macdChart.addLineSeries({ color:'#00d9ff', lineWidth:1, priceLineVisible:false, lastValueVisible:false });
         _drvChart._macdSignal = _drvChart.macdChart.addLineSeries({ color:'#ff9f43', lineWidth:1, priceLineVisible:false, lastValueVisible:false });
@@ -33957,7 +33957,7 @@ function _drvIniciarChart() {
     // Volume
     const volCont = document.getElementById('drv-vol-container');
     if (volCont) {
-        _drvChart.volChart = LightweightCharts.createChart(volCont, { ...commonOpts, width: volCont.clientWidth, height: 70, rightPriceScale: { visible: false }, timeScale: { borderColor:'rgba(30,60,30,0.8)', timeVisible:true } });
+        _drvChart.volChart = LightweightCharts.createChart(volCont, { ...commonOpts, width: volCont.clientWidth, height: 52, rightPriceScale: { visible: false }, timeScale: { borderColor:'rgba(30,60,30,0.8)', timeVisible:true } });
         _drvChart._volSeries = _drvChart.volChart.addHistogramSeries({ priceFormat:{ type:'volume' }, priceLineVisible:false, lastValueVisible:false });
     }
     window.addEventListener('resize', () => {
