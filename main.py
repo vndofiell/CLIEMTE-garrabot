@@ -2028,65 +2028,69 @@ def _get_token_com_access(access_token: str, tipo: str):
 @app.route('/get-token')
 def get_token():
     """Gera WSS URL usando o token armazenado localmente (recebido via /pegar-token-robo).
-    
-    IMPORTANTE: o OTP da Deriv expira em ~30s após gerado.
-    Para evitar usar OTPs velhos, esta rota SÓ gera a wss_url quando o
-    frontend acabou de fazer o login (token_ts muito recente — últimos 20s).
-    Para polls anteriores ao login retorna apenas {wss_url: null}.
+
+    Valida existência e expiração do token (23 h). Retorna a wss_url para o
+    frontend abrir a conexão WebSocket. A confirmação (/auth/confirmar-bot)
+    deve ser chamada SOMENTE após a conexão WebSocket estar realmente aberta
+    e autenticada — nunca aqui.
     """
     try:
-        # 1. Tenta usar token armazenado localmente (recebido do Netlify)
         with _token_lock:
             access_token = _token_recebido.get("access_token", "")
             token_ts     = _token_recebido.get("ts", 0)
-            bot_confirmou = _token_recebido.get("_bot_confirmou", False)
 
-        # Token existe e é recente (últimos 10 minutos) — mas só gera OTP se
-        # veio de um login novo (token_ts < 20s) OU ainda não foi confirmado
-        if access_token and (time.time() - token_ts) < 600:
-            # Se o bot já confirmou e o token tem mais de 20s, não regera OTP
-            # (evita gerar OTPs novos durante re-polls que vão expirar antes de serem usados)
-            idade_token = time.time() - token_ts
-            if bot_confirmou and idade_token > 20:
-                # Já conectou antes — aguarda novo login
-                return jsonify({"wss_url": None, "erro": "token_nao_encontrado"})
-            
-            print(f"[Token] Usando token local (idade={idade_token:.0f}s): {access_token[:10]}...")
-            # Marca que o bot leu o token (sinaliza para a página de callback)
-            with _token_lock:
-                _token_recebido["_bot_confirmou"] = True
-            tipo = _access_token.get("tipo", "DEMO")
-            return jsonify(_get_token_com_access(access_token, tipo))
+        if not access_token:
+            return jsonify({
+                "ok": False,
+                "wss_url": None,
+                "erro": "token_nao_encontrado",
+                "mensagem": "Faça login na Deriv novamente."
+            }), 401
 
-        # 2. Fallback: tenta buscar do RENDER_URL (compatibilidade)
-        try:
-            res = requests.get(RENDER_URL, timeout=5)
-            if res.status_code == 200:
-                data = res.json()
-                access_token = (
-                    data.get("token") or
-                    data.get("access_token") or
-                    (data.get("data") or {}).get("token") or ""
-                )
-                if isinstance(access_token, dict):
-                    access_token = access_token.get("token") or access_token.get("access_token") or ""
-                access_token = str(access_token).strip().strip('"') if access_token else ""
-                if access_token and access_token not in ("None", "null"):
-                    with _token_lock:
-                        _token_recebido["access_token"] = access_token
-                        _token_recebido["ts"]           = time.time()
-                    tipo = _access_token.get("tipo", "DEMO")
-                    return jsonify(_get_token_com_access(access_token, tipo))
-        except Exception:
-            pass
+        idade = time.time() - token_ts
+        if idade >= 82800:
+            return jsonify({
+                "ok": False,
+                "wss_url": None,
+                "erro": "token_expirado"
+            }), 401
 
-        return jsonify({"wss_url": None, "erro": "token_nao_encontrado"})
+        tipo = str(_access_token.get("tipo", "DEMO")).upper()
+        resultado = _get_token_com_access(access_token, tipo)
+        if not resultado.get("wss_url"):
+            print(f"[Conexao] Falha ao gerar URL: {resultado}")
+            return jsonify({
+                "ok": False,
+                **resultado
+            }), 502
 
+        print(
+            f"[Conexao] URL WebSocket gerada "
+            f"para conta {tipo}. Aguardando conexão real."
+        )
+        # Não marcar o bot como conectado aqui.
+        # A confirmação deve acontecer após a conexão WebSocket real.
+        return jsonify({
+            "ok": True,
+            **resultado
+        })
+
+    except requests.RequestException as e:
+        print(f"[Conexao] Erro de rede: {e}")
+        return jsonify({
+            "ok": False,
+            "wss_url": None,
+            "erro": "erro_de_rede",
+            "detalhe": str(e)
+        }), 502
     except Exception as e:
-        err = str(e)
-        if "timed out" not in err and "ConnectionPool" not in err:
-            print(f"[Erro] {err}")
-        return jsonify({"wss_url": None, "erro": err})
+        print(f"[Conexao] Erro inesperado: {e}")
+        return jsonify({
+            "ok": False,
+            "wss_url": None,
+            "erro": "erro_interno",
+            "detalhe": str(e)
+        }), 500
 
 @app.route('/get-token-force', methods=['GET', 'POST'])
 def get_token_force():
