@@ -1537,17 +1537,41 @@ def login_deriv():
 
 @app.route('/open-login')
 def open_login():
+    """Gera URL OAuth PKCE completa e retorna direto para o frontend.
+    O frontend abre essa URL — vai direto para a Deriv sem página intermediária.
+    """
+    import hashlib, base64, secrets
     tipo = request.args.get('tipo', 'DEMO')
     _access_token["tipo"] = tipo.upper()
-    # Garante que o slot da secundária NÃO está em modo aguardando
-    # Evita que o callback roube o token do login principal para a secundária
     with _token_sec_lock:
         _token_secundaria["aguardando"] = False
-    # Resolve URL dinamicamente — funciona mesmo se o ngrok reiniciou
-    base_url  = _get_base_url()
-    site_login = f"{base_url}/login"
-    print(f"[Login] URL gerada dinamicamente: {site_login}")
-    return jsonify({"status": "opened", "url": site_login})
+
+    # Gera PKCE verifier + challenge no servidor
+    verifier  = secrets.token_hex(32)
+    challenge = base64.urlsafe_b64encode(
+        hashlib.sha256(verifier.encode()).digest()
+    ).rstrip(b'=').decode()
+    state = secrets.token_hex(8)
+
+    # Salva verifier para usar na troca do code
+    with _token_lock:
+        _token_recebido["_pkce_verifier"] = verifier
+        _token_recebido["_session_id"]    = state
+
+    base_url      = _get_base_url()
+    callback_url  = f"{base_url}/callback.html"
+    oauth_url = (
+        "https://auth.deriv.com/oauth2/auth"
+        f"?response_type=code"
+        f"&client_id={APP_ID}"
+        f"&redirect_uri={requests.utils.quote(callback_url, safe='')}"
+        f"&state={state}"
+        f"&code_challenge={challenge}"
+        f"&code_challenge_method=S256"
+        f"&scope=trade+account_manage"
+    )
+    print(f"[Login] URL OAuth gerada — redirect_uri={callback_url}")
+    return jsonify({"status": "opened", "url": oauth_url})
 
 # ── Estado global do login da conta secundária ──────────────────────────────
 # Usado para monitorar o processo de login em janela anônima
