@@ -1409,23 +1409,57 @@ setInterval(function(){
                 '<span style="color:#aaa">&#9658; Feche esta aba<br>'
                 '&#9658; Clique em <b style="color:#00ff41">+ Conectar</b> no modal</span>')
 
-        # Login principal — informa token recebido e fecha em 5 s (sem esperar o bot)
-        sucesso_body = """<div class="icone">&#9989;</div>
+        # Login principal — aguarda o bot confirmar antes de iniciar countdown
+        sucesso_body = """
+<div class="icone">&#9989;</div>
 <div class="titulo" style="color:#00ff41;text-shadow:0 0 14px #00ff41">ACESSO AUTORIZADO</div>
-<div id="stmsg" class="msg" style="color:#00ff41">TOKEN RECEBIDO COM SUCESSO!</div>
-<div class="msg" style="color:#aaa">VOLTE AO GARRABOT PARA CONCLUIR A CONEXÃO</div>
-<div id="cnt-area" class="cnt-wrap">FECHANDO EM <span id="cnt" class="cnt-num">5</span> SEGUNDOS...</div>
+<div id="stmsg" class="msg">AGUARDANDO BOT CONECTAR<span id="dots">...</span></div>
+<div id="cnt-area" class="cnt-wrap" style="display:none">FECHANDO EM <span id="cnt" class="cnt-num">5</span> SEGUNDOS...</div>
 <button class="btn" onclick="window.close()">&#10005; FECHAR ESTA ABA</button>"""
 
-        sucesso_js = """<script>(function(){
-var segundos = 5;
-var elemento = document.getElementById('cnt');
-var timer = setInterval(function(){
-    segundos--;
-    if(elemento){ elemento.textContent = segundos; }
-    if(segundos <= 0){ clearInterval(timer); window.close(); }
-}, 1000);
-})();</script>"""
+        sucesso_js = """<script>
+(function(){
+var cv=document.getElementById('mx'),ctx=cv.getContext('2d');
+var ch='GARRABOT01ABCDEFｦｧｨｩｪｫｬｭｮｯｰｱｲｳｴｵｶｷｸｹｺ0123456789$#@%&'.split('');
+var cols,drops;
+function rsz(){cv.width=window.innerWidth;cv.height=window.innerHeight;cols=Math.floor(cv.width/16);drops=Array(cols).fill(1);}
+rsz();window.addEventListener('resize',rsz);
+setInterval(function(){
+  ctx.fillStyle='rgba(0,0,0,0.05)';ctx.fillRect(0,0,cv.width,cv.height);
+  ctx.font='14px Courier New';
+  for(var i=0;i<drops.length;i++){
+    var c=ch[Math.floor(Math.random()*ch.length)];
+    ctx.fillStyle=drops[i]*16<cv.height*0.1?'#fff':'#00ff41';
+    ctx.fillText(c,i*16,drops[i]*16);
+    if(drops[i]*16>cv.height&&Math.random()>0.975)drops[i]=0;
+    drops[i]++;
+  }
+},50);
+var dotF=['...','.. ','.','.  '],dotI=0;
+var dotT=setInterval(function(){var d=document.getElementById('dots');if(d)d.textContent=dotF[dotI++%4];},400);
+var tries=0;
+function startCountdown(){
+  clearInterval(dotT);
+  var s=document.getElementById('stmsg');
+  if(s){s.innerHTML='BOT CONECTADO COM SUCESSO!';s.style.color='#00ff41';}
+  var a=document.getElementById('cnt-area');if(a)a.style.display='block';
+  var c=5,t=setInterval(function(){c--;var e=document.getElementById('cnt');if(e)e.textContent=c;if(c<=0){clearInterval(t);window.close();}},1000);
+}
+function poll(){
+  fetch('/auth/token-confirmado').then(function(r){return r.json();}).then(function(d){
+    if(d.ok){startCountdown();}
+    else{tries++;if(tries<30)setTimeout(poll,1000);else{
+      // Bot demorou — fecha automaticamente após 2s (token já está salvo)
+      clearInterval(dotT);
+      var s=document.getElementById('stmsg');
+      if(s){s.innerHTML='✅ TOKEN SALVO — fechando...';s.style.color='#00ff41';}
+      setTimeout(function(){window.close();},2000);
+    }}
+  }).catch(function(){tries++;if(tries<30)setTimeout(poll,1000);});
+}
+setTimeout(poll,1000);
+})();
+</script>"""
 
         return Response(MATRIX_HEAD + sucesso_body + MATRIX_FOOT + sucesso_js, mimetype='text/html')
     except Exception as e:
@@ -1994,69 +2028,65 @@ def _get_token_com_access(access_token: str, tipo: str):
 @app.route('/get-token')
 def get_token():
     """Gera WSS URL usando o token armazenado localmente (recebido via /pegar-token-robo).
-
-    Valida existência e expiração do token (23 h). Retorna a wss_url para o
-    frontend abrir a conexão WebSocket. A confirmação (/auth/confirmar-bot)
-    deve ser chamada SOMENTE após a conexão WebSocket estar realmente aberta
-    e autenticada — nunca aqui.
+    
+    IMPORTANTE: o OTP da Deriv expira em ~30s após gerado.
+    Para evitar usar OTPs velhos, esta rota SÓ gera a wss_url quando o
+    frontend acabou de fazer o login (token_ts muito recente — últimos 20s).
+    Para polls anteriores ao login retorna apenas {wss_url: null}.
     """
     try:
+        # 1. Tenta usar token armazenado localmente (recebido do Netlify)
         with _token_lock:
             access_token = _token_recebido.get("access_token", "")
             token_ts     = _token_recebido.get("ts", 0)
+            bot_confirmou = _token_recebido.get("_bot_confirmou", False)
 
-        if not access_token:
-            return jsonify({
-                "ok": False,
-                "wss_url": None,
-                "erro": "token_nao_encontrado",
-                "mensagem": "Faça login na Deriv novamente."
-            }), 401
+        # Token existe e é recente (últimos 10 minutos) — mas só gera OTP se
+        # veio de um login novo (token_ts < 20s) OU ainda não foi confirmado
+        if access_token and (time.time() - token_ts) < 600:
+            # Se o bot já confirmou e o token tem mais de 20s, não regera OTP
+            # (evita gerar OTPs novos durante re-polls que vão expirar antes de serem usados)
+            idade_token = time.time() - token_ts
+            if bot_confirmou and idade_token > 20:
+                # Já conectou antes — aguarda novo login
+                return jsonify({"wss_url": None, "erro": "token_nao_encontrado"})
+            
+            print(f"[Token] Usando token local (idade={idade_token:.0f}s): {access_token[:10]}...")
+            # Marca que o bot leu o token (sinaliza para a página de callback)
+            with _token_lock:
+                _token_recebido["_bot_confirmou"] = True
+            tipo = _access_token.get("tipo", "DEMO")
+            return jsonify(_get_token_com_access(access_token, tipo))
 
-        idade = time.time() - token_ts
-        if idade >= 82800:
-            return jsonify({
-                "ok": False,
-                "wss_url": None,
-                "erro": "token_expirado"
-            }), 401
+        # 2. Fallback: tenta buscar do RENDER_URL (compatibilidade)
+        try:
+            res = requests.get(RENDER_URL, timeout=5)
+            if res.status_code == 200:
+                data = res.json()
+                access_token = (
+                    data.get("token") or
+                    data.get("access_token") or
+                    (data.get("data") or {}).get("token") or ""
+                )
+                if isinstance(access_token, dict):
+                    access_token = access_token.get("token") or access_token.get("access_token") or ""
+                access_token = str(access_token).strip().strip('"') if access_token else ""
+                if access_token and access_token not in ("None", "null"):
+                    with _token_lock:
+                        _token_recebido["access_token"] = access_token
+                        _token_recebido["ts"]           = time.time()
+                    tipo = _access_token.get("tipo", "DEMO")
+                    return jsonify(_get_token_com_access(access_token, tipo))
+        except Exception:
+            pass
 
-        tipo = str(_access_token.get("tipo", "DEMO")).upper()
-        resultado = _get_token_com_access(access_token, tipo)
-        if not resultado.get("wss_url"):
-            print(f"[Conexao] Falha ao gerar URL: {resultado}")
-            return jsonify({
-                "ok": False,
-                **resultado
-            }), 502
+        return jsonify({"wss_url": None, "erro": "token_nao_encontrado"})
 
-        print(
-            f"[Conexao] URL WebSocket gerada "
-            f"para conta {tipo}. Aguardando conexão real."
-        )
-        # Não marcar o bot como conectado aqui.
-        # A confirmação deve acontecer após a conexão WebSocket real.
-        return jsonify({
-            "ok": True,
-            **resultado
-        })
-
-    except requests.RequestException as e:
-        print(f"[Conexao] Erro de rede: {e}")
-        return jsonify({
-            "ok": False,
-            "wss_url": None,
-            "erro": "erro_de_rede",
-            "detalhe": str(e)
-        }), 502
     except Exception as e:
-        print(f"[Conexao] Erro inesperado: {e}")
-        return jsonify({
-            "ok": False,
-            "wss_url": None,
-            "erro": "erro_interno",
-            "detalhe": str(e)
-        }), 500
+        err = str(e)
+        if "timed out" not in err and "ConnectionPool" not in err:
+            print(f"[Erro] {err}")
+        return jsonify({"wss_url": None, "erro": err})
 
 @app.route('/get-token-force', methods=['GET', 'POST'])
 def get_token_force():

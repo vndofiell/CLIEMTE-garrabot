@@ -11009,8 +11009,6 @@ function initWebSocket(wssUrl) {
             if (lid) {
                 bot._loginid = lid;
                 print(`🔑 Conta principal: ${lid} | Banca: $${parseFloat(data.authorize.balance || 0).toFixed(2)}`, 'log-info');
-                // Confirma ao servidor que o WebSocket está realmente aberto e autenticado
-                fetch('/auth/confirmar-bot', { method: 'POST' }).catch(() => {});
             }
         }
 
