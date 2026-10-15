@@ -1,10 +1,10 @@
 {
   "config": {
     "estado": "APRENDIZADO",
-    "dias_coletados": 4,
+    "dias_coletados": 1,
     "dias_minimos": 7,
-    "total_raw": 3166,
-    "ultimo_update": "2026-09-25T15:59:04.184902-03:00"
+    "total_raw": 3186,
+    "ultimo_update": "2026-10-15T18:01:27.345589-03:00"
   },
   "slots": {
     "11:20": {
@@ -301,49 +301,49 @@
       "atualizado": 1790108995.726821
     },
     "17:50": {
-      "operacoes": 28,
-      "operacoes_real": 28,
-      "wins_w": 11.7,
-      "losses_w": 15.5,
-      "win_rate": 43.0,
-      "status": "BLOQUEAR",
-      "regime_status": {
-        "R_10": {
-          "wr": 43.0,
-          "status": "BLOQUEAR"
-        }
-      },
-      "atualizado": 1790196873.235761
-    },
-    "17:55": {
-      "operacoes": 24,
-      "operacoes_real": 24,
-      "wins_w": 12.0,
-      "losses_w": 11.9,
-      "win_rate": 50.2,
+      "operacoes": 35,
+      "operacoes_real": 7,
+      "wins_w": 4.0,
+      "losses_w": 3.0,
+      "win_rate": 57.1,
       "status": "NEUTRO",
       "regime_status": {
         "R_10": {
-          "wr": 50.2,
+          "wr": 57.1,
           "status": "NEUTRO"
         }
       },
-      "atualizado": 1790197184.73551
+      "atualizado": 1792097695.505099
     },
-    "18:00": {
-      "operacoes": 32,
-      "operacoes_real": 32,
-      "wins_w": 12.6,
-      "losses_w": 18.7,
-      "win_rate": 40.3,
-      "status": "BLOQUEAR",
+    "17:55": {
+      "operacoes": 31,
+      "operacoes_real": 7,
+      "wins_w": 6.0,
+      "losses_w": 1.0,
+      "win_rate": 85.7,
+      "status": "OPERAR",
       "regime_status": {
         "R_10": {
-          "wr": 40.3,
-          "status": "BLOQUEAR"
+          "wr": 85.7,
+          "status": "OPERAR"
         }
       },
-      "atualizado": 1790197484.704765
+      "atualizado": 1792097923.422836
+    },
+    "18:00": {
+      "operacoes": 37,
+      "operacoes_real": 5,
+      "wins_w": 4.0,
+      "losses_w": 1.0,
+      "win_rate": 80.0,
+      "status": "OPERAR",
+      "regime_status": {
+        "R_10": {
+          "wr": 80.0,
+          "status": "OPERAR"
+        }
+      },
+      "atualizado": 1792098087.344891
     },
     "18:05": {
       "operacoes": 57,
@@ -646,19 +646,19 @@
       "atualizado": 1790196294.869338
     },
     "17:45": {
-      "operacoes": 29,
-      "operacoes_real": 29,
-      "wins_w": 18.0,
-      "losses_w": 11.0,
-      "win_rate": 62.1,
-      "status": "OPERAR",
+      "operacoes": 30,
+      "operacoes_real": 1,
+      "wins_w": 0.0,
+      "losses_w": 1.0,
+      "win_rate": 0.0,
+      "status": "APRENDENDO",
       "regime_status": {
         "R_10": {
-          "wr": 62.1,
-          "status": "OPERAR"
+          "wr": 0.0,
+          "status": "BLOQUEAR"
         }
       },
-      "atualizado": 1790196595.214497
+      "atualizado": 1792097379.526546
     },
     "18:15": {
       "operacoes": 8,
