@@ -163,6 +163,12 @@ class AI01Tendencia:
             alta  = alta  and ema50 > ema200
             baixa = baixa and ema50 < ema200
 
+        # RSI extremo bloqueia a entrada completamente — mercado exausto, reversão imprevisível
+        if rsi >= 75:
+            return self._neutro(f"RSI sobrecomprado ({rsi:.1f}) — aguardar normalização")
+        if rsi <= 25:
+            return self._neutro(f"RSI sobrevendido ({rsi:.1f}) — aguardar normalização")
+
         score = 0
         if alta:
             score += 40
@@ -178,10 +184,6 @@ class AI01Tendencia:
             direcao = "PUT"
         else:
             return self._neutro("EMAs sem alinhamento")
-
-        # Penalidade RSI extremo (sobrecompra/sobrevenda)
-        if rsi > 75 and direcao == "CALL": score -= 15
-        if rsi < 25 and direcao == "PUT":  score -= 15
 
         confianca = min(score, 100)
         return {
@@ -314,10 +316,18 @@ class AI03Estatistica:
             }
         wins = sum(1 for op in filtro if op.get("resultado", "").upper() == "WIN")
         wr   = wins / total
+        # Win rate < 50% → NEUTRO (não inverte direção para não entrar contra a tendência)
+        if wr < 0.50:
+            return {
+                "direcao":   "NEUTRO",
+                "confianca": 0,
+                "detalhes":  {"total": total, "wins": wins, "win_rate": round(wr * 100, 1),
+                              "motivo": f"Win rate histórico baixo ({wr*100:.0f}%) — aguardar"},
+            }
         # Mapeia win rate para confiança: 50% = 0, 100% = 100
         confianca = max(0, min(100, round((wr - 0.50) * 200)))
         return {
-            "direcao":   direcao if wr >= 0.50 else ("PUT" if direcao == "CALL" else "CALL"),
+            "direcao":   direcao,
             "confianca": confianca,
             "detalhes":  {"total": total, "wins": wins, "win_rate": round(wr * 100, 1)},
         }
@@ -443,7 +453,16 @@ class AI05Supervisor:
                 "votos":   votos,
             }
 
-        # Sem bloqueio por conflito — entra na direção dominante
+        # Veto anti-contra-tendência: consenso final deve estar alinhado com a tendência das EMAs (AI01)
+        tendencia_ai01 = votos.get("AI_01_TENDENCIA", {}).get("direcao", "NEUTRO")
+        if tendencia_ai01 not in ("NEUTRO", "") and tendencia_ai01 != direcao:
+            return {
+                "operar":  False,
+                "direcao": "AGUARDAR",
+                "score":   round(score_total, 1),
+                "motivo":  f"Contra-tendência bloqueada (AI01={tendencia_ai01} vs consenso={direcao})",
+                "votos":   votos,
+            }
 
         return {
             "operar":       True,
