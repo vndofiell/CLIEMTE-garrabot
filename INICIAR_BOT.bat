@@ -22,7 +22,7 @@ timeout /t 2 /nobreak >nul
 
 :: Tenta iniciar ngrok com dominio fixo
 echo  Tentando iniciar ngrok com dominio fixo...
-start "" /B "%NGROK%" http --url=%DOMINIO% 5000
+start "" /B "%NGROK%" http --domain=%DOMINIO% 5000
 timeout /t 4 /nobreak >nul
 
 :: Inicia bot local
@@ -33,16 +33,17 @@ cd /d "%PASTA%"
 start "" /B "%PYTHON%" -u main.py > bot_log.txt 2>&1
 timeout /t 5 /nobreak >nul
 
-:: Abre o bot pelo ngrok (URL do login local via tunel)
-echo  Abrindo navegador no login LOCAL (via ngrok)...
-start "" "https://%DOMINIO%/login"
+:: Abre o Render (sempre disponível) e o ngrok se estiver ok
+echo  Abrindo navegador...
+start "" "%RENDER%"
 
 echo.
 echo  =============================================
-echo    ACESSE O BOT PELO LINK ABAIXO:
-echo    https://%DOMINIO%/login
+echo    RENDER (sempre online):
+echo    %RENDER%
 echo.
-echo    (NAO use o Render para conectar a Deriv)
+echo    LOCAL (se ngrok ok):
+echo    https://%DOMINIO%/
 echo  =============================================
 echo.
 pause
