@@ -34432,16 +34432,19 @@ async function _drvScannerAnalisarAtivo(sym, periodo) {
         const best = Math.min(100, Math.max(call, put));
         if (!dir) return { sym, nome:'', dir:null, score:best, blockers, rsiVal, macdUp, trendUp, ema9Up, volOk };
 
+        // Alinhamento triplo obrigatório: EMA9/21 + EMA200 + MACD devem apontar a mesma direção
         if (dir === 'CALL') {
+            if (!ema9Up)   blockers.push('EMA9/21 ❌');   // EMA rápida contra
+            if (!trendUp)  blockers.push('EMA200 ❌');    // tendência lenta contra
             if (!macdUp)   blockers.push('MACD ❌');
-            if (!trendUp)  blockers.push('tendência ❌');
             // Vela só bloqueia se fortemente contrária (corpo > 60% da amplitude)
             const _a = vela.high - vela.low;
             if (bearC && _a > 0 && Math.abs(vela.close - vela.open) / _a >= 0.6 && !padraoCall) blockers.push('vela ❌');
         }
         if (dir === 'PUT') {
+            if (ema9Up)     blockers.push('EMA9/21 ❌');  // EMA rápida contra
+            if (!trendDown) blockers.push('EMA200 ❌');   // tendência lenta contra
             if (!macdDown)  blockers.push('MACD ❌');
-            if (!trendDown) blockers.push('tendência ❌');
             const _a = vela.high - vela.low;
             if (bullC && _a > 0 && Math.abs(vela.close - vela.open) / _a >= 0.6 && !padraoPut) blockers.push('vela ❌');
         }
@@ -34899,17 +34902,18 @@ function _drvPriceActionProAnalisar(vela) {
 
     if (!dir) return null;
 
-    // ── Filtros bloqueantes (apenas os críticos) ──────────────
+    // ── Filtros bloqueantes — alinhamento triplo obrigatório ──
     if (dir === 'CALL') {
+        if (!ema9Up)   blockers.push('EMA9/21 baixista');   // EMA rápida contra
+        if (!trendUp)  blockers.push('tendência baixista'); // EMA200 contra
         if (!macdUp)   blockers.push('MACD não confirmou');
-        if (!trendUp)  blockers.push('tendência baixista');
-        // Vela vermelha só bloqueia se for fortemente bearish (corpo > 60% da amplitude)
         if (bearCandle && amp > 0 && Math.abs(corpo) / amp >= 0.6 && !padraoCall)
             blockers.push('candle não confirmou a direção');
     }
     if (dir === 'PUT') {
+        if (ema9Up)     blockers.push('EMA9/21 altista');   // EMA rápida contra
+        if (!trendDown) blockers.push('tendência altista'); // EMA200 contra
         if (!macdDown)  blockers.push('MACD não confirmou');
-        if (!trendDown) blockers.push('tendência altista');
         if (bullCandle && amp > 0 && Math.abs(corpo) / amp >= 0.6 && !padraoPut)
             blockers.push('candle não confirmou a direção');
     }
