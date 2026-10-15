@@ -8108,15 +8108,17 @@ function escolherConta(tipo) {
                     document.getElementById('percent-text').innerText   = '100';
                     document.getElementById('loading-text').innerText   = 'WELCOME TO CYBER TERMINAL / ACCESS GRANTED';
 
-                    print("✅ CONTA: " + data.conta_id + " (" + data.tipo + ")", "log-win");
+                    print("✅ CONTA: " + (data.conta_id||'') + " (" + data.tipo + ")", "log-win");
 
                     // Mostra botão "trocar conta" no painel lateral
                     const _btnTrocar = document.getElementById('btn-trocar-conta');
                     const _lblTrocar = document.getElementById('lbl-trocar-conta');
                     if (_btnTrocar) _btnTrocar.style.display = '';
-                    if (_lblTrocar) _lblTrocar.textContent = data.conta_id + ' (' + (data.tipo||'') + ')';
+                    if (_lblTrocar) _lblTrocar.textContent = (data.conta_id||'') + ' (' + (data.tipo||'') + ')';
 
-                    // Oculta o loader e conecta IMEDIATAMENTE (OTP expira em ~30s)
+                    // Guarda access_token para authorize direto (fluxo sem OTP)
+                    if (data.access_token) bot._accessToken = data.access_token;
+
                     document.getElementById('terminal-loading').style.display = 'none';
                     bot.token = data.wss_url;
                     initWebSocket(data.wss_url);
@@ -10974,12 +10976,16 @@ function initWebSocket(wssUrl) {
     };
 
     bot.ws.onopen = () => {
-        print("🔒 CONECTADO! BUSCANDO SALDO...", "log-win");
+        print("🔒 CONECTADO! AUTENTICANDO...", "log-win");
         bot._loginid  = undefined; // reseta para nova conexão
         bot._buying   = false;     // libera flag de compra travado
-        // A URL WSS já contém o token OAuth — a Deriv autentica automaticamente
-        // e envia msg_type:'authorize' com loginid sem precisar de request explícito
-        bot.ws.send(json({ balance: 1, subscribe: 1 }));
+        // Se tiver access_token direto (fluxo sem OTP — Render), envia authorize explícito
+        // Caso contrário a URL já contém OTP e a Deriv autentica automaticamente
+        if (bot._accessToken) {
+            bot.ws.send(json({ authorize: bot._accessToken }));
+        } else {
+            bot.ws.send(json({ balance: 1, subscribe: 1 }));
+        }
         const _estAtivo = ESTRATEGIAS[bot.estrategia] && ESTRATEGIAS[bot.estrategia].ativo;
         const ativo = _resolverAtivo(_estAtivo);
         bot._tickAtivo = ativo;
@@ -11018,6 +11024,15 @@ function initWebSocket(wssUrl) {
             if (lid) {
                 bot._loginid = lid;
                 print(`🔑 Conta principal: ${lid} | Banca: $${parseFloat(data.authorize.balance || 0).toFixed(2)}`, 'log-info');
+                // Fluxo sem OTP (Render): após authorize, inicia balance e ticks
+                if (bot._accessToken) {
+                    const _estAtivo = ESTRATEGIAS[bot.estrategia] && ESTRATEGIAS[bot.estrategia].ativo;
+                    const _ativo = _resolverAtivo(_estAtivo);
+                    bot._tickAtivo = _ativo;
+                    bot.ws.send(json({ balance: 1, subscribe: 1 }));
+                    bot.ws.send(json({ ticks: _ativo, subscribe: 1 }));
+                    print("🔒 AUTENTICADO! BUSCANDO SALDO...", "log-win");
+                }
             }
         }
 

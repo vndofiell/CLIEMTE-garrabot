@@ -2005,38 +2005,14 @@ def auth_deriv_secundaria():
     return resp
 
 def _get_token_com_access(access_token: str, tipo: str):
-    """Usa o access_token para obter WSS URL via API Deriv. Retorna dict com wss_url ou erro."""
-    headers = {
-        "Authorization": f"Bearer {access_token}",
-        "Deriv-App-ID":  APP_ID,
-        "Content-Type":  "application/json"
-    }
-    res_contas = requests.get(f"{API_BASE}/accounts", headers=headers, timeout=10)
-    print(f"[API] Contas: status={res_contas.status_code} | body={res_contas.text[:300]}")
-    if res_contas.status_code != 200:
-        return {"wss_url": None, "erro": f"Erro ao listar contas: {res_contas.status_code}", "detalhe": res_contas.text[:200]}
-    contas_api = res_contas.json().get("data", [])
-    conta_id = None
-    for c in contas_api:
-        cid          = str(c.get("account_id", ""))
-        account_type = str(c.get("account_type", "")).lower()
-        is_virt      = c.get("is_virtual", False)
-        is_demo      = account_type == "demo" or is_virt or cid.upper().startswith(("VR", "DOT", "VRT"))
-        print(f"[API] Conta: id={cid} | account_type={account_type} | is_demo={is_demo}")
-        if tipo == "DEMO" and is_demo:
-            conta_id = cid; break
-        elif tipo == "REAL" and not is_demo:
-            conta_id = cid; break
-    if not conta_id:
-        return {"wss_url": None, "erro": f"Nenhuma conta {tipo} encontrada", "contas_disponiveis": len(contas_api)}
-    print(f"[API] Gerando OTP para conta {conta_id}...")
-    res_otp = requests.post(f"{API_BASE}/accounts/{conta_id}/otp", headers=headers, timeout=10)
-    print(f"[API] OTP: status={res_otp.status_code} | body={res_otp.text[:300]}")
-    wss_url = res_otp.json().get("data", {}).get("url")
-    if not wss_url:
-        return {"wss_url": None, "erro": "OTP não retornou URL", "detalhe": res_otp.text[:200]}
-    print(f"[API] URL WSS gerada com sucesso!")
-    return {"wss_url": wss_url, "conta_id": conta_id, "tipo": tipo}
+    """Retorna URL WSS com o access_token OAuth embutido.
+    O WebSocket da Deriv aceita autenticação direta via access_token —
+    sem precisar chamar api.derivws.com (que falha no Render por timeout).
+    O frontend envia {"authorize": access_token} após abrir a conexão.
+    """
+    wss_url = f"wss://ws.derivws.com/websockets/v3?app_id={APP_ID}&l=EN&brand=deriv"
+    print(f"[Token] WSS URL gerada com access_token direto (tipo={tipo})")
+    return {"wss_url": wss_url, "access_token": access_token, "conta_id": "", "tipo": tipo}
 
 @app.route('/get-token')
 def get_token():
