@@ -1404,12 +1404,24 @@ setInterval(function(){
                 print(f"[Callback] Token SECUNDÁRIA armazenado: {access_token[:10]}...")
 
         if not _eh_secundaria:
+            # Gera OTP imediatamente enquanto o token é fresquíssimo
+            tipo_conta = str(_access_token.get("tipo", "DEMO")).upper()
+            print(f"[Callback] Gerando OTP imediatamente para conta {tipo_conta}...")
+            try:
+                _resultado_otp = _get_token_com_access(access_token, tipo_conta)
+            except Exception as _e:
+                _resultado_otp = {}
+                print(f"[Callback] Erro ao gerar OTP: {_e}")
+
             with _token_lock:
                 _token_recebido["access_token"]      = access_token
                 _token_recebido["ts"]                = time.time()
                 _token_recebido["_bot_confirmou"]    = False
                 _token_recebido.pop("_pkce_verifier", None)
-            print(f"[Callback] Token PRINCIPAL armazenado: {access_token[:10]}... ({len(access_token)} chars)")
+                # Guarda wss_url pré-gerada para o poll retornar instantaneamente
+                _token_recebido["_wss_url_cache"]    = _resultado_otp.get("wss_url", "")
+                _token_recebido["_conta_id_cache"]   = _resultado_otp.get("conta_id", "")
+            print(f"[Callback] Token PRINCIPAL armazenado: {access_token[:10]}... | wss_url: {'OK' if _resultado_otp.get('wss_url') else 'FALHOU'}")
 
         # Login secundário — fecha imediatamente sem esperar bot
         if _eh_secundaria:
@@ -2070,15 +2082,15 @@ def _get_token_com_access(access_token: str, tipo: str):
 
 @app.route('/get-token')
 def get_token():
-    """Gera WSS URL usando o access_token OAuth armazenado localmente.
-
-    O access_token OAuth dura ~24h — pode gerar novo OTP a qualquer momento
-    enquanto o token estiver válido (< 23h). Não bloqueia por _bot_confirmou.
+    """Retorna wss_url do cache (pré-gerada no callback) para resposta instantânea.
+    Se não houver cache, gera OTP agora via API REST.
     """
     try:
         with _token_lock:
             access_token = _token_recebido.get("access_token", "")
             token_ts     = _token_recebido.get("ts", 0)
+            wss_cache    = _token_recebido.get("_wss_url_cache", "")
+            conta_cache  = _token_recebido.get("_conta_id_cache", "")
 
         # Sem token — aguarda login
         if not access_token:
@@ -2088,13 +2100,21 @@ def get_token():
         if (time.time() - token_ts) >= 82800:
             return jsonify({"wss_url": None, "erro": "token_expirado"})
 
-        idade_token = time.time() - token_ts
-        print(f"[Token] Gerando OTP (access_token idade={idade_token:.0f}s): {access_token[:10]}...")
+        tipo = str(_access_token.get("tipo", "DEMO")).upper()
 
-        tipo = _access_token.get("tipo", "DEMO")
+        # Usa wss_url pré-gerada no callback (resposta instantânea)
+        if wss_cache:
+            print(f"[Token] Retornando wss_url do cache")
+            with _token_lock:
+                _token_recebido["_bot_confirmou"]  = True
+                _token_recebido["_wss_url_cache"]  = ""  # consome o cache
+            return jsonify({"wss_url": wss_cache, "conta_id": conta_cache, "tipo": tipo})
+
+        # Sem cache — gera OTP agora
+        idade_token = time.time() - token_ts
+        print(f"[Token] Gerando OTP agora (idade={idade_token:.0f}s): {access_token[:10]}...")
         resultado = _get_token_com_access(access_token, tipo)
 
-        # Sinaliza para a página de callback que o bot leu o token
         if resultado.get("wss_url"):
             with _token_lock:
                 _token_recebido["_bot_confirmou"] = True
