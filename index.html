@@ -35118,16 +35118,22 @@ function drvOperar(direcao) {
     const reqProp = 100 + Math.floor(Math.random()*200);
     const reqBuy  = 300 + Math.floor(Math.random()*200);
 
-    // Para CALL/PUT a Deriv prefere 'm' (minutos); converte segundos → minutos quando possível
-    // Digits usam ticks ('t'), EVEN/ODD não precisam de barreira
+    // Para CALL/PUT a Deriv prefere 'm' (minutos); converte segundos → minutos quando possível.
+    // Forex (EUR/USD, GBP/USD, etc.) NÃO aceita segundos — força mínimo 1m.
+    // Digits usam ticks ('t'), EVEN/ODD não precisam de barreira.
+    const _ehForex = !/^(R_|1HZ)/i.test(ativo);  // true para EUR/USD, GBP/USD, etc.
     let _durFinal = duracao;
     let _unitFinal = 's';
     if (tipoContrato === 'CALL' || tipoContrato === 'PUT') {
         if (duracao >= 60 && duracao % 60 === 0) {
             _durFinal  = duracao / 60;   // ex: 60s → 1m, 120s → 2m
             _unitFinal = 'm';
+        } else if (_ehForex) {
+            // Forex não aceita segundos: arredonda para o minuto mais próximo (mín. 1m)
+            _durFinal  = Math.max(1, Math.round(duracao / 60));
+            _unitFinal = 'm';
         }
-        // durações não divisíveis por 60 ficam em segundos (ex: 30s)
+        // Volatility sintética: duração em segundos é aceita (ex: 30s)
     }
 
     const propPayload = {
