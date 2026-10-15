@@ -8059,13 +8059,29 @@ function escolherConta(tipo) {
 
     // 5. Loop de checagem do Token — cancelado automaticamente se nova conexão for iniciada
     (async () => {
+        let _tentativas = 0;
+        const _MAX_TENTATIVAS = 150; // 5 minutos (150 × 2s)
         while (_pollTokenId === meuId) {
+            _tentativas++;
+            if (_tentativas > _MAX_TENTATIVAS) {
+                print("⏱️ Tempo esgotado aguardando login. Clique em conectar novamente.", "log-loss");
+                break;
+            }
             try {
                 const res  = await fetch('/get-token');
                 const data = await res.json();
 
+                // Erros fatais — exibe imediatamente e interrompe o poll
+                if (data.erro === 'token_expirado') {
+                    print("⚠️ Token expirado. Faça login novamente.", "log-loss");
+                    break;
+                }
+                if (data.erro === 'erro_de_rede' || data.erro === 'erro_interno') {
+                    print("⚠️ Erro no servidor: " + (data.detalhe || data.erro), "log-loss");
+                    break;
+                }
+                // Erros transitórios — silencia (aguarda novo login)
                 const erroSilencioso = !data.erro ||
-                    data.erro === 'Render indisponível' ||
                     data.erro === 'token_nao_encontrado' ||
                     data.erro.includes('timeout') ||
                     data.erro.includes('Timeout') ||
@@ -8105,7 +8121,9 @@ function escolherConta(tipo) {
                     }, 1000);
                     break;
                 }
-            } catch(e) {}
+            } catch(e) {
+                print("⚠️ Erro ao verificar token: " + (e.message || e), "log-loss");
+            }
 
             // Aguarda 2 segundos antes de checar novamente
             await new Promise(r => setTimeout(r, 2000));
@@ -9710,13 +9728,32 @@ function processCommand(cmd) {
 // ═══════════════════════════════════════════════════════
 async function pollToken() {
     print("⏳ AGUARDANDO LOGIN...", "log-info");
+    let _tentativas = 0;
+    const _MAX = 100; // ~5 minutos (100 × 3s)
     const interval = setInterval(async () => {
+        _tentativas++;
+        if (_tentativas > _MAX) {
+            clearInterval(interval);
+            print("⏱️ Tempo esgotado aguardando login. Clique em conectar novamente.", "log-loss");
+            return;
+        }
         try {
             const res  = await fetch('/get-token');
             const data = await res.json();
-            // Silencia erros transitrios de timeout/indisponível enquanto aguarda login
+
+            // Erros fatais — para o poll imediatamente
+            if (data.erro === 'token_expirado') {
+                clearInterval(interval);
+                print("⚠️ Token expirado. Faça login novamente.", "log-loss");
+                return;
+            }
+            if (data.erro === 'erro_de_rede' || data.erro === 'erro_interno') {
+                clearInterval(interval);
+                print("⚠️ Erro no servidor: " + (data.detalhe || data.erro), "log-loss");
+                return;
+            }
+            // Erros transitórios — silencia (aguarda novo login)
             const erroSilencioso = !data.erro ||
-                data.erro === 'Render indisponível' ||
                 data.erro === 'token_nao_encontrado' ||
                 data.erro.includes('timeout') ||
                 data.erro.includes('Timeout') ||
@@ -9726,12 +9763,14 @@ async function pollToken() {
                 print("⚠️ " + data.erro, "log-loss");
             }
             if (data.wss_url) {
-                print("✅ CONTA: " + data.conta_id + " (" + data.tipo + ")", "log-win");
                 clearInterval(interval);
+                print("✅ CONTA: " + data.conta_id + " (" + data.tipo + ")", "log-win");
                 bot.token = data.wss_url;
                 initWebSocket(data.wss_url);
             }
-        } catch(e) {}
+        } catch(e) {
+            print("⚠️ Erro ao verificar token: " + (e.message || e), "log-loss");
+        }
     }, 3000);
 }
 
