@@ -33734,15 +33734,41 @@ function _drvMgrReiniciar() {
     drvMgrSincronizarInput();
 }
 
-// ── Deriv REST API pública (sem auth, sem WS próprio) ─────
-// Endpoint público: https://api.deriv.com/api-explorer
-// ticks_history retorna candles sem precisar de token
+// ── Fetch de candles históricos da Deriv ─────────────────
+// Usa bot.ws (já autenticado, resposta em <1s) como fonte principal.
+// Fallback para /deriv/candles no servidor apenas se ws não estiver disponível.
 async function _drvFetchCandles(ativo, granularity, count) {
-    // Usa a API WebSocket da Deriv via fetch polyfill sobre HTTP não é possível.
-    // Usa o endpoint público do servidor do próprio bot como proxy.
-    // Se não existir, cai para usar o bot.ws existente.
+    // 1. Tenta pelo bot.ws — mais rápido (já conectado, resposta em <1s)
+    const ws = (typeof bot !== 'undefined') ? bot.ws : null;
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        return new Promise((resolve) => {
+            const reqId = 9600 + Math.floor(Math.random() * 300);
+            const timeout = setTimeout(() => { resolve([]); }, 5000);
+            const handler = (ev) => {
+                try {
+                    const d = JSON.parse(ev.data);
+                    if (d.req_id !== reqId) return;
+                    clearTimeout(timeout);
+                    ws.removeEventListener('message', handler);
+                    if (d.candles) resolve(d.candles);
+                    else resolve([]);
+                } catch(_) {}
+            };
+            ws.addEventListener('message', handler);
+            ws.send(JSON.stringify({
+                ticks_history: ativo,
+                adjust_start_time: 1,
+                count: count,
+                end: 'latest',
+                granularity: granularity,
+                style: 'candles',
+                req_id: reqId,
+            }));
+        });
+    }
+
+    // 2. Fallback: proxy /deriv/candles no servidor (mais lento, não precisa de WS)
     try {
-        // Tenta endpoint local do bot (main.py pode já ter /deriv/candles)
         const r = await fetch(`/deriv/candles?ativo=${encodeURIComponent(ativo)}&granularity=${granularity}&count=${count}`);
         if (r.ok) {
             const d = await r.json();
@@ -33750,7 +33776,12 @@ async function _drvFetchCandles(ativo, granularity, count) {
         }
     } catch(_) {}
 
-    // Fallback: usa o bot.ws (já autenticado e aberto)
+    return [];
+}
+
+// ── REMOVIDO — lógica inline migrada para _drvFetchCandles acima ─────────
+// (mantido apenas para compatibilidade de chamadas antigas do fallback ws)
+function __drvFetchCandlesLegacyWs_UNUSED(ativo, granularity, count) {
     return new Promise((resolve) => {
         const ws = (typeof bot !== 'undefined') ? bot.ws : null;
         if (!ws || ws.readyState !== WebSocket.OPEN) { resolve([]); return; }
