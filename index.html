@@ -34387,6 +34387,8 @@ async function _drvScannerAnalisarAtivo(sym, periodo) {
 
         const closes = sorted.map(c => c.close);
         const n      = sorted.length;
+        if (n < 5) return null;
+
         const e9     = _drvEmaArr(closes, 9);
         const e21    = _drvEmaArr(closes, 21);
         const e200   = _drvEmaArr(closes, 200);
@@ -34394,59 +34396,89 @@ async function _drvScannerAnalisarAtivo(sym, periodo) {
         const mc     = _drvMacdObj(closes);
         const vols   = sorted.map(c => c.volume || 1);
         const avgVol = vols.slice(-21, -1).reduce((s, v) => s + v, 0) / 20 || 1;
-        const i      = n - 1;
-        const vela   = sorted[i];
 
-        const rsiVal    = rv[i];
-        const macdUp    = mc.m[i] > mc.s[i];
-        const macdDown  = mc.m[i] < mc.s[i];
-        const trendUp   = closes[i] > e200[i];
-        const trendDown = closes[i] < e200[i];
-        const ema9Up    = e9[i] > e21[i];
-        const volOk     = vols[i] > avgVol;
-        const bullC     = vela.close > vela.open;
-        const bearC     = vela.close < vela.open;
-        const amp       = vela.high - vela.low;
-        const corpo     = vela.close - vela.open;
+        // Usa ÚLTIMA VELA FECHADA (n-2), igual ao Price Action
+        const iF    = n - 2;
+        const vF    = sorted[iF];
+        const vP    = sorted[iF - 1] || vF;
+
+        const rsiVal    = rv[iF];
+        const macdUp    = mc.m[iF] > mc.s[iF];
+        const macdDown  = mc.m[iF] < mc.s[iF];
+        const trendUp   = closes[iF] > e200[iF];
+        const trendDown = closes[iF] < e200[iF];
+        const ema9Up    = e9[iF] > e21[iF];
+        const volOk     = vols[iF] > avgVol * 0.8;
+        const bullC     = vF.close > vF.open;
+        const bearC     = vF.close < vF.open;
+        const amp       = vF.high - vF.low || 1e-9;
+        const corpo     = vF.close - vF.open;
+
+        // ── Padrões de vela ──────────────────────────────────────
+        const pavInf = Math.min(vF.open, vF.close) - vF.low;
+        const pavSup = vF.high - Math.max(vF.open, vF.close);
         let padraoCall = false, padraoPut = false;
-        if (amp > 0) {
-            const pavInf = Math.min(vela.open, vela.close) - vela.low;
-            const pavSup = vela.high - Math.max(vela.open, vela.close);
-            if (pavInf / amp >= 0.55 && Math.abs(corpo) / amp < 0.35) padraoCall = true;
-            if (pavSup / amp >= 0.55 && Math.abs(corpo) / amp < 0.35) padraoPut = true;
-            if (bullC && Math.abs(corpo) / amp >= 0.65) padraoCall = true;
-            if (bearC && Math.abs(corpo) / amp >= 0.65) padraoPut = true;
-        }
+        if (pavInf / amp >= 0.55 && Math.abs(corpo) / amp < 0.35) padraoCall = true;
+        if (pavSup / amp >= 0.55 && Math.abs(corpo) / amp < 0.35) padraoPut = true;
+        // Engolfo real
+        if (bullC && vP.close < vP.open && vF.open <= vP.close && vF.close >= vP.open) padraoCall = true;
+        if (bearC && vP.close > vP.open && vF.open >= vP.close && vF.close <= vP.open) padraoPut  = true;
+        // Marubozu
+        if (bullC && Math.abs(corpo) / amp >= 0.80) padraoCall = true;
+        if (bearC && Math.abs(corpo) / amp >= 0.80) padraoPut  = true;
 
+        // ── Contexto 5 velas ─────────────────────────────────────
+        const ctx5      = sorted.slice(Math.max(0, iF - 4), iF + 1);
+        const verdes    = ctx5.filter(v => v.close > v.open).length;
+        const vermelhas = ctx5.filter(v => v.close < v.open).length;
+        const momCallCtx   = verdes    >= 4;
+        const momPutCtx    = vermelhas >= 4;
+        const seq3Verm     = ctx5.slice(0, 3).every(v => v.close < v.open);
+        const seq3Verd     = ctx5.slice(0, 3).every(v => v.close > v.open);
+        const reversaoAlta = seq3Verm && bullC;
+        const reversaoBaixa= seq3Verd && bearC;
+
+        // ── Topo/fundo local (20 velas) ──────────────────────────
+        const ctx20    = sorted.slice(Math.max(0, iF - 19), iF);
+        const topoL    = ctx20.length ? Math.max(...ctx20.map(v => v.high)) : vF.high;
+        const fundoL   = ctx20.length ? Math.min(...ctx20.map(v => v.low))  : vF.low;
+        const rangeL   = topoL - fundoL || 1e-9;
+        const pertoTopo  = (topoL  - vF.close) / rangeL < 0.10;
+        const pertoFundo = (vF.close - fundoL)  / rangeL < 0.10;
+
+        // ── Pontuação ─────────────────────────────────────────────
         let call = 0, put = 0, blockers = [];
         if (trendUp)   call += 25; if (trendDown)  put  += 25;
         if (ema9Up)    call += 15; else             put  += 15;
-        if (rsiVal >= 52 && rsiVal <= 68) call += 15;
-        else if (rsiVal >= 32 && rsiVal <= 48) put += 15;
+        if (macdUp)    call += 20; if (macdDown)    put  += 20;
+        if (rsiVal >= 52 && rsiVal <= 68) call += 10;
+        else if (rsiVal >= 32 && rsiVal <= 48) put += 10;
         else if (rsiVal > 75 || rsiVal < 25) blockers.push('RSI extremo');
-        if (macdUp)    call += 20; if (macdDown)   put  += 20;
-        // Volume: só pontua se tiver dados reais, nunca bloqueia
-        if (padraoCall) call += 15; if (padraoPut)  put  += 15;
+        if (padraoCall || momCallCtx || reversaoAlta)  call += 15;
+        if (padraoPut  || momPutCtx  || reversaoBaixa) put  += 15;
+        if (padraoCall || reversaoAlta)  call += 10;
+        if (padraoPut  || reversaoBaixa) put  += 10;
 
         const dir  = call > put ? 'CALL' : put > call ? 'PUT' : null;
         const best = Math.min(100, Math.max(call, put));
         if (!dir) return { sym, nome:'', dir:null, score:best, blockers, rsiVal, macdUp, trendUp, ema9Up, volOk };
 
-        // Alinhamento triplo obrigatório: EMA9/21 + EMA200 + MACD devem apontar a mesma direção
+        // ── Filtros bloqueantes (idênticos ao Price Action) ───────
         if (dir === 'CALL') {
-            if (!ema9Up)   blockers.push('EMA9/21 ❌');   // EMA rápida contra
-            if (!trendUp)  blockers.push('EMA200 ❌');    // tendência lenta contra
+            if (!ema9Up)   blockers.push('EMA9/21 ❌');
+            if (!trendUp)  blockers.push('EMA200 ❌');
             if (!macdUp)   blockers.push('MACD ❌');
-            // Vela só bloqueia se fortemente contrária (corpo > 60% da amplitude)
-            const _a = vela.high - vela.low;
-            if (bearC && _a > 0 && Math.abs(vela.close - vela.open) / _a >= 0.6 && !padraoCall) blockers.push('vela ❌');
+            if (pertoTopo && !reversaoAlta) blockers.push('topo ❌');
+            if (momPutCtx && !padraoCall && !reversaoAlta) blockers.push('impulso baixa ❌');
+            if (bearC && Math.abs(corpo) / amp >= 0.6 && !padraoCall) blockers.push('vela ❌');
         }
         if (dir === 'PUT') {
-            if (ema9Up)     blockers.push('EMA9/21 ❌');  // EMA rápida contra
-            if (!trendDown) blockers.push('EMA200 ❌');   // tendência lenta contra
+            if (ema9Up)     blockers.push('EMA9/21 ❌');
+            if (!trendDown) blockers.push('EMA200 ❌');
             if (!macdDown)  blockers.push('MACD ❌');
-            const _a = vela.high - vela.low;
-            if (bullC && _a > 0 && Math.abs(vela.close - vela.open) / _a >= 0.6 && !padraoPut) blockers.push('vela ❌');
+            if (pertoFundo && !reversaoBaixa) blockers.push('fundo ❌');
+            if (momCallCtx && !padraoPut && !reversaoBaixa) blockers.push('impulso alta ❌');
+            if (bullC && Math.abs(corpo) / amp >= 0.6 && !padraoPut) blockers.push('vela ❌');
         }
         const ok = best >= _drvScannerScoreMin && blockers.length === 0;
         return { sym, nome:'', dir, score: best, ok, blockers, rsiVal, macdUp, trendUp, ema9Up, volOk, padraoCall, padraoPut };
