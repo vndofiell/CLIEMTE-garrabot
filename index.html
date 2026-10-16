@@ -28481,11 +28481,18 @@ function _tradeMostrarWidget(dadosServidor) {
         ? Math.max(0, dadosServidor.segundos_rest || 0)
         : (_tsLocal.ativo
             ? (_isTick
-                // Modo ticks: mostra ticks restantes = total - recebidos
-                ? Math.max(0, (_tsLocal._ticksTotal || 0) - (_tsLocal._ticksReceb || 0))
+                // Modo ticks: usa ticks recebidos se disponíveis, senão estima por tempo (~1s/tick)
+                ? (() => {
+                    const receb = _tsLocal._ticksReceb || 0;
+                    const total_ = _tsLocal._ticksTotal || 5;
+                    if (receb > 0) return Math.max(0, total_ - receb);
+                    // Fallback: estima 1 tick/segundo
+                    const estimado = Math.round((agora - _tsLocal.tsInicio) / 1000);
+                    return Math.max(0, total_ - estimado);
+                  })()
                 : Math.max(0, _tsLocal.duracao - Math.round((agora - _tsLocal.tsInicio) / 1000)))
             : 0);
-    const total   = usarServidor ? (dadosServidor.duracao || 60) : (_tsLocal.duracao || (_isTick ? _tsLocal._ticksTotal : 60));
+    const total   = usarServidor ? (dadosServidor.duracao || 60) : (_isTick ? (_tsLocal._ticksTotal || 5) : (_tsLocal.duracao || 60));
     const status  = usarServidor ? (dadosServidor.status_lucro || 'neutro') : _tsLocal.status;
     const direcao = usarServidor ? (dadosServidor.direcao || '').toUpperCase() : _tsLocal.direcao;
     const nomAtv  = usarServidor ? (dadosServidor.ativo_nome || '') : _tsLocal.ativoNome;
@@ -33213,7 +33220,7 @@ function _qxHmaAtualizarStake(win, lucro) {
 // ── Estado ────────────────────────────────────────────────
 const _drvChart = {
     chart:null, series:null,
-    ativo:'R_100', periodo:60, duracao:60, valor:1, contrato:'CALL',
+    ativo:'R_100', periodo:60, duracao:60, duracaoUnidade:'s', valor:1, contrato:'CALL',
     historico:[], rtTimer:null, lastPreco:0,
     velaAtual:null, tsAbertura:0,
     opAtiva:null, priceLine:null,
@@ -35631,16 +35638,27 @@ function _drvIniciarOpAtiva(op) {
     }
     if (bubbleEl) bubbleEl.style.borderColor=corDir;
     _drvChart.opAtiva = { ...op, corDir, tsVelaAtual:tsV };
-    const tsFimMs = op.ts + op.duracao * 1000;
+    const _opEhTick = (_drvChart.duracaoUnidade === 't');
+    const tsFimMs   = op.ts + op.duracao * (_opEhTick ? 1000 : 1000); // mesmo cálculo, flag para display
     _drvChart.opAtiva.timerInterval = setInterval(() => {
-        const restamMs=Math.max(0,tsFimMs-Date.now()), restamS=Math.ceil(restamMs/1000);
-        const mm=String(Math.floor(restamS/60)).padStart(2,'0'), ss=String(restamS%60).padStart(2,'0');
-        if (bubbleEl) bubbleEl.textContent='$'+parseFloat(op.valor).toFixed(2)+' • '+mm+':'+ss;
+        let displayStr;
+        if (_opEhTick) {
+            // Modo ticks: estima ticks restantes por tempo (~1s/tick)
+            const decorrido = Math.round((Date.now() - op.ts) / 1000);
+            const restamT   = Math.max(0, op.duracao - decorrido);
+            displayStr = '$'+parseFloat(op.valor).toFixed(2)+' • '+restamT+'t';
+        } else {
+            const restamMs=Math.max(0,tsFimMs-Date.now()), restamS=Math.ceil(restamMs/1000);
+            const mm=String(Math.floor(restamS/60)).padStart(2,'0'), ss=String(restamS%60).padStart(2,'0');
+            displayStr = '$'+parseFloat(op.valor).toFixed(2)+' • '+mm+':'+ss;
+        }
+        if (bubbleEl) bubbleEl.textContent = displayStr;
         // Linha horizontal acompanha o preço de entrada — contador fica fixo no topo
         if (op.precoEntrada > 0 && _drvChart.series) {
             try { const y=_drvChart.series.priceToCoordinate(op.precoEntrada); if(y!==null&&y>10&&linhaEl){linhaEl.style.top=Math.round(y)+'px';} } catch(_) {}
         }
-        if (restamMs <= 0) clearInterval(_drvChart.opAtiva?.timerInterval);
+        const restamMs2=Math.max(0,tsFimMs-Date.now());
+        if (restamMs2 <= 0) clearInterval(_drvChart.opAtiva?.timerInterval);
     }, 500);
 }
 
