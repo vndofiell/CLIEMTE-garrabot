@@ -29361,6 +29361,14 @@ window.addEventListener('load', () => {
             <span style="font-size:0.62rem; color:#555;">Filtro de vela</span>
             <b id="drv-ap-vela" style="font-size:0.68rem; color:#aaa;">—</b>
           </div>
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <span style="font-size:0.62rem; color:#555;">ADX / força</span>
+            <b id="drv-ap-adx" style="font-size:0.68rem; color:#aaa;">—</b>
+          </div>
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <span style="font-size:0.62rem; color:#555;">DI+ / DI−</span>
+            <b id="drv-ap-di" style="font-size:0.68rem; color:#aaa;">—</b>
+          </div>
         </div>
       </div>
 
@@ -34002,6 +34010,32 @@ function _drvMacdObj(vals) {
     return { m, s, h: m.map((x, i) => x - s[i]) };
 }
 
+// ADX 14 + DI+/DI−
+function _drvAdxObj(cs, p) {
+    p = p || 14;
+    const n = cs.length, tr = Array(n).fill(0), pdm = Array(n).fill(0), mdm = Array(n).fill(0);
+    for (let i = 1; i < n; i++) {
+        const up = cs[i].high - cs[i-1].high, dn = cs[i-1].low - cs[i].low;
+        pdm[i] = (up > dn && up > 0) ? up : 0;
+        mdm[i] = (dn > up && dn > 0) ? dn : 0;
+        tr[i]  = Math.max(cs[i].high - cs[i].low, Math.abs(cs[i].high - cs[i-1].close), Math.abs(cs[i].low - cs[i-1].close));
+    }
+    const smAtr = Array(n).fill(0), smP = Array(n).fill(0), smM = Array(n).fill(0);
+    for (let i = p; i < n; i++) {
+        smAtr[i] = tr.slice(i-p+1, i+1).reduce((z,v) => z+v, 0);
+        smP[i]   = pdm.slice(i-p+1, i+1).reduce((z,v) => z+v, 0);
+        smM[i]   = mdm.slice(i-p+1, i+1).reduce((z,v) => z+v, 0);
+    }
+    const plus = Array(n).fill(0), minus = Array(n).fill(0), dx = Array(n).fill(0), adx = Array(n).fill(0);
+    for (let i = p; i < n; i++) {
+        plus[i]  = smAtr[i] ? 100 * smP[i] / smAtr[i] : 0;
+        minus[i] = smAtr[i] ? 100 * smM[i] / smAtr[i] : 0;
+        dx[i]    = (plus[i]+minus[i]) ? 100 * Math.abs(plus[i]-minus[i]) / (plus[i]+minus[i]) : 0;
+    }
+    for (let i = p*2; i < n; i++) adx[i] = dx.slice(i-p+1, i+1).reduce((z,v) => z+v, 0) / p;
+    return { adx, plus, minus };
+}
+
 // Atualiza subgráficos e painel Análise Garra a partir dos candles armazenados
 function _drvAtualizarIndicadores(candles) {
     if (!candles || candles.length < 10 || typeof LightweightCharts === 'undefined') return;
@@ -34012,9 +34046,12 @@ function _drvAtualizarIndicadores(candles) {
     const e200 = _drvEmaArr(closes, 200);
     const rv   = _drvRsiArr(closes, 14);
     const mc   = _drvMacdObj(closes);
+    const ax   = _drvAdxObj(sorted, 14);
     const n    = sorted.length;
     const vols = sorted.map(c => (c.volume !== undefined ? c.volume : 1));
-    const avgVol = vols.slice(-21, -1).reduce((s, v) => s + v, 0) / 20 || 1;
+    const histVols = vols.slice(-21, -1);
+    const observed = histVols.filter(v => v > 0).length;
+    const avgVol   = observed ? histVols.reduce((s, v) => s + v, 0) / observed : 0;
 
     if (_drvChart._se9)   _drvChart._se9.setData(sorted.map((c, i) => ({ time: c.time, value: e9[i]  })));
     if (_drvChart._se21)  _drvChart._se21.setData(sorted.map((c, i) => ({ time: c.time, value: e21[i] })));
@@ -34028,44 +34065,92 @@ function _drvAtualizarIndicadores(candles) {
     // Legenda
     const i = n - 1;
     const rsiVal = rv[i], macdAbove = mc.m[i] > mc.s[i];
-    const volRel = (vols[i] / avgVol).toFixed(2);
-    const up9_21 = e9[i] > e21[i], trendUp = closes[i] > e200[i], trendDown = closes[i] < e200[i];
+    const volRatio = avgVol > 0 ? vols[i] / avgVol : 0;
+    const volRel = volRatio.toFixed(2);
+    const up9_21   = e9[i] > e21[i];
+    const trendUp  = closes[i] > e200[i] && e9[i] > e21[i] && e21[i] > e200[i];  // alinhamento triplo
+    const trendDown= closes[i] < e200[i] && e9[i] < e21[i] && e21[i] < e200[i];  // alinhamento triplo
+    const adxVal   = ax.adx[i] || 0, diPlus = ax.plus[i] || 0, diMinus = ax.minus[i] || 0;
     const el = id => document.getElementById(id);
     if (el('drv-leg-rsi'))  el('drv-leg-rsi').textContent  = rsiVal.toFixed(1) + (rsiVal > 70 ? ' • sobrecompra' : rsiVal < 30 ? ' • sobrevenda' : rsiVal > 50 ? ' • compradora' : ' • vendedora');
     if (el('drv-leg-macd')) el('drv-leg-macd').textContent = macdAbove ? 'acima da sinal' : 'abaixo da sinal';
     if (el('drv-leg-vol'))  el('drv-leg-vol').textContent  = volRel + 'x';
     if (el('drv-ind-rsi-label'))  el('drv-ind-rsi-label').textContent  = rsiVal.toFixed(1) + (rsiVal > 70 ? ' • sobrecompra' : rsiVal < 30 ? ' • sobrevenda' : '');
     if (el('drv-ind-macd-label')) el('drv-ind-macd-label').textContent = macdAbove ? 'MACD acima da sinal' : 'MACD abaixo da sinal';
-    if (el('drv-ind-vol-label'))  el('drv-ind-vol-label').textContent  = parseFloat(volRel) > 1 ? 'Volume acima da média' : 'Volume abaixo da média';
+    if (el('drv-ind-vol-label'))  el('drv-ind-vol-label').textContent  = volRatio >= 1.25 ? 'Volume acima da média' : 'Volume abaixo da média';
 
-    // Painel Análise Garra
-    const momUp = mc.m[i] > mc.s[i], momDown = mc.m[i] < mc.s[i];
-    const volOk = vols[i] > avgVol;
-    const bullC = sorted[i].close > sorted[i].open, bearC = sorted[i].close < sorted[i].open;
+    // Painel Análise Garra — SNIPER (ADX 14+DI, EMA tripla, Volume 1.25×, força de vela)
+    const momUp  = mc.m[i] > mc.s[i] && mc.h[i] > 0;
+    const momDown= mc.m[i] < mc.s[i] && mc.h[i] < 0;
+    // Volume SNIPER: precisa de histórico suficiente E ratio >= 1.25
+    const volReady = observed >= 10;
+    const volOk    = volReady && volRatio >= 1.25;
+    // Força de vela: corpo >= 55% do range e fechamento no terço certo
+    const cv = sorted[i];
+    const cvBody  = Math.abs(cv.close - cv.open);
+    const cvRange = Math.max(1e-9, cv.high - cv.low);
+    const cvBodyR = cvBody / cvRange;
+    const cvCloseLoc = (cv.close - cv.low) / cvRange;
+    const bullCandle = cvBodyR >= 0.55 && cvCloseLoc >= 0.7;
+    const bearCandle = cvBodyR >= 0.55 && cvCloseLoc <= 0.3;
+    const bullC = cv.close > cv.open, bearC = cv.close < cv.open;
+
     let call = 0, put = 0, blockers = [];
+    // EMA alinhamento triplo (+25)
     if (trendUp)   call += 25; if (trendDown)  put += 25;
-    if (up9_21)    call += 15; if (!up9_21)    put += 15;
+    // EMA 9/21 (+10)
+    if (up9_21)    call += 10; if (!up9_21)    put += 10;
+    // RSI (+15)
     if (rsiVal >= 52 && rsiVal <= 68) call += 15;
     else if (rsiVal >= 32 && rsiVal <= 48) put += 15;
     else blockers.push('RSI extremo');
-    if (momUp)  call += 20; if (momDown) put += 20;
-    if (volOk)  { call += 10; put += 10; } else blockers.push('volume baixo');
-    if (bullC)  call += 15; if (bearC)   put += 15;
+    // MACD (+15)
+    if (momUp)  call += 15; if (momDown) put += 15;
+    // ADX + DI (+15)
+    if (adxVal >= 25) { if (diPlus > diMinus) call += 15; else if (diMinus > diPlus) put += 15; }
+    else if (adxVal < 20) blockers.push('ADX fraco: sem tendência');
+    // DI dominância (+10)
+    if (diPlus > diMinus) call += 10; else if (diMinus > diPlus) put += 10;
+    // Volume SNIPER (+10)
+    if (volOk)  { call += 10; put += 10; } else blockers.push(volReady ? 'ticks abaixo de 1,25× a média' : 'histórico de ticks insuficiente');
+    // Força de vela (+10)
+    if (bullCandle) call += 10; if (bearCandle) put += 10;
+
     const dir  = call > put ? 'CALL' : put > call ? 'PUT' : 'AGUARDAR';
     const best = Math.min(100, Math.max(call, put));
-    if (dir === 'CALL') { if (!momUp) blockers.push('MACD não confirmou'); if (!trendUp) blockers.push('tendência baixista'); if (!bullC) blockers.push('candle não confirmou'); }
-    if (dir === 'PUT')  { if (!momDown) blockers.push('MACD não confirmou'); if (!trendDown) blockers.push('tendência altista'); if (!bearC) blockers.push('candle não confirmou'); }
-    const ok = dir !== 'AGUARDAR' && best >= 70 && blockers.length === 0;
+
+    // Bloqueadores adicionais por direção
+    if (!volReady) blockers.push('aguardando histórico de ticks');
+    else if (!volOk) { const idx = blockers.indexOf('ticks abaixo de 1,25× a média'); if (idx === -1) blockers.push('sem explosão de atividade ≥1,25×'); }
+    if (adxVal < 20 && blockers.indexOf('ADX fraco: sem tendência') === -1) blockers.push('ADX fraco: sem tendência');
+    if (dir === 'CALL') {
+        if (!momUp) blockers.push('MACD/histograma sem confirmação');
+        if (!trendUp) blockers.push('EMA 9/21/200 não alinhadas');
+        if (!bullCandle) blockers.push('vela sem corpo/fechamento forte');
+        if (adxVal >= 20 && diPlus <= diMinus) blockers.push('DI+ não domina DI−');
+    }
+    if (dir === 'PUT') {
+        if (!momDown) blockers.push('MACD/histograma sem confirmação');
+        if (!trendDown) blockers.push('EMA 9/21/200 não alinhadas');
+        if (!bearCandle) blockers.push('vela sem corpo/fechamento forte');
+        if (adxVal >= 20 && diMinus <= diPlus) blockers.push('DI− não domina DI+');
+    }
+    if (rsiVal >= 70 || rsiVal <= 30) blockers.push('RSI extremo');
+    const uniqueBlockers = Array.from(new Set(blockers));
+    const ok = dir !== 'AGUARDAR' && best >= 70 && uniqueBlockers.length === 0;
     if (el('drv-ap-sinal'))    { el('drv-ap-sinal').textContent = ok ? dir : 'AGUARDAR'; el('drv-ap-sinal').style.color = ok ? (dir==='CALL'?'#00e88f':'#ff5364') : '#ffc857'; }
-    if (el('drv-ap-motivo'))   el('drv-ap-motivo').textContent = ok ? 'Confluência técnica atendida.' : (blockers.length ? blockers.join(' • ') : 'Pontuação insuficiente; aguardar nova vela.');
+    if (el('drv-ap-motivo'))   el('drv-ap-motivo').textContent = ok ? 'SNIPER: tendência + ADX/DI + ticks + vela confirmados.' : (uniqueBlockers.length ? uniqueBlockers.join(' • ') : 'Confluência insuficiente; aguardar.');
     if (el('drv-ap-conf-bar')) el('drv-ap-conf-bar').style.width = best + '%';
     if (el('drv-ap-conf-pct')) el('drv-ap-conf-pct').textContent = best + '%';
     if (el('drv-ap-ema'))    { el('drv-ap-ema').textContent    = up9_21 ? 'Alta' : 'Baixa';          el('drv-ap-ema').style.color    = up9_21   ? '#00e88f' : '#ff5364'; }
     if (el('drv-ap-ema200')) { el('drv-ap-ema200').textContent = trendUp ? 'Alta' : trendDown ? 'Baixa' : 'Neutro'; el('drv-ap-ema200').style.color = trendUp  ? '#00e88f' : trendDown ? '#ff5364' : '#aaa'; }
     if (el('drv-ap-macd'))   { el('drv-ap-macd').textContent   = momUp ? 'Comprador' : momDown ? 'Vendedor' : 'Neutro'; el('drv-ap-macd').style.color  = momUp    ? '#00e88f' : momDown   ? '#ff5364' : '#aaa'; }
     if (el('drv-ap-rsi'))    { el('drv-ap-rsi').textContent    = rsiVal.toFixed(1);                   el('drv-ap-rsi').style.color    = rsiVal>70? '#ff5364' : rsiVal<30 ? '#00e88f' : '#aaa'; }
-    if (el('drv-ap-vol'))    { el('drv-ap-vol').textContent    = volOk ? 'Confirmado' : 'Fraco';      el('drv-ap-vol').style.color    = volOk    ? '#00e88f' : '#ff5364'; }
-    if (el('drv-ap-vela'))   { el('drv-ap-vela').textContent   = bullC ? 'Vela verde' : bearC ? 'Vela vermelha' : 'Neutro'; el('drv-ap-vela').style.color  = bullC    ? '#00e88f' : bearC     ? '#ff5364' : '#aaa'; }
+    if (el('drv-ap-vol'))    { el('drv-ap-vol').textContent    = volOk ? 'Confirmado' : (volReady ? 'Fraco (< 1,25×)' : 'Aguard. histórico'); el('drv-ap-vol').style.color = volOk ? '#00e88f' : '#ff5364'; }
+    if (el('drv-ap-vela'))   { el('drv-ap-vela').textContent   = bullCandle ? 'Vela forte ▲' : bearCandle ? 'Vela forte ▼' : (bullC ? 'Vela verde (fraca)' : bearC ? 'Vela vermelha (fraca)' : 'Neutro'); el('drv-ap-vela').style.color = bullCandle ? '#00e88f' : bearCandle ? '#ff5364' : '#aaa'; }
+    // ADX / DI no painel (se existirem os elementos)
+    if (el('drv-ap-adx'))  { el('drv-ap-adx').textContent  = adxVal.toFixed(1) + (adxVal >= 25 ? ' • forte' : adxVal >= 20 ? ' • moderado' : ' • fraco'); el('drv-ap-adx').style.color = adxVal >= 25 ? '#00e88f' : adxVal >= 20 ? '#ffc857' : '#ff5364'; }
+    if (el('drv-ap-di'))   { el('drv-ap-di').textContent   = 'DI+' + diPlus.toFixed(1) + ' / DI−' + diMinus.toFixed(1); el('drv-ap-di').style.color = (dir==='CALL'&&diPlus>diMinus)||(dir==='PUT'&&diMinus>diPlus) ? '#00e88f' : '#ff5364'; }
     const mins = _drvChart.periodo ? Math.round(_drvChart.periodo / 60) : 1;
     if (el('drv-ap-tag')) el('drv-ap-tag').textContent = 'M' + mins;
     try {
