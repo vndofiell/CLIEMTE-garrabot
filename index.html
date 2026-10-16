@@ -5308,8 +5308,23 @@ class GerenciadorUnificado {
             case "💰 Stake Fixa":
                 this.currentStake = base; break;
 
-            case "🔄 Martingale":
-                this.currentStake = base; this._nivelGale = 0; break;
+            case "🔄 Martingale": {
+                // Abate dívida acumulada pelo lucro real deste WIN
+                const _martLucroW = parseFloat((this.currentStake * parseFloat(this.cfg.mart_pay || 0.95)).toFixed(2));
+                this._dividaLR = Math.max(0, parseFloat((this._dividaLR - _martLucroW).toFixed(2)));
+                if (this._dividaLR < 0.07) this._dividaLR = 0;
+                this._nivelGale = 0;
+                // Se ainda há dívida, usa stake intermediária para continuar recuperando
+                // (evita voltar para base quando o WIN não cobriu tudo)
+                if (this._dividaLR > 0) {
+                    const payout    = parseFloat(this.cfg.mart_pay || 0.95);
+                    // Stake que cobre 50% da dívida restante num único WIN
+                    const stakeRec  = parseFloat((this._dividaLR * 0.5 / payout).toFixed(2));
+                    this.currentStake = Math.max(base, Math.min(stakeRec, base * 10));
+                } else {
+                    this.currentStake = base;
+                }
+                break; }
 
             case "⚡ SorosGale":
                 this.currentStake = base; this._nivelGale = 0; break;
@@ -5426,6 +5441,8 @@ class GerenciadorUnificado {
             case "🔄 Martingale": {
                 const maxG = parseInt(cfg.mart_gales || 10);
                 const mult = parseFloat(cfg.mart_mult || 2.1);
+                // Acumula dívida a cada loss (para uso no _onWin de recuperação contínua)
+                this._dividaLR = parseFloat((this._dividaLR + stake).toFixed(2));
                 if (this._nivelGale < maxG) { this._nivelGale++; this.currentStake = parseFloat((stake * mult).toFixed(2)); }
                 else { this._nivelGale = 0; this.currentStake = base; }
                 break; }
@@ -33588,11 +33605,27 @@ function _drvAplicarGerenciamento(win, lucro) {
             case 'fixo':
                 _drvMgr.valorAtual = base; _drvMgr.galeAtual = 0; break;
             case 'martingale':
-                if (win) { _drvMgr.valorAtual = base; _drvMgr.galeAtual = 0; }
-                else if (_drvMgr.galeAtual < _drvMgr.maxGales) {
-                    _drvMgr.valorAtual = parseFloat((_drvMgr.valorAtual * _drvMgr.multGale).toFixed(2));
-                    _drvMgr.galeAtual++;
-                } else { _drvMgr.valorAtual = base; _drvMgr.galeAtual = 0; }
+                if (win) {
+                    // Abate dívida pelo lucro real deste WIN
+                    const _mLucroW = parseFloat((_drvMgr.valorAtual * 0.95).toFixed(2));
+                    _drvMgr.lrDivida = Math.max(0, parseFloat((_drvMgr.lrDivida - _mLucroW).toFixed(2)));
+                    if (_drvMgr.lrDivida < 0.07) _drvMgr.lrDivida = 0;
+                    _drvMgr.galeAtual = 0;
+                    if (_drvMgr.lrDivida > 0) {
+                        // Ainda há dívida: stake intermediária para recuperar (~50% da dívida por WIN)
+                        const _stRec = parseFloat((_drvMgr.lrDivida * 0.5 / 0.95).toFixed(2));
+                        _drvMgr.valorAtual = Math.max(base, Math.min(_stRec, base * 10));
+                    } else {
+                        _drvMgr.valorAtual = base;
+                    }
+                } else {
+                    // Acumula dívida a cada loss
+                    _drvMgr.lrDivida = parseFloat((_drvMgr.lrDivida + _drvMgr.valorAtual).toFixed(2));
+                    if (_drvMgr.galeAtual < _drvMgr.maxGales) {
+                        _drvMgr.valorAtual = parseFloat((_drvMgr.valorAtual * _drvMgr.multGale).toFixed(2));
+                        _drvMgr.galeAtual++;
+                    } else { _drvMgr.valorAtual = base; _drvMgr.galeAtual = 0; }
+                }
                 break;
             case 'sorosgale':
                 if (win) { _drvMgr.galeAtual++; _drvMgr.sorosLucro += Math.abs(lucro);
