@@ -35116,12 +35116,11 @@ function _drvAnalisarAutomatic(precoAtual) {
         if (!_drvModo.opBloqueada) {
             _drvModo.opBloqueada = true;
 
-            // Calcula ms até a próxima virada de vela
+            // Calcula ms até a próxima virada de vela — entra EXATAMENTE no segundo 00
             const _periodo  = _drvChart.periodo || 60;
             const _tsAb     = _drvChart.tsAbertura || (Math.floor(Date.now() / 1000 / _periodo) * _periodo);
             const _tsFimMs  = (_tsAb + _periodo) * 1000;
-            const _msFalta  = Math.max(0, _tsFimMs - Date.now());
-            const _atraso   = _msFalta < 300 ? 0 : _msFalta;
+            const _atraso   = Math.max(0, _tsFimMs - Date.now());
 
             // Função que efetivamente agenda a entrada na virada
             const _agendarEntrada = (infoMtf) => {
@@ -35504,22 +35503,36 @@ function _drvIniciarOpAtiva(op) {
     try {
         if (_drvChart.priceLine) { _drvChart.series.removePriceLine(_drvChart.priceLine); _drvChart.priceLine=null; }
         if (op.precoEntrada > 0) {
-            // Linha sólida e grossa — fácil de identificar o ponto exato de entrada
+            // Linha pontilhada — marca entrada sem dominar o gráfico
             _drvChart.priceLine = _drvChart.series.createPriceLine({
                 price: op.precoEntrada,
                 color: op.direcao === 'call' ? '#00ff88' : '#ff4d4d',
-                lineWidth: 3,
-                lineStyle: 0,   // 0 = sólida
+                lineWidth: 1,
+                lineStyle: 2,   // 2 = Dashed (pontilhado)
                 axisLabelVisible: true,
                 title: op.direcao === 'call' ? '▲ ENTRADA' : '▼ ENTRADA',
             });
+            // Remove a linha após 3 velas (duração da operação + 2 velas extra)
+            const _duracaoVelas = (op.duracao || 60) + ((_drvChart.periodo || 60) * 2);
+            setTimeout(() => {
+                if (_drvChart.priceLine && _drvChart.series) {
+                    try { _drvChart.series.removePriceLine(_drvChart.priceLine); } catch(_) {}
+                    _drvChart.priceLine = null;
+                }
+            }, _duracaoVelas * 1000);
         }
     } catch(_) {}
     // Congela o gráfico no ponto da entrada (impede que novos ticks façam scroll)
     try { _drvChart.chart.timeScale().scrollToRealTime(); } catch(_) {}
     const linhaEl=document.getElementById('drv-op-linha-entrada'), timerEl=document.getElementById('drv-op-timer-overlay'), bubbleEl=document.getElementById('drv-op-timer-bubble');
     if (linhaEl) { linhaEl.style.borderColor=corDir; linhaEl.style.display='block'; }
-    if (timerEl) timerEl.style.display='flex';
+    if (timerEl) {
+        // Contador FIXO no centro-topo do gráfico — não segue o preço
+        timerEl.style.top    = '14px';
+        timerEl.style.left   = '50%';
+        timerEl.style.transform = 'translateX(-50%)';
+        timerEl.style.display = 'flex';
+    }
     if (bubbleEl) bubbleEl.style.borderColor=corDir;
     _drvChart.opAtiva = { ...op, corDir, tsVelaAtual:tsV };
     const tsFimMs = op.ts + op.duracao * 1000;
@@ -35527,8 +35540,9 @@ function _drvIniciarOpAtiva(op) {
         const restamMs=Math.max(0,tsFimMs-Date.now()), restamS=Math.ceil(restamMs/1000);
         const mm=String(Math.floor(restamS/60)).padStart(2,'0'), ss=String(restamS%60).padStart(2,'0');
         if (bubbleEl) bubbleEl.textContent='$'+parseFloat(op.valor).toFixed(2)+' • '+mm+':'+ss;
+        // Linha horizontal acompanha o preço de entrada — contador fica fixo no topo
         if (op.precoEntrada > 0 && _drvChart.series) {
-            try { const y=_drvChart.series.priceToCoordinate(op.precoEntrada); if(y!==null&&y>10){if(linhaEl)linhaEl.style.top=Math.round(y)+'px';if(timerEl)timerEl.style.top=(Math.round(y)-18)+'px';} } catch(_) {}
+            try { const y=_drvChart.series.priceToCoordinate(op.precoEntrada); if(y!==null&&y>10&&linhaEl){linhaEl.style.top=Math.round(y)+'px';} } catch(_) {}
         }
         if (restamMs <= 0) clearInterval(_drvChart.opAtiva?.timerInterval);
     }, 500);
