@@ -710,165 +710,104 @@ def login_sistema():
     pw       = dados.get("password") or ""
     ip_novo  = request.remote_addr or "desconhecido"
     _pc_raw  = (dados.get("pc_id") or "").strip()[:80]
-    # Só aceita fingerprint real — ignora string "desconhecido" ou vazio
     pc_novo  = _pc_raw if (_pc_raw and _pc_raw != "desconhecido") else ""
 
-    # Admin master — acesso direto, sem prazo
+    # Admin master — acesso direto, sem I/O de arquivo
     if user == ADMIN_USER and pw == ADMIN_SENHA:
         return jsonify({"ok": True, "tipo": "ADMIN", "username": user,
                         "email": "administrador@sistema", "dias_restantes": None})
 
-    # Usuário comum
-    u = _auth_buscar_usuario(user)
+    # ── UMA ÚNICA leitura do arquivo ──────────────────────────────────────────
+    db = _auth_ler_usuarios()
+    u  = next((x for x in db.get("usuarios", []) if x["username"].lower() == user.lower()), None)
+
     if not u:
         return jsonify({"ok": False, "erro": "USUÁRIO NÃO CADASTRADO"})
     if u["status"] == "PENDENTE":
         return jsonify({"ok": False, "erro": "ACESSO PENDENTE — aguarde aprovação do administrador.", "status": "PENDENTE"})
     if u["status"] == "BLOQUEADO":
         motivo = u.get("motivo_bloqueio") or "contate o administrador."
-        return jsonify({"ok": False, "erro": f"ACESSO BLOQUEADO — {motivo}", "status": "BLOQUEADO",
-                        "motivo": motivo})
+        return jsonify({"ok": False, "erro": f"ACESSO BLOQUEADO — {motivo}", "status": "BLOQUEADO", "motivo": motivo})
     if not u.get("senha_hash"):
         return jsonify({"ok": False, "erro": "SENHA NÃO DEFINIDA — aguarde aprovação.", "status": "PENDENTE"})
 
     # ── Validação de PC aprovado ──────────────────────────────────────────────
-    # Se o usuário tiver lista de PCs aprovados, só permite login nesses PCs
-    # pc_novo vazio significa que o fingerprint não chegou — ignora a validação
     pcs_aprovados = u.get("pcs_aprovados", [])
     if pcs_aprovados and pc_novo and pc_novo not in pcs_aprovados:
-        # Registra tentativa de PC não autorizado
-        db2 = _auth_ler_usuarios()
-        for usr2 in db2["usuarios"]:
-            if usr2["username"].lower() == user.lower():
-                # Guarda o PC novo para o admin poder aprovar pelo painel
-                pcs_pendentes = usr2.get("pcs_pendentes", [])
-                if pc_novo not in pcs_pendentes:
-                    pcs_pendentes.append(pc_novo)
-                usr2["pcs_pendentes"] = pcs_pendentes[-5:]  # guarda últimos 5
-                break
-        _auth_salvar_usuarios(db2)
-        _hist_registrar(user, ip_novo, pc_novo, "PC_NAO_AUTORIZADO")
+        pcs_pendentes = u.get("pcs_pendentes", [])
+        if pc_novo not in pcs_pendentes:
+            pcs_pendentes.append(pc_novo)
+        u["pcs_pendentes"] = pcs_pendentes[-5:]
+        _auth_salvar_usuarios(db)  # 1 escrita
+        threading.Thread(target=_hist_registrar, args=(user, ip_novo, pc_novo, "PC_NAO_AUTORIZADO"), daemon=True).start()
         print(f"[AUTH] PC não autorizado para {user}: {pc_novo[:16]}...")
-        return jsonify({
-            "ok":     False,
-            "erro":   "DISPOSITIVO NÃO AUTORIZADO — contate o administrador para liberar este computador.",
-            "status": "PC_BLOQUEADO"
-        })
+        return jsonify({"ok": False, "erro": "DISPOSITIVO NÃO AUTORIZADO — contate o administrador para liberar este computador.", "status": "PC_BLOQUEADO"})
 
-    # Verifica se o período de teste expirou
+    # ── Verifica expiração do teste ────────────────────────────────────────────
     restam = _auth_dias_restantes(u)
     if restam is not None and restam < 0:
-        db = _auth_ler_usuarios()
-        for usr in db["usuarios"]:
-            if usr["username"].lower() == user.lower():
-                usr["status"]          = "BLOQUEADO"
-                usr["motivo_bloqueio"] = "PERÍODO DE TESTE EXPIRADO"
-                usr["bloqueado_em"]    = time.strftime("%Y-%m-%d %H:%M:%S")
-                break
-        _auth_salvar_usuarios(db)
+        u["status"]          = "BLOQUEADO"
+        u["motivo_bloqueio"] = "PERÍODO DE TESTE EXPIRADO"
+        u["bloqueado_em"]    = time.strftime("%Y-%m-%d %H:%M:%S")
+        _auth_salvar_usuarios(db)  # 1 escrita
         return jsonify({"ok": False, "erro": "PERÍODO DE TESTE EXPIRADO — contate o administrador.", "status": "EXPIRADO"})
 
     if _auth_hash(pw) != u["senha_hash"]:
         return jsonify({"ok": False, "erro": "SENHA INCORRETA"})
 
-    # ══════════════════════════════════════════════════════════════════════
-    # DETECÇÃO DE LOGIN DUPLO
-    # Lógica de 2 etapas para evitar falsos positivos:
-    #   1ª detecção → derruba sessão anterior, registra alerta
-    #   2ª detecção em device diferente → bloqueia conta automaticamente
-    # ══════════════════════════════════════════════════════════════════════
-    token_atual = u.get("login_token")
-    ip_anterior = u.get("ultimo_ip")
-    pc_anterior = u.get("ultimo_pc")
-    agora_str   = time.strftime("%Y-%m-%d %H:%M:%S")
-
-    # Considera "mesmo dispositivo" se IP E PC coincidem (reconexão legítima)
+    # ── Detecção de login duplo ────────────────────────────────────────────────
+    agora_str    = time.strftime("%Y-%m-%d %H:%M:%S")
+    token_atual  = u.get("login_token")
+    ip_anterior  = u.get("ultimo_ip")
+    pc_anterior  = u.get("ultimo_pc")
     mesmo_device = (ip_anterior == ip_novo and pc_anterior == pc_novo)
 
+    evento_hist = "LOGIN"
     if token_atual and not mesmo_device:
-        # Existe sessão ativa em outro dispositivo
         tentativas = int(u.get("tentativas_login_duplo") or 0) + 1
-        db = _auth_ler_usuarios()
-        for usr in db["usuarios"]:
-            if usr["username"].lower() == user.lower():
-                usr["tentativas_login_duplo"] = tentativas
-                if tentativas >= 2:
-                    # ── 2ª detecção → BLOQUEAR ──────────────────────────────
-                    usr["status"]              = "BLOQUEADO"
-                    usr["motivo_bloqueio"]     = "LOGIN DUPLO DETECTADO"
-                    usr["bloqueado_em"]        = agora_str
-                    usr["login_token"]         = None
-                    usr["ultima_atividade"]    = agora_str
-                    # Guarda IPs/PCs do incidente para o admin ver
-                    usr["primeira_tentativa_ip"] = ip_anterior
-                    usr["primeira_tentativa_pc"] = pc_anterior
-                else:
-                    # ── 1ª detecção → Derrubar sessão anterior ───────────────
-                    usr["login_token"]           = None
-                    usr["primeira_tentativa_ip"] = ip_anterior
-                    usr["primeira_tentativa_pc"] = pc_anterior
-                    usr["ultima_atividade"]      = agora_str
-                break
-        _auth_salvar_usuarios(db)
-
-        # Registra no histórico
-        _hist_registrar(user, ip_novo, pc_novo,
-                        "BLOQUEIO_LOGIN_DUPLO" if tentativas >= 2 else "LOGIN_DUPLO_1A_DETECCAO")
-
-        # Notifica admin por Telegram se configurado
-        def _notif_admin():
-            tg = _tg_carregar()
-            if tg.get("enabled") and tg.get("token") and tg.get("chat_id"):
-                acao_txt = "🔴 CONTA BLOQUEADA" if tentativas >= 2 else "⚠️ 1ª Detecção (sessão anterior derrubada)"
-                msg = (
-                    f"🚨 LOGIN DUPLO DETECTADO\n\n"
-                    f"👤 Usuário: <b>{user}</b>\n"
-                    f"📍 {acao_txt}\n\n"
-                    f"🖥️ PC anterior: <code>{pc_anterior or '?'}</code>\n"
-                    f"🌐 IP anterior: <code>{ip_anterior or '?'}</code>\n\n"
-                    f"🖥️ PC novo: <code>{pc_novo}</code>\n"
-                    f"🌐 IP novo: <code>{ip_novo}</code>\n\n"
-                    f"🕐 {agora_str}"
-                )
-                _tg_enviar_texto(tg["token"], tg["chat_id"], msg)
-        threading.Thread(target=_notif_admin, daemon=True).start()
-
+        u["tentativas_login_duplo"]  = tentativas
+        u["primeira_tentativa_ip"]   = ip_anterior
+        u["primeira_tentativa_pc"]   = pc_anterior
+        u["ultima_atividade"]        = agora_str
         if tentativas >= 2:
-            return jsonify({
-                "ok": False,
-                "erro": "LOGIN DUPLO DETECTADO — conta bloqueada automaticamente.",
-                "status": "BLOQUEADO",
-                "motivo": "LOGIN DUPLO DETECTADO"
-            })
+            u["status"]          = "BLOQUEADO"
+            u["motivo_bloqueio"] = "LOGIN DUPLO DETECTADO"
+            u["bloqueado_em"]    = agora_str
+            u["login_token"]     = None
+            _auth_salvar_usuarios(db)  # 1 escrita
+            threading.Thread(target=_hist_registrar, args=(user, ip_novo, pc_novo, "BLOQUEIO_LOGIN_DUPLO"), daemon=True).start()
+            # Notifica admin em background
+            def _notif():
+                tg = _tg_carregar()
+                if tg.get("enabled") and tg.get("token") and tg.get("chat_id"):
+                    _tg_enviar_texto(tg["token"], tg["chat_id"],
+                        f"🚨 LOGIN DUPLO\n👤 {user}\n🔴 BLOQUEADO\nIP novo: {ip_novo}\nPC novo: {pc_novo}")
+            threading.Thread(target=_notif, daemon=True).start()
+            return jsonify({"ok": False, "erro": "LOGIN DUPLO DETECTADO — conta bloqueada automaticamente.", "status": "BLOQUEADO", "motivo": "LOGIN DUPLO DETECTADO"})
         else:
-            # Sessão anterior derrubada — permite o login neste device
-            pass   # continua para registrar nova sessão abaixo
+            u["login_token"] = None   # derruba sessão anterior
+            evento_hist = "LOGIN_DUPLO_1A_DETECCAO"
 
-    # ── Registra nova sessão ──────────────────────────────────────────────
+    # ── Registra nova sessão (tudo em memória, 1 única escrita) ───────────────
     novo_token = _auth_gerar_token()
-    db = _auth_ler_usuarios()
-    for usr in db["usuarios"]:
-        if usr["username"].lower() == user.lower():
-            usr["login_token"]        = novo_token
-            usr["ultimo_ip"]          = ip_novo
-            # Só atualiza o pc se vier um fingerprint real (não "desconhecido")
-            if pc_novo and pc_novo != "desconhecido":
-                usr["ultimo_pc"]      = pc_novo
-            usr["ultima_atividade"]   = agora_str
-            # Reseta contador de tentativas duplas em login legítimo
-            if mesmo_device or not token_atual:
-                usr["tentativas_login_duplo"] = 0
-            break
-    _auth_salvar_usuarios(db)
-    _hist_registrar(user, ip_novo, pc_novo, "LOGIN")
+    u["login_token"]      = novo_token
+    u["ultimo_ip"]        = ip_novo
+    if pc_novo:
+        u["ultimo_pc"]    = pc_novo
+    u["ultima_atividade"] = agora_str
+    if mesmo_device or not token_atual:
+        u["tentativas_login_duplo"] = 0
+
+    _auth_salvar_usuarios(db)  # 1 ÚNICA escrita para todo o fluxo normal
+    threading.Thread(target=_hist_registrar, args=(user, ip_novo, pc_novo, evento_hist), daemon=True).start()
 
     return jsonify({
-        "ok":            True,
-        "tipo":          "USUARIO",
-        "username":      u["username"],
-        "email":         u.get("email", ""),
+        "ok":             True,
+        "tipo":           "USUARIO",
+        "username":       u["username"],
+        "email":          u.get("email", ""),
         "dias_restantes": restam,
-        "session_token": novo_token,   # cliente deve armazenar e enviar no logout
+        "session_token":  novo_token,
     })
 
 # ── Rota: logout do usuário (invalida token de sessão) ───────────────────────
