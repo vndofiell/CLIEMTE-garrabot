@@ -1638,14 +1638,27 @@ def debug_ngrok():
 
 @app.route('/open-login')
 def open_login():
-    """Gera URL OAuth PKCE completa e retorna direto para o frontend.
-    O frontend abre essa URL — vai direto para a Deriv sem página intermediária.
-    """
-    import hashlib, base64, secrets
-    tipo = request.args.get('tipo', 'DEMO')
+    """Retorna a URL da tela intermediária de login (com Matrix + botão CONECTAR CONTA DERIV).
+    O frontend abre essa tela numa nova aba — o usuário clica no botão para ir à Deriv."""
+    tipo     = request.args.get('tipo', 'DEMO')
     _access_token["tipo"] = tipo.upper()
     with _token_sec_lock:
         _token_secundaria["aguardando"] = False
+
+    base_url   = _get_base_url()
+    login_url  = f"{base_url}/login?tipo={tipo.upper()}"
+    print(f"[OpenLogin] Tela login -> {login_url}")
+    return jsonify({"status": "opened", "url": login_url, "ngrok_ativo": True,
+                    "redirect_uri": f"{base_url}/callback.html"})
+
+
+@app.route('/open-login-pkce')
+def open_login_pkce():
+    """Chamado pela tela /login quando o usuário clica em 'CONECTAR CONTA DERIV'.
+    Gera PKCE server-side e retorna a URL OAuth da Deriv."""
+    import hashlib, base64, secrets
+    tipo = request.args.get('tipo', 'DEMO')
+    _access_token["tipo"] = tipo.upper()
 
     # Gera PKCE verifier + challenge no servidor
     verifier  = secrets.token_hex(32)
@@ -1658,7 +1671,6 @@ def open_login():
     with _token_lock:
         _pkce_store = _token_recebido.setdefault("_pkce_store", {})
         _pkce_store[state] = verifier
-        # Compatibilidade retroativa
         _token_recebido["_pkce_verifier"] = verifier
         _token_recebido["_session_id"]    = state
     _pkce_salvar(state, verifier)
@@ -1666,17 +1678,10 @@ def open_login():
     base_url     = _get_base_url()
     eh_ngrok     = 'ngrok' in base_url or 'ngrok-free' in base_url
     eh_render    = 'onrender.com' in base_url
-    # URL é válida se for ngrok (local) OU Render (produção)
-    url_valida   = eh_ngrok or eh_render
     callback_url = f"{base_url}/callback.html"
 
-    if not url_valida:
-        # Rodando local sem ngrok — avisa mas deixa tentar
-        print(f"[OpenLogin] ⚠️ URL nao reconhecida: {base_url}")
-        print(f"[OpenLogin]    Para usar local inicie com INICIAR_BOT.bat (ngrok)")
-    else:
-        modo = "ngrok" if eh_ngrok else "Render"
-        print(f"[OpenLogin] ✅ Modo {modo} | state={state} | verifier={verifier[:8]}... | redirect_uri={callback_url}")
+    modo = "ngrok" if eh_ngrok else ("Render" if eh_render else "local")
+    print(f"[OpenLoginPKCE] ✅ Modo {modo} | state={state} | verifier={verifier[:8]}... | redirect_uri={callback_url}")
 
     oauth_url = (
         "https://auth.deriv.com/oauth2/auth"
