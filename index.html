@@ -1148,8 +1148,8 @@
             <span id="trade-status-icone" class="neutro">🟡</span>
             <span style="color:rgba(0,255,65,0.55); font-size:0.6rem; white-space:nowrap; letter-spacing:1.5px; text-transform:uppercase;">Trade</span>
             <span id="trade-direcao-icone" style="font-size:0.82rem; font-weight:bold;"></span>
-            <span id="trade-countdown" title="Restantes">--</span>
-            <span id="trade-countdown-unit" style="color:rgba(0,255,65,0.4); font-size:0.6rem; margin-left:-4px;">s</span>
+            <span id="trade-countdown" title="Segundos restantes">--</span>
+            <span style="color:rgba(0,255,65,0.4); font-size:0.6rem; margin-left:-4px;">s</span>
             <span id="trade-status-txt" style="color:#555; font-size:0.62rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; min-width:0;"></span>
         </div>
         <div style="display:flex; flex-direction:column; align-items:flex-end; gap:2px; flex-shrink:0;">
@@ -28267,7 +28267,7 @@ const _tsLocal = {
 };
 
 // Ativa o widget com os dados do trade recém-aberto
-function _tradeAtivarLocal(direcao, durSecs, ativoNome, valor, fonte, precoEntrada, ativoId, unidade) {
+function _tradeAtivarLocal(direcao, durSecs, ativoNome, valor, fonte, precoEntrada, ativoId) {
     // Cancela qualquer encerramento agendado
     if (_tsLocal._timerEncerrando) { clearTimeout(_tsLocal._timerEncerrando); _tsLocal._timerEncerrando = null; }
     // Limpa timers anteriores
@@ -28276,9 +28276,6 @@ function _tradeAtivarLocal(direcao, durSecs, ativoNome, valor, fonte, precoEntra
     _tsLocal.ativo        = true;
     _tsLocal.tsInicio     = Date.now();
     _tsLocal.duracao      = durSecs || 60;
-    _tsLocal.unidade      = unidade || 's'; // 't' = ticks, 's' = segundos/minutos
-    _tsLocal._ticksTotal  = (unidade === 't') ? (durSecs || 5) : 0;
-    _tsLocal._ticksReceb  = 0; // ticks já recebidos (contados via proposal_open_contract)
     _tsLocal.direcao      = (direcao || '').toUpperCase();
     _tsLocal.ativoNome    = ativoNome || '';
     _tsLocal.valor        = parseFloat(valor) || 0;
@@ -28287,10 +28284,8 @@ function _tradeAtivarLocal(direcao, durSecs, ativoNome, valor, fonte, precoEntra
     _tsLocal._precoEntrada = parseFloat(precoEntrada) || 0;
     _tsLocal._ativoId      = ativoId || '';
     _tradeMostrarWidget();
-    // Modo ticks: atualiza exatamente a cada 1s (1 tick = 1 segundo)
-    // Modo segundos: atualiza a cada 500ms para suavidade visual
-    const _intervaloMs = (unidade === 't') ? 1000 : 500;
-    _tsLocal._timer = setInterval(_tradeMostrarWidget, _intervaloMs);
+    // Atualiza o cronômetro a cada 500ms localmente (suave e sem flickering)
+    _tsLocal._timer = setInterval(_tradeMostrarWidget, 500);
 
     // ── Para Quotex: busca preço via /quotex/tick a cada 2s e atualiza cor ──
     if (fonte === 'quotex' && _tsLocal._ativoId) {
@@ -28364,18 +28359,17 @@ function _tradeEncerrarLocal(statusFinal, lucroFinal) {
 
 // ── Referências em cache (evita getElementById a cada frame) ──
 // Cache DOM — sempre tenta obter; usa querySelector como fallback
-let _tBar, _tIcone, _tCount, _tTxt, _tLbl, _tInner, _tDir, _tLucro, _tGlow, _tCountUnit;
+let _tBar, _tIcone, _tCount, _tTxt, _tLbl, _tInner, _tDir, _tLucro, _tGlow;
 function _tradeGetEls() {
-    if (!_tBar)       _tBar       = document.getElementById('trade-ativo-bar');
-    if (!_tIcone)     _tIcone     = document.getElementById('trade-status-icone');
-    if (!_tCount)     _tCount     = document.getElementById('trade-countdown');
-    if (!_tCountUnit) _tCountUnit = document.getElementById('trade-countdown-unit');
-    if (!_tTxt)       _tTxt       = document.getElementById('trade-status-txt');
-    if (!_tLbl)       _tLbl       = document.getElementById('trade-status-label');
-    if (!_tInner)     _tInner     = document.getElementById('trade-barra-prog-inner');
-    if (!_tDir)       _tDir       = document.getElementById('trade-direcao-icone');
-    if (!_tLucro)     _tLucro     = document.getElementById('trade-lucro-badge');
-    if (!_tGlow)      _tGlow      = document.getElementById('trade-screen-glow');
+    if (!_tBar)   _tBar   = document.getElementById('trade-ativo-bar');
+    if (!_tIcone) _tIcone = document.getElementById('trade-status-icone');
+    if (!_tCount) _tCount = document.getElementById('trade-countdown');
+    if (!_tTxt)   _tTxt   = document.getElementById('trade-status-txt');
+    if (!_tLbl)   _tLbl   = document.getElementById('trade-status-label');
+    if (!_tInner) _tInner = document.getElementById('trade-barra-prog-inner');
+    if (!_tDir)   _tDir   = document.getElementById('trade-direcao-icone');
+    if (!_tLucro) _tLucro = document.getElementById('trade-lucro-badge');
+    if (!_tGlow)  _tGlow  = document.getElementById('trade-screen-glow');
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -28477,24 +28471,13 @@ function _tradeMostrarWidget(dadosServidor) {
     }
 
     // Dados: prioridade servidor > local
-    const agora    = Date.now();
-    const _isTick  = !usarServidor && _tsLocal.unidade === 't';
-    const secs     = usarServidor
+    const agora   = Date.now();
+    const secs    = usarServidor
         ? Math.max(0, dadosServidor.segundos_rest || 0)
         : (_tsLocal.ativo
-            ? (_isTick
-                // Modo ticks: 1 tick = 1 segundo — desce exatamente 1 por segundo
-                ? (() => {
-                    const total_ = _tsLocal._ticksTotal || 5;
-                    // Usa ticks reais do servidor se chegaram, senão conta por tempo
-                    const receb   = _tsLocal._ticksReceb || 0;
-                    const porTempo = Math.floor((agora - _tsLocal.tsInicio) / 1000);
-                    const gasto   = receb > 0 ? receb : porTempo;
-                    return Math.max(0, total_ - gasto);
-                  })()
-                : Math.max(0, _tsLocal.duracao - Math.floor((agora - _tsLocal.tsInicio) / 1000)))
+            ? Math.max(0, _tsLocal.duracao - Math.round((agora - _tsLocal.tsInicio) / 1000))
             : 0);
-    const total   = usarServidor ? (dadosServidor.duracao || 60) : (_isTick ? (_tsLocal._ticksTotal || 5) : (_tsLocal.duracao || 60));
+    const total   = usarServidor ? (dadosServidor.duracao || 60) : (_tsLocal.duracao || 60);
     const status  = usarServidor ? (dadosServidor.status_lucro || 'neutro') : _tsLocal.status;
     const direcao = usarServidor ? (dadosServidor.direcao || '').toUpperCase() : _tsLocal.direcao;
     const nomAtv  = usarServidor ? (dadosServidor.ativo_nome || '') : _tsLocal.ativoNome;
@@ -28524,14 +28507,10 @@ function _tradeMostrarWidget(dadosServidor) {
     // Barra de progresso
     if (_tInner) { _tInner.style.width = pct.toFixed(1) + '%'; }
 
-    // Cronômetro + unidade dinâmica (ticks ou segundos)
+    // Cronômetro
     if (_tCount) {
         _tCount.textContent = secs;
         _tCount.className   = secs <= 5 ? 'urgente' : '';
-        _tCount.title       = _isTick ? 'Ticks restantes' : 'Segundos restantes';
-    }
-    if (_tCountUnit) {
-        _tCountUnit.textContent = _isTick ? 't' : 's';
     }
 
     // Direção — normaliza CALL/PUT/RISE/FALL e DIGIT*
@@ -33222,7 +33201,7 @@ function _qxHmaAtualizarStake(win, lucro) {
 // ── Estado ────────────────────────────────────────────────
 const _drvChart = {
     chart:null, series:null,
-    ativo:'R_100', periodo:60, duracao:60, duracaoUnidade:'s', valor:1, contrato:'CALL',
+    ativo:'R_100', periodo:60, duracao:60, valor:1, contrato:'CALL',
     historico:[], rtTimer:null, lastPreco:0,
     velaAtual:null, tsAbertura:0,
     opAtiva:null, priceLine:null,
@@ -35464,9 +35443,7 @@ function drvOperar(direcao) {
                     _drvIniciarOpAtiva({ id:cid, direcao, valor, duracao, ts:tsAgora, precoEntrada:_drvChart.lastPreco||0 });
                     // Sincroniza barra inferior com o mesmo timestamp do gráfico
                     if (typeof _tradeAtivarLocal === 'function') {
-                        // Passa unidade correta: 't' para ticks, 's' para segundos/minutos
-                        const _unidTrade = _drvChart.duracaoUnidade || 's';
-                        _tradeAtivarLocal(direcao, duracao, ativo, valor, 'deriv', _drvChart.lastPreco||0, '', _unidTrade);
+                        _tradeAtivarLocal(direcao, duracao, ativo, valor, 'deriv', _drvChart.lastPreco||0);
                     }
                     _drvAguardarResultado(cid, duracao);
                 } else {
@@ -35504,10 +35481,6 @@ function _drvAguardarResultado(contractId, duracao) {
                 if (typeof _tsLocal !== 'undefined' && _tsLocal.ativo) {
                     if (lucroInt > 0)      _tsLocal.status = 'ganhando';
                     else if (lucroInt < 0) _tsLocal.status = 'perdendo';
-                    // Conta ticks recebidos quando modo ticks está ativo
-                    if (_tsLocal.unidade === 't') {
-                        _tsLocal._ticksReceb = (_tsLocal._ticksReceb || 0) + 1;
-                    }
                 }
                 // Atualiza cor do bubble/linha no gráfico
                 if (_drvChart.opAtiva) {
@@ -35640,27 +35613,16 @@ function _drvIniciarOpAtiva(op) {
     }
     if (bubbleEl) bubbleEl.style.borderColor=corDir;
     _drvChart.opAtiva = { ...op, corDir, tsVelaAtual:tsV };
-    const _opEhTick = (_drvChart.duracaoUnidade === 't');
-    const tsFimMs   = op.ts + op.duracao * (_opEhTick ? 1000 : 1000); // mesmo cálculo, flag para display
+    const tsFimMs = op.ts + op.duracao * 1000;
     _drvChart.opAtiva.timerInterval = setInterval(() => {
-        let displayStr;
-        if (_opEhTick) {
-            // Modo ticks: 1 tick = 1 segundo exato
-            const decorrido = Math.floor((Date.now() - op.ts) / 1000);
-            const restamT   = Math.max(0, op.duracao - decorrido);
-            displayStr = '$'+parseFloat(op.valor).toFixed(2)+' • '+restamT+'t';
-        } else {
-            const restamMs=Math.max(0,tsFimMs-Date.now()), restamS=Math.ceil(restamMs/1000);
-            const mm=String(Math.floor(restamS/60)).padStart(2,'0'), ss=String(restamS%60).padStart(2,'0');
-            displayStr = '$'+parseFloat(op.valor).toFixed(2)+' • '+mm+':'+ss;
-        }
-        if (bubbleEl) bubbleEl.textContent = displayStr;
+        const restamMs=Math.max(0,tsFimMs-Date.now()), restamS=Math.ceil(restamMs/1000);
+        const mm=String(Math.floor(restamS/60)).padStart(2,'0'), ss=String(restamS%60).padStart(2,'0');
+        if (bubbleEl) bubbleEl.textContent='$'+parseFloat(op.valor).toFixed(2)+' • '+mm+':'+ss;
         // Linha horizontal acompanha o preço de entrada — contador fica fixo no topo
         if (op.precoEntrada > 0 && _drvChart.series) {
             try { const y=_drvChart.series.priceToCoordinate(op.precoEntrada); if(y!==null&&y>10&&linhaEl){linhaEl.style.top=Math.round(y)+'px';} } catch(_) {}
         }
-        const restamMs2=Math.max(0,tsFimMs-Date.now());
-        if (restamMs2 <= 0) clearInterval(_drvChart.opAtiva?.timerInterval);
+        if (restamMs <= 0) clearInterval(_drvChart.opAtiva?.timerInterval);
     }, 500);
 }
 
