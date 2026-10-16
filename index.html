@@ -10967,17 +10967,7 @@ function initWebSocket(wssUrl) {
                 }
             }
 
-            // OTP ainda pode ser válido — só reconecta automaticamente se bot rodando ou DBS ativo
-            if (!bot.running && !_dbsEstaAtivo()) {
-                // Bot parado: tenta obter nova URL silenciosamente para próxima vez
-                const _urlSilenciosa = await _wsObterNovaUrl();
-                if (_urlSilenciosa) {
-                    bot._wssUrl = _urlSilenciosa; // atualiza para reconexão futura
-                }
-                _wsReconectando = false;
-                return;
-            }
-
+            // Reconecta sempre que tiver _wssUrl — independente de bot.running
             print(`📡 Reconectando automaticamente... (tentativa ${_tentativa})`, "log-info");
             try { initWebSocket(bot._wssUrl); } catch(_) {}
             _wsReconTimer = setTimeout(async () => {
@@ -20801,7 +20791,7 @@ _wakeLockAtivar();
             const s2 = document.getElementById('dbs-auto-operar');
             return (s1 && s1.checked) || (s2 && s2.checked);
         };
-        if (typeof bot !== 'undefined' && bot._wssUrl && (bot.running || _wdDbsAtivo())) {
+        if (typeof bot !== 'undefined' && bot._wssUrl) {
             if (!bot.ws || bot.ws.readyState === WebSocket.CLOSED || bot.ws.readyState === WebSocket.CLOSING) {
                 if (!_wsReconectando) {
                     console.warn('🔁 Watchdog: WS principal caiu — reconectando...');
