@@ -29508,30 +29508,6 @@ window.addEventListener('load', () => {
               style="padding:5px 10px; background:#0a0a12; border:1px solid #333;
                      color:#aaa; cursor:pointer; border-radius:3px; font-size:0.9rem;">+</button>
         </div>
-        <!-- Modo de entrada -->
-        <div style="display:flex; gap:4px; margin-top:8px;">
-          <button id="drv-entrada-virada"
-              onclick="drvSetModoEntrada('virada')"
-              style="flex:1; padding:4px 4px; font-family:'Share Tech Mono'; font-size:0.58rem;
-                     letter-spacing:1px; cursor:pointer; border-radius:3px;
-                     background:rgba(0,255,65,0.15); border:1px solid #00ff41; color:#00ff41;">
-            ⏱ 00
-          </button>
-          <button id="drv-entrada-5s"
-              onclick="drvSetModoEntrada('5s')"
-              style="flex:1; padding:4px 4px; font-family:'Share Tech Mono'; font-size:0.58rem;
-                     letter-spacing:1px; cursor:pointer; border-radius:3px;
-                     background:transparent; border:1px solid #444; color:#555;">
-            ⏰ -2s
-          </button>
-          <button id="drv-entrada-imediato"
-              onclick="drvSetModoEntrada('imediato')"
-              style="flex:1; padding:4px 4px; font-family:'Share Tech Mono'; font-size:0.58rem;
-                     letter-spacing:1px; cursor:pointer; border-radius:3px;
-                     background:transparent; border:1px solid #444; color:#555;">
-            ⚡ JÁ
-          </button>
-        </div>
       </div>
 
       <!-- Valor -->
@@ -33211,7 +33187,7 @@ const _drvChart = {
     chart:null, series:null,
     ativo:'R_100', periodo:60, duracao:60, valor:1, contrato:'CALL',
     historico:[], rtTimer:null, lastPreco:0,
-    velaAtual:null, velaFechada:null, tsAbertura:0,
+    velaAtual:null, tsAbertura:0,
     opAtiva:null, priceLine:null,
     _sessaoWins:0, _sessaoLosses:0, _sessaoLucro:0,
     cidsAtivos:    new Set(),   // IDs de contratos abertos pelo painel Deriv Chart
@@ -33229,22 +33205,7 @@ const _drvModo = {
     viradaDirecao: null,// direção pendente ao acordar do background
     mtfAtivo: true,   // Filtro Multi-Timeframe ligado por padrão
     srAtivo:  true,   // Filtro Topo/Fundo (S/R) ligado por padrão
-    modoEntrada: 'virada', // 'virada' = segundo 00 | '5s' = 2s antes da virada | 'imediato' = qualquer tick
-    _anticp2sVela: 0,      // controle anti-duplo disparo do modo -2s
 };
-
-function drvSetModoEntrada(modo) {
-    _drvModo.modoEntrada = modo;
-    const btnVirada   = document.getElementById('drv-entrada-virada');
-    const btn5s       = document.getElementById('drv-entrada-5s');
-    const btnImediato = document.getElementById('drv-entrada-imediato');
-    // Apaga todos
-    [btnVirada, btn5s, btnImediato].forEach(b => { if(b){ b.style.background='transparent'; b.style.borderColor='#444'; b.style.color='#555'; }});
-    // Acende o selecionado
-    if (modo === 'virada'  && btnVirada)   { btnVirada.style.background   = 'rgba(0,255,65,0.15)';  btnVirada.style.borderColor   = '#00ff41'; btnVirada.style.color   = '#00ff41'; }
-    if (modo === '5s'      && btn5s)       { btn5s.style.background       = 'rgba(255,189,46,0.15)'; btn5s.style.borderColor       = '#ffbd2e'; btn5s.style.color       = '#ffbd2e'; }
-    if (modo === 'imediato'&& btnImediato) { btnImediato.style.background = 'rgba(0,200,255,0.15)'; btnImediato.style.borderColor = '#00cfff'; btnImediato.style.color = '#00cfff'; }
-}
 
 // ── Web Worker inline — timer imune ao throttling de tela bloqueada ──────────
 // Criado como Blob URL para não precisar de arquivo externo.
@@ -33933,10 +33894,6 @@ function _drvProcessarTick(tick) {
         v.volume = (v.volume || 0) + 1;
         _drvChart.series.update(v);
     } else if (tsAb > (_drvChart.velaAtual?.time || 0)) {
-        // ── VIRADA DE VELA: salva a vela que acabou de fechar ───────────────
-        if (_drvChart.velaAtual) {
-            _drvChart.velaFechada = { ..._drvChart.velaAtual };
-        }
         _drvChart.velaAtual = { time: tsAb, open: preco, high: preco, low: preco, close: preco, volume: 1 };
         _drvChart.series.update(_drvChart.velaAtual);
         // Só rola para o tempo real se NÃO houver operação ativa (congela o gráfico durante a operação)
@@ -33980,25 +33937,8 @@ function _drvProcessarTick(tick) {
         }
     }
 
-    // Análise automática:
-    // - VIRADA 00 : só na virada da vela (novaVela) → entra no segundo 00
-    // - -2s       : quando restam 2s para fechar a vela atual → entra no segundo ~58
-    // - IMEDIATO  : a cada 5 ticks → entra assim que sinal aparece
     if (_drvModo.rodando && !_drvModo.opBloqueada) {
-        if (_drvModo.modoEntrada === 'imediato') {
-            _drvChart._tickCount = (_drvChart._tickCount || 0) + 1;
-            if (_drvChart._tickCount % 5 === 0) _drvAnalisarAutomatic(preco);
-        } else if (_drvModo.modoEntrada === '5s') {
-            // Dispara quando restam EXATAMENTE 2 segundos para a vela fechar
-            // (só uma vez por vela — usa flag _drvModo._anticp2sVela)
-            if (restam === 2 && _drvModo._anticp2sVela !== tsAb) {
-                _drvModo._anticp2sVela = tsAb;
-                _drvAnalisarAutomatic(preco);
-            }
-        } else if (novaVela) {
-            // Modo VIRADA 00 — entra imediatamente no segundo 00
-            _drvAnalisarAutomatic(preco);
-        }
+        _drvAnalisarAutomatic(preco);
     }
 }
 
@@ -35132,9 +35072,10 @@ function _drvPriceActionProAnalisar(vela) {
 }
 
 function _drvAnalisarAutomatic(precoAtual) {
-    // Usa a vela que acabou de fechar — dados completos. Chamada apenas na virada (novaVela).
-    const vela = _drvChart.velaFechada || _drvChart.velaAtual; if (!vela) return;
-    // Não reanalisar se já há entrada agendada
+    _drvAnaliseContador++;
+    if (_drvAnaliseContador % 5 !== 0) return;
+    const vela = _drvChart.velaAtual; if (!vela) return;
+    // Não reanalisar se já há entrada agendada para a virada
     if (_drvModo.viradaTimer) return;
     const modo = _drvModo.modo;
     let direcao = null, confianca = 0;
@@ -35175,9 +35116,11 @@ function _drvAnalisarAutomatic(precoAtual) {
         if (!_drvModo.opBloqueada) {
             _drvModo.opBloqueada = true;
 
-            // Atraso sempre 0 — o momento certo já foi aguardado antes de chamar esta função
-            // (VIRADA: na virada, +5s: setTimeout 5s, IMEDIATO: a cada 5 ticks)
-            const _atraso = 0;
+            // Calcula ms até a próxima virada de vela — entra EXATAMENTE no segundo 00
+            const _periodo  = _drvChart.periodo || 60;
+            const _tsAb     = _drvChart.tsAbertura || (Math.floor(Date.now() / 1000 / _periodo) * _periodo);
+            const _tsFimMs  = (_tsAb + _periodo) * 1000;
+            const _atraso   = Math.max(0, _tsFimMs - Date.now());
 
             // Função que efetivamente agenda a entrada na virada
             const _agendarEntrada = (infoMtf) => {
