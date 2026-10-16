@@ -29361,9 +29361,16 @@ window.addEventListener('load', () => {
       <div style="padding:8px 10px;">
         <div style="font-size:0.62rem; color:#555; letter-spacing:1px; margin-bottom:8px;">REGRAS DA ESTRATÉGIA</div>
         <div style="display:flex; flex-direction:column; gap:5px;">
-          <div style="display:flex; justify-content:space-between;">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
             <span style="font-size:0.6rem; color:#555;">Entrada</span>
-            <b style="font-size:0.6rem; color:#aaa;">Após fechar a vela</b>
+            <select id="drv-timing-entrada"
+                onchange="_drvModo.entradaTiming = this.value"
+                style="background:#0a0a12; border:1px solid rgba(0,255,65,0.3); color:#00ff41;
+                       font-family:'Share Tech Mono'; font-size:0.58rem; padding:2px 4px;
+                       border-radius:3px; outline:none; cursor:pointer; max-width:130px;">
+              <option value="fechar_vela">Após fechar vela</option>
+              <option value="virada_5s">Virada da vela (+5s)</option>
+            </select>
           </div>
           <div style="display:flex; justify-content:space-between;">
             <span style="font-size:0.6rem; color:#555;">Direção</span>
@@ -33205,6 +33212,7 @@ const _drvModo = {
     viradaDirecao: null,// direção pendente ao acordar do background
     mtfAtivo: true,   // Filtro Multi-Timeframe ligado por padrão
     srAtivo:  true,   // Filtro Topo/Fundo (S/R) ligado por padrão
+    entradaTiming: 'fechar_vela', // 'fechar_vela' = na virada | 'virada_5s' = virada +5s
 };
 
 // ── Web Worker inline — timer imune ao throttling de tela bloqueada ──────────
@@ -35120,14 +35128,18 @@ function _drvAnalisarAutomatic(precoAtual) {
             const _periodo  = _drvChart.periodo || 60;
             const _tsAb     = _drvChart.tsAbertura || (Math.floor(Date.now() / 1000 / _periodo) * _periodo);
             const _tsFimMs  = (_tsAb + _periodo) * 1000;
-            const _atraso   = Math.max(0, _tsFimMs - Date.now());
+            const _atrasoBase = Math.max(0, _tsFimMs - Date.now());
+            // Se timing = virada_5s, entra 5 segundos APÓS a virada da vela
+            const _extra5s  = _drvModo.entradaTiming === 'virada_5s' ? 5000 : 0;
+            const _atraso   = _atrasoBase + _extra5s;
 
             // Função que efetivamente agenda a entrada na virada
             const _agendarEntrada = (infoMtf) => {
                 const mtfLabel = infoMtf
                     ? ` | MTF:${infoMtf.consenso} (✅${infoMtf.vFavor} ❌${infoMtf.vContra})`
                     : '';
-                _drvAdicionarSinal({ msg: `${direcao==='call'?'▲':'▼'} SINAL ${direcao.toUpperCase()} | conf:${confianca.toFixed(0)}%${mtfLabel} | ⏳ virada em ${(_atraso/1000).toFixed(0)}s...`, cor });
+                const _timingLabel = _extra5s > 0 ? ` | ⏱ virada+5s` : '';
+                _drvAdicionarSinal({ msg: `${direcao==='call'?'▲':'▼'} SINAL ${direcao.toUpperCase()} | conf:${confianca.toFixed(0)}%${mtfLabel}${_timingLabel} | ⏳ virada em ${(_atrasoBase/1000).toFixed(0)}s...`, cor });
                 // Salva timestamp-alvo e direção para compensar se tela bloquear
                 _drvModo.viradaTs      = Date.now() + _atraso;
                 _drvModo.viradaDirecao = direcao;
