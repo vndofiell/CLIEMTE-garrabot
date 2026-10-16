@@ -29522,7 +29522,7 @@ window.addEventListener('load', () => {
               style="flex:1; padding:4px 4px; font-family:'Share Tech Mono'; font-size:0.58rem;
                      letter-spacing:1px; cursor:pointer; border-radius:3px;
                      background:transparent; border:1px solid #444; color:#555;">
-            ⏰ +5s
+            ⏰ -2s
           </button>
           <button id="drv-entrada-imediato"
               onclick="drvSetModoEntrada('imediato')"
@@ -33229,7 +33229,8 @@ const _drvModo = {
     viradaDirecao: null,// direção pendente ao acordar do background
     mtfAtivo: true,   // Filtro Multi-Timeframe ligado por padrão
     srAtivo:  true,   // Filtro Topo/Fundo (S/R) ligado por padrão
-    modoEntrada: 'virada', // 'virada' = entra no segundo 00 da nova vela | 'imediato' = entra assim que o sinal aparece
+    modoEntrada: 'virada', // 'virada' = segundo 00 | '5s' = 2s antes da virada | 'imediato' = qualquer tick
+    _anticp2sVela: 0,      // controle anti-duplo disparo do modo -2s
 };
 
 function drvSetModoEntrada(modo) {
@@ -33980,23 +33981,23 @@ function _drvProcessarTick(tick) {
     }
 
     // Análise automática:
-    // - VIRADA (00): só na virada da vela → entra no segundo 00
-    // - +5s: 5 segundos após a virada → usa setTimeout na nova vela
-    // - IMEDIATO: a cada 5 ticks → entra assim que sinal aparece
+    // - VIRADA 00 : só na virada da vela (novaVela) → entra no segundo 00
+    // - -2s       : quando restam 2s para fechar a vela atual → entra no segundo ~58
+    // - IMEDIATO  : a cada 5 ticks → entra assim que sinal aparece
     if (_drvModo.rodando && !_drvModo.opBloqueada) {
         if (_drvModo.modoEntrada === 'imediato') {
             _drvChart._tickCount = (_drvChart._tickCount || 0) + 1;
             if (_drvChart._tickCount % 5 === 0) _drvAnalisarAutomatic(preco);
-        } else if (novaVela) {
-            if (_drvModo.modoEntrada === '5s') {
-                // Aguarda 5s após a virada antes de analisar e entrar
-                setTimeout(() => {
-                    if (_drvModo.rodando && !_drvModo.opBloqueada) _drvAnalisarAutomatic(preco);
-                }, 5000);
-            } else {
-                // Modo VIRADA 00 — entra imediatamente
+        } else if (_drvModo.modoEntrada === '5s') {
+            // Dispara quando restam EXATAMENTE 2 segundos para a vela fechar
+            // (só uma vez por vela — usa flag _drvModo._anticp2sVela)
+            if (restam === 2 && _drvModo._anticp2sVela !== tsAb) {
+                _drvModo._anticp2sVela = tsAb;
                 _drvAnalisarAutomatic(preco);
             }
+        } else if (novaVela) {
+            // Modo VIRADA 00 — entra imediatamente no segundo 00
+            _drvAnalisarAutomatic(preco);
         }
     }
 }
