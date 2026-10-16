@@ -35304,9 +35304,6 @@ function drvOperar(direcao) {
         _drvOpStatusMsg('❌ Deriv não conectada. Conecte primeiro.', '#f44');
         _drvModo.opBloqueada = false; return;
     }
-    // Cancela qualquer proposal/open_contract anterior para liberar subscrições no servidor
-    try { ws.send(JSON.stringify({ forget_all: 'proposal' })); } catch(_) {}
-    try { ws.send(JSON.stringify({ forget_all: 'proposal_open_contract' })); } catch(_) {}
     if (btnCall) btnCall.disabled = true;
     if (btnPut)  btnPut.disabled  = true;
     _drvOpStatusMsg('⏳ Enviando proposta...', '#ffbd2e');
@@ -35467,6 +35464,7 @@ function _drvAguardarResultado(contractId, duracao) {
     const reqId = 500 + Math.floor(Math.random()*200);
     let _finalizado = false;
 
+    let _pocSubId = null; // subscription id para cancelar depois
     const handler = (ev) => {
         try {
             const d = JSON.parse(ev.data);
@@ -35474,6 +35472,8 @@ function _drvAguardarResultado(contractId, duracao) {
             const poc = d.proposal_open_contract;
             // Só processa updates deste contrato
             if (String(poc.contract_id) !== String(contractId)) return;
+            // Captura o subscription id na primeira mensagem
+            if (!_pocSubId && d.subscription?.id) _pocSubId = d.subscription.id;
 
             // ── Update intermediário: atualiza cor do widget ──────────
             if (!poc.is_sold) {
@@ -35497,6 +35497,10 @@ function _drvAguardarResultado(contractId, duracao) {
             if (_finalizado) return;
             _finalizado = true;
             ws.removeEventListener('message', handler);
+            // Cancela subscrição específica deste contrato (libera slot sem afetar outros)
+            if (ws.readyState === WebSocket.OPEN && _pocSubId) {
+                try { ws.send(JSON.stringify({ forget: _pocSubId })); } catch(_) {}
+            }
             _drvModo.opBloqueada = false;
 
             const win = poc.profit >= 0, lucro = parseFloat(poc.profit||0);
@@ -35561,10 +35565,6 @@ function _drvAguardarResultado(contractId, duracao) {
         if (!_finalizado) {
             _finalizado = true;
             ws.removeEventListener('message', handler);
-            // Cancela subscrição do contrato aberto para liberar o limite de subscrições
-            if (ws.readyState === WebSocket.OPEN) {
-                try { ws.send(JSON.stringify({ forget_all: 'proposal_open_contract' })); } catch(_) {}
-            }
             _drvModo.opBloqueada = false;
             _drvScannerRetomarAposResultado();
         }
