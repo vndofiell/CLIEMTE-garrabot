@@ -29500,6 +29500,8 @@ window.addEventListener('load', () => {
       <div style="padding:12px 12px 8px; border-bottom:1px solid rgba(255,255,255,0.06);">
         <div style="font-size:0.62rem; color:#555; letter-spacing:1px; margin-bottom:6px;">TEMPO</div>
         <div style="display:flex; gap:6px; flex-wrap:wrap;">
+          <button class="drv-dur-btn" data-s="5"   data-u="t" onclick="drvSetDuracao(5,'t')"  style="padding:5px 8px; color:#ffbd2e; border-color:rgba(255,189,46,0.4);">5t</button>
+          <button class="drv-dur-btn" data-s="10"  data-u="t" onclick="drvSetDuracao(10,'t')" style="padding:5px 8px; color:#ffbd2e; border-color:rgba(255,189,46,0.4);">10t</button>
           <button class="drv-dur-btn" data-s="30"  onclick="drvSetDuracao(30)"  style="padding:5px 8px;">30s</button>
           <button class="drv-dur-btn drv-dur-ativo" data-s="60"  onclick="drvSetDuracao(60)"  style="padding:5px 8px;">1m</button>
           <button class="drv-dur-btn" data-s="120" onclick="drvSetDuracao(120)" style="padding:5px 8px;">2m</button>
@@ -34187,16 +34189,38 @@ async function drvChartCarregar() {
 }
 
 // ── Controles duração / valor / contrato ──────────────────
-function drvSetDuracao(seg) {
-    _drvChart.duracao = seg;
-    document.querySelectorAll('.drv-dur-btn').forEach(b => b.classList.toggle('drv-dur-ativo', parseInt(b.dataset.s) === seg));
+function drvSetDuracao(seg, unidade) {
+    _drvChart.duracao      = seg;
+    _drvChart.duracaoUnidade = unidade || 's'; // 't' para ticks, 's' para segundos, 'm' para minutos
+    document.querySelectorAll('.drv-dur-btn').forEach(b => {
+        const matchVal  = parseInt(b.dataset.s) === seg;
+        const matchUnit = (b.dataset.u || 's') === (unidade || 's');
+        b.classList.toggle('drv-dur-ativo', matchVal && matchUnit);
+    });
     _drvAtualizarDuracaoDisplay(); _drvRecalcPagamento();
 }
-function drvAjustarDuracao(delta) { _drvChart.duracao = Math.max(5, _drvChart.duracao + delta); _drvAtualizarDuracaoDisplay(); _drvRecalcPagamento(); }
+function drvAjustarDuracao(delta) {
+    // Botões +/− só ajustam duração em segundos; se estava em ticks parte de 60s
+    const _baseAntes = (_drvChart.duracaoUnidade === 't') ? 60 : _drvChart.duracao;
+    _drvChart.duracaoUnidade = 's';
+    _drvChart.duracao = Math.max(15, _baseAntes + delta);
+    document.querySelectorAll('.drv-dur-btn').forEach(b => {
+        b.classList.toggle('drv-dur-ativo', parseInt(b.dataset.s) === _drvChart.duracao && (b.dataset.u || 's') === 's');
+    });
+    _drvAtualizarDuracaoDisplay(); _drvRecalcPagamento();
+}
 function _drvAtualizarDuracaoDisplay() {
-    const s = _drvChart.duracao, h = Math.floor(s/3600), m = Math.floor((s%3600)/60), sec = s%60;
+    const u = _drvChart.duracaoUnidade || 's';
     const el = document.getElementById('drv-dur-display');
-    if (el) el.textContent = String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(sec).padStart(2,'0');
+    if (!el) return;
+    if (u === 't') {
+        el.textContent = _drvChart.duracao + ' ticks';
+        el.style.color = '#ffbd2e';
+    } else {
+        el.style.color = '#0ff';
+        const s = _drvChart.duracao, h = Math.floor(s/3600), m = Math.floor((s%3600)/60), sec = s%60;
+        el.textContent = String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(sec).padStart(2,'0');
+    }
 }
 function drvSetValor(v) { _drvChart.valor = v; const i = document.getElementById('drv-valor-input'); if (i) i.value = v; _drvRecalcPagamento(); }
 function drvAjustarValor(delta) {
@@ -35271,19 +35295,27 @@ function drvOperar(direcao) {
     // Para CALL/PUT a Deriv prefere 'm' (minutos); converte segundos → minutos quando possível.
     // Forex (EUR/USD, GBP/USD, etc.) NÃO aceita segundos — força mínimo 1m.
     // Digits usam ticks ('t'), EVEN/ODD não precisam de barreira.
-    const _ehForex = !/^(R_|1HZ)/i.test(ativo);  // true para EUR/USD, GBP/USD, etc.
-    let _durFinal = duracao;
+    const _ehForex       = !/^(R_|1HZ)/i.test(ativo);  // true para EUR/USD, GBP/USD, etc.
+    const _unidadeUsuario = _drvChart.duracaoUnidade || 's'; // 't' = ticks, 's' = segundos
+    let _durFinal  = duracao;
     let _unitFinal = 's';
     if (tipoContrato === 'CALL' || tipoContrato === 'PUT') {
-        if (duracao >= 60 && duracao % 60 === 0) {
+        if (_unidadeUsuario === 't') {
+            // Usuário escolheu ticks explicitamente (5t, 10t) — Deriv aceita CALL/PUT em ticks
+            _durFinal  = Math.max(1, duracao);
+            _unitFinal = 't';
+        } else if (duracao >= 60 && duracao % 60 === 0) {
             _durFinal  = duracao / 60;   // ex: 60s → 1m, 120s → 2m
             _unitFinal = 'm';
         } else if (_ehForex) {
             // Forex não aceita segundos: arredonda para o minuto mais próximo (mín. 1m)
             _durFinal  = Math.max(1, Math.round(duracao / 60));
             _unitFinal = 'm';
+        } else {
+            // Volatility sintética: duração em segundos aceita, mínimo 15s pela Deriv
+            _durFinal  = Math.max(15, duracao);
+            _unitFinal = 's';
         }
-        // Volatility sintética: duração em segundos é aceita (ex: 30s)
     }
 
     const propPayload = {
