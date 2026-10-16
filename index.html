@@ -29508,21 +29508,28 @@ window.addEventListener('load', () => {
               style="padding:5px 10px; background:#0a0a12; border:1px solid #333;
                      color:#aaa; cursor:pointer; border-radius:3px; font-size:0.9rem;">+</button>
         </div>
-        <!-- Modo de entrada: virada da vela OU imediato -->
+        <!-- Modo de entrada -->
         <div style="display:flex; gap:4px; margin-top:8px;">
           <button id="drv-entrada-virada"
               onclick="drvSetModoEntrada('virada')"
-              style="flex:1; padding:4px 6px; font-family:'Share Tech Mono'; font-size:0.6rem;
+              style="flex:1; padding:4px 4px; font-family:'Share Tech Mono'; font-size:0.58rem;
                      letter-spacing:1px; cursor:pointer; border-radius:3px;
                      background:rgba(0,255,65,0.15); border:1px solid #00ff41; color:#00ff41;">
-            ⏱ VIRADA 00
+            ⏱ 00
+          </button>
+          <button id="drv-entrada-5s"
+              onclick="drvSetModoEntrada('5s')"
+              style="flex:1; padding:4px 4px; font-family:'Share Tech Mono'; font-size:0.58rem;
+                     letter-spacing:1px; cursor:pointer; border-radius:3px;
+                     background:transparent; border:1px solid #444; color:#555;">
+            ⏰ +5s
           </button>
           <button id="drv-entrada-imediato"
               onclick="drvSetModoEntrada('imediato')"
-              style="flex:1; padding:4px 6px; font-family:'Share Tech Mono'; font-size:0.6rem;
+              style="flex:1; padding:4px 4px; font-family:'Share Tech Mono'; font-size:0.58rem;
                      letter-spacing:1px; cursor:pointer; border-radius:3px;
                      background:transparent; border:1px solid #444; color:#555;">
-            ⚡ IMEDIATO
+            ⚡ JÁ
           </button>
         </div>
       </div>
@@ -33228,14 +33235,14 @@ const _drvModo = {
 function drvSetModoEntrada(modo) {
     _drvModo.modoEntrada = modo;
     const btnVirada   = document.getElementById('drv-entrada-virada');
+    const btn5s       = document.getElementById('drv-entrada-5s');
     const btnImediato = document.getElementById('drv-entrada-imediato');
-    if (modo === 'virada') {
-        if (btnVirada)   { btnVirada.style.background = 'rgba(0,255,65,0.15)'; btnVirada.style.borderColor = '#00ff41'; btnVirada.style.color = '#00ff41'; }
-        if (btnImediato) { btnImediato.style.background = 'transparent'; btnImediato.style.borderColor = '#444'; btnImediato.style.color = '#555'; }
-    } else {
-        if (btnImediato) { btnImediato.style.background = 'rgba(0,200,255,0.15)'; btnImediato.style.borderColor = '#00cfff'; btnImediato.style.color = '#00cfff'; }
-        if (btnVirada)   { btnVirada.style.background = 'transparent'; btnVirada.style.borderColor = '#444'; btnVirada.style.color = '#555'; }
-    }
+    // Apaga todos
+    [btnVirada, btn5s, btnImediato].forEach(b => { if(b){ b.style.background='transparent'; b.style.borderColor='#444'; b.style.color='#555'; }});
+    // Acende o selecionado
+    if (modo === 'virada'  && btnVirada)   { btnVirada.style.background   = 'rgba(0,255,65,0.15)';  btnVirada.style.borderColor   = '#00ff41'; btnVirada.style.color   = '#00ff41'; }
+    if (modo === '5s'      && btn5s)       { btn5s.style.background       = 'rgba(255,189,46,0.15)'; btn5s.style.borderColor       = '#ffbd2e'; btn5s.style.color       = '#ffbd2e'; }
+    if (modo === 'imediato'&& btnImediato) { btnImediato.style.background = 'rgba(0,200,255,0.15)'; btnImediato.style.borderColor = '#00cfff'; btnImediato.style.color = '#00cfff'; }
 }
 
 // ── Web Worker inline — timer imune ao throttling de tela bloqueada ──────────
@@ -33973,14 +33980,23 @@ function _drvProcessarTick(tick) {
     }
 
     // Análise automática:
-    // - Modo VIRADA: só na virada da vela (novaVela) — entra no segundo 00
-    // - Modo IMEDIATO: a cada 5 ticks — entra assim que o sinal aparece
+    // - VIRADA (00): só na virada da vela → entra no segundo 00
+    // - +5s: 5 segundos após a virada → usa setTimeout na nova vela
+    // - IMEDIATO: a cada 5 ticks → entra assim que sinal aparece
     if (_drvModo.rodando && !_drvModo.opBloqueada) {
         if (_drvModo.modoEntrada === 'imediato') {
             _drvChart._tickCount = (_drvChart._tickCount || 0) + 1;
             if (_drvChart._tickCount % 5 === 0) _drvAnalisarAutomatic(preco);
         } else if (novaVela) {
-            _drvAnalisarAutomatic(preco);
+            if (_drvModo.modoEntrada === '5s') {
+                // Aguarda 5s após a virada antes de analisar e entrar
+                setTimeout(() => {
+                    if (_drvModo.rodando && !_drvModo.opBloqueada) _drvAnalisarAutomatic(preco);
+                }, 5000);
+            } else {
+                // Modo VIRADA 00 — entra imediatamente
+                _drvAnalisarAutomatic(preco);
+            }
         }
     }
 }
@@ -35158,16 +35174,9 @@ function _drvAnalisarAutomatic(precoAtual) {
         if (!_drvModo.opBloqueada) {
             _drvModo.opBloqueada = true;
 
-            // Calcula atraso conforme modo de entrada:
-            // VIRADA: já estamos no segundo 00 → atraso = 0
-            // IMEDIATO: agenda para a virada da vela atual (faltam X segundos)
-            let _atraso = 0;
-            if (_drvModo.modoEntrada === 'imediato') {
-                const _periodo = _drvChart.periodo || 60;
-                const _tsAb    = _drvChart.tsAbertura || (Math.floor(Date.now() / 1000 / _periodo) * _periodo);
-                const _tsFimMs = (_tsAb + _periodo) * 1000;
-                _atraso = Math.max(0, _tsFimMs - Date.now());
-            }
+            // Atraso sempre 0 — o momento certo já foi aguardado antes de chamar esta função
+            // (VIRADA: na virada, +5s: setTimeout 5s, IMEDIATO: a cada 5 ticks)
+            const _atraso = 0;
 
             // Função que efetivamente agenda a entrada na virada
             const _agendarEntrada = (infoMtf) => {
