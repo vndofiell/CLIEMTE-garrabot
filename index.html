@@ -33901,6 +33901,10 @@ function _drvRemoverTickHandler() {
     if (ws && _drvChart._tickHandler) {
         ws.removeEventListener('message', _drvChart._tickHandler);
         _drvChart._tickHandler = null;
+        // Cancela subscrição de ticks no servidor Deriv para não esgotar o limite
+        if (ws.readyState === WebSocket.OPEN) {
+            try { ws.send(JSON.stringify({ forget_all: 'ticks' })); } catch(_) {}
+        }
     }
     if (_drvChart.rtTimer) { clearInterval(_drvChart.rtTimer); _drvChart.rtTimer = null; }
 }
@@ -35300,6 +35304,9 @@ function drvOperar(direcao) {
         _drvOpStatusMsg('❌ Deriv não conectada. Conecte primeiro.', '#f44');
         _drvModo.opBloqueada = false; return;
     }
+    // Cancela qualquer proposal/open_contract anterior para liberar subscrições no servidor
+    try { ws.send(JSON.stringify({ forget_all: 'proposal' })); } catch(_) {}
+    try { ws.send(JSON.stringify({ forget_all: 'proposal_open_contract' })); } catch(_) {}
     if (btnCall) btnCall.disabled = true;
     if (btnPut)  btnPut.disabled  = true;
     _drvOpStatusMsg('⏳ Enviando proposta...', '#ffbd2e');
@@ -35554,6 +35561,10 @@ function _drvAguardarResultado(contractId, duracao) {
         if (!_finalizado) {
             _finalizado = true;
             ws.removeEventListener('message', handler);
+            // Cancela subscrição do contrato aberto para liberar o limite de subscrições
+            if (ws.readyState === WebSocket.OPEN) {
+                try { ws.send(JSON.stringify({ forget_all: 'proposal_open_contract' })); } catch(_) {}
+            }
             _drvModo.opBloqueada = false;
             _drvScannerRetomarAposResultado();
         }
