@@ -9472,7 +9472,8 @@ function tgEnviarResultado(win, lucro, prox_stake, _origemSec, _overrides, _entr
 }
 
 // ── Notificação de início de sessão ──────────────────────────────────────────
-function tgEnviarInicio() {
+// opts (opcional): { estrategia, gestao, entrada, stopWin, stopLoss }
+function tgEnviarInicio(opts) {
     if (!_tgCfg.enabled || !_tgCfg.token || !_tgCfg.chat_id) return;
 
     const frases = [
@@ -9491,10 +9492,12 @@ function tgEnviarInicio() {
     const _mc       = (typeof _mcConfig !== 'undefined') ? _mcConfig : {};
 
     const cot      = _cotacaoBRL || 0;
-    const entrada  = _secAtiva ? parseFloat(_mc.stake      || bot.initialStake) : bot.initialStake;
-    const gestao   = _secAtiva ? (_mc.gerenciamento        || bot.gerenciamento) : bot.gerenciamento;
-    const swVal    = _secAtiva ? parseFloat(_mc.stopWin    || 9999) : bot.stopWin;
-    const slVal    = _secAtiva ? parseFloat(_mc.stopLoss   || 9999) : bot.stopLoss;
+    // Se opts foram passados (ex: Gráfico Deriv), usa eles; senão usa bot/sec
+    const entrada  = (opts && opts.entrada  != null) ? opts.entrada  : (_secAtiva ? parseFloat(_mc.stake   || bot.initialStake) : bot.initialStake);
+    const gestao   = (opts && opts.gestao   != null) ? opts.gestao   : (_secAtiva ? (_mc.gerenciamento     || bot.gerenciamento) : bot.gerenciamento);
+    const swVal    = (opts && opts.stopWin  != null) ? opts.stopWin  : (_secAtiva ? parseFloat(_mc.stopWin || 9999) : bot.stopWin);
+    const slVal    = (opts && opts.stopLoss != null) ? opts.stopLoss : (_secAtiva ? parseFloat(_mc.stopLoss|| 9999) : bot.stopLoss);
+    const estrategiaNome = (opts && opts.estrategia) ? opts.estrategia : bot.estrategia;
 
     const sw     = swVal < 9999 ? `$${swVal.toFixed(2)}` : '—';
     const sl     = slVal < 9999 ? `$${slVal.toFixed(2)}` : '—';
@@ -9512,7 +9515,7 @@ function tgEnviarInicio() {
         "▶️ <b>BOT INICIADO</b>\n" +
         "─────────────────\n" +
         `📅 ${dataHora}\n` +
-        `🎯 Estratégia: ${bot.estrategia}\n` +
+        `🎯 Estratégia: ${estrategiaNome}\n` +
         `⚙️ Gestão: ${gestao}\n` +
         "─────────────────\n" +
         `💰 Entrada: $${entrada.toFixed(2)}${entBrl}\n` +
@@ -34260,7 +34263,20 @@ function drvToggleAnalise() {
     _drvAdicionarSinal({ msg: _drvModo.rodando ? '🟢 OPERAÇÕES INICIADAS' : '🔴 OPERAÇÕES PAUSADAS', cor: _drvModo.rodando ? '#00ff41' : '#ef4444' });
     if (_drvModo.rodando) {
         if (typeof _timer !== 'undefined') _timer.iniciar();
-        if (typeof tgEnviarInicio === 'function') tgEnviarInicio();
+        if (typeof tgEnviarInicio === 'function') {
+            const _drvNomeAtivo  = _drvChart.ativo || 'Deriv';
+            const _drvNomeMgr    = (typeof _DRV_MGR_MAP !== 'undefined') ? (_DRV_MGR_MAP[_drvMgr.tipo] || _drvMgr.tipo) : _drvMgr.tipo;
+            const _drvEntrada    = _drvMgr.valorBase || parseFloat(document.getElementById('drv-valor-input')?.value || 1);
+            const _drvSwVal      = parseFloat(document.getElementById('drv-stop-win')?.value  || 0);
+            const _drvSlVal      = parseFloat(document.getElementById('drv-stop-loss')?.value || 0);
+            tgEnviarInicio({
+                estrategia: '📊 Gráfico Deriv — ' + _drvNomeAtivo,
+                gestao:     _drvNomeMgr,
+                entrada:    _drvEntrada,
+                stopWin:    _drvSwVal  > 0 ? _drvSwVal  : 9999,
+                stopLoss:   _drvSlVal  > 0 ? _drvSlVal  : 9999,
+            });
+        }
         // Se o scanner multi estiver ativo, inicia o ciclo junto
         if (_drvScannerMultiAtivo && !_drvScannerTimer) {
             drvScannerVarrer();
