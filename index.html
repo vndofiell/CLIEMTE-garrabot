@@ -34817,23 +34817,6 @@ async function drvScannerVarrer() {
             _drvAdicionarSinal({ msg: `⏳ AUTO-MULTI → ${melhor.nome} | ${melhor.dir} | virada em ${(_atraso/1000).toFixed(0)}s`, cor: melhor.dir === 'CALL' ? '#27c93f' : '#ef4444' });
             setTimeout(() => {
                 if (!_drvModo.rodando) { _drvModo.opBloqueada = false; _drvScannerPausado = false; return; }
-                // ── FILTRO PRICE ACTION PRO ──────────────────────────────────────
-                // Bloqueia a entrada se o Price Action PRO mostrar AGUARDAR ou
-                // houver qualquer bloqueador ativo (RSI extremo, MACD contrário,
-                // tendência contrária, vela não confirmada).
-                const _velaAtual = _drvChart.velaAtual;
-                if (_velaAtual) {
-                    const _paFiltro = _drvPriceActionProAnalisar(_velaAtual);
-                    if (!_paFiltro || !_paFiltro.ok) {
-                        const _motivo = _paFiltro ? _paFiltro.blockers.join(' • ') : 'candles insuficientes';
-                        _drvAdicionarSinal({ msg: `🚫 AUTO-MULTI BLOQUEADO — Price Action PRO: ${_motivo}`, cor: '#ef4444' });
-                        _drvModo.opBloqueada = false;
-                        _drvScannerPausado = false;
-                        // Reinicia o scanner para continuar monitorando
-                        if (!_drvScannerTimer) _drvScannerTimer = setInterval(_drvScannerExecutar, (_drvScannerIntervalo || 30) * 1000);
-                        return;
-                    }
-                }
                 drvOperar(melhor.dir.toLowerCase());
             }, _atraso);
         }
