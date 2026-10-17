@@ -33447,12 +33447,23 @@ function drvMgrMostrarParams() {
             _inp('drv-mgr-ramaxima',  'Stake máx ($)',   _drvMgr.raMaxima,  0.35,10000,0.01,'#fbbf24');
             _inp('drv-mgr-rarecbase', '% Recuperação base', _drvMgr.raRecBase, 1, 100, 1, '#4ade80');
             break;
-        case 'juros_compostos':
-            _inp('drv-mgr-jcpct',      '% banca/entrada',  _drvMgr.jcPct,     0.1,  50, 0.1,'#4ade80');
-            _inp('drv-mgr-jcmetapct',  'Meta lucro % banca',_drvMgr.jcMetaPct,0.1, 500, 0.1,'#27c93f');
-            _inp('drv-mgr-jcstoppct',  'Stop loss % banca', _drvMgr.jcStopPct,0.1, 100, 0.1,'#f87171');
-            _inp('drv-mgr-jcpayout',   'Payout (ex:0.85)',  _drvMgr.jcPayout, 0.01,0.99,0.01,'#ffbd2e');
-            break;
+        case 'juros_compostos': {
+            _inp('drv-mgr-jcpct', '% da banca por entrada  (ex: 1 = 1% da banca)', _drvMgr.jcPct, 0.1, 50, 0.1, '#4ade80');
+            // Mostra o valor em dólares calculado em tempo real
+            const _jcSaldoEl = document.getElementById('drv-saldo-val') || document.getElementById('hd-balance');
+            const _jcSaldo   = _jcSaldoEl ? (parseFloat(_jcSaldoEl.textContent.replace(/[^0-9.]/g,'')) || 0) : 0;
+            if (_jcSaldo > 0) {
+                const _jcDolar = Math.max(0.35, parseFloat((_jcSaldo * _drvMgr.jcPct / 100).toFixed(2)));
+                const _hint = document.createElement('div');
+                _hint.style.cssText = 'font-size:0.58rem;color:#4ade80;margin:-4px 0 6px 0;';
+                _hint.textContent   = `→ Com banca $${_jcSaldo.toFixed(2)} e ${_drvMgr.jcPct}% → stake = $${_jcDolar.toFixed(2)} por entrada`;
+                const _box = document.getElementById('drv-mgr-params');
+                if (_box) { const _prev = _box.querySelector('#_jc_hint'); if (_prev) _prev.remove(); _hint.id='_jc_hint'; _box.appendChild(_hint); }
+            }
+            _inp('drv-mgr-jcmetapct', 'Meta lucro % banca', _drvMgr.jcMetaPct, 0.1, 500, 0.1, '#27c93f');
+            _inp('drv-mgr-jcstoppct', 'Stop loss % banca',  _drvMgr.jcStopPct, 0.1, 100, 0.1, '#f87171');
+            _inp('drv-mgr-jcpayout',  'Payout (ex:0.85)',   _drvMgr.jcPayout,  0.01,0.99,0.01,'#ffbd2e');
+            break; }
         case 'ral':
             _inp('drv-mgr-ralrecfrac', '% banca/tentativa', _drvMgr.ralRecFrac*100, 1,100, 1,'#00ff88');
             _inp('drv-mgr-rallotcap',  'Teto lote (×base)', _drvMgr.ralLotCap,    1.1, 20, 0.1,'#fbbf24');
