@@ -29702,6 +29702,12 @@ window.addEventListener('load', () => {
                        border:1px solid rgba(255,189,46,0.5); color:#ffbd2e;
                        cursor:pointer; border-radius:3px; font-family:'Share Tech Mono';"
                 onclick="drvToggleSR()">📌 S/R: ON</button>
+            <button id="drv-vela-toggle"
+                title="Filtro Vela Contrária: só entra se a vela anterior for oposta ao sinal (CALL exige vela vermelha, PUT exige vela verde)"
+                style="font-size:0.56rem; padding:2px 6px; background:transparent;
+                       border:1px solid #333; color:#555;
+                       cursor:pointer; border-radius:3px; font-family:'Share Tech Mono';"
+                onclick="drvToggleVelaContraria()">🕯️ VELA: OFF</button>
           </div>
         </div>
 
@@ -33229,6 +33235,7 @@ const _drvModo = {
     viradaDirecao: null,// direção pendente ao acordar do background
     mtfAtivo: true,   // Filtro Multi-Timeframe ligado por padrão
     srAtivo:  true,   // Filtro Topo/Fundo (S/R) ligado por padrão
+    velaContrariaAtivo: false, // Filtro vela contrária: exige que a vela anterior seja oposta ao sinal
     entradaTiming: 'fechar_vela', // 'fechar_vela' = na virada | 'virada_5s' = virada +5s
 };
 
@@ -34454,6 +34461,24 @@ function drvToggleMtf() {
     _drvAdicionarSinal({ msg: `📊 Filtro MTF ${_drvModo.mtfAtivo ? 'ATIVADO' : 'DESATIVADO'}`, cor: _drvModo.mtfAtivo ? '#0ff' : '#ffbd2e' });
 }
 
+function drvToggleVelaContraria() {
+    _drvModo.velaContrariaAtivo = !_drvModo.velaContrariaAtivo;
+    const btn = document.getElementById('drv-vela-toggle');
+    if (!btn) return;
+    if (_drvModo.velaContrariaAtivo) {
+        btn.textContent       = '🕯️ VELA: ON';
+        btn.style.color       = '#a78bfa';
+        btn.style.borderColor = 'rgba(167,139,250,0.5)';
+        btn.style.background  = 'rgba(167,139,250,0.08)';
+    } else {
+        btn.textContent       = '🕯️ VELA: OFF';
+        btn.style.color       = '#555';
+        btn.style.borderColor = '#333';
+        btn.style.background  = 'transparent';
+    }
+    _drvAdicionarSinal({ msg: `🕯️ Filtro Vela Contrária ${_drvModo.velaContrariaAtivo ? 'ATIVADO — entra só se vela anterior for oposta ao sinal' : 'DESATIVADO'}`, cor: _drvModo.velaContrariaAtivo ? '#a78bfa' : '#ffbd2e' });
+}
+
 function drvToggleSR() {
     _drvModo.srAtivo = !_drvModo.srAtivo;
     const btn = document.getElementById('drv-sr-toggle');
@@ -35256,6 +35281,24 @@ function _drvAnalisarAutomatic(precoAtual) {
     }
     if (direcao && confianca >= 55) {
         const cor = direcao === 'call' ? '#27c93f' : '#ef4444';
+
+        // ── Filtro Vela Contrária ─────────────────────────────────────────────
+        // Quando ativo: CALL só entra se a vela que fechou for vermelha (close < open)
+        //               PUT  só entra se a vela que fechou for verde   (close > open)
+        if (_drvModo.velaContrariaAtivo) {
+            const _velaVerde   = vela.close > vela.open;
+            const _velaVermela = vela.close < vela.open;
+            const _velaOk = (direcao === 'call' && _velaVermela) || (direcao === 'put' && _velaVerde);
+            if (!_velaOk) {
+                const _corVela = _velaVerde ? '🟢 verde' : _velaVermela ? '🔴 vermelha' : '⬜ doji';
+                _drvAdicionarSinal({
+                    msg: `🚫 VELA CONTRÁRIA bloqueou — sinal ${direcao.toUpperCase()} mas vela anterior é ${_corVela}`,
+                    cor: '#a78bfa'
+                });
+                return;
+            }
+        }
+
         // Todos os outros modos operam automaticamente
         if (!_drvModo.opBloqueada) {
             _drvModo.opBloqueada = true;
