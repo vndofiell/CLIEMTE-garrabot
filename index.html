@@ -9451,11 +9451,11 @@ function tgEnviarResultado(win, lucro, prox_stake, _origemSec, _overrides, _entr
             prox_stake:      prox_stake,
             modo:            (_overrides && _overrides.modo)       || bot.gerenciamento,
             estrategia:      (_overrides && _overrides.estrategia) || bot.estrategia,
-            seq_win:         bot._seqWinAtual,
-            seq_loss:        bot._seqLossAtual,
-            max_win_consec:  bot._maxWinConsec,
-            max_loss_consec: bot._maxLossConsec,
-            max_stake:       bot._maxStakeUsada,
+            seq_win:         (_overrides && _overrides.seq_win  != null) ? _overrides.seq_win  : bot._seqWinAtual,
+            seq_loss:        (_overrides && _overrides.seq_loss != null) ? _overrides.seq_loss : bot._seqLossAtual,
+            max_win_consec:  (_overrides && _overrides.max_win_consec  != null) ? _overrides.max_win_consec  : bot._maxWinConsec,
+            max_loss_consec: (_overrides && _overrides.max_loss_consec != null) ? _overrides.max_loss_consec : bot._maxLossConsec,
+            max_stake:       (_overrides && _overrides.max_stake != null) ? _overrides.max_stake : bot._maxStakeUsada,
             // PRINCIPAL = envia; BLOQUEADA = secundária espelhando ativamente, evita duplicata
             conta:           _secEspelhando ? 'BLOQUEADA' : 'PRINCIPAL',
         };
@@ -35619,7 +35619,6 @@ function _drvAguardarResultado(contractId, duracao) {
                 if (_drvChart._seqLoss > _drvChart._maxLossConsec) _drvChart._maxLossConsec = _drvChart._seqLoss;
             }
             if (_drvStakeUsada > _drvChart._maxStake) _drvChart._maxStake = _drvStakeUsada;
-            const _drvProxStake  = _drvMgr.valorAtual || _drvStakeUsada;
             if (typeof bot !== 'undefined') {
                 bot.profit += lucro;
                 if (win) { bot.wins++; bot._seqWinAtual = (bot._seqWinAtual||0)+1; bot._seqLossAtual = 0; }
@@ -35629,13 +35628,19 @@ function _drvAguardarResultado(contractId, duracao) {
                 bot.ws.send(JSON.stringify({ balance: 1 }));
                 if (typeof updateHeader === 'function') updateHeader();
             }
+            // ── Aplica gerenciamento ANTES de enviar TG para que prox_stake já esteja atualizado ──
+            _drvAplicarGerenciamento(win, lucro);
+            const _drvProxStake = _drvMgr.valorAtual || _drvMgr.valorBase || _drvStakeUsada;
+            const _drvModoNome  = (typeof _DRV_MGR_MAP !== 'undefined') ? (_DRV_MGR_MAP[_drvMgr.tipo] || _drvMgr.tipo) : _drvMgr.tipo;
             if (typeof tgEnviarResultado === 'function') {
                 tgEnviarResultado(win, lucro, _drvProxStake, false, {
-                    estrategia: bot && bot.estrategia ? bot.estrategia : '🤖 TRADING PRO AI',
-                    modo:       bot && bot.gerenciamento ? bot.gerenciamento : '💰 Stake Fixa',
+                    estrategia:      '📊 Gráfico Deriv — ' + (_drvChart.ativo || 'Deriv'),
+                    modo:            _drvModoNome,
+                    max_win_consec:  _drvChart._maxWinConsec  || 0,
+                    max_loss_consec: _drvChart._maxLossConsec || 0,
+                    max_stake:       _drvChart._maxStake      || _drvMgr.valorBase || 0,
                 }, _drvStakeUsada);
             }
-            _drvAplicarGerenciamento(win, lucro);
             _drvOpStatusMsg(`${win?'✅ WIN':'❌ LOSS'} ${win?'+':''}$${lucro.toFixed(2)}`, win ? '#27c93f' : '#f44');
             // ── Retoma o scanner após resultado (se estava pausado) ──
             _drvScannerRetomarAposResultado();
