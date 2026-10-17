@@ -44,8 +44,10 @@ CONFIG_DEFAULT: dict = {
     "rotate_on_loss":             True,  # troca IA líder após loss
     "reset_leader_after_wins":    2,     # wins seguidos para voltar à AI_01
     "require_new_candle":         True,  # exige nova vela M1 entre operações
-    "min_candles":                5,     # mínimo de velas no histórico (relaxado para entrar mais rápido)
-    "veto_lateral_adx":           10,    # ADX abaixo disso → veto lateral (relaxado)
+    "min_candles":                5,     # mínimo de velas no histórico
+    "veto_lateral_adx":           18,    # ADX abaixo disso → veto lateral (mercado sem força)
+    "veto_pavio_reversao":        2.0,   # pavio ≥ N× corpo na última vela = sinal de rejeição → reduz score
+    "veto_ema200_zona":           0.001, # preço dentro de 0.1% da EMA200 → reduz score (zona de indecisão)
     "veto_max_drawdown_pct":      0.15,  # drawdown acima disso → veto risco
     "veto_max_losses_seguidos":   5,     # losses seguidos → veto
 }
@@ -145,7 +147,7 @@ class AI01Tendencia:
     Retorna: { direcao, confianca, detalhes }
     """
 
-    def analisar(self, velas: list) -> dict:
+    def analisar(self, velas: list, cfg: dict | None = None) -> dict:
         if len(velas) < 20:
             return self._neutro("Histórico insuficiente")
 
@@ -183,16 +185,54 @@ class AI01Tendencia:
         if rsi > 75 and direcao == "CALL": score -= 15
         if rsi < 25 and direcao == "PUT":  score -= 15
 
+        # ── Penalidade: pavio de reversão na última vela fechada ──────────────
+        # Se a última vela tem pavio grande contra a direção do sinal,
+        # o mercado rejeitou aquele nível — reduz confiança da tendência.
+        cfg = cfg or {}
+        pavio_mult = float(cfg.get("veto_pavio_reversao", 2.0))
+        ema200_zona = float(cfg.get("veto_ema200_zona", 0.001))
+        penalidades = []
+        if len(velas) >= 2:
+            v_ult = velas[-2]  # última fechada
+            ab, fc = v_ult["abertura"], v_ult["fechamento"]
+            mx, mn = v_ult["maxima"],   v_ult["minima"]
+            corpo  = abs(fc - ab)
+            rng    = mx - mn if mx != mn else 1e-9
+            pav_s  = mx - max(ab, fc)  # pavio superior
+            pav_i  = min(ab, fc) - mn  # pavio inferior
+            if corpo > 1e-9:
+                # CALL mas vela tem pavio superior longo (rejeição de alta)
+                if direcao == "CALL" and pav_s >= corpo * pavio_mult:
+                    pen = min(20, int(pav_s / corpo * 5))
+                    score -= pen
+                    penalidades.append(f"pavio_sup_reversao(-{pen})")
+                # PUT mas vela tem pavio inferior longo (rejeição de baixa)
+                if direcao == "PUT" and pav_i >= corpo * pavio_mult:
+                    pen = min(20, int(pav_i / corpo * 5))
+                    score -= pen
+                    penalidades.append(f"pavio_inf_reversao(-{pen})")
+
+        # ── Penalidade: preço travado na EMA200 (zona de indecisão) ──────────
+        # Se o fechamento está colado na EMA200, o mercado está testando a média
+        # sem força definida — reduz score da tendência.
+        if not math.isnan(ema200) and ema200 > 0:
+            dist_pct = abs(closes[-1] - ema200) / ema200
+            if dist_pct <= ema200_zona:
+                score -= 15
+                penalidades.append(f"preco_na_ema200(-15,dist={dist_pct*100:.3f}%)")
+
+        score    = max(0, score)
         confianca = min(score, 100)
         return {
             "direcao":   direcao,
             "confianca": confianca,
             "detalhes":  {
-                "ema20":  round(ema20, 6),
-                "ema50":  round(ema50, 6) if not math.isnan(ema50)  else None,
-                "ema200": round(ema200, 6) if not math.isnan(ema200) else None,
-                "rsi":    rsi,
-                "slope":  round(slope, 8),
+                "ema20":       round(ema20, 6),
+                "ema50":       round(ema50, 6) if not math.isnan(ema50)  else None,
+                "ema200":      round(ema200, 6) if not math.isnan(ema200) else None,
+                "rsi":         rsi,
+                "slope":       round(slope, 8),
+                "penalidades": penalidades,
             },
         }
 
@@ -349,10 +389,11 @@ class AI04RegimeRisco:
         if len(velas) < 3:
             return {"aprovado": False, "motivo_veto": "Histórico insuficiente", "regime": "INDEFINIDO"}
 
-        # ADX — mercado lateral? (só veta se ADX disponível e muito baixo)
+        # ADX — mercado lateral? Veta quando abaixo do threshold configurado.
+        # Padrão 18: mercados com ADX < 18 não têm força direcional suficiente.
         adx = _adx(velas, 14) if len(velas) >= 14 else 15
-        if adx < cfg.get("veto_lateral_adx", 10):
-            return {"aprovado": False, "motivo_veto": f"Mercado lateral (ADX={adx:.1f})", "regime": "LATERAL"}
+        if adx < cfg.get("veto_lateral_adx", 18):
+            return {"aprovado": False, "motivo_veto": f"Mercado sem força (ADX={adx:.1f} < {cfg.get('veto_lateral_adx', 18)})", "regime": "LATERAL"}
 
         # Drawdown: sem veto — Martingale/StopLoss já gerenciam o risco financeiro
         # Volatilidade exagerada (ATR > 5x média histórica)
@@ -552,7 +593,7 @@ class TradingProOrchestrator:
                 hora = _dt.datetime.utcnow().strftime("%H")
 
             # ── Rodar as 4 IAs ───────────────────────────────────────────────
-            v01 = self._ai01.analisar(velas)
+            v01 = self._ai01.analisar(velas, cfg=self.cfg)
             v02 = self._ai02.analisar(velas)
             # AI03 usa a direção sugerida pelo líder como referência
             dir_ref = v01.get("direcao") or v02.get("direcao") or "CALL"
