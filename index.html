@@ -12093,23 +12093,37 @@ function initWebSocket(wssUrl) {
                     return;
                 }
 
-                // FASE 1 — aguarda histórico suficiente (mínimo 5 velas = 15 ticks)
-                const _tpAiHistMin  = Math.max(2, Math.min(210, est.tp_hist || 5));
-                const _tpAiMinTicks = _tpAiJan * _tpAiHistMin;
-                if (bot._candleBuffer.length < _tpAiMinTicks) {
-                    const _tpAiN = Math.floor(bot._candleBuffer.length / _tpAiJan);
-                    _seqStatusUpdate(`🤖 TRADING PRO [${_tpAiN}/${_tpAiHistMin} velas] coletando...`);
-                    return;
-                }
+                // ── Helper: monta velas OHLC ──────────────────────────────────────
+                // Prioridade 1: candles reais do gráfico Deriv (_drvChart._candles)
+                //   → usados quando o bot opera no painel Gráfico Deriv (candles de 1 min reais)
+                // Prioridade 2: buffer de ticks com janela aumentada (20 ticks/vela mínimo)
+                //   → fallback quando _drvChart não está disponível
+                const _tpAiUsarDrvCandles = (
+                    typeof _drvChart !== 'undefined' &&
+                    _drvChart._candles &&
+                    _drvChart._candles.length >= 30
+                );
 
-                if (bot._tpAiAnalisando) return;
-
-                // Helper: monta velas OHLC a partir do candleBuffer atual
                 const _tpAiMontarVelas = () => {
-                    const buf = bot._candleBuffer.slice(-_tpAiJan * 210);
+                    if (_tpAiUsarDrvCandles) {
+                        // Usa candles reais (mesmos que o painel ANÁLISE GARRA usa)
+                        return [..._drvChart._candles]
+                            .sort((a, b) => a.time - b.time)
+                            .slice(-210)
+                            .map(c => ({
+                                abertura:   c.open,
+                                fechamento: c.close,
+                                maxima:     c.high,
+                                minima:     c.low,
+                                timestamp:  c.time,
+                            }));
+                    }
+                    // Fallback: buffer de ticks com janela de 20 ticks por vela
+                    const _janFallback = Math.max(20, _tpAiJan);
+                    const buf = bot._candleBuffer.slice(-_janFallback * 210);
                     const vs  = [];
-                    for (let _i = 0; _i + _tpAiJan <= buf.length; _i += _tpAiJan) {
-                        const sl = buf.slice(_i, _i + _tpAiJan);
+                    for (let _i = 0; _i + _janFallback <= buf.length; _i += _janFallback) {
+                        const sl = buf.slice(_i, _i + _janFallback);
                         vs.push({
                             abertura:   sl[0],
                             fechamento: sl[sl.length - 1],
@@ -12120,6 +12134,26 @@ function initWebSocket(wssUrl) {
                     }
                     return vs;
                 };
+
+                // FASE 1 — aguarda histórico suficiente
+                const _tpAiHistMin  = Math.max(30, Math.min(210, est.tp_hist || 60));
+                if (_tpAiUsarDrvCandles) {
+                    // Candles reais disponíveis: verifica quantidade mínima
+                    if (_drvChart._candles.length < _tpAiHistMin) {
+                        _seqStatusUpdate(`🤖 TRADING PRO [${_drvChart._candles.length}/${_tpAiHistMin} velas] coletando...`);
+                        return;
+                    }
+                } else {
+                    const _janFallback  = Math.max(20, _tpAiJan);
+                    const _tpAiMinTicks = _janFallback * _tpAiHistMin;
+                    if (bot._candleBuffer.length < _tpAiMinTicks) {
+                        const _tpAiN = Math.floor(bot._candleBuffer.length / _janFallback);
+                        _seqStatusUpdate(`🤖 TRADING PRO [${_tpAiN}/${_tpAiHistMin} velas] coletando...`);
+                        return;
+                    }
+                }
+
+                if (bot._tpAiAnalisando) return;
 
                 const _tpAiDd = bot.profit < 0
                     ? Math.abs(bot.profit) / Math.max(1, bot.stake * 10)
