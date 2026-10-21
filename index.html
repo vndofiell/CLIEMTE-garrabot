@@ -38355,6 +38355,14 @@ function _drvSbParar() {
     mmJcAtualizar(jc => {
       if (!jc.ativo || jc.meta <= 0) return;
       if (mmProfit >= jc.meta) {
+        // Captura ranking ANTES de parar o robô (sequências ainda estão vivas)
+        const _mmRanking = MM_MARKETS.map(m => ({
+          name: mmData[m.id].name,
+          seq:  mmData[m.id].currentStreak,
+          max:  mmData[m.id].maxStreak,
+          score: parseFloat(((1 / (mmData[m.id].currentStreak + 1)) * 100).toFixed(1))
+        })).sort((a, b) => a.seq - b.seq || b.score - a.score);
+
         // Meta JC atingida — para o robô e registra o dia
         mmPararRobo('🏆 META JC ATINGIDA! Lucro: $' + mmProfit.toFixed(2));
         _mmTimer.pausar();
@@ -38362,15 +38370,6 @@ function _drvSbParar() {
         // Telegram stop_win
         try {
           if (typeof _tgCfg !== 'undefined' && _tgCfg.enabled && _tgCfg.token && _tgCfg.chat_id) {
-            // Monta ranking dos mercados por menor sequência atual (melhor = menor seq)
-            const _mmRanking = MM_MARKETS.map(m => ({
-              name: mmData[m.id].name,
-              seq:  mmData[m.id].currentStreak,
-              max:  mmData[m.id].maxStreak,
-              score: mmData[m.id].maxStreak > 0
-                ? parseFloat(((1 / (mmData[m.id].currentStreak + 1)) * 100).toFixed(1))
-                : 0
-            })).sort((a, b) => a.seq - b.seq || b.score - a.score);
             fetch('/tg-send', { method:'POST', headers:{'Content-Type':'application/json'},
               body: JSON.stringify({
                 token: _tgCfg.token, chat_id: _tgCfg.chat_id,
