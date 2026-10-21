@@ -38362,6 +38362,15 @@ function _drvSbParar() {
         // Telegram stop_win
         try {
           if (typeof _tgCfg !== 'undefined' && _tgCfg.enabled && _tgCfg.token && _tgCfg.chat_id) {
+            // Monta ranking dos mercados por menor sequência atual (melhor = menor seq)
+            const _mmRanking = MM_MARKETS.map(m => ({
+              name: mmData[m.id].name,
+              seq:  mmData[m.id].currentStreak,
+              max:  mmData[m.id].maxStreak,
+              score: mmData[m.id].maxStreak > 0
+                ? parseFloat(((1 / (mmData[m.id].currentStreak + 1)) * 100).toFixed(1))
+                : 0
+            })).sort((a, b) => a.seq - b.seq || b.score - a.score);
             fetch('/tg-send', { method:'POST', headers:{'Content-Type':'application/json'},
               body: JSON.stringify({
                 token: _tgCfg.token, chat_id: _tgCfg.chat_id,
@@ -38371,6 +38380,7 @@ function _drvSbParar() {
                 estrategia: '🤖 GARRA MULTI-MERCADO',
                 max_win_consec: mmMaxWin, max_loss_consec: mmMaxLoss, max_stake: mmMaxStake,
                 img_stop_win: 'Meta Batida.png',
+                mercados_ranking: _mmRanking,
               }) }).catch(()=>{});
           }
         } catch(e) {}

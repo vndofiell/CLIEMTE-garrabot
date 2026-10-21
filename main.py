@@ -6261,11 +6261,29 @@ def tg_send():
             max_win_consec  = int(payload.get("max_win_consec", 0))
             max_loss_consec = int(payload.get("max_loss_consec", 0))
             max_stake       = float(payload.get("max_stake", 0))
+            mercados_ranking = payload.get("mercados_ranking", [])
             total           = wins + losses
             wr              = (wins / total * 100) if total > 0 else 0.0
             lucro_brl       = lucro * cot
             banca_brl       = banca * cot
             max_stake_brl   = max_stake * cot
+
+            # Monta bloco de mercados se disponível
+            mercados_linha = ""
+            melhor_linha   = ""
+            if mercados_ranking:
+                linhas = []
+                medalhas = ["🥇","🥈","🥉"]
+                for i, m in enumerate(mercados_ranking):
+                    med   = medalhas[i] if i < 3 else f"{i+1}."
+                    nome  = m.get("name", "?")
+                    seq   = m.get("seq", 0)
+                    score = m.get("score", 0)
+                    linhas.append(f"  {med} {nome}  —  seq {seq}x  •  score {score}")
+                mercados_linha = "\n📋 <b>Mercados usados:</b>\n" + "\n".join(linhas) + "\n"
+                melhor         = mercados_ranking[0]
+                melhor_linha   = f"\n⭐ <b>Melhor mercado:</b> {melhor.get('name','?')} (seq {melhor.get('seq',0)}x)\n"
+
             msg = (
                 f"━━━━━━━━━━━━━━━\n"
                 f"🏆 <b>META BATIDA!</b>\n"
@@ -6276,6 +6294,8 @@ def tg_send():
                 f"━━━━━━━━━━━━━━━\n"
                 f"🔥 {max_win_consec}x WIN  💀 {max_loss_consec}x LOSS  💵 Máx ${max_stake:.2f}\n"
                 f"━━━━━━━━━━━━━━━\n"
+                f"{mercados_linha}"
+                f"{melhor_linha}"
                 f"🤖 {estrategia}  •  ⚙️ {modo}\n"
                 f"🕐 {_hora_brt()}"
             )
