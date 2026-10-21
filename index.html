@@ -5942,6 +5942,23 @@ class GerenciadorUnificado {
                     this._ricCicloAtivo     = _rs.ciclo_ativo     || false;
                     this._ricHistorico      = _rs.historico       || [];
                     this._ricTentativas     = _rs.tentativas      || 0;
+
+                    // Verifica se o saldo atual já voltou à banca de referência
+                    // Se sim, o ciclo já foi recuperado — encerra automaticamente
+                    try {
+                        const _saldoEl = document.getElementById('hd-balance');
+                        const _saldoNow = parseFloat((_saldoEl?.textContent || '0').replace('$','').replace(',','')) || 0;
+                        if (_saldoNow > 0 && this._ricBancaRef > 0 && _saldoNow >= this._ricBancaRef) {
+                            // Saldo >= banca ref: ciclo recuperado, limpa estado
+                            this._ricCicloAtivo     = false;
+                            this._ricFalta          = 0;
+                            this._ricParcelaAtual   = 1;
+                            this._ricLossesSeguidos = 0;
+                            this._ricPausado        = false;
+                            this._ricBancaRef       = 0;
+                            try { localStorage.removeItem('ric_pro_estado'); } catch(e2) {}
+                        }
+                    } catch(e2) {}
                 }
             }
         } catch(e) {}
@@ -6692,6 +6709,15 @@ GerenciadorUnificado.prototype.updateResult = function(won, profit) {
         if (this._ricFalta < 0.02) this._ricFalta = 0;
         this._ricLossesSeguidos = 0;
         this._ricPausado        = false;
+
+        // Verifica também pelo saldo real — se já voltou à referência, encerra
+        try {
+            const _sEl = document.getElementById('hd-balance');
+            const _sNow = parseFloat((_sEl?.textContent || '0').replace('$','').replace(',','')) || 0;
+            if (_sNow > 0 && this._ricBancaRef > 0 && _sNow >= this._ricBancaRef) {
+                this._ricFalta = 0;
+            }
+        } catch(e) {}
 
         if (this._ricFalta <= 0) {
             // Ciclo encerrado com sucesso
