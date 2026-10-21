@@ -5928,39 +5928,15 @@ class GerenciadorUnificado {
         this._ricMaxEntrada     = parseFloat(cfg.ric_max_entrada  || 50.0);
         this._ricHistorico      = [];
         this._ricTentativas     = 0;
-        // Restaura ciclo ativo do localStorage (memória persistente)
+        // Restaura apenas o histórico — ciclo começa sempre zerado na nova sessão
         try {
             const _ricSalvo = localStorage.getItem('ric_pro_estado');
             if (_ricSalvo) {
                 const _rs = JSON.parse(_ricSalvo);
-                if (_rs.ciclo_ativo) {
-                    this._ricBancaRef       = _rs.banca_ref      || 0;
-                    this._ricFalta          = _rs.falta           || 0;
-                    this._ricParcelaAtual   = _rs.parcela_atual   || 1;
-                    this._ricLossesSeguidos = _rs.losses_seguidos || 0;
-                    this._ricPausado        = _rs.pausado         || false;
-                    this._ricCicloAtivo     = _rs.ciclo_ativo     || false;
-                    this._ricHistorico      = _rs.historico       || [];
-                    this._ricTentativas     = _rs.tentativas      || 0;
-
-                    // Verifica se o saldo atual já voltou à banca de referência
-                    // Se sim, o ciclo já foi recuperado — encerra automaticamente
-                    try {
-                        const _saldoEl = document.getElementById('hd-balance');
-                        const _saldoNow = parseFloat((_saldoEl?.textContent || '0').replace('$','').replace(',','')) || 0;
-                        if (_saldoNow > 0 && this._ricBancaRef > 0 && _saldoNow >= this._ricBancaRef) {
-                            // Saldo >= banca ref: ciclo recuperado, limpa estado
-                            this._ricCicloAtivo     = false;
-                            this._ricFalta          = 0;
-                            this._ricParcelaAtual   = 1;
-                            this._ricLossesSeguidos = 0;
-                            this._ricPausado        = false;
-                            this._ricBancaRef       = 0;
-                            try { localStorage.removeItem('ric_pro_estado'); } catch(e2) {}
-                        }
-                    } catch(e2) {}
-                }
+                this._ricHistorico = _rs.historico || [];
             }
+            // Sempre limpa qualquer ciclo ativo salvo — só inicia com perda real
+            localStorage.removeItem('ric_pro_estado');
         } catch(e) {}
     }
 
