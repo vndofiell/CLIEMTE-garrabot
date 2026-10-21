@@ -1188,17 +1188,26 @@ def manifest_json():
     except FileNotFoundError:
         return jsonify({"erro": "manifest.json não encontrado"}), 404
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# DIGITAL ASSET LINKS — Validação Oficial Android (PWABuilder)
+# ═══════════════════════════════════════════════════════════════════════════════
+ASSETLINKS_DATA = """[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.onrender.bot_garra_uv2r.twa",
+      "sha256_cert_fingerprints": ["C3:F8:C8:42:A7:E2:CC:1C:8A:FB:D4:89:FE:6E:25:6C:B9:2D:61:D3:1A:84:A6:8F:66:C8:39:D1:75:59:40:8D"]
+    }
+  }
+]"""
+
 @app.route('/.well-known/assetlinks.json')
 def assetlinks_json():
     from flask import Response
-    try:
-        with open('assetlinks.json', 'r', encoding='utf-8') as f:
-            data = f.read()
-        resp = Response(data, mimetype='application/json')
-        resp.headers['Cache-Control'] = 'public, max-age=86400'
-        return resp
-    except FileNotFoundError:
-        return jsonify({"erro": "assetlinks.json não encontrado"}), 404
+    resp = Response(ASSETLINKS_DATA, mimetype='application/json')
+    resp.headers['Cache-Control'] = 'public, max-age=86400'
+    return resp
 
 
 @app.route('/sw.js')
