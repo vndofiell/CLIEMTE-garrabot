@@ -2819,7 +2819,7 @@
       </aside>
 
       <!-- PAINEL DIREITO -->
-      <main style="position:relative;z-index:1;flex:1;background:transparent;display:flex;flex-direction:column;padding:20px;overflow-y:auto;">
+      <main style="position:relative;z-index:1;flex:1;background:transparent;display:flex;flex-direction:column;padding:20px;overflow:hidden;">
         <div style="display:flex;gap:10px;margin-bottom:16px;border-bottom:1px solid #3a1f5a;padding-bottom:10px;align-items:center;">
           <span style="font-size:14px;font-weight:bold;color:#9d4edd;font-family:'Share Tech Mono',monospace;letter-spacing:2px;">📊 ANÁLISE MULTI-MERCADO</span>
           <button onclick="mmFechar()" style="margin-left:auto;background:rgba(255,51,102,0.1);border:1px solid #ff3366;color:#ff3366;font-size:12px;font-weight:600;cursor:pointer;padding:6px 14px;border-radius:6px;">✕ Fechar</button>
@@ -3012,14 +3012,14 @@
           .mm-tag-ativo { background: rgba(157,78,221,0.25); color: #e2caff; border: 1px solid #9d4edd; }
           .mm-tag-bloq  { background: rgba(255,51,102,0.2);  color: #ff3366; border: 1px solid #ff3366; }
         </style>
-        <!-- ── Mercados (esquerda) + Log (direita) lado a lado ── -->
-        <div style="display:flex;gap:14px;align-items:flex-start;">
+        <!-- ── Mercados (esquerda) + Log (direita) lado a lado, ocupam todo o espaço restante ── -->
+        <div style="display:flex;gap:14px;flex:1;min-height:0;">
 
-          <!-- Tabela de mercados -->
-          <div style="flex:1 1 0;min-width:0;">
+          <!-- Tabela de mercados — scroll próprio -->
+          <div style="flex:1 1 0;min-width:0;overflow-y:auto;border-radius:8px;">
             <table style="width:100%;border-collapse:collapse;background:rgba(18,21,31,0.85);border-radius:8px;overflow:hidden;border:1px solid #262a3d;font-size:13px;">
-              <thead>
-                <tr style="background:rgba(22,26,38,0.95);">
+              <thead style="position:sticky;top:0;z-index:2;">
+                <tr style="background:rgba(22,26,38,0.98);">
                   <th style="padding:12px 14px;text-align:left;color:#7e8b9b;font-size:10px;text-transform:uppercase;letter-spacing:1px;">Ativo / Mercado</th>
                   <th style="padding:12px 14px;text-align:left;color:#7e8b9b;font-size:10px;text-transform:uppercase;letter-spacing:1px;">Últimos 10 Dígitos</th>
                   <th style="padding:12px 14px;text-align:left;color:#7e8b9b;font-size:10px;text-transform:uppercase;letter-spacing:1px;">Sequência Atual</th>
@@ -3031,13 +3031,13 @@
             </table>
           </div>
 
-          <!-- Coluna direita: placar + log -->
-          <div style="flex:0 0 300px;display:flex;flex-direction:column;gap:8px;">
-            <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;background:rgba(0,0,0,0.4);padding:8px 12px;border-radius:8px;border:1px solid #262a3d;">
+          <!-- Coluna direita: placar + log com scroll -->
+          <div style="flex:0 0 320px;display:flex;flex-direction:column;gap:8px;min-height:0;">
+            <div style="flex:0 0 auto;display:flex;justify-content:space-between;align-items:center;font-size:12px;background:rgba(0,0,0,0.4);padding:8px 12px;border-radius:8px;border:1px solid #262a3d;">
               <span style="color:#7e8b9b;font-family:'Share Tech Mono',monospace;">LUCRO: <b id="mm-profit" style="color:#00ff66;">$0.00</b></span>
               <span style="color:#7e8b9b;font-family:'Share Tech Mono',monospace;">PLACAR: <b id="mm-score" style="color:#e2caff;">0W - 0L</b></span>
             </div>
-            <div id="mm-log" style="flex:1;background:rgba(0,0,0,0.4);border-radius:8px;border:1px solid #262a3d;overflow-y:auto;font-size:11px;font-family:'Share Tech Mono',monospace;"></div>
+            <div id="mm-log" style="flex:1 1 0;min-height:0;background:rgba(0,0,0,0.4);border-radius:8px;border:1px solid #262a3d;overflow-y:auto;font-size:11px;font-family:'Share Tech Mono',monospace;padding:6px 8px;"></div>
           </div>
 
         </div><!-- fim flex mercados+log -->
