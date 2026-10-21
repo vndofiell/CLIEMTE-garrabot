@@ -1,0 +1,22 @@
+name: 🚀 Deploy Automático para Render
+
+on:
+  push:
+    branches:
+      - main   # dispara toda vez que você der push na branch main
+
+jobs:
+  deploy:
+    name: Deploy via Render Deploy Hook
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: ✅ Checkout do código
+        uses: actions/checkout@v4
+
+      - name: 🚀 Trigger Deploy no Render
+        run: |
+          echo "Disparando deploy no Render..."
+          curl -s --fail -X POST "${{ secrets.RENDER_DEPLOY_HOOK_URL }}"
+          echo ""
+          echo "✅ Deploy disparado com sucesso!"

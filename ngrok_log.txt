@@ -1,0 +1,22 @@
+t=2026-10-15T15:37:37-0300 lvl=info msg="no configuration paths supplied"
+t=2026-10-15T15:37:37-0300 lvl=info msg="using configuration at default config path" path=C:\Users\vando\AppData\Local\ngrok\ngrok.yml
+t=2026-10-15T15:37:37-0300 lvl=info msg="open config file" path=C:\Users\vando\AppData\Local\ngrok\ngrok.yml err=<nil>
+t=2026-10-15T15:37:37-0300 lvl=info msg="FIPS 140 mode" enabled=false
+t=2026-10-15T15:37:37-0300 lvl=info msg="starting web service" obj=web addr=127.0.0.1:4040 allow_hosts=[]
+t=2026-10-15T15:37:37-0300 lvl=info msg="client session established" obj=tunnels.session
+t=2026-10-15T15:37:37-0300 lvl=info msg="tunnel session started" obj=tunnels.session
+t=2026-10-15T15:37:37-0300 lvl=info msg="started tunnel" obj=tunnels name=command_line addr=http://127.0.0.1:5000 url=https://paraphrastically-gatherable-deloras.ngrok-free.dev
+t=2026-10-15T16:41:22-0300 lvl=eror msg="heartbeat timeout, terminating session" obj=tunnels.session obj=csess id=4738d6ff87a7 clientid=d80e80c8fbfd4b98bc9ad7c0db5a5237
+t=2026-10-15T16:41:22-0300 lvl=eror msg="session closed, starting reconnect loop" obj=tunnels.session obj=csess id=3e8b6ef40bc7 err="session closed"
+t=2026-10-15T16:41:23-0300 lvl=info msg="client session established" obj=tunnels.session
+t=2026-10-15T16:41:23-0300 lvl=info msg="tunnel session started" obj=tunnels.session
+Flag --domain has been deprecated, use --url instead
+Flag --domain has been deprecated, use --url instead
+Flag --domain has been deprecated, use --url instead
+Flag --domain has been deprecated, use --url instead
+Flag --domain has been deprecated, use --url instead
+Flag --domain has been deprecated, use --url instead
+Flag --domain has been deprecated, use --url instead
+Flag --domain has been deprecated, use --url instead
+Flag --domain has been deprecated, use --url instead
+Flag --domain has been deprecated, use --url instead

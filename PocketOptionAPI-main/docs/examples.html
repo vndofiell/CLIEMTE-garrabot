@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Examples - PocketOptionAPI Async Docs</title>
+  <link rel="stylesheet" href="style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+</head>
+<body>
+  <header>
+    <h1>PocketOptionAPI Async</h1>
+    <nav>
+      <a href="index.html">Home</a>
+      <a href="quickstart.html">Quickstart</a>
+      <a href="api.html">API Reference</a>
+      <a href="examples.html">Examples</a>
+      <a href="assets-timeframes.html">Assets & Timeframes</a>
+      <a href="termux-setup.html">Termux Setup</a>
+      <a href="faq.html">FAQ</a>
+    </nav>
+  </header>
+  <main>
+    <h2>Examples</h2>
+    <div class="card">
+      <h3>Get Connection Stats</h3>
+      <pre><code>from pocketoptionapi_async import AsyncPocketOptionClient
+
+async def main():
+    SSID = input("Enter your SSID: ")
+    client = AsyncPocketOptionClient(SSID, is_demo=True, enable_logging=False)
+    await client.connect()
+    stats = await client.get_connection_stats()
+    print(f"Connection Stats: {stats}")
+    await client.disconnect()
+</code></pre>
+      <h3>Place a CALL Order</h3>
+      <pre><code>from pocketoptionapi_async import AsyncPocketOptionClient, OrderDirection
+
+async def main():
+    SSID = input("Enter your SSID: ")
+    client = AsyncPocketOptionClient(SSID, is_demo=True, enable_logging=False)
+    await client.connect()
+    amount = float(input("Enter the amount to invest: "))
+    symbol = input("Enter the symbol (e.g., 'EURUSD_otc'): ")
+    direction = OrderDirection.CALL
+    order = await client.place_order(asset=symbol, amount=amount, direction=direction, duration=60)
+    print(f"Order placed successfully: {order.order_id}, amount: {order.amount}, direction: {order.direction}, duration: {order.duration}")
+    await client.disconnect()
+</code></pre>
+      <h3>Get Candles as DataFrame</h3>
+      <pre><code>from pocketoptionapi_async import AsyncPocketOptionClient
+
+async def main():
+    SSID = input("Enter your SSID: ")
+    client = AsyncPocketOptionClient(SSID, is_demo=True, enable_logging=False)
+    await client.connect()
+    candles_df = await client.get_candles_dataframe(asset='EURUSD_otc', timeframe=60)
+    print(candles_df)
+    await client.disconnect()
+</code></pre>
+      <h3>Get Candles (List)</h3>
+      <pre><code>from pocketoptionapi_async import AsyncPocketOptionClient
+
+async def main():
+    SSID = input("Enter your SSID: ")
+    client = AsyncPocketOptionClient(SSID, is_demo=True, enable_logging=False)
+    await client.connect()
+    candles = await client.get_candles(asset='EURUSD_otc', timeframe=60)
+    for candle in candles:
+        print(f"open: {candle.open}, close: {candle.close}, high: {candle.high}, low: {candle.low}, volume: {candle.volume}, timestamp: {candle.timestamp}")
+    await client.disconnect()
+</code></pre>
+      <h3>Check Win</h3>
+      <pre><code>from pocketoptionapi_async import AsyncPocketOptionClient, OrderDirection
+
+async def main():
+    SSID = input("Enter your SSID: ")
+    client = AsyncPocketOptionClient(SSID, is_demo=True, enable_logging=False)
+    await client.connect()
+    amount = float(input("Enter the amount to invest: "))
+    symbol = input("Enter the symbol (e.g., 'EURUSD_otc'): ")
+    direction = OrderDirection.PUT
+    order = await client.place_order(asset=symbol, amount=amount, direction=direction, duration=5)
+    check_win = await client.check_win(order.order_id)
+    print(f"Order placed successfully: {order}")
+    print(f"Check win result: {check_win}")
+    await client.disconnect()
+</code></pre>
+      <h3>Get Active Orders</h3>
+      <pre><code>from pocketoptionapi_async import AsyncPocketOptionClient
+
+async def main():
+    SSID = input("Enter your SSID: ")
+    client = AsyncPocketOptionClient(SSID, is_demo=True, enable_logging=False)
+    await client.connect()
+    orders = await client.get_active_orders()
+    if orders:
+        print("Active Orders:")
+        for order in orders:
+            print(f"Order ID: {order['id']}, Amount: {order['amount']}, Status: {order['status']}")
+    else:
+        print("No active orders found.")
+    await client.disconnect()
+</code></pre>
+      <h3>Get Balance</h3>
+      <pre><code>from pocketoptionapi_async import AsyncPocketOptionClient
+
+async def main():
+    SSID = input("Enter your SSID: ")
+    client = AsyncPocketOptionClient(SSID, is_demo=True, enable_logging=False)
+    await client.connect()
+    balance = await client.get_balance()
+    print(f"Your balance is: {balance.balance}, currency: {balance.currency}")
+    await client.disconnect()
+</code></pre>
+      <h3>Check Order Result</h3>
+      <pre><code>from pocketoptionapi_async import AsyncPocketOptionClient, OrderDirection
+
+async def main():
+    SSID = input("Enter your SSID: ")
+    client = AsyncPocketOptionClient(SSID, is_demo=True, enable_logging=False)
+    await client.connect()
+    amount = float(input("Enter the amount to invest: "))
+    symbol = input("Enter the symbol (e.g., 'EURUSD_otc'): ")
+    direction = OrderDirection.PUT
+    order = await client.place_order(asset=symbol, amount=amount, direction=direction, duration=5)
+    result = await client.check_order_result(order.order_id)
+    if result:
+        print(f"Order placed successfully: {result}")
+    else:
+        print("Order result is None, please check the order status manually.")
+    await client.disconnect()
+</code></pre>
+    </div>
+    <div class="advert">
+      Want a custom trading bot? <a href="https://chipatrade.com/services/bot-development" target="_blank">Let us build it for you!</a>
+    </div>
+    <div class="links-bar">
+      <a href="https://u3.shortink.io/smart/SDIaxbeamcYYqB" target="_blank" class="link-btn signup-btn">Sign up for Pocket Option</a>
+      <a href="https://discord.gg/PHHfh6UyCb" target="_blank" class="link-btn discord-btn">Join our Discord</a>
+    </div>
+  </main>
+</body>
+<script src="codeblock.js"></script>
+</html>

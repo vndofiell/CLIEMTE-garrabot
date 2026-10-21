@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>API Reference - PocketOptionAPI Async Docs</title>
+  <link rel="stylesheet" href="style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+</head>
+<body>
+  <header>
+    <h1>PocketOptionAPI Async</h1>
+    <nav>
+      <a href="index.html">Home</a>
+      <a href="quickstart.html">Quickstart</a>
+      <a href="api.html">API Reference</a>
+      <a href="examples.html">Examples</a>
+      <a href="assets-timeframes.html">Assets & Timeframes</a>
+      <a href="termux-setup.html">Termux Setup</a>
+      <a href="faq.html">FAQ</a>
+    </nav>
+  </header>
+  <main>
+    <h2>API Reference</h2>
+    <div class="card">
+      <h3>Class: AsyncPocketOptionClient</h3>
+      <p><b>AsyncPocketOptionClient(ssid, is_demo=True, enable_logging=True, ...)</b></p>
+      <p>Creates a new asynchronous client for Pocket Option. This is the main entry point for all API operations.</p>
+      <pre><code>from pocketoptionapi_async import AsyncPocketOptionClient
+client = AsyncPocketOptionClient("SSID", is_demo=True, enable_logging=True)
+</code></pre>
+      <ul>
+        <li><b>ssid</b> (str): Your Pocket Option SSID cookie value (required)</li>
+        <li><b>is_demo</b> (bool): Use demo account if True, real if False (default: True)</li>
+        <li><b>enable_logging</b> (bool): Enable logging output (default: True)</li>
+      </ul>
+      <p><i>This object must be used with <b>await</b> for all network operations.</i></p>
+
+      <h3>Method: <code>await client.connect()</code></h3>
+      <p>Establishes a connection to Pocket Option using your SSID. <b>Must be awaited before any trading or data calls.</b></p>
+      <pre><code>await client.connect()
+</code></pre>
+      <p><b>Returns:</b> <code>True</code> if connected successfully, otherwise raises an error.</p>
+
+      <h3>Method: <code>await client.disconnect()</code></h3>
+      <p>Disconnects from Pocket Option and cleans up resources.</p>
+      <pre><code>await client.disconnect()
+</code></pre>
+
+      <h3>Method: <code>await client.get_balance()</code></h3>
+      <p>Fetches your current account balance and currency.</p>
+      <pre><code>balance = await client.get_balance()
+print(balance.balance, balance.currency)
+</code></pre>
+      <p><b>Returns:</b> <code>Balance</code> object with <code>balance</code> (float), <code>currency</code> (str), and <code>is_demo</code> (bool).</p>
+
+      <h3>Method: <code>await client.get_candles(asset, timeframe, count=100, end_time=None)</code></h3>
+      <p>Retrieves historical candle (OHLC) data for a given asset and timeframe.</p>
+      <pre><code>candles = await client.get_candles("EURUSD_otc", 60)
+for candle in candles:
+    print(candle.open, candle.close)
+</code></pre>
+      <ul>
+        <li><b>asset</b> (str): Symbol, e.g. <code>"EURUSD_otc"</code></li>
+        <li><b>timeframe</b> (int or str): Timeframe in seconds or string (e.g. <code>60</code> or <code>"1m"</code>)</li>
+        <li><b>count</b> (int): Number of candles (default 100)</li>
+        <li><b>end_time</b> (datetime): End time (default now)</li>
+      </ul>
+      <p><b>Returns:</b> List of <code>Candle</code> objects.</p>
+
+      <h3>Method: <code>await client.get_candles_dataframe(asset, timeframe, ...)</code></h3>
+      <p>Retrieves candle data as a pandas DataFrame for easy analysis.</p>
+      <pre><code>df = await client.get_candles_dataframe("EURUSD_otc", 60)
+print(df.head())
+</code></pre>
+      <p><b>Returns:</b> <code>pandas.DataFrame</code> with OHLCV columns indexed by timestamp.</p>
+
+      <h3>Method: <code>await client.place_order(asset, amount, direction, duration)</code></h3>
+      <p>Places a binary options order (CALL/PUT) for a given asset, amount, direction, and duration.</p>
+      <pre><code>from pocketoptionapi_async import OrderDirection
+order = await client.place_order(
+    asset="EURUSD_otc",
+    amount=1.0,
+    direction=OrderDirection.CALL,
+    duration=60
+)
+print(order.order_id, order.status)
+</code></pre>
+      <ul>
+        <li><b>asset</b> (str): Symbol, e.g. <code>"EURUSD_otc"</code></li>
+        <li><b>amount</b> (float): Amount to invest</li>
+        <li><b>direction</b> (OrderDirection): <code>CALL</code> or <code>PUT</code></li>
+        <li><b>duration</b> (int): Duration in seconds (minimum 5)</li>
+      </ul>
+      <p><b>Returns:</b> <code>OrderResult</code> object with order details and status.</p>
+
+      <h3>Method: <code>await client.get_active_orders()</code></h3>
+      <p>Returns a list of your currently active (open) orders.</p>
+      <pre><code>orders = await client.get_active_orders()
+for order in orders:
+    print(order.order_id, order.status)
+</code></pre>
+      <p><b>Returns:</b> List of <code>OrderResult</code> objects.</p>
+
+      <h3>Method: <code>await client.check_order_result(order_id)</code></h3>
+      <p>Checks the result of a specific order by its ID (win/loss/pending).</p>
+      <pre><code>result = await client.check_order_result(order_id)
+if result:
+    print(result.status, result.profit)
+</code></pre>
+      <p><b>Returns:</b> <code>OrderResult</code> object or <code>None</code> if not found.</p>
+
+      <h3>Method: <code>client.get_connection_stats()</code></h3>
+      <p>Returns connection statistics and status as a dictionary.</p>
+      <pre><code>stats = client.get_connection_stats()
+print(stats)
+</code></pre>
+
+      <h3>Enum: <code>OrderDirection</code></h3>
+      <p>Specifies the direction of an order.</p>
+      <pre><code>from pocketoptionapi_async import OrderDirection
+OrderDirection.CALL  # "call"
+OrderDirection.PUT   # "put"
+</code></pre>
+      <ul>
+        <li><b>CALL</b>: Place a call (up) order</li>
+        <li><b>PUT</b>: Place a put (down) order</li>
+      </ul>
+    </div>
+    <div class="advert">
+      Want a custom trading bot? <a href="https://chipatrade.com/services/bot-development" target="_blank">Let us build it for you!</a>
+    </div>
+    <div class="links-bar">
+      <a href="https://u3.shortink.io/smart/SDIaxbeamcYYqB" target="_blank" class="link-btn signup-btn">Sign up for Pocket Option</a>
+      <a href="https://discord.gg/PHHfh6UyCb" target="_blank" class="link-btn discord-btn">Join our Discord</a>
+    </div>
+  </main>
+</body>
+<script src="codeblock.js"></script>
+</html>

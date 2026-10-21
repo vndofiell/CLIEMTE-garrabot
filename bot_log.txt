@@ -1,0 +1,13 @@
+[CONFIG] URL base: https://bot-garra-uv2r.onrender.com
+[Quotex] ✅ SSID Hunter carregado (captura automática ativa).
+[Quotex] ✅ Módulo quotex_connector carregado com sucesso.
+[PocketOption] ⚠️ pocketoptionapi_async não disponível: No module named 'loguru'
+[PocketOption] ✅ Módulo pocket_option_connector carregado com sucesso.
+[IA Avançada] Módulos não carregados: No module named 'ia_laboratorio'
+✅ DIGIT MATRIX SNIPER PRO registrado.
+🌐 Interface: /digit-matrix
+📡 API ticks: /api/digit-matrix/ticks
+🎯 API sinal: /api/digit-matrix/sinal
+🚀 Iniciando Interface Cyber Cloud...
+ * Serving Flask app 'main'
+ * Debug mode: off

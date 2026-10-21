@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GARRABot — Callback</title>
+<style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { background:#000; font-family:'Courier New', monospace; display:flex; align-items:center; justify-content:center; min-height:100vh; }
+    .box {
+        border:1px solid #00ff41; padding:40px 36px; width:420px; text-align:center;
+        box-shadow:0 0 40px rgba(0,255,65,0.3); background:rgba(0,5,0,0.95);
+    }
+    .logo { font-size:1.4rem; letter-spacing:6px; color:#00ff41; margin-bottom:4px; text-shadow:0 0 14px #00ff41; }
+    .sub  { font-size:0.6rem; letter-spacing:3px; color:#1a5c2a; margin-bottom:24px; }
+    .icone { font-size:2.5rem; margin:12px 0; }
+    .titulo { font-size:0.95rem; letter-spacing:2px; margin:10px 0 8px; }
+    .titulo.ok   { color:#00ff41; }
+    .titulo.erro { color:#ff4444; }
+    .titulo.warn { color:#ffbd2e; }
+    .msg { font-size:0.72rem; color:#888; line-height:1.8; margin:10px 0 20px; }
+    .msg b { color:#ccc; }
+    .btn {
+        width:100%; padding:12px; margin-top:8px;
+        background:rgba(0,255,65,0.08); border:1px solid #00ff41;
+        color:#00ff41; font-family:'Courier New',monospace;
+        font-size:0.82rem; letter-spacing:2px; cursor:pointer;
+    }
+    .btn:hover { background:rgba(0,255,65,0.18); }
+    .btn-red { background:rgba(255,68,68,0.08); border-color:#ff4444; color:#ff4444; }
+    .btn-red:hover { background:rgba(255,68,68,0.18); }
+    .divider { border:none; border-top:1px solid #0a2a0a; margin:18px 0; }
+</style>
+</head>
+<body>
+<div class="box">
+    <div class="logo">GARRABOT</div>
+    <div class="sub">CYBER TRADING SYSTEM v2.0</div>
+    <hr class="divider">
+    <div id="conteudo">
+        <div class="icone">⏳</div>
+        <div class="titulo warn">PROCESSANDO...</div>
+        <div class="msg">Aguarde enquanto conectamos sua conta Deriv.</div>
+    </div>
+</div>
+
+<script>
+    const urlParams = new URLSearchParams(window.location.search);
+    const erroParam = urlParams.get('error');
+    const erroDesc  = urlParams.get('error_description') || '';
+    const code      = urlParams.get('code');
+    const verifier  = sessionStorage.getItem('pkce_verifier');
+    const el        = document.getElementById('conteudo');
+
+    // ── Erro vindo diretamente da Deriv (ex: link já usado) ──────────────
+    if (erroParam) {
+        const jaUsado = erroDesc.toLowerCase().includes('already been used') ||
+                        erroDesc.toLowerCase().includes('verifier');
+        el.innerHTML = `
+            <div class="icone">${jaUsado ? '🔁' : '✕'}</div>
+            <div class="titulo erro">${jaUsado ? 'ACESSO NEGADO PELA DERIV' : 'ERRO DE AUTENTICAÇÃO'}</div>
+            <div class="msg">
+                ${jaUsado
+                    ? '<b>O link de callback já foi usado.</b><br>Cada login gera um código único que expira após o primeiro uso.<br><br>→ <b>FECHE ESTA JANELA</b> e clique em <b>Conectar Deriv</b> novamente no bot.'
+                    : '<b>' + erroDesc.replace(/\+/g,' ') + '</b><br><br>→ Feche esta janela e tente novamente.'}
+            </div>
+            ${jaUsado ? `<button class="btn" onclick="window.close()">✕ Fechar esta aba</button>` : ''}`;
+        return;
+    }
+
+    // ── Sem code e sem verifier ───────────────────────────────────────────
+    if (!code) {
+        el.innerHTML = `
+            <div class="icone">⚠️</div>
+            <div class="titulo warn">PÁGINA ACESSADA DIRETAMENTE</div>
+            <div class="msg">Esta página só funciona após o redirecionamento da Deriv.<br><br>→ Acesse o bot e clique em <b>Conectar Deriv</b>.</div>`;
+        return;
+    }
+
+    if (!verifier) {
+        el.innerHTML = `
+            <div class="icone">⚠️</div>
+            <div class="titulo warn">SESSÃO EXPIRADA</div>
+            <div class="msg">O verificador PKCE não foi encontrado (sessão expirou ou aba foi recarregada).<br><br>→ <b>FECHE ESTA ABA</b> e clique em <b>Conectar Deriv</b> novamente.</div>
+            <button class="btn" onclick="window.close()">✕ Fechar esta aba</button>`;
+        return;
+    }
+
+    // ── Fluxo normal: envia code + verifier para o servidor ──────────────
+    fetch('https://garrabot.duckdns.org/auth/deriv', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ code, verifier })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.ok) {
+            el.innerHTML = `
+                <div class="icone">✅</div>
+                <div class="titulo ok">CONECTADO COM SUCESSO!</div>
+                <div class="msg">Sua conta Deriv foi autenticada.<br><br>→ <b>Feche esta aba</b> e volte ao bot para iniciar as operações.</div>
+                <button class="btn" onclick="window.close()">✕ Fechar esta aba</button>`;
+        } else {
+            el.innerHTML = `
+                <div class="icone">❌</div>
+                <div class="titulo erro">ERRO AO CONECTAR</div>
+                <div class="msg">${data.erro || 'Erro desconhecido'}<br><br>→ Feche esta aba e tente novamente.</div>
+                <button class="btn btn-red" onclick="window.close()">✕ Fechar</button>`;
+        }
+    })
+    .catch(err => {
+        el.innerHTML = `
+            <div class="icone">❌</div>
+            <div class="titulo erro">ERRO DE CONEXÃO</div>
+            <div class="msg">Não foi possível contactar o servidor.<br><b>${err}</b><br><br>→ Verifique se o bot está rodando e tente novamente.</div>`;
+    });
+</script>
+</body>
+</html>

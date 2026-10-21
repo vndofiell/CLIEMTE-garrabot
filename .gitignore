@@ -1,0 +1,52 @@
+﻿# Runtime / dados dinamicos do servidor
+# Estes arquivos sao atualizados pelo bot em producao.
+# Nunca devem ser sobrescritos por git pull.
+jc_progresso.json
+jc_sec_progresso.json
+memory_vault.json
+sec_config.json
+contas_config.json
+usuarios_sistema.json
+login_historico.json
+agendamentos.json
+ect_state.json
+caixa_gale_stats.json
+avisos_cfg.json
+strategies_feedback.json
+groq_config.json
+email_config.json
+telegram_config.json
+whatsapp_config.json
+
+# Logs e temporarios
+*.log
+*.tmp
+temp_*.sh
+temp_*.txt
+temp_*.py
+temp_ws_test.py
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.env
+
+# SSH / chaves
+*.key
+*.pem
+*.pub
+ssh-key-2026-07-26.key
+ssh-key-2026-07-26.key.pub
+
+# Node / WhatsApp
+whatsapp-api/node_modules/
+whatsapp-api/.wwebjs_auth/
+whatsapp-api/.wwebjs_cache/
+whatsapp-api/package-lock.json
+
+# Android build
+local.properties
+build/
+.gradle/

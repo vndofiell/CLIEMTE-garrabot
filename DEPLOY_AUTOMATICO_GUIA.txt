@@ -1,0 +1,76 @@
+==================================================
+   SISTEMA DE DEPLOY AUTOMATICO - GARRABOT
+   Servidor: Render (https://bot-garra-uv2r.onrender.com)
+==================================================
+
+
+COMO FUNCIONA
+─────────────
+Toda vez que voce der "git push" na branch main,
+o GitHub Actions dispara automaticamente o deploy no Render.
+Nenhum clique extra necessario apos configurar uma vez.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ OPCAO 1 — SCRIPT .BAT (1 CLIQUE) ⭐ MAIS FACIL
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Arquivo: DEPLOY_1CLICK.bat
+
+COMO USAR:
+  1. Faca suas alteracoes no codigo
+  2. Clique 2x em "DEPLOY_1CLICK.bat"
+  3. Digite a mensagem do commit (ou pressione Enter)
+  4. O script faz o git push automaticamente
+  5. O Render detecta o push e inicia o deploy sozinho
+  6. Acompanhe em: https://dashboard.render.com
+
+TEMPO DE DEPLOY: ~2 a 5 minutos no Render
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ OPCAO 2 — GITHUB ACTIONS (TOTALMENTE AUTOMATICO)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Arquivo: .github/workflows/deploy.yml
+
+Toda vez que voce der "git push", o GitHub Actions
+dispara automaticamente o deploy no Render via Deploy Hook.
+
+COMO CONFIGURAR O RENDER DEPLOY HOOK (faca 1 vez):
+
+  1. Acesse: https://dashboard.render.com
+  2. Clique no servico "bot-garra"
+  3. Va em: Settings > Deploy Hook
+  4. Copie a URL do Deploy Hook (parece com:
+     https://api.render.com/deploy/srv-xxxx?key=yyyy)
+
+  5. Acesse seu repositorio no GitHub:
+     https://github.com/vndofiell/CLIEMTE-garrabot
+
+  6. Va em: Settings > Secrets and variables > Actions
+
+  7. Crie o secret:
+     Nome:  RENDER_DEPLOY_HOOK_URL
+     Valor: (cole a URL do Deploy Hook do Render aqui)
+
+  8. Pronto! A partir de agora, todo "git push" na branch main
+     dispara o deploy automaticamente.
+
+Acompanhe o status em:
+  - GitHub Actions: github.com > seu repo > Actions
+  - Render: dashboard.render.com
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ DEPLOY MANUAL PELO RENDER (sem git push)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Se quiser forcar um novo deploy sem alterar codigo:
+
+  1. Acesse: https://dashboard.render.com
+  2. Clique no servico "bot-garra"
+  3. Clique no botao "Manual Deploy" > "Deploy latest commit"
+
+
+==================================================

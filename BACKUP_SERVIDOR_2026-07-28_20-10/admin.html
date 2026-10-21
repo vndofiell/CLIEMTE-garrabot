@@ -1,0 +1,1595 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GARRABOT — Painel Admin</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+:root { --g: #00ff41; --r: #ff4444; --y: #ffbd2e; --c: #0ff; --bg: #000; --bg2: #0a0a12; }
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:var(--bg); color:#ccc; font-family:'Share Tech Mono',monospace; min-height:100vh; }
+
+/* ── MATRIX CANVAS LOGIN ── */
+#matrix-adm-canvas {
+    position:fixed; top:0; left:0; z-index:0; pointer-events:none;
+}
+/* ── LOGIN ADMIN ── */
+#screen-login {
+    display:flex; align-items:center; justify-content:center;
+    min-height:100vh; background:#000; position:relative; z-index:1;
+}
+.adm-login-box {
+    background:var(--bg2); border:1px solid var(--g);
+    padding:36px 32px; width:360px; text-align:center;
+    box-shadow:0 0 28px rgba(0,255,65,0.4);
+}
+.adm-login-box h1 { color:var(--g); font-size:1rem; letter-spacing:4px; margin-bottom:4px; }
+.adm-login-box p  { color:#444; font-size:0.6rem; letter-spacing:2px; margin-bottom:24px; }
+.adm-input {
+    width:100%; background:rgba(0,12,0,0.6); border:1px solid rgba(0,255,65,0.4);
+    color:var(--g); padding:10px 12px; font-family:'Share Tech Mono',monospace;
+    font-size:0.85rem; outline:none; margin-bottom:14px; letter-spacing:2px;
+}
+.adm-input:focus { border-color:var(--g); box-shadow:0 0 8px rgba(0,255,65,0.3); }
+.adm-input::placeholder { color:rgba(0,255,65,0.2); }
+.adm-btn {
+    width:100%; padding:12px; font-family:'Share Tech Mono',monospace;
+    font-size:0.82rem; letter-spacing:3px; cursor:pointer;
+    transition:background 0.2s, box-shadow 0.2s, color 0.2s; border:1px solid var(--g);
+    background:rgba(0,255,65,0.1); color:var(--g); margin-top:4px;
+}
+.adm-btn:hover { background:rgba(0,255,65,0.2); box-shadow:0 0 14px rgba(0,255,65,0.4); color:#fff; }
+.adm-btn.danger { border-color:var(--r); color:var(--r); background:rgba(255,68,68,0.08); }
+.adm-btn.danger:hover { background:rgba(255,68,68,0.18); box-shadow:0 0 14px rgba(255,68,68,0.4); }
+.adm-btn.warn   { border-color:var(--y); color:var(--y); background:rgba(255,189,46,0.08); }
+.adm-btn.warn:hover { background:rgba(255,189,46,0.18); }
+.adm-btn.cyan   { border-color:var(--c); color:var(--c); background:rgba(0,255,255,0.06); }
+.adm-btn.cyan:hover { background:rgba(0,255,255,0.14); }
+.adm-btn.sm     { padding:7px 12px; font-size:0.72rem; letter-spacing:1px; width:auto; margin:0; }
+#login-erro { color:var(--r); font-size:0.65rem; margin-top:10px; min-height:1em; }
+
+/* ── PAINEL PRINCIPAL ── */
+#screen-painel { display:none; }
+
+.adm-header {
+    background:var(--bg2); border-bottom:1px solid rgba(0,255,65,0.25);
+    padding:12px 24px; display:flex; align-items:center; justify-content:space-between;
+}
+.adm-header-title { color:var(--g); font-size:0.95rem; letter-spacing:3px; text-shadow:0 0 8px var(--g); }
+.adm-header-user  { color:#555; font-size:0.65rem; letter-spacing:1px; }
+
+.adm-nav {
+    background:var(--bg2); border-bottom:1px solid rgba(0,255,65,0.15);
+    display:flex; gap:0; padding:0 16px;
+}
+.adm-tab {
+    padding:10px 18px; font-family:'Share Tech Mono',monospace; font-size:0.72rem;
+    letter-spacing:2px; cursor:pointer; color:#555; border:none; background:transparent;
+    border-bottom:2px solid transparent; transition:all 0.2s;
+}
+.adm-tab:hover { color:#ccc; }
+.adm-tab.active { color:var(--g); border-bottom-color:var(--g); }
+
+.adm-content { padding:24px; max-width:1100px; margin:0 auto; }
+
+/* Seção */
+.adm-section { display:none; }
+.adm-section.active { display:block; }
+.adm-section-title {
+    color:var(--g); font-size:0.8rem; letter-spacing:3px;
+    border-bottom:1px solid rgba(0,255,65,0.2); padding-bottom:8px; margin-bottom:18px;
+}
+
+/* Cards de estatísticas */
+.adm-stats { display:flex; gap:12px; margin-bottom:24px; flex-wrap:wrap; }
+.adm-stat-card {
+    flex:1; min-width:120px; background:var(--bg2); border:1px solid rgba(0,255,65,0.2);
+    padding:14px 18px; text-align:center;
+}
+.adm-stat-num { font-size:1.8rem; font-weight:bold; }
+.adm-stat-lbl { font-size:0.72rem; color:#aaa; letter-spacing:2px; margin-top:6px; font-weight:bold; text-shadow:0 0 6px rgba(255,255,255,0.15); }
+
+/* Tabela de usuários */
+.adm-table-wrap { overflow-x:auto; }
+table { width:100%; border-collapse:collapse; font-size:0.75rem; }
+th { color:var(--g); font-size:0.62rem; letter-spacing:2px; padding:8px 10px;
+     border-bottom:1px solid rgba(0,255,65,0.25); text-align:left; }
+td { padding:9px 10px; border-bottom:1px solid rgba(255,255,255,0.04); color:#aaa; }
+tr:hover td { background:rgba(0,255,65,0.03); }
+.badge {
+    display:inline-block; padding:2px 8px; border-radius:2px;
+    font-size:0.6rem; letter-spacing:1px; font-weight:bold;
+}
+.badge-pend    { background:rgba(255,189,46,0.12); color:var(--y); border:1px solid rgba(255,189,46,0.4); }
+.badge-ok      { background:rgba(0,255,65,0.1);    color:var(--g); border:1px solid rgba(0,255,65,0.35); }
+.badge-block   { background:rgba(255,68,68,0.1);   color:var(--r); border:1px solid rgba(255,68,68,0.35); }
+.badge-duplo   { background:rgba(255,40,40,0.18);  color:#ff2020;  border:1px solid rgba(255,40,40,0.6);
+                  animation:blink-crit 1.4s step-end infinite; }
+.badge-expir   { background:rgba(255,100,0,0.1);   color:#ff6600;  border:1px solid rgba(255,100,0,0.4); }
+.badge-prazo   { background:rgba(255,189,46,0.12); color:var(--y); border:1px solid rgba(255,189,46,0.5);
+                  font-size:0.65rem; padding:3px 8px; font-weight:bold; text-shadow:0 0 6px rgba(255,189,46,0.4); }
+.badge-perm    { background:rgba(0,255,65,0.08);   color:rgba(0,255,65,0.75); border:1px solid rgba(0,255,65,0.3);
+                  font-size:0.65rem; padding:3px 8px; }
+/* Cronômetro ao vivo */
+.countdown-live {
+    font-size:0.7rem; font-weight:bold; letter-spacing:0.5px;
+    font-family:'Courier New', 'Lucida Console', Courier, monospace;
+    font-variant-numeric: tabular-nums;
+    display:inline-block;
+    min-width:160px;
+    white-space:nowrap;
+}
+.countdown-ok   { color:#00ff41; text-shadow:0 0 8px rgba(0,255,65,0.5); }
+.countdown-warn { color:#ffbd2e; text-shadow:0 0 8px rgba(255,189,46,0.5); }
+.countdown-crit { color:#ff4444; text-shadow:0 0 10px rgba(255,68,68,0.6); animation:blink-crit 1s step-end infinite; }
+@keyframes blink-crit { 0%,100%{opacity:1} 50%{opacity:0.5} }
+
+.adm-actions { display:flex; gap:6px; flex-wrap:wrap; }
+
+/* Colunas Motivo / IP / PC — texto compacto */
+.cell-motivo { color:#ff6060; font-size:0.65rem; letter-spacing:0.5px; max-width:130px; }
+.cell-ip     { color:#888; font-size:0.62rem; font-family:'Courier New',monospace; }
+.cell-pc     { color:#888; font-size:0.62rem; font-family:'Courier New',monospace; max-width:130px;
+               overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+/* Modal genérico */
+.modal-overlay {
+    display:none; position:fixed; inset:0;
+    background:rgba(0,0,0,0.88);
+    z-index:999; align-items:center; justify-content:center;
+}
+.modal-overlay.open { display:flex; }
+.modal-box {
+    background:var(--bg2); border:1px solid var(--g);
+    padding:28px 26px; width:480px; max-width:96vw;
+    box-shadow:0 0 28px rgba(0,255,65,0.3);
+    max-height:85vh; overflow-y:auto;
+}
+.modal-box h3 { color:var(--g); font-size:0.82rem; letter-spacing:3px; margin-bottom:4px; }
+.modal-box .sub { color:#444; font-size:0.6rem; letter-spacing:1px; margin-bottom:18px; }
+
+/* Tabela de histórico dentro do modal */
+.hist-table { width:100%; border-collapse:collapse; font-size:0.68rem; margin-top:8px; }
+.hist-table th { color:var(--c); font-size:0.58rem; letter-spacing:1px; padding:5px 6px;
+                  border-bottom:1px solid rgba(0,255,65,0.2); text-align:left; }
+.hist-table td { padding:6px 6px; border-bottom:1px solid rgba(255,255,255,0.04); color:#aaa; }
+.hist-table tr:hover td { background:rgba(0,255,65,0.03); }
+.ev-login   { color:#00ff41; }
+.ev-logout  { color:#888; }
+.ev-duplo   { color:#ff4444; font-weight:bold; }
+.ev-block   { color:#ff2020; font-weight:bold; }
+.ev-admin   { color:#0ff; }
+
+/* Modal detalhe do dispositivo */
+.detalhe-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin:14px 0; }
+.detalhe-item label { font-size:0.58rem; color:var(--c); letter-spacing:1px; display:block; margin-bottom:3px; }
+.detalhe-item span  { font-size:0.72rem; color:#ddd; font-family:'Courier New',monospace; word-break:break-all; }
+.detalhe-divider { border:none; border-top:1px solid rgba(0,255,65,0.1); margin:10px 0; }
+
+/* Modal de aprovação */
+#modal-aprovar {
+    display:none; position:fixed; inset:0;
+    background:rgba(0,0,0,0.85);
+    z-index:999; align-items:center; justify-content:center;
+}
+#modal-aprovar.open { display:flex; }
+.modal-aprovar-box {
+    background:var(--bg2); border:1px solid var(--g);
+    padding:30px 28px; width:360px;
+    box-shadow:0 0 28px rgba(0,255,65,0.35);
+}
+.modal-aprovar-box h3 { color:var(--g); font-size:0.85rem; letter-spacing:3px; margin-bottom:4px; }
+.modal-aprovar-box p  { color:#555; font-size:0.62rem; letter-spacing:1px; margin-bottom:20px; }
+.modal-row { display:flex; align-items:center; gap:10px; margin-bottom:18px; }
+.modal-row label { color:var(--c); font-size:0.6rem; letter-spacing:1px; white-space:nowrap; }
+.modal-row input[type=number] {
+    flex:1; background:rgba(0,12,0,0.6); border:1px solid rgba(0,255,65,0.35);
+    color:var(--g); padding:8px 10px; font-family:'Share Tech Mono',monospace;
+    font-size:0.85rem; outline:none; letter-spacing:1px;
+}
+.modal-row input:focus { border-color:var(--g); box-shadow:0 0 6px rgba(0,255,65,0.3); }
+.modal-hint { color:#444; font-size:0.58rem; letter-spacing:1px; margin-bottom:18px; line-height:1.7; }
+.modal-btns { display:flex; gap:8px; }
+
+/* Formulário de e-mail */
+.adm-form { display:flex; flex-direction:column; gap:14px; max-width:480px; }
+.adm-form label { font-size:0.6rem; color:var(--c); letter-spacing:2px; margin-bottom:4px; display:block; }
+.adm-form input  {
+    width:100%; background:rgba(0,12,0,0.6); border:1px solid rgba(0,255,65,0.35);
+    color:var(--g); padding:9px 12px; font-family:'Share Tech Mono',monospace;
+    font-size:0.82rem; outline:none; letter-spacing:1px;
+}
+.adm-form input:focus { border-color:var(--g); box-shadow:0 0 6px rgba(0,255,65,0.3); }
+.adm-form input::placeholder { color:rgba(0,255,65,0.2); }
+
+/* Toast */
+#toast {
+    position:fixed; bottom:24px; right:24px;
+    background:var(--bg2); border:1px solid var(--g); color:var(--g);
+    font-family:'Share Tech Mono',monospace; font-size:0.75rem; letter-spacing:1px;
+    padding:12px 20px; z-index:9999; display:none;
+    box-shadow:0 0 16px rgba(0,255,65,0.4); max-width:340px;
+    animation:toast-in 0.3s ease-out;
+}
+#toast.erro { border-color:var(--r); color:var(--r); box-shadow:0 0 16px rgba(255,68,68,0.4); }
+@keyframes toast-in { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:none} }
+
+/* Separador */
+.adm-sep { border:none; border-top:1px solid rgba(0,255,65,0.1); margin:20px 0; }
+
+/* Aviso */
+.adm-info {
+    background:rgba(0,255,65,0.04); border:1px solid rgba(0,255,65,0.15);
+    padding:12px 16px; font-size:0.68rem; color:#bbb; line-height:1.8; margin-bottom:18px;
+}
+.adm-info b { color:var(--g); }
+
+/* ── ABA AVISOS ── */
+.aviso-grid { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+@media(max-width:720px){ .aviso-grid { grid-template-columns:1fr; } }
+
+.aviso-card {
+    background:var(--bg2); border:1px solid rgba(0,255,65,0.2);
+    padding:22px 20px; display:flex; flex-direction:column; gap:14px;
+}
+.aviso-card-title {
+    color:var(--c); font-size:0.72rem; letter-spacing:3px;
+    border-bottom:1px solid rgba(0,255,255,0.15); padding-bottom:8px;
+}
+.aviso-card textarea {
+    width:100%; background:rgba(0,12,0,0.6); border:1px solid rgba(0,255,65,0.3);
+    color:var(--g); padding:10px 12px; font-family:'Share Tech Mono',monospace;
+    font-size:0.78rem; outline:none; resize:vertical; min-height:90px;
+    line-height:1.7; letter-spacing:0.5px;
+}
+.aviso-card textarea:focus { border-color:var(--g); box-shadow:0 0 6px rgba(0,255,65,0.25); }
+.aviso-card textarea::placeholder { color:rgba(0,255,65,0.2); }
+.aviso-card select {
+    width:100%; background:rgba(0,12,0,0.6); border:1px solid rgba(0,255,65,0.3);
+    color:var(--g); padding:9px 12px; font-family:'Share Tech Mono',monospace;
+    font-size:0.78rem; outline:none; cursor:pointer;
+}
+.aviso-card select:focus { border-color:var(--g); }
+.aviso-card input[type=number],
+.aviso-card input[type=text] {
+    width:100%; background:rgba(0,12,0,0.6); border:1px solid rgba(0,255,65,0.3);
+    color:var(--g); padding:9px 12px; font-family:'Share Tech Mono',monospace;
+    font-size:0.78rem; outline:none; letter-spacing:1px;
+}
+.aviso-card input:focus { border-color:var(--g); }
+
+/* Campo de data/hora clicável inteiro */
+.dt-wrap { position:relative; }
+.dt-wrap input[type=datetime-local] {
+    width:100%; background:rgba(0,12,0,0.6); border:1px solid rgba(0,255,65,0.3);
+    color:var(--g); padding:9px 38px 9px 12px;
+    font-family:'Share Tech Mono',monospace;
+    font-size:0.78rem; outline:none; letter-spacing:1px;
+    cursor:pointer;
+    /* remove o ícone nativo em Chrome/Edge */
+    -webkit-appearance:none;
+}
+.dt-wrap input[type=datetime-local]::-webkit-calendar-picker-indicator {
+    /* cobre o campo inteiro de forma invisível para qualquer clique abrir o picker */
+    position:absolute; inset:0; width:100%; height:100%;
+    opacity:0; cursor:pointer;
+}
+.dt-wrap input[type=datetime-local]:focus { border-color:var(--g); box-shadow:0 0 6px rgba(0,255,65,0.25); }
+.dt-icon {
+    position:absolute; right:10px; top:50%; transform:translateY(-50%);
+    color:var(--g); font-size:1rem; pointer-events:none; opacity:0.65;
+}
+.aviso-card label { font-size:0.6rem; color:var(--c); letter-spacing:2px; display:block; margin-bottom:4px; }
+.aviso-row { display:flex; gap:10px; align-items:flex-end; }
+.aviso-row > div { flex:1; }
+
+/* Preview do agendamento */
+#lista-agendamentos {
+    max-height:210px; overflow-y:auto; display:flex; flex-direction:column; gap:6px;
+}
+.agend-item {
+    background:rgba(0,255,65,0.04); border:1px solid rgba(0,255,65,0.15);
+    padding:9px 12px; font-size:0.65rem; color:#aaa; display:flex;
+    justify-content:space-between; align-items:flex-start; gap:8px; line-height:1.6;
+}
+.agend-item b { color:var(--g); }
+.agend-item .agend-del { color:var(--r); cursor:pointer; font-size:0.8rem; flex-shrink:0; }
+.agend-item .agend-del:hover { text-shadow:0 0 6px var(--r); }
+.agend-vazio { color:#333; font-size:0.68rem; text-align:center; padding:18px 0; }
+
+/* Slider de dias */
+.range-wrap { display:flex; align-items:center; gap:10px; }
+.range-wrap input[type=range] {
+    flex:1; accent-color:var(--y); height:4px; cursor:pointer;
+}
+.range-val { color:var(--y); font-size:0.8rem; font-weight:bold; min-width:44px; text-align:right; }
+</style>
+</head>
+<body>
+
+<!-- ══ CANVAS MATRIX — LOGIN ADMIN ══ -->
+<canvas id="matrix-adm-canvas"></canvas>
+
+<!-- ══ TELA DE LOGIN ADMIN ══ -->
+<div id="screen-login">
+    <div class="adm-login-box">
+        <h1>⚡ GARRABOT ELITE</h1>
+        <p>&gt;&gt; PAINEL DE ADMINISTRAÇÃO</p>
+        <label style="display:block;text-align:left;font-size:0.6rem;color:var(--c);letter-spacing:2px;margin-bottom:6px;">USUÁRIO ADMIN</label>
+        <input class="adm-input" type="text"     id="adm-user" placeholder="admin" autocomplete="off">
+        <label style="display:block;text-align:left;font-size:0.6rem;color:var(--c);letter-spacing:2px;margin-bottom:6px;">SENHA</label>
+        <input class="adm-input" type="password" id="adm-pass" placeholder="••••••••">
+        <label style="display:flex;align-items:center;gap:8px;font-size:0.6rem;color:rgba(0,255,65,0.5);letter-spacing:1px;margin-bottom:14px;cursor:pointer;">
+            <input type="checkbox" id="adm-lembrar" style="accent-color:var(--g);width:13px;height:13px;">
+            LEMBRAR CREDENCIAIS
+        </label>
+        <button class="adm-btn" onclick="admLogin()">► ENTRAR NO PAINEL</button>
+        <div id="login-erro"></div>
+    </div>
+</div>
+
+<!-- ══ PAINEL PRINCIPAL ══ -->
+<div id="screen-painel">
+    <div class="adm-header">
+        <span class="adm-header-title">⚡ GARRABOT — PAINEL ADMIN</span>
+        <span class="adm-header-user" id="adm-logged-label"></span>
+    </div>
+    <div class="adm-nav">
+        <button class="adm-tab active" onclick="trocarAba('usuarios')">USUÁRIOS</button>
+        <button class="adm-tab"        onclick="trocarAba('email')">CONFIG E-MAIL</button>
+        <button class="adm-tab"        onclick="trocarAba('senha-adm')">ALTERAR SENHA</button>
+        <button class="adm-tab"        onclick="trocarAba('avisos')" style="color:#ffbd2e;border-bottom-color:transparent;" id="tab-avisos">📢 AVISOS</button>
+    </div>
+
+    <div class="adm-content">
+
+        <!-- ── ABA: USUÁRIOS ── -->
+        <div class="adm-section active" id="aba-usuarios">
+            <div class="adm-section-title">▸ GERENCIAR USUÁRIOS</div>
+
+            <div class="adm-stats">
+                <div class="adm-stat-card"><div class="adm-stat-num" id="stat-total" style="color:var(--c)">0</div><div class="adm-stat-lbl" style="color:#0ff;">TOTAL</div></div>
+                <div class="adm-stat-card"><div class="adm-stat-num" id="stat-pend"  style="color:var(--y)">0</div><div class="adm-stat-lbl" style="color:#ffbd2e;">PENDENTES</div></div>
+                <div class="adm-stat-card"><div class="adm-stat-num" id="stat-aprov" style="color:var(--g)">0</div><div class="adm-stat-lbl" style="color:#00ff41;">APROVADOS</div></div>
+                <div class="adm-stat-card"><div class="adm-stat-num" id="stat-block" style="color:var(--r)">0</div><div class="adm-stat-lbl" style="color:#ff4444;">BLOQUEADOS</div></div>
+            </div>
+
+            <div style="display:flex;justify-content:flex-end;margin-bottom:12px;">
+                <button class="adm-btn sm cyan" onclick="carregarUsuarios()">↺ ATUALIZAR</button>
+            </div>
+
+            <div class="adm-table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>USUÁRIO</th>
+                            <th>E-MAIL</th>
+                            <th>STATUS</th>
+                            <th>MOTIVO</th>
+                            <th>ÚLTIMO IP</th>
+                            <th>ÚLTIMO PC</th>
+                            <th>CADASTRO</th>
+                            <th>PRAZO</th>
+                            <th>AÇÕES</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabela-usuarios">
+                        <tr><td colspan="9" style="text-align:center;color:#333;padding:20px;">Carregando...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    <!-- ── ABA: E-MAIL ── -->
+    <div class="adm-section" id="aba-email">
+        <div class="adm-section-title">▸ CONFIGURAÇÃO DE E-MAIL SMTP</div>
+        <div class="adm-info">
+            <b>Como configurar com Gmail:</b><br>
+            1. Acesse <b>myaccount.google.com → Segurança → Verificação em duas etapas</b> (ativar)<br>
+            2. Em <b>Senhas de app</b>, gere uma senha para "Outro aplicativo"<br>
+            3. Use o e-mail do Gmail no campo <b>REMETENTE</b> e a senha de app gerada no campo <b>SENHA DE APP</b><br>
+            4. Clique em <b>💾 SALVAR</b> — depois <b>📨 TESTAR</b> para confirmar que está funcionando
+        </div>
+        <div id="email-status-banner" style="display:none;padding:10px 14px;font-size:0.68rem;margin-bottom:14px;border:1px solid;letter-spacing:1px;"></div>
+        <div class="adm-form">
+            <div>
+                <label>SERVIDOR SMTP</label>
+                <input type="text" id="cfg-host" placeholder="smtp.gmail.com" value="smtp.gmail.com">
+            </div>
+            <div>
+                <label>PORTA SMTP</label>
+                <input type="number" id="cfg-port" placeholder="587" value="587">
+            </div>
+            <div>
+                <label>REMETENTE (e-mail)</label>
+                <input type="email" id="cfg-email" placeholder="seuemail@gmail.com" autocomplete="off">
+            </div>
+            <div>
+                <label>SENHA DE APP <span style="color:#555;font-size:0.55rem;">(gerada no Google — não é sua senha normal)</span></label>
+                <input type="password" id="cfg-senha-app" placeholder="xxxx xxxx xxxx xxxx" autocomplete="new-password">
+                <div style="font-size:0.58rem;color:#555;margin-top:4px;letter-spacing:0.5px;">
+                    ▸ Se já foi salva, deixe em branco para manter a senha atual
+                </div>
+            </div>
+            <div>
+                <label>NOME DE EXIBIÇÃO</label>
+                <input type="text" id="cfg-nome" placeholder="GARRABOT ELITE" value="GARRABOT ELITE">
+            </div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;">
+                <button class="adm-btn" style="max-width:220px;" onclick="salvarEmailConfig()">💾 SALVAR CONFIGURAÇÃO</button>
+                <button class="adm-btn cyan" style="max-width:180px;" onclick="testarEmailConfig()">📨 TESTAR ENVIO</button>
+                <button class="adm-btn warn" style="max-width:180px;" onclick="diagnosticarEmail()">🔍 DIAGNÓSTICO</button>
+            </div>
+            <div style="font-size:0.6rem;color:#444;margin-top:6px;">
+                O teste envia um e-mail para o próprio remetente configurado.
+            </div>
+            <div id="email-diag-box" style="display:none;margin-top:12px;padding:10px 14px;font-size:0.65rem;letter-spacing:0.5px;border:1px solid rgba(255,189,46,0.3);background:rgba(255,189,46,0.05);color:#ffbd2e;white-space:pre-wrap;"></div>
+        </div>
+    </div>
+
+        <!-- ── ABA: ALTERAR SENHA ADMIN ── -->
+        <div class="adm-section" id="aba-senha-adm">
+
+            <!-- ── Alterar Usuário ── -->
+            <div class="adm-section-title">▸ ALTERAR USUÁRIO DE LOGIN DO ADMINISTRADOR</div>
+            <div class="adm-form" style="margin-bottom:32px;">
+                <div>
+                    <label>USUÁRIO ATUAL</label>
+                    <input type="text" id="adm-user-atual" placeholder="usuário atual" autocomplete="off">
+                </div>
+                <div>
+                    <label>SENHA ATUAL (confirmação)</label>
+                    <input type="password" id="adm-senha-conf-user" placeholder="••••••••">
+                </div>
+                <div>
+                    <label>NOVO USUÁRIO</label>
+                    <input type="text" id="adm-novo-user" placeholder="mínimo 3 caracteres, sem espaços" autocomplete="off">
+                </div>
+                <button class="adm-btn cyan" style="max-width:260px;" onclick="alterarUsuarioAdmin()">👤 ALTERAR USUÁRIO</button>
+            </div>
+
+            <hr style="border:none;border-top:1px solid rgba(0,255,65,0.12);margin-bottom:28px;">
+
+            <!-- ── Alterar Senha ── -->
+            <div class="adm-section-title">▸ ALTERAR SENHA DO ADMINISTRADOR</div>
+            <div class="adm-form">
+                <div>
+                    <label>SENHA ATUAL</label>
+                    <input type="password" id="adm-senha-atual" placeholder="••••••••">
+                </div>
+                <div>
+                    <label>NOVA SENHA</label>
+                    <input type="password" id="adm-nova-senha" placeholder="mínimo 4 caracteres">
+                </div>
+                <div>
+                    <label>CONFIRMAR NOVA SENHA</label>
+                    <input type="password" id="adm-nova-senha2" placeholder="repita a nova senha">
+                </div>
+                <button class="adm-btn" style="max-width:240px;" onclick="alterarSenhaAdmin()">🔑 ALTERAR SENHA</button>
+            </div>
+        </div>
+
+        <!-- ══════════════════════════════════════════════════════ -->
+        <!-- ── ABA: AVISOS — agendamento + aviso automático ── -->
+        <!-- ══════════════════════════════════════════════════════ -->
+        <div class="adm-section" id="aba-avisos">
+            <div class="adm-section-title" style="color:var(--y);">▸ CENTRAL DE AVISOS AO CLIENTE</div>
+
+            <div class="aviso-grid">
+
+                <!-- ╔══════════════════════════════╗ -->
+                <!-- ║  CARD 1 — AGENDAR MENSAGEM  ║ -->
+                <!-- ╚══════════════════════════════╝ -->
+                <div class="aviso-card">
+                    <div class="aviso-card-title">📅 AGENDAR MENSAGEM / MANUTENÇÃO</div>
+
+                    <div>
+                        <label>TIPO DE AVISO</label>
+                        <select id="ag-tipo">
+                            <option value="manutencao">🔧 Manutenção Programada</option>
+                            <option value="atualizacao">🚀 Atualização do Sistema</option>
+                            <option value="comunicado">📣 Comunicado Geral</option>
+                            <option value="custom">✏️ Mensagem Personalizada</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label>MENSAGEM (exibida ao cliente)</label>
+                        <textarea id="ag-msg" placeholder="Ex: O sistema ficará em manutenção das 02h às 04h. Por favor salve seu progresso antes."></textarea>
+                    </div>
+
+                    <div class="aviso-row">
+                        <div>
+                            <label>DATA / HORA DE INÍCIO</label>
+                            <div class="dt-wrap">
+                                <input type="datetime-local" id="ag-inicio">
+                                <span class="dt-icon">📅</span>
+                            </div>
+                        </div>
+                        <div>
+                            <label>DATA / HORA DE FIM</label>
+                            <div class="dt-wrap">
+                                <input type="datetime-local" id="ag-fim">
+                                <span class="dt-icon">📅</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label>COR DO BANNER</label>
+                        <select id="ag-cor">
+                            <option value="yellow">🟡 Amarelo (aviso)</option>
+                            <option value="red">🔴 Vermelho (urgente)</option>
+                            <option value="cyan">🔵 Ciano (informativo)</option>
+                            <option value="green">🟢 Verde (sucesso)</option>
+                        </select>
+                    </div>
+
+                    <button class="adm-btn warn" onclick="agendarMensagem()">📅 AGENDAR MENSAGEM</button>
+
+                    <hr class="adm-sep" style="margin:4px 0;">
+
+                    <div style="font-size:0.6rem;color:var(--c);letter-spacing:2px;margin-bottom:4px;">AGENDAMENTOS ATIVOS</div>
+                    <div id="lista-agendamentos">
+                        <div class="agend-vazio">Nenhum agendamento.</div>
+                    </div>
+                </div>
+
+                <!-- ╔═════════════════════════════════════╗ -->
+                <!-- ║  CARD 2 — AVISO AUTOMÁTICO PRAZO   ║ -->
+                <!-- ╚═════════════════════════════════════╝ -->
+                <div class="aviso-card">
+                    <div class="aviso-card-title">⏰ AVISO AUTOMÁTICO DE EXPIRAÇÃO</div>
+
+                    <div class="adm-info" style="margin-bottom:0;color:#ccc;">
+                        O sistema detecta automaticamente se o cliente é de <b style="color:#fff">teste</b> ou <b style="color:#fff">plano mensal</b>
+                        e exibe um banner de aviso quando o prazo estiver chegando ao fim.
+                    </div>
+
+                    <div>
+                        <label>ATIVAR AVISOS AUTOMÁTICOS</label>
+                        <select id="cfg-aviso-ativo">
+                            <option value="1">✅ Ativado</option>
+                            <option value="0">❌ Desativado</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label>AVISAR QUANDO RESTAR (DIAS)</label>
+                        <div class="range-wrap">
+                            <input type="range" id="cfg-aviso-dias" min="1" max="14" value="3"
+                                   oninput="document.getElementById('cfg-aviso-dias-val').textContent=this.value+'d'">
+                            <span class="range-val" id="cfg-aviso-dias-val">3d</span>
+                        </div>
+                    </div>
+
+                    <div>
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+                            <label style="margin-bottom:0;">MENSAGEM — PLANO DE TESTE</label>
+                            <button class="adm-btn sm cyan" onclick="usarTemplateTeste()" style="font-size:0.6rem;padding:4px 10px;">✨ USAR TEMPLATE</button>
+                        </div>
+                        <textarea id="cfg-msg-teste" placeholder="Clique em ✨ USAR TEMPLATE para preencher automaticamente"></textarea>
+                    </div>
+
+                    <div>
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+                            <label style="margin-bottom:0;">MENSAGEM — PLANO MENSAL / PAGO</label>
+                            <button class="adm-btn sm cyan" onclick="usarTemplatePlano()" style="font-size:0.6rem;padding:4px 10px;">✨ USAR TEMPLATE</button>
+                        </div>
+                        <textarea id="cfg-msg-plano" placeholder="Clique em ✨ USAR TEMPLATE para preencher automaticamente"></textarea>
+                    </div>
+
+                    <div class="adm-info" style="margin-bottom:0;font-size:0.6rem;color:#bbb;">
+                        Use <b>{DIAS}</b>, <b>{HORAS}</b>, <b>{MINS}</b> na mensagem — serão substituídos pelo tempo real restante.<br>
+                        Use <b>{USUARIO}</b> para o nome do cliente.
+                    </div>
+
+                    <button class="adm-btn" onclick="salvarCfgAvisos()">💾 SALVAR CONFIGURAÇÃO</button>
+                </div>
+
+            </div><!-- /aviso-grid -->
+        </div><!-- /aba-avisos -->
+
+    </div><!-- /adm-content -->
+</div><!-- /screen-painel -->
+
+<!-- ══ MODAL — DETALHE DO INCIDENTE LOGIN DUPLO ══ -->
+<div class="modal-overlay" id="modal-incidente">
+    <div class="modal-box" style="border-color:#ff4444;box-shadow:0 0 28px rgba(255,68,68,0.35);">
+        <h3 style="color:#ff4444;">🚨 DETALHE DO INCIDENTE</h3>
+        <p class="sub" id="modal-inc-nome"></p>
+        <div class="detalhe-grid">
+            <div class="detalhe-item"><label>🖥️ PC REGISTRADO</label><span id="inc-pc1">—</span></div>
+            <div class="detalhe-item"><label>🖥️ PC DO INVASOR</label><span id="inc-pc2">—</span></div>
+            <div class="detalhe-item"><label>🌐 IP REGISTRADO</label><span id="inc-ip1">—</span></div>
+            <div class="detalhe-item"><label>🌐 IP DO INVASOR</label><span id="inc-ip2">—</span></div>
+            <div class="detalhe-item"><label>📅 BLOQUEADO EM</label><span id="inc-data">—</span></div>
+            <div class="detalhe-item"><label>🔄 TENTATIVAS</label><span id="inc-tent">—</span></div>
+        </div>
+        <hr class="detalhe-divider">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="adm-btn sm" style="border-color:#00ff41;color:#00ff41;background:rgba(0,255,65,0.08);"
+                    onclick="acoesIncidente('desbloquear')">🔓 DESBLOQUEAR</button>
+            <button class="adm-btn sm cyan" onclick="acoesIncidente('liberar')">🔄 LIBERAR DISPOSITIVO</button>
+            <button class="adm-btn sm warn" onclick="verHistoricoLogin()">📜 VER HISTÓRICO</button>
+            <button class="adm-btn sm danger" onclick="fecharModalIncidente()">✕ FECHAR</button>
+        </div>
+    </div>
+</div>
+
+<!-- ══ MODAL — HISTÓRICO DE LOGINS ══ -->
+<div class="modal-overlay" id="modal-historico">
+    <div class="modal-box">
+        <h3>📜 HISTÓRICO DE LOGINS</h3>
+        <p class="sub" id="modal-hist-nome"></p>
+        <div id="modal-hist-conteudo" style="min-height:60px;color:#555;font-size:0.68rem;">Carregando...</div>
+        <hr class="detalhe-divider">
+        <button class="adm-btn sm danger" onclick="fecharModalHistorico()">✕ FECHAR</button>
+    </div>
+</div>
+
+<!-- ══ MODAL — APROVAR COM DIAS DE TESTE ══ -->
+<div id="modal-aprovar">
+    <div class="modal-aprovar-box">
+        <h3>✔ APROVAR USUÁRIO</h3>
+        <p id="modal-aprovar-nome"></p>
+        <div class="modal-row">
+            <label>DIAS DE TESTE</label>
+            <input type="number" id="modal-dias" min="1" max="3650" placeholder="em branco = permanente">
+        </div>
+        <div class="modal-hint">
+            ▸ <b style="color:var(--g)">Em branco</b> = acesso permanente<br>
+            ▸ <b style="color:var(--y)">Número</b> = bloqueio automático após N dias<br>
+            ▸ Você pode estender o prazo depois na tabela (botão ⏱ PRAZO)
+        </div>
+        <div class="modal-btns">
+            <button class="adm-btn" style="flex:1" onclick="confirmarAprovacao()">✔ CONFIRMAR</button>
+            <button class="adm-btn danger" style="flex:1" onclick="fecharModalAprovar()">✕ CANCELAR</button>
+        </div>
+    </div>
+</div>
+
+<!-- ══ MODAL — GERENCIAR PCs ══ -->
+<div class="modal-overlay" id="modal-pcs" style="display:none;">
+    <div class="modal-box" style="border-color:#a78bfa;box-shadow:0 0 28px rgba(167,139,250,0.3);max-width:520px;width:95%;">
+        <h3 style="color:#a78bfa;">🖥️ DISPOSITIVOS AUTORIZADOS</h3>
+        <p class="sub" id="modal-pcs-nome" style="color:#a78bfa;opacity:0.7;"></p>
+
+        <!-- Último PC registrado — atalho para aprovar o PC atual do usuário -->
+        <div id="modal-pcs-ultimo-wrap" style="display:none;margin-bottom:14px;padding:8px 12px;border:1px solid rgba(0,255,255,0.2);background:rgba(0,255,255,0.04);">
+            <div style="font-size:0.58rem;letter-spacing:2px;color:#0ff;margin-bottom:6px;">▸ ÚLTIMO PC REGISTRADO DESTE USUÁRIO</div>
+            <div style="display:flex;align-items:center;gap:8px;">
+                <span id="modal-pcs-ultimo-val" style="flex:1;font-size:0.6rem;color:#0ff;word-break:break-all;font-family:'Share Tech Mono',monospace;"></span>
+                <button class="adm-btn sm" style="border-color:#0ff;color:#0ff;font-size:0.6rem;padding:3px 10px;white-space:nowrap;" onclick="pcAprovarUltimo()">✔ APROVAR ESTE</button>
+            </div>
+        </div>
+
+        <div style="margin:14px 0 6px;font-size:0.6rem;letter-spacing:2px;color:#555;">▸ PCs APROVADOS</div>
+        <div id="modal-pcs-aprovados" style="min-height:32px;margin-bottom:12px;"></div>
+
+        <div style="margin:14px 0 6px;font-size:0.6rem;letter-spacing:2px;color:#ffbd2e;">▸ PCs PENDENTES (tentaram logar mas não estão autorizados)</div>
+        <div id="modal-pcs-pendentes" style="min-height:32px;margin-bottom:12px;"></div>
+
+        <div style="margin:14px 0 6px;font-size:0.6rem;letter-spacing:2px;color:#555;">▸ ADICIONAR PC MANUALMENTE</div>
+        <div style="display:flex;gap:8px;margin-bottom:16px;">
+            <input type="text" id="modal-pcs-input" class="adm-input" placeholder="cole o ID do PC aqui..." style="margin-bottom:0;font-size:0.7rem;flex:1;">
+            <button class="adm-btn sm" style="border-color:#a78bfa;color:#a78bfa;white-space:nowrap;" onclick="pcAprovarManual()">✔ APROVAR</button>
+        </div>
+
+        <hr class="detalhe-divider">
+        <div style="display:flex;gap:8px;">
+            <button class="adm-btn sm danger" onclick="fecharModalPCs()">✕ FECHAR</button>
+        </div>
+    </div>
+</div>
+
+<!-- Toast de feedback -->
+<div id="toast"></div>
+
+<script>
+// ── Matrix Rain — Login Admin ─────────────────────────────────
+(function() {
+    const mc   = document.getElementById('matrix-adm-canvas');
+    const ctx  = mc.getContext('2d');
+    const CHARS = 'GARRABOT01ｦｧｨｩｪｫｬｭｮｯｰｱｲｳｴｵ0123456789ABCDEF$#@%&!?[]{}|';
+    const FS   = 14;
+    function resize() {
+        mc.width  = window.innerWidth;
+        mc.height = window.innerHeight;
+    }
+    resize();
+    window.addEventListener('resize', resize);
+    // Usa apenas metade das colunas para menos densidade
+    let drops = Array(Math.floor(window.innerWidth / FS / 2)).fill(1).map((_, i) => i * 2);
+    function draw() {
+        ctx.fillStyle = 'rgba(0,0,0,0.08)';
+        ctx.fillRect(0, 0, mc.width, mc.height);
+        ctx.font = FS + 'px Share Tech Mono, monospace';
+        ctx.globalAlpha = 0.4;
+        for (let i = 0; i < drops.length; i++) {
+            const ch = CHARS[Math.floor(Math.random() * CHARS.length)];
+            ctx.fillStyle = drops[i] * FS < mc.height * 0.08 ? '#ccffcc' : '#00ff41';
+            ctx.fillText(ch, i * 2 * FS, drops[i] * FS);
+            if (drops[i] * FS > mc.height && Math.random() > 0.97) drops[i] = 0;
+            drops[i]++;
+        }
+        ctx.globalAlpha = 1;
+    }
+    const _t = setInterval(draw, 65);
+    window._pararMatrixAdm = function() { clearInterval(_t); mc.style.display = 'none'; };
+})();
+
+// ═══════════════════════════════════════════════════════════════
+// PAINEL DE ADMINISTRAÇÃO — GARRABOT ELITE
+// ═══════════════════════════════════════════════════════════════
+
+let _admUser  = '';
+let _admSenha = '';
+
+// ── Utilitários ──────────────────────────────────────────────
+
+function toast(msg, erro = false) {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.className   = erro ? 'erro' : '';
+    el.style.display = 'block';
+    clearTimeout(el._t);
+    el._t = setTimeout(() => el.style.display = 'none', 4000);
+}
+
+function trocarAba(nome) {
+    document.querySelectorAll('.adm-section').forEach(s => s.classList.remove('active'));
+    document.querySelectorAll('.adm-tab').forEach(t => t.classList.remove('active'));
+    document.getElementById('aba-' + nome).classList.add('active');
+    event.target.classList.add('active');
+    if (nome === 'usuarios') carregarUsuarios();
+    if (nome === 'email')    carregarEmailConfig();
+}
+
+function api(url, body) {
+    return fetch(url, {
+        method:  'POST',
+        headers: {'Content-Type': 'application/json'},
+        body:    JSON.stringify({ admin_user: _admUser, admin_senha: _admSenha, ...body })
+    }).then(r => r.json());
+}
+
+// ── Login ────────────────────────────────────────────────────
+
+// Carrega credenciais salvas ao abrir a página
+(function() {
+    try {
+        const s = localStorage.getItem('garrabot_adm_cred');
+        if (s) {
+            const c = JSON.parse(s);
+            document.getElementById('adm-user').value    = c.user  || '';
+            document.getElementById('adm-pass').value    = c.senha || '';
+            document.getElementById('adm-lembrar').checked = true;
+        }
+    } catch(e) {}
+})();
+
+document.getElementById('adm-pass').addEventListener('keydown', e => {
+    if (e.key === 'Enter') admLogin();
+});
+document.getElementById('adm-user').addEventListener('keydown', e => {
+    if (e.key === 'Enter') document.getElementById('adm-pass').focus();
+});
+
+function admLogin() {
+    const user  = document.getElementById('adm-user').value.trim();
+    const senha = document.getElementById('adm-pass').value;
+    const err   = document.getElementById('login-erro');
+    const lembrar = document.getElementById('adm-lembrar').checked;
+
+    // Salva ou remove credenciais conforme checkbox
+    if (lembrar) {
+        localStorage.setItem('garrabot_adm_cred', JSON.stringify({ user, senha }));
+    } else {
+        localStorage.removeItem('garrabot_adm_cred');
+    }
+
+    // Testa chamando a listagem — se responder ok, admin é válido
+    fetch('/auth/admin/listar', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ admin_user: user, admin_senha: senha })
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (d.ok) {
+            _admUser  = user;
+            _admSenha = senha;
+            document.getElementById('screen-login').style.display = 'none';
+            document.getElementById('screen-painel').style.display = 'block';
+            if (typeof window._pararMatrixAdm === 'function') window._pararMatrixAdm();
+            document.getElementById('adm-logged-label').textContent = '[ ' + user.toUpperCase() + ' ]';
+            carregarUsuarios();
+        } else {
+            err.textContent = '> ' + (d.erro || 'ACESSO NEGADO');
+            // Se senha errada, apaga o que estava salvo
+            localStorage.removeItem('garrabot_adm_cred');
+        }
+    })
+    .catch(() => { err.textContent = '> ERRO DE CONEXÃO'; });
+}
+
+// ── Usuários ─────────────────────────────────────────────────
+
+function carregarUsuarios() {
+    api('/auth/admin/listar', {})
+    .then(d => {
+        if (!d.ok) { toast(d.erro, true); return; }
+        const lista = d.usuarios || [];
+
+        // Estatísticas
+        document.getElementById('stat-total').textContent = lista.length;
+        document.getElementById('stat-pend' ).textContent = lista.filter(u => u.status === 'PENDENTE' ).length;
+        document.getElementById('stat-aprov').textContent = lista.filter(u => u.status === 'APROVADO' ).length;
+        document.getElementById('stat-block').textContent = lista.filter(u => u.status === 'BLOQUEADO').length;
+
+        const tbody = document.getElementById('tabela-usuarios');
+        if (!lista.length) {
+            tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#333;padding:20px;">Nenhum usuário cadastrado.</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = lista.map(u => {
+            const ehDuplo  = u.motivo_bloqueio === 'LOGIN DUPLO DETECTADO';
+            const badgeCls = u.status === 'APROVADO'  ? 'badge-ok'
+                           : u.status === 'BLOQUEADO' && ehDuplo ? 'badge-duplo'
+                           : u.status === 'BLOQUEADO' ? 'badge-block'
+                           : 'badge-pend';
+
+            const badgeTxt = u.status === 'BLOQUEADO' && ehDuplo
+                           ? '🔴 BLOQUEADO'
+                           : u.status;
+
+            // Coluna MOTIVO
+            const motivoCel = u.motivo_bloqueio
+                ? `<span class="cell-motivo">${u.motivo_bloqueio}</span>`
+                : `<span style="color:#333;font-size:0.6rem;">—</span>`;
+
+            // Colunas IP / PC
+            const ipCel = u.ultimo_ip ? `<span class="cell-ip">${u.ultimo_ip}</span>` : '<span style="color:#333">—</span>';
+            const pcCel = u.ultimo_pc ? `<span class="cell-pc" title="${u.ultimo_pc}">${u.ultimo_pc}</span>` : '<span style="color:#333">—</span>';
+
+            // Coluna de prazo — cronômetro ao vivo
+            let prazoCel = '<span class="badge badge-perm">∞ PERMANENTE</span>';
+            if (u.dias_teste) {
+                const ap       = u.aprovado_em ? new Date(u.aprovado_em.replace(' ','T')) : null;
+                const expiraTs = ap ? (ap.getTime() + u.dias_teste * 86400000) : null;
+                if (expiraTs !== null) {
+                    const msRestam = expiraTs - Date.now();
+                    if (msRestam < 0) {
+                        prazoCel = `<span class="badge badge-expir">EXPIRADO</span>`;
+                    } else {
+                        prazoCel = `<span class="countdown-live countdown-ok" data-expira="${expiraTs}" id="cd-${u.username}">⏱ calculando...</span>`;
+                    }
+                }
+            }
+
+            const acoes = [];
+            if (u.status === 'PENDENTE')
+                acoes.push(`<button class="adm-btn sm" onclick="abrirModalAprovar('${u.username}')">✔ APROVAR</button>`);
+            if (u.status === 'APROVADO')
+                acoes.push(`<button class="adm-btn sm warn" onclick="acao('${u.username}','BLOQUEAR')">⛔ BLOQUEAR</button>`);
+            if (u.status === 'APROVADO')
+                acoes.push(`<button class="adm-btn sm cyan" onclick="acao('${u.username}','REENVIAR')">📧 REENVIAR</button>`);
+            if (u.status === 'APROVADO')
+                acoes.push(`<button class="adm-btn sm" onclick="abrirEstenderPrazo('${u.username}')">⏱ PRAZO</button>`);
+            if (u.status === 'APROVADO')
+                acoes.push(`<button class="adm-btn sm cyan" onclick="abrirLiberarDevice('${u.username}')">🔄 DEVICE</button>`);
+            if (u.status === 'APROVADO')
+                acoes.push(`<button class="adm-btn sm" style="border-color:#a78bfa;color:#a78bfa;background:rgba(167,139,250,0.08);" onclick="abrirGerenciarPCs('${u.username}')">🖥️ PCs</button>`);
+            if (u.status === 'BLOQUEADO' && ehDuplo)
+                acoes.push(`<button class="adm-btn sm" style="border-color:#ff4444;color:#ff4444;" onclick="abrirIncidente(${JSON.stringify(u)})">🚨 INCIDENTE</button>`);
+            if (u.status === 'BLOQUEADO')
+                acoes.push(`<button class="adm-btn sm" onclick="desbloquearDireto('${u.username}')">🔓 DESBLOQUEAR</button>`);
+            acoes.push(`<button class="adm-btn sm warn" onclick="abrirHistoricoLogin('${u.username}')">📜 LOG</button>`);
+            acoes.push(`<button class="adm-btn sm danger" onclick="acao('${u.username}','REMOVER')">✕ REMOVER</button>`);
+
+            return `
+            <tr>
+                <td style="color:#fff">${u.username}</td>
+                <td>${u.email}</td>
+                <td><span class="badge ${badgeCls}">${badgeTxt}</span></td>
+                <td>${motivoCel}</td>
+                <td>${ipCel}</td>
+                <td>${pcCel}</td>
+                <td style="color:#555;font-size:0.65rem">${u.criado_em || '-'}</td>
+                <td>${prazoCel}</td>
+                <td><div class="adm-actions">${acoes.join('')}</div></td>
+            </tr>`;
+        }).join('');
+    });
+}
+
+// Usuário sendo aprovado no momento
+let _aprovandoUser = '';
+
+function abrirModalAprovar(username) {
+    _aprovandoUser = username;
+    document.getElementById('modal-aprovar-nome').textContent = `>> usuário: ${username}`;
+    document.getElementById('modal-dias').value = '';
+    document.getElementById('modal-aprovar').classList.add('open');
+}
+
+function fecharModalAprovar() {
+    document.getElementById('modal-aprovar').classList.remove('open');
+    _aprovandoUser = '';
+}
+
+function confirmarAprovacao() {
+    const diasVal = document.getElementById('modal-dias').value.trim();
+    const dias    = diasVal ? parseInt(diasVal) : null;
+    if (diasVal && (isNaN(dias) || dias < 1)) {
+        toast('Informe um número de dias válido (mín. 1).', true); return;
+    }
+    api('/auth/admin/aprovar', { username: _aprovandoUser, acao: 'APROVAR', dias_teste: dias })
+    .then(d => {
+        toast(d.ok ? d.msg : (d.erro || 'Erro.'), !d.ok);
+        fecharModalAprovar();
+        if (d.ok) setTimeout(carregarUsuarios, 500);
+    });
+}
+
+function abrirEstenderPrazo(username) {
+    const dias = prompt(`Quantos dias deseja adicionar ao prazo de "${username}"?\n(Os dias serão somados ao prazo restante atual)`);
+    if (dias === null) return;
+    const n = parseInt(dias);
+    if (isNaN(n) || n < 1) { toast('Número inválido.', true); return; }
+    api('/auth/admin/estender-prazo', { username, dias_extra: n })
+    .then(d => {
+        toast(d.ok ? ('⏱ ' + d.msg) : (d.erro || 'Erro.'), !d.ok);
+        if (d.ok) setTimeout(carregarUsuarios, 500);
+    });
+}
+
+function acao(username, tipo) {
+    if (tipo === 'REMOVER' && !confirm(`Remover o usuário "${username}"?`)) return;
+    if (tipo === 'REENVIAR') {
+        api('/auth/admin/reenviar-senha', { username })
+        .then(d => {
+            if (!d.ok) {
+                // Erro real (e-mail não configurado, usuário não encontrado, etc.)
+                toast(d.erro || 'Erro ao reenviar.', true);
+                return;
+            }
+            if (d.email_ok) {
+                // Enviou com sucesso
+                toast(d.msg || `📧 Nova senha enviada para ${username} por e-mail.`);
+            } else {
+                // SMTP falhou — exibe a senha diretamente para o admin copiar
+                const senha = d.senha_gerada || '(ver console)';
+                toast(`⚠️ E-mail FALHOU. Senha gerada: ${senha} — passe ao usuário manualmente.`, true);
+                // Também abre um alert para garantir que o admin veja e copie
+                alert(`⚠️ SMTP falhou — E-mail NÃO enviado!\n\nSenha gerada para "${username}":\n\n${senha}\n\nCopie e passe para o usuário manualmente.\nConfigure o e-mail SMTP na aba CONFIG E-MAIL.`);
+            }
+        });
+        return;
+    }
+    api('/auth/admin/aprovar', { username, acao: tipo })
+    .then(d => {
+        toast(d.ok ? d.msg : (d.erro || 'Erro.'), !d.ok);
+        if (d.ok) setTimeout(carregarUsuarios, 500);
+    });
+}
+
+// ── Desbloquear direto (sem abrir modal) ─────────────────────────────────────
+function desbloquearDireto(username) {
+    if (!confirm(`Desbloquear "${username}" e restaurar o acesso?`)) return;
+    api('/auth/admin/desbloquear', { username })
+    .then(d => {
+        toast(d.ok ? ('🔓 ' + d.msg) : (d.erro || 'Erro.'), !d.ok);
+        if (d.ok) setTimeout(carregarUsuarios, 500);
+    });
+}
+
+// ── Liberar dispositivo (reseta token/IP/PC) ─────────────────────────────────
+function abrirLiberarDevice(username) {
+    if (!confirm(`Liberar novo dispositivo para "${username}"?\nO usuário poderá fazer login de qualquer PC uma vez.`)) return;
+    api('/auth/admin/liberar-dispositivo', { username })
+    .then(d => {
+        toast(d.ok ? ('🔄 ' + d.msg) : (d.erro || 'Erro.'), !d.ok);
+        if (d.ok) setTimeout(carregarUsuarios, 500);
+    });
+}
+
+// ── Modal de incidente LOGIN DUPLO ────────────────────────────────────────────
+let _incidenteUser = '';
+
+function abrirIncidente(u) {
+    _incidenteUser = u.username;
+    document.getElementById('modal-inc-nome').textContent = `>> usuário: ${u.username}`;
+    document.getElementById('inc-pc1').textContent  = u.ultimo_pc  || '—';
+    document.getElementById('inc-pc2').textContent  = u.primeira_tentativa_pc || '—';
+    document.getElementById('inc-ip1').textContent  = u.ultimo_ip  || '—';
+    document.getElementById('inc-ip2').textContent  = u.primeira_tentativa_ip || '—';
+    document.getElementById('inc-data').textContent = u.bloqueado_em || '—';
+    document.getElementById('inc-tent').textContent = (u.tentativas_login_duplo || 0) + 'x';
+    document.getElementById('modal-incidente').classList.add('open');
+}
+
+function fecharModalIncidente() {
+    document.getElementById('modal-incidente').classList.remove('open');
+    _incidenteUser = '';
+}
+
+function acoesIncidente(tipo) {
+    if (!_incidenteUser) return;
+    if (tipo === 'desbloquear') {
+        desbloquearDireto(_incidenteUser);
+        fecharModalIncidente();
+    } else if (tipo === 'liberar') {
+        abrirLiberarDevice(_incidenteUser);
+        fecharModalIncidente();
+    }
+}
+
+// ── Modal histórico de logins ─────────────────────────────────────────────────
+function abrirHistoricoLogin(username) {
+    document.getElementById('modal-hist-nome').textContent = `>> usuário: ${username}`;
+    document.getElementById('modal-hist-conteudo').textContent = 'Carregando...';
+    document.getElementById('modal-historico').classList.add('open');
+
+    api('/auth/admin/historico-logins', { username })
+    .then(d => {
+        if (!d.ok) { document.getElementById('modal-hist-conteudo').textContent = d.erro || 'Erro.'; return; }
+        const hist = d.historico || [];
+        if (!hist.length) {
+            document.getElementById('modal-hist-conteudo').innerHTML = '<p style="color:#333;padding:12px 0;">Nenhum registro encontrado.</p>';
+            return;
+        }
+        const evCls = ev => {
+            if (ev === 'LOGIN')   return 'ev-login';
+            if (ev === 'LOGOUT')  return 'ev-logout';
+            if (ev.includes('DUPLO') || ev.includes('BLOQUEIO')) return 'ev-block';
+            if (ev.includes('ADMIN') || ev.includes('LIBERACAO')) return 'ev-admin';
+            return 'ev-login';
+        };
+        const evIcon = ev => {
+            if (ev === 'LOGIN')   return '✅';
+            if (ev === 'LOGOUT')  return '🚪';
+            if (ev === 'BLOQUEIO_LOGIN_DUPLO')     return '🔴';
+            if (ev === 'LOGIN_DUPLO_1A_DETECCAO')  return '⚠️';
+            if (ev === 'DESBLOQUEIO_ADMIN')        return '🔓';
+            if (ev === 'LIBERACAO_DISPOSITIVO')    return '🔄';
+            return '●';
+        };
+        document.getElementById('modal-hist-conteudo').innerHTML = `
+            <table class="hist-table">
+                <thead><tr>
+                    <th>DATA/HORA</th><th>EVENTO</th><th>IP</th><th>PC</th>
+                </tr></thead>
+                <tbody>
+                ${hist.map(h => `
+                    <tr>
+                        <td style="color:#555;white-space:nowrap">${h.data_hora}</td>
+                        <td class="${evCls(h.evento)}">${evIcon(h.evento)} ${h.evento}</td>
+                        <td class="cell-ip">${h.ip}</td>
+                        <td class="cell-pc" title="${h.pc}">${h.pc}</td>
+                    </tr>`).join('')}
+                </tbody>
+            </table>`;
+    });
+}
+
+function fecharModalHistorico() {
+    document.getElementById('modal-historico').classList.remove('open');
+}
+
+function verHistoricoLogin() {
+    const u = _incidenteUser;
+    fecharModalIncidente();
+    abrirHistoricoLogin(u);
+}
+
+// ── Config E-mail ────────────────────────────────────────────
+
+function carregarEmailConfig() {
+    fetch('/auth/admin/email-config/get', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ admin_user: _admUser, admin_senha: _admSenha })
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (!d.ok || !d.config) return;
+        const c = d.config;
+        document.getElementById('cfg-host' ).value = c.smtp_host      || 'smtp.gmail.com';
+        document.getElementById('cfg-port' ).value = c.smtp_port      || 587;
+        document.getElementById('cfg-email').value = c.remetente      || '';
+        document.getElementById('cfg-nome' ).value = c.nome_exibicao  || 'GARRABOT ELITE';
+        // Mostra banner verde se já está configurado
+        const banner = document.getElementById('email-status-banner');
+        if (c.remetente) {
+            banner.textContent = `✅ E-mail configurado: ${c.remetente}`;
+            banner.style.display = 'block';
+            banner.style.color = '#00ff41';
+            banner.style.borderColor = 'rgba(0,255,65,0.3)';
+            banner.style.background = 'rgba(0,255,65,0.05)';
+        } else {
+            banner.textContent = '⚠️ E-mail NÃO configurado — preencha os campos abaixo e salve.';
+            banner.style.display = 'block';
+            banner.style.color = '#ffbd2e';
+            banner.style.borderColor = 'rgba(255,189,46,0.3)';
+            banner.style.background = 'rgba(255,189,46,0.05)';
+        }
+        // senha_app nunca vem do servidor — campo fica vazio (normal)
+    });
+}
+
+function salvarEmailConfig() {
+    const remetente = document.getElementById('cfg-email').value.trim();
+    const senha_app = document.getElementById('cfg-senha-app').value.trim();
+    const host      = document.getElementById('cfg-host').value.trim() || 'smtp.gmail.com';
+    const port      = parseInt(document.getElementById('cfg-port').value) || 587;
+    const nome      = document.getElementById('cfg-nome').value.trim() || 'GARRABOT ELITE';
+
+    if (!remetente) { toast('Preencha o e-mail remetente.', true); return; }
+    // senha_app pode ser vazia — o servidor mantém a senha já salva nesse caso
+
+    fetch('/auth/admin/email-config/salvar', {
+        method:  'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            admin_user:    _admUser,
+            admin_senha:   _admSenha,
+            smtp_host:     host,
+            smtp_port:     port,
+            remetente:     remetente,
+            senha_app:     senha_app,
+            nome_exibicao: nome,
+        })
+    })
+    .then(r => r.json())
+    .then(d => {
+        toast(d.ok ? (d.msg || '✅ Configuração salva!') : (d.erro || 'Erro ao salvar.'), !d.ok);
+        if (d.ok) {
+            document.getElementById('cfg-senha-app').value = ''; // limpa campo de senha por segurança
+            carregarEmailConfig(); // recarrega para mostrar o banner atualizado
+        }
+    })
+    .catch(() => toast('Erro de conexão ao salvar.', true));
+}
+
+function diagnosticarEmail() {
+    const box = document.getElementById('email-diag-box');
+    box.style.display = 'block';
+    box.textContent = '🔍 Consultando configuração no servidor...';
+    fetch('/auth/admin/email-config/diagnostico', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ admin_user: _admUser, admin_senha: _admSenha })
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (!d.ok) { box.textContent = '❌ ' + (d.erro || 'Erro ao consultar.'); return; }
+        const senhaStatus = d.senha_ok ? '✅ CONFIGURADA' : '❌ NÃO CONFIGURADA';
+        box.textContent = [
+            `REMETENTE  : ${d.remetente}`,
+            `FONTE REM. : ${d.fonte_remetente}`,
+            `SENHA APP  : ${senhaStatus}`,
+            `FONTE SENHA: ${d.fonte_senha}`,
+            `SMTP HOST  : ${d.smtp_host}`,
+            `SMTP PORT  : ${d.smtp_port}`,
+        ].join('\n');
+        // Cor verde se tudo ok, laranja se faltando algo
+        const tudo_ok = d.remetente && d.remetente !== '❌ NÃO CONFIGURADO' && d.senha_ok;
+        box.style.color = tudo_ok ? '#00ff41' : '#ffbd2e';
+        box.style.borderColor = tudo_ok ? 'rgba(0,255,65,0.3)' : 'rgba(255,189,46,0.3)';
+        box.style.background  = tudo_ok ? 'rgba(0,255,65,0.05)' : 'rgba(255,189,46,0.05)';
+    })
+    .catch(() => { box.textContent = '❌ Erro de conexão ao servidor.'; });
+}
+
+function testarEmailConfig() {
+    const remetente = document.getElementById('cfg-email').value.trim();
+    if (!remetente) { toast('Configure e salve o e-mail antes de testar.', true); return; }
+    toast('📨 Enviando e-mail de teste...', false);
+    fetch('/auth/admin/email-config/testar', {
+        method:  'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ admin_user: _admUser, admin_senha: _admSenha })
+    })
+    .then(r => r.json())
+    .then(d => toast(d.ok ? ('✅ ' + (d.msg || 'E-mail de teste enviado!')) : ('❌ ' + (d.erro || 'Falha no envio.')), !d.ok))
+    .catch(() => toast('Erro de conexão ao testar.', true));
+}
+
+// ── Alterar Usuário Admin ─────────────────────────────────────
+
+function alterarUsuarioAdmin() {
+    const userAtual = document.getElementById('adm-user-atual').value.trim();
+    const senhaConf = document.getElementById('adm-senha-conf-user').value.trim();
+    const novoUser  = document.getElementById('adm-novo-user').value.trim();
+
+    // Validações visuais antes de enviar
+    if (!userAtual) {
+        toast('Preencha o USUÁRIO ATUAL.', true); return;
+    }
+    if (!senhaConf) {
+        toast('Preencha a SENHA ATUAL para confirmar.', true); return;
+    }
+    if (!novoUser || novoUser.length < 3) {
+        toast('Novo usuário muito curto (mín. 3 caracteres).', true); return;
+    }
+    if (novoUser.includes(' ')) {
+        toast('Usuário não pode conter espaços.', true); return;
+    }
+
+    // Usa _admSenha em memória se o campo de confirmação bater com o que está salvo
+    // O backend valida admin_user + admin_senha — envia o que está no campo
+    fetch('/auth/admin/alterar-usuario', {
+        method:  'POST',
+        headers: {'Content-Type': 'application/json'},
+        body:    JSON.stringify({
+            admin_user:    userAtual,
+            admin_senha:   senhaConf,
+            novo_usuario:  novoUser
+        })
+    })
+    .then(r => {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+    })
+    .then(d => {
+        if (d.ok) {
+            toast('👤 ' + d.msg);
+            _admUser = novoUser;
+            document.getElementById('adm-logged-label').textContent = '[ ' + novoUser.toUpperCase() + ' ]';
+            document.getElementById('adm-user-atual').value      = '';
+            document.getElementById('adm-senha-conf-user').value = '';
+            document.getElementById('adm-novo-user').value       = '';
+        } else {
+            toast(d.erro || 'Credenciais incorretas.', true);
+        }
+    })
+    .catch(err => {
+        toast('Erro de conexão: ' + err.message, true);
+    });
+}
+
+// ── Cronômetro ao vivo ────────────────────────────────────────
+// Atualiza todos os elementos .countdown-live a cada segundo
+
+function _tickCountdowns() {
+    const agora = Date.now();
+    document.querySelectorAll('.countdown-live[data-expira]').forEach(el => {
+        const expira = parseInt(el.dataset.expira);
+        const diff   = expira - agora;
+        if (diff <= 0) {
+            el.textContent = '⛔ EXPIRADO';
+            el.className   = 'countdown-live countdown-crit';
+            return;
+        }
+        const totalSeg = Math.floor(diff / 1000);
+        const dias     = Math.floor(totalSeg / 86400);
+        const horas    = Math.floor((totalSeg % 86400) / 3600);
+        const mins     = Math.floor((totalSeg % 3600)  / 60);
+        const segs     = totalSeg % 60;
+
+        const pad = n => String(n).padStart(2, '0');
+        let txt;
+        if (dias > 0) {
+            txt = `⏱ ${dias}d ${pad(horas)}h ${pad(mins)}m ${pad(segs)}s`;
+        } else {
+            txt = `⏱ ${pad(horas)}h ${pad(mins)}m ${pad(segs)}s`;
+        }
+        el.textContent = txt;
+
+        // Cor conforme urgência
+        const horasTotal = diff / 3600000;
+        if (horasTotal <= 24) {
+            el.className = 'countdown-live countdown-crit';   // vermelho piscando < 24h
+        } else if (horasTotal <= 72) {
+            el.className = 'countdown-live countdown-warn';   // amarelo < 3 dias
+        } else {
+            el.className = 'countdown-live countdown-ok';     // verde normal
+        }
+    });
+}
+
+// Inicia o tick a cada segundo
+setInterval(_tickCountdowns, 1000);
+
+// ═══════════════════════════════════════════════════════════════
+// ABA AVISOS — agendamentos + avisos automáticos de prazo
+// ═══════════════════════════════════════════════════════════════
+
+const _AVISOS_KEY = 'garrabot_avisos_cfg';
+const _AGEND_KEY  = 'garrabot_agendamentos';
+
+// ── Templates bonitos pré-definidos ──────────────────────────
+const _TEMPLATE_TESTE = `⏳ ATENÇÃO, {USUARIO}!
+
+Seu período de TESTE está se encerrando.
+
+⏱ Tempo restante: {DIAS}d {HORAS}h {MINS}min
+
+Aproveite para conhecer todos os recursos antes do prazo acabar. Entre em contato com o administrador para renovar seu acesso e continuar operando com o GARRABOT ELITE.`;
+
+const _TEMPLATE_PLANO = `🔔 AVISO IMPORTANTE, {USUARIO}!
+
+Seu plano está prestes a expirar.
+
+⏱ Tempo restante: {DIAS}d {HORAS}h {MINS}min
+
+Para não perder o acesso ao GARRABOT ELITE e continuar suas operações sem interrupção, renove seu plano agora mesmo. Após o vencimento o acesso será suspenso automaticamente.`;
+
+function usarTemplateTeste() {
+    document.getElementById('cfg-msg-teste').value = _TEMPLATE_TESTE;
+    toast('✨ Template de teste aplicado!');
+}
+function usarTemplatePlano() {
+    document.getElementById('cfg-msg-plano').value = _TEMPLATE_PLANO;
+    toast('✨ Template de plano aplicado!');
+}
+
+function carregarAbaAvisos() {
+    try {
+        const raw = localStorage.getItem(_AVISOS_KEY);
+        if (raw) {
+            const c = JSON.parse(raw);
+            document.getElementById('cfg-aviso-ativo').value = c.ativo ?? '1';
+            const dias = c.dias_aviso ?? 3;
+            document.getElementById('cfg-aviso-dias').value          = dias;
+            document.getElementById('cfg-aviso-dias-val').textContent = dias + 'd';
+            document.getElementById('cfg-msg-teste').value = c.msg_teste || '';
+            document.getElementById('cfg-msg-plano').value = c.msg_plano || '';
+        }
+    } catch(e) {}
+    // Se os campos ainda estiverem vazios, preenche com os templates automaticamente
+    if (!document.getElementById('cfg-msg-teste').value)
+        document.getElementById('cfg-msg-teste').value = _TEMPLATE_TESTE;
+    if (!document.getElementById('cfg-msg-plano').value)
+        document.getElementById('cfg-msg-plano').value = _TEMPLATE_PLANO;
+    renderAgendamentos();
+}
+
+function salvarCfgAvisos() {
+    const cfg = {
+        ativo:      document.getElementById('cfg-aviso-ativo').value,
+        dias_aviso: parseInt(document.getElementById('cfg-aviso-dias').value) || 3,
+        msg_teste:  document.getElementById('cfg-msg-teste').value.trim(),
+        msg_plano:  document.getElementById('cfg-msg-plano').value.trim(),
+    };
+    localStorage.setItem(_AVISOS_KEY, JSON.stringify(cfg));
+    api('/avisos/cfg', { cfg })
+    .then(d => toast(d.ok ? '💾 Configuração de avisos salva!' : (d.erro || 'Erro ao salvar.'), !d.ok))
+    .catch(() => toast('💾 Salvo localmente.'));
+}
+
+function _lerAgendamentos() {
+    try { return JSON.parse(localStorage.getItem(_AGEND_KEY) || '[]'); } catch(e) { return []; }
+}
+function _salvarAgendamentos(lista) {
+    localStorage.setItem(_AGEND_KEY, JSON.stringify(lista));
+    // Salva no servidor — usa fetch direto (não precisa de autenticação admin)
+    fetch('/avisos/agendamentos', {
+        method:  'POST',
+        headers: {'Content-Type': 'application/json'},
+        body:    JSON.stringify({ agendamentos: lista })
+    })
+    .then(r => r.json())
+    .then(d => { if (!d.ok) toast('⚠ Erro ao salvar agendamento no servidor: ' + (d.erro || '?'), true); })
+    .catch(() => toast('⚠ Servidor offline — agendamento salvo só localmente.', true));
+}
+
+function agendarMensagem() {
+    const tipo   = document.getElementById('ag-tipo').value;
+    const msg    = document.getElementById('ag-msg').value.trim();
+    const inicio = document.getElementById('ag-inicio').value;
+    const fim    = document.getElementById('ag-fim').value;
+    const cor    = document.getElementById('ag-cor').value;
+
+    if (!msg)    { toast('Escreva uma mensagem.', true);              return; }
+    if (!inicio) { toast('Informe data/hora de início.', true);       return; }
+    if (!fim)    { toast('Informe data/hora de fim.', true);          return; }
+    if (new Date(inicio) >= new Date(fim)) {
+        toast('O fim deve ser posterior ao início.', true); return;
+    }
+    const labels = { manutencao:'MANUTENÇÃO', atualizacao:'ATUALIZAÇÃO', comunicado:'COMUNICADO', custom:'PERSONALIZADO' };
+    const lista = _lerAgendamentos();
+    lista.push({ id: Date.now(), tipo, tipoLabel: labels[tipo] || tipo.toUpperCase(), msg, inicio, fim, cor });
+    _salvarAgendamentos(lista);
+    document.getElementById('ag-msg').value    = '';
+    document.getElementById('ag-inicio').value = '';
+    document.getElementById('ag-fim').value    = '';
+    renderAgendamentos();
+    toast('📅 Mensagem agendada!');
+}
+
+function removerAgendamento(id) {
+    _salvarAgendamentos(_lerAgendamentos().filter(a => a.id !== id));
+    renderAgendamentos();
+    toast('✕ Agendamento removido.');
+}
+
+function renderAgendamentos() {
+    const lista = _lerAgendamentos();
+    const el    = document.getElementById('lista-agendamentos');
+    if (!lista.length) {
+        el.innerHTML = '<div class="agend-vazio">Nenhum agendamento ativo.</div>';
+        return;
+    }
+    const fmt = iso => iso.replace('T',' ').slice(0,16);
+    el.innerHTML = lista.map(a => {
+        const agora  = Date.now();
+        const tsIni  = new Date(a.inicio).getTime();
+        const tsFim  = new Date(a.fim).getTime();
+        let sc = '#555', st = 'agendado';
+        if (agora >= tsIni && agora <= tsFim) { sc = '#00ff41'; st = '● ATIVO'; }
+        if (agora > tsFim)                    { sc = '#555';    st = '✓ encerrado'; }
+        return `<div class="agend-item">
+            <div>
+                <b>[${a.tipoLabel}]</b> <span style="color:${sc};font-size:0.6rem;">${st}</span><br>
+                <span>${a.msg.slice(0,80)}${a.msg.length>80?'…':''}</span><br>
+                <span style="color:#555;font-size:0.58rem;">📅 ${fmt(a.inicio)} → ${fmt(a.fim)}</span>
+            </div>
+            <span class="agend-del" title="Remover" onclick="removerAgendamento(${a.id})">✕</span>
+        </div>`;
+    }).join('');
+}
+
+// Preenche min dos campos datetime-local com agora
+(function() {
+    try {
+        const pad = n => String(n).padStart(2,'0');
+        const now = new Date();
+        const s   = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
+        document.getElementById('ag-inicio').min = s;
+        document.getElementById('ag-fim').min    = s;
+    } catch(e) {}
+})();
+
+// Sobrescreve trocarAba para incluir carregamento da aba avisos
+const _trocarAbaBase = trocarAba;
+trocarAba = function(nome) {
+    _trocarAbaBase(nome);
+    if (nome === 'avisos') carregarAbaAvisos();
+};
+
+// ── Alterar Senha Admin ───────────────────────────────────────
+
+function alterarSenhaAdmin() {
+    const atual  = document.getElementById('adm-senha-atual').value;
+    const nova1  = document.getElementById('adm-nova-senha').value;
+    const nova2  = document.getElementById('adm-nova-senha2').value;
+    if (nova1 !== nova2) { toast('As senhas novas não coincidem.', true); return; }
+    if (nova1.length < 4){ toast('Senha muito curta (mín. 4 chars).', true); return; }
+
+    fetch('/auth/admin/alterar-senha', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ admin_user: _admUser, admin_senha: atual, nova_senha: nova1 })
+    })
+    .then(r => r.json())
+    .then(d => {
+        toast(d.ok ? '🔑 Senha alterada!' : (d.erro || 'Erro.'), !d.ok);
+        if (d.ok) {
+            _admSenha = nova1;
+            document.getElementById('adm-senha-atual').value = '';
+            document.getElementById('adm-nova-senha').value  = '';
+            document.getElementById('adm-nova-senha2').value = '';
+        }
+    });
+}
+// ── Gerenciar PCs ────────────────────────────────────────────────────────────
+let _pcUserAtual = '';
+
+function abrirGerenciarPCs(username) {
+    _pcUserAtual = username;
+    document.getElementById('modal-pcs-nome').textContent = '>> USUÁRIO: ' + username.toUpperCase();
+    document.getElementById('modal-pcs').style.display = 'flex';
+    document.getElementById('modal-pcs-aprovados').innerHTML = '<span style="color:#555;font-size:0.65rem;">Carregando...</span>';
+    document.getElementById('modal-pcs-pendentes').innerHTML = '<span style="color:#555;font-size:0.65rem;">Carregando...</span>';
+    carregarPCs(username);
+}
+
+function fecharModalPCs() {
+    document.getElementById('modal-pcs').style.display = 'none';
+    _pcUserAtual = '';
+}
+
+function carregarPCs(username) {
+    document.getElementById('modal-pcs-aprovados').innerHTML = '<span style="color:#555;font-size:0.65rem;">Carregando...</span>';
+    document.getElementById('modal-pcs-pendentes').innerHTML = '<span style="color:#555;font-size:0.65rem;">Carregando...</span>';
+    fetch('/auth/admin/pcs/listar', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ admin_user: _admUser, admin_senha: _admSenha, username })
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (!d.ok) { toast('Erro: ' + d.erro, true); return; }
+
+        // Mostra o último PC registrado (cyan) — fácil de aprovar com 1 clique
+        const ultimoWrap = document.getElementById('modal-pcs-ultimo-wrap');
+        const ultimoVal  = document.getElementById('modal-pcs-ultimo-val');
+        const ultimo = (d.ultimo_pc || '').trim();
+        if (ultimo) {
+            ultimoVal.textContent = ultimo;
+            ultimoVal.style.color = '#0ff';
+            ultimoWrap.querySelector('button').style.display = '';
+            ultimoWrap.style.display = 'block';
+        } else {
+            // Nenhum fingerprint registrado ainda — pede para o usuário logar
+            ultimoVal.style.color = '#ff4444';
+            ultimoVal.textContent = 'nenhum PC registrado — peça para o usuário fazer login novamente';
+            ultimoWrap.querySelector('button').style.display = 'none';
+            ultimoWrap.style.display = 'block';
+        }
+
+        const apEl = document.getElementById('modal-pcs-aprovados');
+        if (!d.pcs_aprovados.length) {
+            apEl.innerHTML = '<span style="color:#333;font-size:0.65rem;">Nenhum PC aprovado — qualquer dispositivo pode logar.</span>';
+        } else {
+            apEl.innerHTML = d.pcs_aprovados.map(pc => `
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;padding:6px 10px;border:1px solid rgba(0,255,65,0.2);background:rgba(0,255,65,0.04);">
+                    <span style="flex:1;font-size:0.6rem;color:#00ff41;word-break:break-all;font-family:'Share Tech Mono',monospace;">${pc}</span>
+                    <button class="adm-btn sm danger" onclick="pcRevogar('${username}','${pc}')" style="font-size:0.6rem;padding:3px 8px;">✕ REVOGAR</button>
+                </div>`).join('');
+        }
+        const peEl = document.getElementById('modal-pcs-pendentes');
+        if (!d.pcs_pendentes || !d.pcs_pendentes.length) {
+            peEl.innerHTML = '<span style="color:#333;font-size:0.65rem;">Nenhum PC pendente.</span>';
+        } else {
+            peEl.innerHTML = d.pcs_pendentes.map(pc => `
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;padding:6px 10px;border:1px solid rgba(255,189,46,0.3);background:rgba(255,189,46,0.04);">
+                    <span style="flex:1;font-size:0.6rem;color:#ffbd2e;word-break:break-all;font-family:'Share Tech Mono',monospace;">${pc}</span>
+                    <button class="adm-btn sm" style="border-color:#00ff41;color:#00ff41;font-size:0.6rem;padding:3px 8px;" onclick="pcAprovar('${username}','${pc}')">✔ APROVAR</button>
+                    <button class="adm-btn sm danger" style="font-size:0.6rem;padding:3px 8px;" onclick="pcDescartarPendente('${username}','${pc}')">✕ DESCARTAR</button>
+                </div>`).join('');
+        }
+    })
+    .catch(() => toast('Erro de conexão.', true));
+}
+
+function pcAprovar(username, pc_id) {
+    fetch('/auth/admin/pcs/aprovar', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ admin_user: _admUser, admin_senha: _admSenha, username, pc_id })
+    }).then(r => r.json()).then(d => {
+        toast(d.ok ? '✅ PC aprovado! O cliente já pode logar.' : ('❌ ' + d.erro), !d.ok);
+        if (d.ok) carregarPCs(username);
+    });
+}
+
+function pcAprovarUltimo() {
+    const pc_id = document.getElementById('modal-pcs-ultimo-val').textContent.trim();
+    if (!pc_id) { toast('Nenhum PC registrado.', true); return; }
+    pcAprovar(_pcUserAtual, pc_id);
+}
+
+function pcAprovarManual() {
+    const pc_id = document.getElementById('modal-pcs-input').value.trim();
+    if (!pc_id) { toast('Cole o ID do PC no campo.', true); return; }
+    pcAprovar(_pcUserAtual, pc_id);
+    document.getElementById('modal-pcs-input').value = '';
+}
+
+function pcRevogar(username, pc_id) {
+    if (!confirm('Revogar este PC? O usuário não conseguirá mais logar nele.')) return;
+    fetch('/auth/admin/pcs/revogar', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ admin_user: _admUser, admin_senha: _admSenha, username, pc_id })
+    }).then(r => r.json()).then(d => {
+        toast(d.ok ? '✅ PC revogado!' : ('❌ ' + d.erro), !d.ok);
+        if (d.ok) carregarPCs(username);
+    });
+}
+
+function pcDescartarPendente(username, pc_id) {
+    // Remove da lista pendente sem aprovar
+    const db_dummy = { admin_user: _admUser, admin_senha: _admSenha, username, pc_id };
+    fetch('/auth/admin/pcs/revogar', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(db_dummy)
+    }).finally(() => carregarPCs(username));
+}
+
+</script>
+</body>
+</html>
