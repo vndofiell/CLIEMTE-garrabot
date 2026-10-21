@@ -38204,8 +38204,8 @@ function _drvSbParar() {
     const modal = g('mm-modal');
     if (!modal) return;
     mmOpen = true;
-    // Para o bot principal imediatamente ao abrir o MM
-    if (typeof bot !== 'undefined' && bot.running) {
+    // Para o bot principal ao abrir o MM (só se não estava já operando no MM)
+    if (!mmRunning && typeof bot !== 'undefined' && bot.running) {
       bot.running = false;
       bot._buying = false;
       if (typeof _timer !== 'undefined') _timer.pausar();
@@ -38217,7 +38217,8 @@ function _drvSbParar() {
     mmRenderTable(); // flush inicial
     mmSyncCfg();
     mmStartMatrix();
-    mmHookWs();      // abre WS próprio do MM
+    // Só reconecta WS se ainda não estiver conectado (evita duplicar listeners)
+    if (!mmRunning) mmHookWs();
     // Sincroniza badge/label/nome do gerenciamento ativo ao abrir
     mmSincronizarBadgeGerenciamento();
     // Popula mini-HUD imediatamente ao abrir e mantém sincronizado a cada 1s
@@ -38237,17 +38238,11 @@ function _drvSbParar() {
     const modal = g('mm-modal');
     if (!modal) return;
     mmOpen = false;
-    if (mmRunning) mmToggleBot();
-    mmUnhookWs();
+    // NÃO para o bot nem desconecta o WS — operações continuam em background
     mmStopMatrix();
     modal.style.display = 'none';
-    mmSetBadge('AGUARDANDO', 'yellow');
-    // Para o intervalo de sync do mini-HUD
-    if (_mmHudInterval) { clearInterval(_mmHudInterval); _mmHudInterval = null; }
-    // Reseta flags para reconstruir tabela na próxima abertura
-    _mmTableBuilt = false;
-    if (_mmFlushTimer) { clearTimeout(_mmFlushTimer); _mmFlushTimer = null; }
-    _mmDirtyAssets = new Set();
+    // Mantém o badge refletindo o estado real
+    mmSetBadge(mmRunning ? 'OPERANDO' : 'AGUARDANDO', mmRunning ? 'green' : 'yellow');
   };
 
   window.mmOnAssetChange = function() {
