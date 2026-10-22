@@ -37503,7 +37503,7 @@ function _drvSbParar() {
 
   const mmData = {};
   MM_MARKETS.forEach(m => {
-    mmData[m.id] = { name: m.name, digits: [], currentStreak: 0, maxStreak: 0 };
+    mmData[m.id] = { name: m.name, digits: [], currentStreak: 0, maxStreak: 0, wins: 0, losses: 0 };
   });
 
   let mmRunning    = false;
@@ -38355,13 +38355,19 @@ function _drvSbParar() {
     mmJcAtualizar(jc => {
       if (!jc.ativo || jc.meta <= 0) return;
       if (mmProfit >= jc.meta) {
-        // Captura ranking ANTES de parar o robô (sequências ainda estão vivas)
-        const _mmRanking = MM_MARKETS.map(m => ({
-          name: mmData[m.id].name,
-          seq:  mmData[m.id].currentStreak,
-          max:  mmData[m.id].maxStreak,
-          score: parseFloat(((1 / (mmData[m.id].currentStreak + 1)) * 100).toFixed(1))
-        })).sort((a, b) => a.seq - b.seq || b.score - a.score);
+        // Captura ranking ANTES de parar o robô — filtra só mercados usados
+        const _mmRanking = MM_MARKETS
+          .filter(m => (mmData[m.id].wins + mmData[m.id].losses) > 0)
+          .map(m => {
+            const d    = mmData[m.id];
+            const ops  = d.wins + d.losses;
+            const wr   = ops > 0 ? Math.round(d.wins / ops * 100) : 0;
+            const seq  = d.currentStreak;   // sequência atual (ainda viva)
+            const max  = d.maxStreak;        // maior sequência da sessão
+            const score = parseFloat(((1 / (seq + 1)) * 100).toFixed(1));
+            return { name: d.name, seq, max, wins: d.wins, losses: d.losses, wr, score };
+          })
+          .sort((a, b) => a.seq - b.seq || b.score - a.score);
 
         // Meta JC atingida — para o robô e registra o dia
         mmPararRobo('🏆 META JC ATINGIDA! Lucro: $' + mmProfit.toFixed(2));
@@ -38727,11 +38733,13 @@ function _drvSbParar() {
     let lucro, proxStake;
     const stakeUsadaAgora = mmStake;
     if (stakeUsadaAgora > mmMaxStake) mmMaxStake = stakeUsadaAgora;
+    const _selAssetNow = (g('mm-asset') || {value:'JD50'}).value;
     if (won) {
       lucro    = Math.abs(profit);
       mmProfit += lucro; mmWins++;
       mmSeqWin++; mmSeqLoss = 0;
       if (mmSeqWin > mmMaxWin) mmMaxWin = mmSeqWin;
+      if (mmData[_selAssetNow]) mmData[_selAssetNow].wins++;
       mmLog('✅ WIN REAL! +$' + lucro.toFixed(2) + ' (Stake $' + stakeUsadaAgora.toFixed(2) + ')', 'win');
       mmJcAtualizarStake();
       // WIN: atualiza GerenciadorUnificado e lê próxima stake
@@ -38750,6 +38758,7 @@ function _drvSbParar() {
       mmProfit += lucro; mmLosses++;
       mmSeqLoss++; mmSeqWin = 0;
       if (mmSeqLoss > mmMaxLoss) mmMaxLoss = mmSeqLoss;
+      if (mmData[_selAssetNow]) mmData[_selAssetNow].losses++;
       mmLog('❌ LOSS REAL! -$' + Math.abs(lucro).toFixed(2) + ' (Stake $' + stakeUsadaAgora.toFixed(2) + ')', 'loss');
       // LOSS: atualiza GerenciadorUnificado e lê próxima stake
       if (typeof bot !== 'undefined' && bot.mgr && typeof bot.mgr.updateResult === 'function') {

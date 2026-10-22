@@ -6268,7 +6268,7 @@ def tg_send():
             banca_brl       = banca * cot
             max_stake_brl   = max_stake * cot
 
-            # Monta bloco de mercados se disponível
+            # Monta bloco de mercados se disponível (só os usados, ordenados por menor seq)
             mercados_linha = ""
             melhor_linha   = ""
             if mercados_ranking:
@@ -6278,11 +6278,22 @@ def tg_send():
                     med   = medalhas[i] if i < 3 else f"{i+1}."
                     nome  = m.get("name", "?")
                     seq   = m.get("seq", 0)
-                    score = m.get("score", 0)
-                    linhas.append(f"  {med} {nome}  —  seq {seq}x  •  score {score}")
+                    max_s = m.get("max", 0)
+                    w     = m.get("wins", 0)
+                    l     = m.get("losses", 0)
+                    wr_m  = m.get("wr", 0)
+                    linhas.append(
+                        f"  {med} {nome}\n"
+                        f"      Seq atual: {seq}x  |  Maior seq: {max_s}x  |  {w}W {l}L {wr_m}%"
+                    )
                 mercados_linha = "\n📋 <b>Mercados usados:</b>\n" + "\n".join(linhas) + "\n"
-                melhor         = mercados_ranking[0]
-                melhor_linha   = f"\n⭐ <b>Melhor mercado:</b> {melhor.get('name','?')} (seq {melhor.get('seq',0)}x)\n"
+                # Melhor = menor seq atual, desempate por maior % acerto
+                melhor = mercados_ranking[0]
+                melhor_linha = (
+                    f"\n⭐ <b>Melhor para operar agora:</b>\n"
+                    f"  {melhor.get('name','?')}  —  seq {melhor.get('seq',0)}x  •  "
+                    f"{melhor.get('wins',0)}W {melhor.get('losses',0)}L {melhor.get('wr',0)}%\n"
+                )
 
             msg = (
                 f"━━━━━━━━━━━━━━━\n"
