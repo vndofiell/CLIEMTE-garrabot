@@ -38642,10 +38642,14 @@ function _drvSbParar() {
     // ── MODO DUPLA: envia Under + Over ao mesmo tempo ──────────────────────
     if (contract === 'DIGITDUPLA') {
       mmBuyPending = true;
-      const stakeDupla = Math.max(0.35, parseFloat(stake.toFixed(2))); // cada contrato usa stake inteira
-      const predUnder  = prediction;
-      const predOver   = 9 - prediction + 1;
-      mmLog('⚡ DUPLA: Under barr=' + predUnder + ' + Over barr=' + predOver + ' stake=$' + stakeDupla + ' cada', 'virtual');
+      const stakeDupla = Math.max(0.35, parseFloat(stake.toFixed(2)));
+      // Barreiras fixas ótimas: Under<8 + Over>1 → zona de ganho duplo = dígitos 1,2,3,4,5,6,7 (7 de 10 = 70%)
+      // Qualquer dígito entre 1 e 7 ganha nos dois contratos simultaneamente
+      const predUnder  = 8;   // Under: ganha se dígito < 8  (0,1,2,3,4,5,6,7)
+      const predOver   = 1;   // Over:  ganha se dígito > 1  (2,3,4,5,6,7,8,9)
+      // Zona de ganho duplo: dígitos 2,3,4,5,6,7 (6 de 10 = 60%)
+      // Zona de perda dupla: dígitos 0 e 1 (Over perde) | dígito 8 e 9 (Under perde)
+      mmLog('⚡ DUPLA: Under barr=8 + Over barr=1 | zona WIN duplo: dígitos 2-7 (60%) | stake=$' + stakeDupla + ' cada', 'virtual');
 
       const _origOnMsg   = bot.ws.onmessage;
       const _reqUnder    = Math.floor(Math.random() * 90000) + 10000;
