@@ -38656,7 +38656,27 @@ function _drvSbParar() {
       const _reqOver     = _reqUnder + 1;
       let   _cidUnder    = null, _cidOver = null;
       let   _profitTotal = 0;
-      let   _encerrados  = 0;
+      let   _fechadoUnder = false, _fechadoOver = false; // evita dupla contagem
+      let   _duplaFinalizada = false;
+
+      // Timeout de segurança: libera mmBuyPending após 30s se os contratos não fecharem
+      const _duplaTimeout = setTimeout(() => {
+        if (!_duplaFinalizada) {
+          _duplaFinalizada = true;
+          bot.ws.onmessage = _origOnMsg;
+          mmBuyPending = false;
+          mmLog('⚠️ Dupla: timeout 30s — liberando para próxima entrada.', 'virtual');
+        }
+      }, 30000);
+
+      function _duplaFinalizar(won, profit) {
+        if (_duplaFinalizada) return;
+        _duplaFinalizada = true;
+        clearTimeout(_duplaTimeout);
+        bot.ws.onmessage = _origOnMsg;
+        mmExecuteComResultadoReal(won, profit);
+        mmBuyPending = false;
+      }
 
       function _duplaHandler(msg) {
         try {
@@ -38691,29 +38711,31 @@ function _drvSbParar() {
             if (!_cidUnder) {
               _cidUnder = cid;
               mmLog('🟢 Under ' + cid + ' aberto ($' + bp + ')', 'virtual');
-            } else if (!_cidOver) {
+            } else if (!_cidOver && cid !== _cidUnder) {
               _cidOver  = cid;
               mmLog('🟢 Over ' + cid + ' aberto ($' + bp + ')', 'virtual');
             }
             bot.ws.send(JSON.stringify({ proposal_open_contract: 1, contract_id: cid, subscribe: 1 }));
           }
 
-          // Resultado de cada contrato
+          // Resultado de cada contrato — evita dupla contagem com flags por contrato
           if (d.msg_type === 'proposal_open_contract' && d.proposal_open_contract) {
             const poc = d.proposal_open_contract;
-            if ((poc.contract_id === _cidUnder || poc.contract_id === _cidOver) &&
-                poc.status && poc.status !== 'open') {
-              _profitTotal += parseFloat(poc.profit || 0);
-              _encerrados++;
-              mmLog((parseFloat(poc.profit) > 0 ? '✅' : '❌') + ' ' +
-                (poc.contract_id === _cidUnder ? 'Under' : 'Over') +
-                ' ' + (parseFloat(poc.profit) > 0 ? '+' : '') + parseFloat(poc.profit).toFixed(2), 'virtual');
-
-              // Quando os dois contratos fecharem, registra resultado consolidado
-              if (_encerrados >= 2) {
-                bot.ws.onmessage = _origOnMsg;
-                mmExecuteComResultadoReal(_profitTotal > 0, _profitTotal);
-                mmBuyPending = false;
+            if (poc.status && poc.status !== 'open') {
+              if (poc.contract_id === _cidUnder && !_fechadoUnder) {
+                _fechadoUnder = true;
+                _profitTotal += parseFloat(poc.profit || 0);
+                mmLog((parseFloat(poc.profit) > 0 ? '✅' : '❌') + ' Under ' +
+                  (parseFloat(poc.profit) > 0 ? '+' : '') + parseFloat(poc.profit).toFixed(2), 'virtual');
+              } else if (poc.contract_id === _cidOver && !_fechadoOver) {
+                _fechadoOver = true;
+                _profitTotal += parseFloat(poc.profit || 0);
+                mmLog((parseFloat(poc.profit) > 0 ? '✅' : '❌') + ' Over ' +
+                  (parseFloat(poc.profit) > 0 ? '+' : '') + parseFloat(poc.profit).toFixed(2), 'virtual');
+              }
+              // Finaliza quando os dois fecharam
+              if (_fechadoUnder && _fechadoOver) {
+                _duplaFinalizar(_profitTotal > 0, _profitTotal);
               }
             }
           }
