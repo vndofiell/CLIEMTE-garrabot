@@ -15178,6 +15178,22 @@ def _ping():
     return jsonify({"ok": True, "status": "online"})
 
 
+# ── Auto-ping: mantém o Render sempre acordado (nunca hiberna) ───────────────
+def _auto_ping_loop():
+    """Pinga o próprio servidor a cada 4 minutos para evitar hibernação no Render."""
+    import urllib.request
+    time.sleep(30)  # aguarda o servidor subir completamente
+    while True:
+        try:
+            base = RENDER_PERMANENTE or "http://localhost:10000"
+            urllib.request.urlopen(f"{base}/ping", timeout=10)
+        except Exception:
+            pass
+        time.sleep(240)  # 4 minutos
+
+threading.Thread(target=_auto_ping_loop, daemon=True, name="auto-ping").start()
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # RIC PRO — Recuperação Inteligente Conservadora (persistência SQLite)
 # ═══════════════════════════════════════════════════════════════════════════════
