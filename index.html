@@ -2749,6 +2749,7 @@
             <select id="mm-contract" style="width:100%;background:#0b0714;border:1px solid #3a1f5a;color:#e2caff;padding:7px 10px;border-radius:6px;font-size:12px;outline:none;" onchange="mmSyncCfg();mmSalvarCfg()">
               <option value="DIGITUNDER" selected>Inferior (Under)</option>
               <option value="DIGITOVER">Superior (Over)</option>
+              <option value="DIGITDUPLA">⚡ Dupla (Under + Over)</option>
             </select>
           </div>
           <div style="flex:1;">
@@ -38628,34 +38629,123 @@ function _drvSbParar() {
   function mmEnviarEntradaReal() {
     if (mmBuyPending) return;
 
-    // Verifica se o WebSocket do bot principal está aberto e autenticado
     if (typeof bot === 'undefined' || !bot.ws || bot.ws.readyState !== WebSocket.OPEN) {
       mmLog('❌ Bot principal não conectado. Faça login na Deriv primeiro.', 'loss');
       return;
     }
 
-    mmBuyPending = true;
-
     const asset      = (g('mm-asset')      || {value:'JD50'}).value;
     const contract   = (g('mm-contract')   || {value:'DIGITUNDER'}).value;
     const prediction = parseInt((g('mm-prediction') || {value:'7'}).value, 10);
     const stake      = parseFloat(mmStake.toFixed(2));
-    // req_id único para identificar a resposta desta proposta (igual ao buyDupla do bot principal)
-    const _mmReqId   = Math.floor(Math.random() * 90000) + 10000;
 
+    // ── MODO DUPLA: envia Under + Over ao mesmo tempo ──────────────────────
+    if (contract === 'DIGITDUPLA') {
+      mmBuyPending = true;
+      const stakeMetade = parseFloat((stake / 2).toFixed(2));
+      const predUnder   = prediction;          // barreira Under (ex: 5 → dígito < 5)
+      const predOver    = 9 - prediction + 1;  // barreira Over espelhada (ex: pred=5 → over barrier=5)
+      mmLog('⚡ DUPLA: Under barr=' + predUnder + ' + Over barr=' + predOver + ' stake=$' + stakeMetade + ' cada', 'virtual');
+
+      const _origOnMsg   = bot.ws.onmessage;
+      const _reqUnder    = Math.floor(Math.random() * 90000) + 10000;
+      const _reqOver     = _reqUnder + 1;
+      let   _cidUnder    = null, _cidOver = null;
+      let   _profitTotal = 0;
+      let   _encerrados  = 0;
+
+      function _duplaHandler(msg) {
+        try {
+          const d = JSON.parse(msg.data);
+
+          // Repassa mensagens que não são desta dupla ao handler original
+          const _ehDupla = (
+            (d.msg_type === 'proposal' && (d.req_id === _reqUnder || d.req_id === _reqOver)) ||
+            (d.msg_type === 'buy' && d.buy && (!_cidUnder || !_cidOver)) ||
+            (d.msg_type === 'proposal_open_contract' && d.proposal_open_contract &&
+              (d.proposal_open_contract.contract_id === _cidUnder ||
+               d.proposal_open_contract.contract_id === _cidOver))
+          );
+          if (!_ehDupla && _origOnMsg) { _origOnMsg(msg); return; }
+
+          // Propostas → compra
+          if (d.msg_type === 'proposal' && !d.error) {
+            const pid = d.proposal && d.proposal.id;
+            if (pid) {
+              mmLog('📋 Proposta ' + (d.req_id === _reqUnder ? 'Under' : 'Over') + ' ok. Comprando...', 'virtual');
+              bot.ws.send(JSON.stringify({ buy: pid, price: stakeMetade }));
+            }
+          }
+          if (d.msg_type === 'proposal' && d.error) {
+            mmLog('❌ Proposta ' + (d.req_id === _reqUnder ? 'Under' : 'Over') + ' recusada: ' + d.error.message, 'loss');
+          }
+
+          // Compra confirmada → assina resultado
+          if (d.msg_type === 'buy' && d.buy) {
+            const cid = d.buy.contract_id;
+            const bp  = d.buy.buy_price || stakeMetade;
+            if (!_cidUnder) {
+              _cidUnder = cid;
+              mmLog('🟢 Under ' + cid + ' aberto ($' + bp + ')', 'virtual');
+            } else if (!_cidOver) {
+              _cidOver  = cid;
+              mmLog('🟢 Over ' + cid + ' aberto ($' + bp + ')', 'virtual');
+            }
+            bot.ws.send(JSON.stringify({ proposal_open_contract: 1, contract_id: cid, subscribe: 1 }));
+          }
+
+          // Resultado de cada contrato
+          if (d.msg_type === 'proposal_open_contract' && d.proposal_open_contract) {
+            const poc = d.proposal_open_contract;
+            if ((poc.contract_id === _cidUnder || poc.contract_id === _cidOver) &&
+                poc.status && poc.status !== 'open') {
+              _profitTotal += parseFloat(poc.profit || 0);
+              _encerrados++;
+              mmLog((parseFloat(poc.profit) > 0 ? '✅' : '❌') + ' ' +
+                (poc.contract_id === _cidUnder ? 'Under' : 'Over') +
+                ' ' + (parseFloat(poc.profit) > 0 ? '+' : '') + parseFloat(poc.profit).toFixed(2), 'virtual');
+
+              // Quando os dois contratos fecharem, registra resultado consolidado
+              if (_encerrados >= 2) {
+                bot.ws.onmessage = _origOnMsg;
+                mmExecuteComResultadoReal(_profitTotal > 0, _profitTotal);
+                mmBuyPending = false;
+              }
+            }
+          }
+        } catch(e) { console.error('[mmDupla] Erro:', e); }
+      }
+
+      bot.ws.onmessage = _duplaHandler;
+
+      // Envia as duas propostas simultaneamente
+      bot.ws.send(JSON.stringify({
+        proposal: 1, req_id: _reqUnder, amount: stakeMetade, basis: 'stake',
+        contract_type: 'DIGITUNDER', currency: 'USD',
+        duration: 1, duration_unit: 't',
+        underlying_symbol: asset, barrier: String(predUnder)
+      }));
+      bot.ws.send(JSON.stringify({
+        proposal: 1, req_id: _reqOver, amount: stakeMetade, basis: 'stake',
+        contract_type: 'DIGITOVER', currency: 'USD',
+        duration: 1, duration_unit: 't',
+        underlying_symbol: asset, barrier: String(predOver)
+      }));
+      return;
+    }
+
+    // ── MODO SIMPLES: Under ou Over ────────────────────────────────────────
+    mmBuyPending = true;
+
+    const _mmReqId   = Math.floor(Math.random() * 90000) + 10000;
     mmLog('📤 Entrando: ' + contract + ' ' + asset + ' barreira=' + prediction + ' stake=$' + stake, 'virtual');
 
-    // Guarda o handler original para restaurar após a entrada
     const _origOnMsg = bot.ws.onmessage;
     let   _mmContractId = null;
 
-    // Handler temporário que intercepta as respostas desta entrada
     function _mmHandler(msg) {
       try {
         const d = JSON.parse(msg.data);
-
-        // Repassa ao handler original APENAS mensagens que não são desta entrada MM
-        // (buy, proposal_open_contract e proposal desta req_id ficam aqui — não repassa)
         const _ehMinhaProposta = d.msg_type === 'proposal' && d.req_id === _mmReqId;
         const _ehMeuBuy        = d.msg_type === 'buy' && d.buy && !_mmContractId;
         const _ehMeuPoc        = d.msg_type === 'proposal_open_contract' &&
@@ -38664,8 +38754,6 @@ function _drvSbParar() {
         if (!_ehMinhaProposta && !_ehMeuBuy && !_ehMeuPoc) {
           if (_origOnMsg) _origOnMsg(msg);
         }
-
-        // Proposta identificada pelo req_id exclusivo → executa buy
         if (d.msg_type === 'proposal' && d.req_id === _mmReqId) {
           if (d.error) {
             mmLog('❌ Proposta recusada: ' + d.error.message, 'loss');
@@ -38679,49 +38767,31 @@ function _drvSbParar() {
             bot.ws.send(JSON.stringify({ buy: priceId, price: stake }));
           }
         }
-
-        // Compra confirmada → assina resultado
         if (d.msg_type === 'buy' && d.buy && !_mmContractId) {
-          _mmContractId  = d.buy.contract_id;
+          _mmContractId = d.buy.contract_id;
           const buyPrice = d.buy.buy_price || stake;
           mmLog('🟢 Contrato ' + _mmContractId + ' aberto ($' + buyPrice + '). Aguardando...', 'virtual');
-          bot.ws.send(JSON.stringify({
-            proposal_open_contract: 1,
-            contract_id: _mmContractId,
-            subscribe:   1
-          }));
+          bot.ws.send(JSON.stringify({ proposal_open_contract: 1, contract_id: _mmContractId, subscribe: 1 }));
         }
-
-        // Resultado do contrato
         if (d.msg_type === 'proposal_open_contract' && d.proposal_open_contract) {
           const poc = d.proposal_open_contract;
           if (poc.contract_id === _mmContractId && poc.status && poc.status !== 'open') {
             const profit = parseFloat(poc.profit || 0);
             const won    = profit > 0;
-            bot.ws.onmessage = _origOnMsg; // restaura handler original
+            bot.ws.onmessage = _origOnMsg;
             mmExecuteComResultadoReal(won, profit);
             mmBuyPending = false;
           }
         }
-      } catch (e) {
-        console.error('[mmEntrada] Erro:', e);
-      }
+      } catch (e) { console.error('[mmEntrada] Erro:', e); }
     }
 
     bot.ws.onmessage = _mmHandler;
-
-    // Envia proposta — idêntico ao bot principal (underlying_symbol, req_id, sem campos extras)
     bot.ws.send(JSON.stringify({
-      proposal:          1,
-      req_id:            _mmReqId,
-      amount:            stake,
-      basis:             'stake',
-      contract_type:     contract,
-      currency:          'USD',
-      duration:          1,
-      duration_unit:     't',
-      underlying_symbol: asset,
-      barrier:           String(prediction)
+      proposal: 1, req_id: _mmReqId, amount: stake, basis: 'stake',
+      contract_type: contract, currency: 'USD',
+      duration: 1, duration_unit: 't',
+      underlying_symbol: asset, barrier: String(prediction)
     }));
   }
 
