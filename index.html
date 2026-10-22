@@ -37503,7 +37503,7 @@ function _drvSbParar() {
 
   const mmData = {};
   MM_MARKETS.forEach(m => {
-    mmData[m.id] = { name: m.name, digits: [], currentStreak: 0, maxStreak: 0, wins: 0, losses: 0 };
+    mmData[m.id] = { name: m.name, digits: [], currentStreak: 0, maxStreak: 0, wins: 0, losses: 0, lossStreak: 0, maxLossStreak: 0 };
   });
 
   let mmRunning    = false;
@@ -38362,8 +38362,8 @@ function _drvSbParar() {
             const d    = mmData[m.id];
             const ops  = d.wins + d.losses;
             const wr   = ops > 0 ? Math.round(d.wins / ops * 100) : 0;
-            const seq  = d.currentStreak;   // sequência atual (ainda viva)
-            const max  = d.maxStreak;        // maior sequência da sessão
+            const seq  = d.lossStreak;       // losses consecutivos atuais
+            const max  = d.maxLossStreak;    // maior sequência de loss da sessão
             const score = parseFloat(((1 / (seq + 1)) * 100).toFixed(1));
             return { name: d.name, seq, max, wins: d.wins, losses: d.losses, wr, score };
           })
@@ -38739,7 +38739,10 @@ function _drvSbParar() {
       mmProfit += lucro; mmWins++;
       mmSeqWin++; mmSeqLoss = 0;
       if (mmSeqWin > mmMaxWin) mmMaxWin = mmSeqWin;
-      if (mmData[_selAssetNow]) mmData[_selAssetNow].wins++;
+      if (mmData[_selAssetNow]) {
+        mmData[_selAssetNow].wins++;
+        mmData[_selAssetNow].lossStreak = 0;
+      }
       mmLog('✅ WIN REAL! +$' + lucro.toFixed(2) + ' (Stake $' + stakeUsadaAgora.toFixed(2) + ')', 'win');
       mmJcAtualizarStake();
       // WIN: atualiza GerenciadorUnificado e lê próxima stake
@@ -38758,7 +38761,12 @@ function _drvSbParar() {
       mmProfit += lucro; mmLosses++;
       mmSeqLoss++; mmSeqWin = 0;
       if (mmSeqLoss > mmMaxLoss) mmMaxLoss = mmSeqLoss;
-      if (mmData[_selAssetNow]) mmData[_selAssetNow].losses++;
+      if (mmData[_selAssetNow]) {
+        mmData[_selAssetNow].losses++;
+        mmData[_selAssetNow].lossStreak++;
+        if (mmData[_selAssetNow].lossStreak > mmData[_selAssetNow].maxLossStreak)
+          mmData[_selAssetNow].maxLossStreak = mmData[_selAssetNow].lossStreak;
+      }
       mmLog('❌ LOSS REAL! -$' + Math.abs(lucro).toFixed(2) + ' (Stake $' + stakeUsadaAgora.toFixed(2) + ')', 'loss');
       // LOSS: atualiza GerenciadorUnificado e lê próxima stake
       if (typeof bot !== 'undefined' && bot.mgr && typeof bot.mgr.updateResult === 'function') {

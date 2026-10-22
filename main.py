@@ -6284,14 +6284,14 @@ def tg_send():
                     wr_m  = m.get("wr", 0)
                     linhas.append(
                         f"  {med} {nome}\n"
-                        f"      Seq atual: {seq}x  |  Maior seq: {max_s}x  |  {w}W {l}L {wr_m}%"
+                        f"      Loss seguidos: {seq}x  |  Máx loss: {max_s}x  |  {w}W {l}L {wr_m}%"
                     )
                 mercados_linha = "\n📋 <b>Mercados usados:</b>\n" + "\n".join(linhas) + "\n"
-                # Melhor = menor seq atual, desempate por maior % acerto
+                # Melhor = menor loss streak atual, desempate por maior % acerto
                 melhor = mercados_ranking[0]
                 melhor_linha = (
                     f"\n⭐ <b>Melhor para operar agora:</b>\n"
-                    f"  {melhor.get('name','?')}  —  seq {melhor.get('seq',0)}x  •  "
+                    f"  {melhor.get('name','?')}  —  {melhor.get('seq',0)} loss seguidos  •  "
                     f"{melhor.get('wins',0)}W {melhor.get('losses',0)}L {melhor.get('wr',0)}%\n"
                 )
 
