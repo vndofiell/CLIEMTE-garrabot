@@ -7044,11 +7044,13 @@ function jcAtualizarLabelPainel(d) {
 // ── Registrar Resultado do Dia (botão principal — igual ao BOT GARRA) ─────────
 function jcRegistrarDiaManual() {
     fetch('/jc-config').then(r => r.json()).then(d => {
-        const banca = d.banca_atual || d.banca_base || 0;
-        const perc  = d.perc || 0.05;
+        // Usa banca do servidor; se zero, lê do input visual como fallback
+        const _inputBanca = parseFloat(document.getElementById('jc-banca-base-input')?.value || '0') || 0;
+        const banca = d.banca_atual || d.banca_base || _inputBanca;
+        const perc  = parseFloat(document.getElementById('jc-perc-input')?.value || '0') / 100 || d.perc || 0.05;
         const meta  = Math.max(parseFloat((banca * perc).toFixed(2)), 0.01);
         const dia   = d.dia_atual || 1;
-        if (banca <= 0) { alert('Configure a banca base primeiro!'); return; }
+        if (banca <= 0) { alert('Configure a banca base primeiro e clique em Salvar Config!'); return; }
 
         // Cria sub-diálogo igual ao BOT GARRA
         const overlay = document.createElement('div');
