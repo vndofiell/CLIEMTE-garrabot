@@ -7047,23 +7047,43 @@ function jcRegistrarDiaManual() {
         // Usa banca do servidor; se zero, lê do input visual como fallback
         const _inputBanca = parseFloat(document.getElementById('jc-banca-base-input')?.value || '0') || 0;
         const banca = d.banca_atual || d.banca_base || _inputBanca;
-        const perc  = parseFloat(document.getElementById('jc-perc-input')?.value || '0') / 100 || d.perc || 0.05;
-        const meta  = Math.max(parseFloat((banca * perc).toFixed(2)), 0.01);
+        const percAtual = parseFloat(document.getElementById('jc-perc-input')?.value || '0') || parseFloat(((d.perc || 0.05) * 100).toFixed(1));
+        const meta  = Math.max(parseFloat((banca * (percAtual / 100)).toFixed(2)), 0.01);
         const dia   = d.dia_atual || 1;
         if (banca <= 0) { alert('Configure a banca base primeiro e clique em Salvar Config!'); return; }
 
-        // Cria sub-diálogo igual ao BOT GARRA
+        // Cria sub-diálogo com campos editáveis de banca, % meta e lucro
         const overlay = document.createElement('div');
         overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:999999;display:flex;align-items:center;justify-content:center;';
         overlay.innerHTML = `
-          <div style="background:#0d0d0d;border:2px solid #00ff64;border-radius:10px;padding:24px 28px;min-width:320px;font-family:'Share Tech Mono',monospace;color:#e0e0e0;">
-            <div style="color:#ffd600;font-weight:700;font-size:0.85rem;text-align:center;margin-bottom:14px;">
-              Dia ${dia} &nbsp;|&nbsp; Banca: $${banca.toFixed(2)} &nbsp;|&nbsp; Meta: $${meta.toFixed(2)}
+          <div style="background:#0d0d0d;border:2px solid #00ff64;border-radius:10px;padding:24px 28px;min-width:340px;font-family:'Share Tech Mono',monospace;color:#e0e0e0;">
+            <div style="color:#ffd600;font-weight:700;font-size:0.85rem;text-align:center;margin-bottom:18px;">
+              📋 Dia ${dia} &nbsp;|&nbsp; Lançamento Manual
             </div>
-            <div style="color:#757575;font-size:0.7rem;text-align:center;margin-bottom:6px;">Lucro real obtido hoje ($):</div>
+
+            <!-- Banca -->
+            <div style="color:#757575;font-size:0.68rem;margin-bottom:3px;letter-spacing:1px;">BANCA ($):</div>
+            <input id="_jc_banca_input" type="number" value="${banca.toFixed(2)}" step="0.01" min="0.01"
+              style="width:100%;background:#111;border:1px solid rgba(255,214,0,0.5);color:#ffd600;
+                     font-family:'Share Tech Mono';font-size:1rem;padding:7px 8px;border-radius:4px;text-align:center;margin-bottom:10px;box-sizing:border-box;">
+
+            <!-- % Meta -->
+            <div style="color:#757575;font-size:0.68rem;margin-bottom:3px;letter-spacing:1px;">% META DIÁRIA:</div>
+            <input id="_jc_perc_input" type="number" value="${percAtual.toFixed(1)}" step="0.1" min="0.1"
+              style="width:100%;background:#111;border:1px solid rgba(41,121,255,0.5);color:#2979ff;
+                     font-family:'Share Tech Mono';font-size:1rem;padding:7px 8px;border-radius:4px;text-align:center;margin-bottom:4px;box-sizing:border-box;">
+
+            <!-- Preview meta calculada -->
+            <div id="_jc_meta_preview" style="color:#00ff64;font-size:0.72rem;text-align:center;margin-bottom:10px;">
+              Meta calculada: $${meta.toFixed(2)}
+            </div>
+
+            <!-- Lucro real -->
+            <div style="color:#757575;font-size:0.68rem;margin-bottom:3px;letter-spacing:1px;">LUCRO REAL OBTIDO HOJE ($):</div>
             <input id="_jc_lucro_input" type="number" value="${meta.toFixed(2)}" step="0.01"
               style="width:100%;background:#111;border:1px solid rgba(0,255,100,0.5);color:#00ff64;
-                     font-family:'Share Tech Mono';font-size:1.1rem;padding:8px;border-radius:4px;text-align:center;margin-bottom:14px;">
+                     font-family:'Share Tech Mono';font-size:1.1rem;padding:8px;border-radius:4px;text-align:center;margin-bottom:16px;box-sizing:border-box;">
+
             <button id="_jc_confirmar_btn"
               style="width:100%;background:#00ff64;color:#000;font-weight:700;font-family:'Share Tech Mono';
                      font-size:0.9rem;padding:10px;border-radius:6px;cursor:pointer;border:none;">
@@ -7071,17 +7091,55 @@ function jcRegistrarDiaManual() {
             </button>
           </div>`;
         document.body.appendChild(overlay);
+
+        // Atualiza preview da meta ao digitar banca ou %
+        function _jcAtualizarPreview() {
+            const b = parseFloat(overlay.querySelector('#_jc_banca_input').value) || 0;
+            const p = parseFloat(overlay.querySelector('#_jc_perc_input').value) || 0;
+            const m = b > 0 && p > 0 ? Math.max(parseFloat((b * p / 100).toFixed(2)), 0.01) : 0;
+            const prev = overlay.querySelector('#_jc_meta_preview');
+            if (prev) prev.textContent = `Meta calculada: $${m.toFixed(2)}`;
+            // Sincroniza campo de lucro com a nova meta (se o usuário não editou lucro ainda)
+            const lucroInp = overlay.querySelector('#_jc_lucro_input');
+            if (lucroInp && !lucroInp._editado) lucroInp.value = m.toFixed(2);
+        }
+        overlay.querySelector('#_jc_banca_input').addEventListener('input', _jcAtualizarPreview);
+        overlay.querySelector('#_jc_perc_input').addEventListener('input', _jcAtualizarPreview);
+        overlay.querySelector('#_jc_lucro_input').addEventListener('input', function() { this._editado = true; });
+
         overlay.querySelector('#_jc_confirmar_btn').onclick = function() {
-            const lucro = parseFloat(overlay.querySelector('#_jc_lucro_input').value) || 0;
+            const novaBanca = parseFloat(overlay.querySelector('#_jc_banca_input').value) || 0;
+            const novaPerc  = parseFloat(overlay.querySelector('#_jc_perc_input').value) || 0;
+            const lucro     = parseFloat(overlay.querySelector('#_jc_lucro_input').value) || 0;
+            if (novaBanca <= 0) { alert('Banca deve ser maior que zero!'); return; }
+            if (novaPerc  <= 0) { alert('% Meta deve ser maior que zero!'); return; }
             document.body.removeChild(overlay);
-            fetch('/jc-registrar-dia', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ lucro_total: lucro })
-            }).then(r => r.json()).then(res => {
-                if (res.ok) jcCarregarDoServidor();
-                else alert(res.erro || 'Erro ao registrar.');
-            }).catch(() => {});
+            // 1) Salva nova banca e % se foram alteradas
+            const configAtualizado = (novaBanca !== banca || novaPerc !== percAtual);
+            const _registrar = () => {
+                fetch('/jc-registrar-dia', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ lucro_total: lucro, banca_manual: novaBanca })
+                }).then(r => r.json()).then(res => {
+                    if (res.ok) jcCarregarDoServidor();
+                    else alert(res.erro || 'Erro ao registrar.');
+                }).catch(() => {});
+            };
+            if (configAtualizado) {
+                // Atualiza inputs visuais
+                const inpB = document.getElementById('jc-banca-base-input');
+                const inpP = document.getElementById('jc-perc-input');
+                if (inpB) inpB.value = novaBanca.toFixed(2);
+                if (inpP) inpP.value = novaPerc.toFixed(1);
+                fetch('/jc-config', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ banca_base: novaBanca, perc_pct: novaPerc, dias: parseInt(document.getElementById('jc-dias-input')?.value || '30') || 30 })
+                }).then(() => _registrar()).catch(() => _registrar());
+            } else {
+                _registrar();
+            }
         };
         overlay.onclick = function(e) { if (e.target === overlay) document.body.removeChild(overlay); };
     }).catch(() => {});

@@ -9389,11 +9389,19 @@ def jc_meta_route():
 @app.route('/jc-registrar-dia', methods=['POST'])
 def jc_registrar_dia_route():
     """Registra resultado do dia de JC e avança a banca com juros compostos.
-    Body JSON: { lucro_total: float, wins?: int, losses?: int }"""
+    Body JSON: { lucro_total: float, wins?: int, losses?: int, banca_manual?: float }"""
     body        = request.get_json(force=True, silent=True) or {}
     lucro_total = float(body.get("lucro_total", 0.0))
     wins        = int(body.get("wins",   0))
     losses      = int(body.get("losses", 0))
+    # Se o usuário alterou a banca manualmente no diálogo, aplica antes de registrar
+    banca_manual = body.get("banca_manual")
+    if banca_manual is not None:
+        banca_manual = float(banca_manual)
+        if banca_manual > 0:
+            dados = jc_carregar()
+            dados["banca_atual"] = banca_manual
+            jc_salvar(dados)
     result      = jc_registrar_dia(lucro_total, wins, losses)
     if result is None:
         return jsonify({"ok": False, "erro": "Configure a banca base primeiro (banca_base <= 0)."})
