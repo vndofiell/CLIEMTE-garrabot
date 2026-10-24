@@ -17784,6 +17784,23 @@ def _tg_bot_controller_loop():
     """Loop de polling que lê mensagens e callbacks do Telegram."""
     global _TG_POLL_OFFSET
     time.sleep(10)
+    # Descarta updates acumulados antes de iniciar (evita reprocessar callbacks antigos)
+    try:
+        cfg0  = _tg_carregar()
+        tok0  = cfg0.get("token","")
+        if tok0:
+            r0 = requests.get(
+                _tg_url(tok0, "getUpdates"),
+                params={"offset": -1, "timeout": 0},
+                timeout=10, verify=False,
+            )
+            res0 = r0.json().get("result", [])
+            if res0:
+                _TG_POLL_OFFSET = res0[-1]["update_id"]
+                print(f"[TG Controller] Descartados updates antigos. Offset inicial: {_TG_POLL_OFFSET}")
+    except Exception as e:
+        print(f"[TG Controller] Aviso no init: {e}")
+
     while True:
         try:
             cfg = _tg_carregar()
@@ -17793,13 +17810,14 @@ def _tg_bot_controller_loop():
                 time.sleep(15); continue
             resp = requests.get(
                 _tg_url(token, "getUpdates"),
-                params={"offset": _TG_POLL_OFFSET + 1, "timeout": 20,
+                params={"offset": _TG_POLL_OFFSET + 1, "timeout": 5,
                         "allowed_updates": ["message","callback_query"]},
-                timeout=25
+                timeout=10, verify=False,
             )
             if resp.status_code != 200:
-                time.sleep(10); continue
-            for upd in resp.json().get("result", []):
+                time.sleep(5); continue
+            results = resp.json().get("result", [])
+            for upd in results:
                 uid = upd.get("update_id", 0)
                 if uid > _TG_POLL_OFFSET:
                     _TG_POLL_OFFSET = uid
@@ -17809,8 +17827,8 @@ def _tg_bot_controller_loop():
                     _tg_processar_callback(upd["callback_query"], token, chat_id)
         except Exception as e:
             print(f"[TG Controller] Erro: {e}")
-            time.sleep(10)
-        time.sleep(1)
+            time.sleep(5)
+        time.sleep(0.5)
 
 threading.Thread(target=_tg_bot_controller_loop, daemon=True, name="tg-controller").start()
 print("[TG Controller] Loop de comandos Telegram iniciado.")
