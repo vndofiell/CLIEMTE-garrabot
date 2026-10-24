@@ -15228,7 +15228,7 @@ def _ping():
 
 @app.route('/tg-debug', methods=['GET'])
 def _tg_debug():
-    """Diagnóstico completo: webhook, offset, updates pendentes."""
+    """Diagnóstico completo: webhook, offset, updates raw do Telegram."""
     global _TG_POLL_OFFSET
     try:
         cfg = _tg_carregar()
@@ -15238,37 +15238,52 @@ def _tg_debug():
 
         # 1. Verifica webhook
         wh = requests.get(_tg_url(tok, "getWebhookInfo"), timeout=8, verify=False).json()
-        webhook_url = wh.get("result", {}).get("url", "")
+        webhook_url   = wh.get("result", {}).get("url", "")
         webhook_ativo = bool(webhook_url)
 
-        # 2. Se tem webhook ativo, remove agora
+        # 2. Remove webhook se existir
         webhook_removido = False
         if webhook_ativo:
             rd = requests.post(_tg_url(tok, "deleteWebhook"),
-                               json={"drop_pending_updates": True},
+                               json={"drop_pending_updates": False},
                                timeout=8, verify=False).json()
             webhook_removido = rd.get("ok", False)
-            if webhook_removido:
-                _TG_POLL_OFFSET = 0
 
-        # 3. Updates pendentes
-        r = requests.get(
+        # 3. Busca últimos updates SEM filtro de offset (vê tudo disponível)
+        r_raw = requests.get(
             _tg_url(tok, "getUpdates"),
-            params={"offset": _TG_POLL_OFFSET + 1, "timeout": 0,
-                    "allowed_updates": ["message","callback_query"]},
+            params={"timeout": 0, "limit": 5,
+                    "allowed_updates": ["message", "callback_query"]},
             timeout=8, verify=False,
         )
-        data = r.json()
-        upds = data.get("result", [])
+        raw = r_raw.json()
+        upds_raw = raw.get("result", [])
+
+        # 4. Com offset correto do thread
+        r_off = requests.get(
+            _tg_url(tok, "getUpdates"),
+            params={"offset": _TG_POLL_OFFSET + 1, "timeout": 0,
+                    "allowed_updates": ["message", "callback_query"]},
+            timeout=8, verify=False,
+        )
+        upds_off = r_off.json().get("result", [])
+
+        # Thread ainda vivo?
+        import threading as _thr
+        thread_vivo = any(t.name == "tg-controller" for t in _thr.enumerate())
 
         return jsonify({
-            "ok":               True,
-            "offset_atual":     _TG_POLL_OFFSET,
-            "updates_pend":     len(upds),
-            "webhook_url":      webhook_url or "(nenhum)",
-            "webhook_ativo":    webhook_ativo,
-            "webhook_removido": webhook_removido,
-            "tg_ok":            data.get("ok"),
+            "ok":                  True,
+            "offset_atual":        _TG_POLL_OFFSET,
+            "thread_polling_vivo": thread_vivo,
+            "webhook_url":         webhook_url or "(nenhum)",
+            "webhook_ativo":       webhook_ativo,
+            "webhook_removido":    webhook_removido,
+            # sem offset — mostra IDs reais disponíveis no Telegram
+            "updates_sem_offset":  len(upds_raw),
+            "ids_disponiveis":     [u.get("update_id") for u in upds_raw],
+            # com offset atual do thread
+            "updates_com_offset":  len(upds_off),
         })
     except Exception as e:
         return jsonify({"ok": False, "erro": str(e)})
