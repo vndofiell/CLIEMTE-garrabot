@@ -16947,7 +16947,21 @@ GERENCIAMENTOS_LISTA = [
 ]
 
 # ── Helpers de teclados inline ───────────────────────────────────────────────
+# ── Reply Keyboard FIXO (aparece embaixo do campo de texto, sempre visível) ──
+_KB_FIXO = {
+    "keyboard": [
+        ["▶️ INICIAR", "⏹️ PARAR",   "📊 STATUS"],
+        ["🔌 CONECTAR","⚙️ CONFIG",   "📈 ESTRATÉGIA"],
+        ["🔄 GERENCIAM.","💵 ENTRADA","🎯 STOPWIN"],
+        ["🛑 STOPLOSS",  "❓ AJUDA",  "🔄 MENU"],
+    ],
+    "resize_keyboard":   True,   # adapta ao tamanho da tela
+    "persistent":        True,   # mantém visível sempre (Telegram 7.0+)
+    "input_field_placeholder": "Escolha uma opção ou digite um comando...",
+}
+
 def _kb_menu_principal(rodando: bool) -> dict:
+    """Teclado inline que aparece dentro da mensagem."""
     robo_btn = "⏹️ PARAR" if rodando else "▶️ INICIAR"
     robo_cb  = "cmd_parar" if rodando else "cmd_iniciar"
     return {"inline_keyboard": [
@@ -17053,28 +17067,67 @@ def _tg_processar_comando(msg: dict, token: str, chat_id_autorizado: str):
             _tg_aguardando_input[chat_id] = campo
         return
 
+    # ── Normaliza texto dos botões fixos para comandos ────────────────────────
+    _ALIAS_BOTOES = {
+        "▶️ iniciar":    "iniciar",
+        "⏹️ parar":      "parar",
+        "📊 status":     "status",
+        "🔌 conectar":   "conectar",
+        "⚙️ config":     "config",
+        "📈 estratégia": "estrategia",
+        "🔄 gerenciam.": "gerenciamento",
+        "💵 entrada":    "entrada",
+        "🎯 stopwin":    "stopwin",
+        "🛑 stoploss":   "stoploss",
+        "❓ ajuda":      "ajuda",
+        "🔄 menu":       "menu",
+    }
+    _texto_norm = texto.lower().strip()
+    if _texto_norm in _ALIAS_BOTOES:
+        texto = "/" + _ALIAS_BOTOES[_texto_norm]
+
     cmd  = texto.split()[0].lower().lstrip("/")
     args = texto.split()[1:]
+    rodando = _tg_bot_estado.get("running", False)
 
     if cmd in ("start", "menu"):
-        rodando = _tg_bot_estado.get("running", False)
+        # /start envia o teclado fixo pela primeira vez (ou reexibe)
         _tg_enviar_texto(token, chat_id, _tg_texto_status(),
+                         _KB_FIXO)
+        # Envia também o painel inline logo abaixo
+        _tg_enviar_texto(token, chat_id, "🎮 <b>Painel de controle:</b>",
                          _kb_menu_principal(rodando))
 
     elif cmd == "status":
-        rodando = _tg_bot_estado.get("running", False)
         _tg_enviar_texto(token, chat_id, _tg_texto_status(),
                          _kb_menu_principal(rodando))
 
+    elif cmd == "config":
+        cfg = {}
+        try:
+            if os.path.exists(BOT_CFG_ARQUIVO):
+                with open(BOT_CFG_ARQUIVO,"r",encoding="utf-8") as f: cfg = json.load(f)
+        except Exception: pass
+        est = _tg_bot_estado
+        txt = (f"⚙️ <b>CONFIGURAÇÕES</b>\n"
+               f"━━━━━━━━━━━━━━━━━━━━━\n"
+               f"💵 Entrada: <b>${cfg.get('stake', est.get('stake',0.35)):.2f}</b>\n"
+               f"🎯 Stop Win: <b>${cfg.get('stopWin', est.get('stopWin',10)):.2f}</b>\n"
+               f"🛑 Stop Loss: <b>${cfg.get('stopLoss', est.get('stopLoss',100)):.2f}</b>\n"
+               f"\nClique para alterar:")
+        _tg_enviar_texto(token, chat_id, txt, _kb_config())
+
     elif cmd == "ajuda":
         _tg_enviar_texto(token, chat_id,
-            "🤖 <b>GARRABOT — Comandos rápidos</b>\n\n"
-            "/start ou /menu — Abre o painel com botões\n"
-            "/status — Status com botões\n"
+            "🤖 <b>GARRABOT — Comandos</b>\n\n"
+            "Use os <b>botões fixos</b> abaixo ou digite:\n\n"
+            "/menu — Painel com botões\n"
+            "/status — Status atual\n"
             "/conectar — Conecta Deriv via PAT\n"
             "/setpat &lt;token&gt; [DEMO|REAL] — Salva PAT\n"
             "/iniciar · /parar · /pausar\n"
-            "/entrada 2.00 · /stopwin 20 · /stoploss 100")
+            "/entrada 2.00 · /stopwin 20 · /stoploss 100\n"
+            "/estrategia · /gerenciamento")
 
     elif cmd == "setpat":
         if not args:
@@ -17082,11 +17135,48 @@ def _tg_processar_comando(msg: dict, token: str, chat_id_autorizado: str):
         tipo_pat = args[1].upper() if len(args) > 1 and args[1].upper() in ("DEMO","REAL") else "REAL"
         _pat_salvar(args[0].strip(), tipo_pat)
         _tg_enviar_texto(token, chat_id,
-            f"✅ PAT salvo! <b>Tipo:</b> {tipo_pat}\nUse /conectar para autenticar.",
-            _kb_menu_principal(_tg_bot_estado.get("running", False)))
+            f"✅ PAT salvo! <b>Tipo:</b> {tipo_pat}\nUse /conectar para autenticar.")
 
     elif cmd == "conectar":
         _tg_executar_conectar(token, chat_id)
+
+    elif cmd == "estrategia":
+        if not args:
+            _tg_enviar_texto(token, chat_id,
+                f"📊 <b>ESTRATÉGIAS</b>\nAtual: <b>{_tg_bot_estado.get('estrategia','—')}</b>\n\nEscolha:",
+                _kb_estrategias())
+        else:
+            try:
+                idx = int(args[0]) - 1
+                if 0 <= idx < len(ESTRATEGIAS_LISTA):
+                    escolha = ESTRATEGIAS_LISTA[idx]
+                    _tg_enfileirar({"acao": "set_estrategia", "valor": escolha})
+                    _tg_enviar_texto(token, chat_id, f"✅ Estratégia: <b>{escolha}</b>")
+                else:
+                    _tg_enviar_texto(token, chat_id, f"❌ Número inválido (1-{len(ESTRATEGIAS_LISTA)})")
+            except ValueError:
+                _tg_enviar_texto(token, chat_id,
+                    f"📊 <b>ESTRATÉGIAS</b>\nAtual: <b>{_tg_bot_estado.get('estrategia','—')}</b>\n\nEscolha:",
+                    _kb_estrategias())
+
+    elif cmd == "gerenciamento":
+        if not args:
+            _tg_enviar_texto(token, chat_id,
+                f"⚙️ <b>GERENCIAMENTOS</b>\nAtual: <b>{_tg_bot_estado.get('gerenciamento','—')}</b>\n\nEscolha:",
+                _kb_gerenciamentos())
+        else:
+            try:
+                idx = int(args[0]) - 1
+                if 0 <= idx < len(GERENCIAMENTOS_LISTA):
+                    escolha = GERENCIAMENTOS_LISTA[idx]
+                    _tg_enfileirar({"acao": "set_gerenciamento", "valor": escolha})
+                    _tg_enviar_texto(token, chat_id, f"✅ Gerenciamento: <b>{escolha}</b>")
+                else:
+                    _tg_enviar_texto(token, chat_id, f"❌ Número inválido (1-{len(GERENCIAMENTOS_LISTA)})")
+            except ValueError:
+                _tg_enviar_texto(token, chat_id,
+                    f"⚙️ <b>GERENCIAMENTOS</b>\nAtual: <b>{_tg_bot_estado.get('gerenciamento','—')}</b>\n\nEscolha:",
+                    _kb_gerenciamentos())
 
     elif cmd == "iniciar":
         _tg_enfileirar({"acao": "iniciar"})
