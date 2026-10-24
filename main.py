@@ -16820,7 +16820,7 @@ _TG_PAT_ARQUIVO = os.path.join(_BASE_DIR, "deriv_pat.json")
 
 def _pat_carregar() -> dict:
     """Lê o PAT da Deriv salvo localmente ou da variável de ambiente."""
-    padrao = {"pat": "", "tipo": "REAL"}
+    padrao = {"pat": "", "tipo": "REAL", "conta_id": "", "banca": 0.0}
     try:
         if os.path.exists(_TG_PAT_ARQUIVO):
             with open(_TG_PAT_ARQUIVO, "r", encoding="utf-8") as f:
@@ -16836,12 +16836,38 @@ def _pat_carregar() -> dict:
             padrao["pat"] = env_pat
     return padrao
 
-def _pat_salvar(pat: str, tipo: str = "REAL"):
+def _pat_salvar(pat: str, tipo: str = "REAL", conta_id: str = "", banca: float = 0.0):
+    """Salva PAT + info da conta de forma persistente."""
+    atual = _pat_carregar()
+    atual.update({"pat": pat, "tipo": tipo})
+    if conta_id:
+        atual["conta_id"] = conta_id
+    if banca > 0:
+        atual["banca"] = banca
     try:
         with open(_TG_PAT_ARQUIVO, "w", encoding="utf-8") as f:
-            json.dump({"pat": pat, "tipo": tipo}, f, indent=2)
+            json.dump(atual, f, indent=2)
     except Exception as e:
         print(f"[PAT] Erro ao salvar: {e}")
+
+def _pat_detectar_tipo(conta_id: str) -> str:
+    """Detecta se uma conta Deriv é DEMO ou REAL pelo ID."""
+    cid = str(conta_id).upper()
+    # Contas virtuais/demo: começam com VR, VRTC, DOT
+    if cid.startswith(("VR", "DOT", "VRTC")):
+        return "DEMO"
+    # Contas reais: CR, MLT, MF, ROT, etc.
+    return "REAL"
+
+def _pat_atualizar_banca(banca: float):
+    """Atualiza só o valor da banca no arquivo salvo."""
+    atual = _pat_carregar()
+    atual["banca"] = round(banca, 2)
+    try:
+        with open(_TG_PAT_ARQUIVO, "w", encoding="utf-8") as f:
+            json.dump(atual, f, indent=2)
+    except Exception:
+        pass
 
 @app.route('/tg-pat-config', methods=['GET'])
 def tg_pat_config_get():
@@ -16908,6 +16934,10 @@ def tg_bot_estado_post():
     for k in _tg_bot_estado:
         if k in dados:
             _tg_bot_estado[k] = dados[k]
+    # Persiste banca no arquivo PAT para sobreviver a reinicializações
+    nova_banca = float(dados.get("banca", 0))
+    if nova_banca > 0:
+        _pat_atualizar_banca(nova_banca)
     return jsonify({"ok": True})
 
 @app.route('/tg-bot-estado', methods=['GET'])
@@ -17108,52 +17138,67 @@ def _tg_processar_comando(msg: dict, token: str, chat_id_autorizado: str):
                 "▶️ <b>BOT INICIADO</b>\n\nClique novamente para pausar.", _KB_FIXO)
 
     elif cmd == "contas":
-        # Botão 👤 CONTAS — mostra a conta conectada
-        contas = _account_manager.listar_contas()
+        # Botão 👤 CONTAS — mostra contas salvas + banca atual
         pat_cfg = _pat_carregar()
         pat_ok  = bool(pat_cfg.get("pat",""))
-        conta_principal_id = _token_recebido.get("_conta_id_cache","") if '_token_recebido' not in dir() else ""
-        try:
-            conta_principal_id = _token_recebido.get("_conta_id_cache","")
-        except Exception:
-            conta_principal_id = ""
 
-        if not contas and not conta_principal_id:
+        # ID salvo persistentemente + ID em memória (sessão ativa)
+        conta_id_salvo  = pat_cfg.get("conta_id","")
+        try:
+            conta_id_mem = _token_recebido.get("_conta_id_cache","")
+        except Exception:
+            conta_id_mem = ""
+        conta_id_exibir = conta_id_mem or conta_id_salvo
+
+        if not pat_ok and not conta_id_exibir:
             _tg_enviar_texto(token, chat_id,
                 "👤 <b>CONTAS CADASTRADAS</b>\n\n"
-                "❌ Nenhuma conta conectada.\n\n"
-                "Use /conectar para autenticar via PAT.", _KB_FIXO)
+                "❌ Nenhuma conta configurada.\n\n"
+                "Use /setpat &lt;token&gt; para adicionar uma conta.", _KB_FIXO)
             return
 
         linhas = ["👤 <b>CONTAS CADASTRADAS</b>\n━━━━━━━━━━━━━━━━━━━━━"]
 
-        # Conta PAT (principal)
         if pat_ok:
-            pat = pat_cfg.get("pat","")
+            pat      = pat_cfg.get("pat","")
             tipo_pat = pat_cfg.get("tipo","REAL")
-            icone_tipo = "💰" if tipo_pat == "REAL" else "🧪"
-            ativo_txt = "🟢 Conectada" if conta_principal_id else "🟡 PAT salvo"
+            # Detecta tipo pelo ID salvo (mais confiável que o digitado pelo usuário)
+            if conta_id_exibir:
+                tipo_pat = _pat_detectar_tipo(conta_id_exibir)
+            icone_tipo = "🧪" if tipo_pat == "DEMO" else "💰"
+            # Banca: usa estado em tempo real se disponível, senão usa o salvo
+            banca_atual = _tg_bot_estado.get("banca", 0.0)
+            banca_salva = pat_cfg.get("banca", 0.0)
+            banca_exib  = banca_atual if banca_atual > 0 else banca_salva
+            # Atualiza banca salva se tiver valor novo
+            if banca_atual > 0 and banca_atual != banca_salva:
+                _pat_atualizar_banca(banca_atual)
+            # Status de conexão
+            conectada = bool(conta_id_mem)
+            status_txt = "🟢 Conectada (sessão ativa)" if conectada else "🟡 Salva (reconectar com /conectar)"
             linhas.append(
                 f"\n{icone_tipo} <b>Conta Principal</b>\n"
-                f"   ID: <code>{conta_principal_id or '—'}</code>\n"
-                f"   Tipo: <b>{tipo_pat}</b>\n"
-                f"   PAT: <code>{pat[:8]}...</code>\n"
-                f"   Status: {ativo_txt}"
+                f"   🆔 ID: <code>{conta_id_exibir or '—'}</code>\n"
+                f"   📋 Tipo: <b>{tipo_pat}</b>\n"
+                f"   💰 Banca: <b>${banca_exib:.2f}</b>\n"
+                f"   🔑 PAT: <code>{pat[:12]}...</code>\n"
+                f"   📡 Status: {status_txt}"
             )
 
         # Contas secundárias registradas no AccountManager
-        for c in contas:
+        contas_sec = _account_manager.listar_contas()
+        for c in contas_sec:
             cid    = c.get("id","?")
             tipo_c = c.get("tipo","?")
             nome_c = c.get("nome","") or cid
             estado = c.get("estado","?")
             icone_e = {"PRODUCAO":"🟢","APRENDIZADO":"🔵","PAUSADA":"🟡","APROVADA":"✅"}.get(estado,"⚪")
-            icone_t = "💰" if "REAL" in tipo_c.upper() else "🧪"
+            icone_t = "🧪" if "TESTE" in tipo_c.upper() or "VR" in cid.upper() else "💰"
             linhas.append(
                 f"\n{icone_t} <b>{nome_c}</b>\n"
-                f"   ID: <code>{cid}</code>\n"
-                f"   Tipo: <b>{tipo_c}</b>\n"
-                f"   Estado: {icone_e} {estado}"
+                f"   🆔 ID: <code>{cid}</code>\n"
+                f"   📋 Tipo: <b>{tipo_c}</b>\n"
+                f"   📡 Estado: {icone_e} {estado}"
             )
 
         _tg_enviar_texto(token, chat_id, "\n".join(linhas), _KB_FIXO)
@@ -17302,25 +17347,35 @@ def _tg_executar_conectar(token: str, chat_id: str):
     if not pat:
         _tg_enviar_texto(token, chat_id,
             "❌ PAT não configurado.\nEnvie: /setpat &lt;token&gt; [DEMO|REAL]"); return
-    _tg_enviar_texto(token, chat_id, f"⏳ Conectando via PAT ({pat_cfg.get('tipo','REAL')})...")
+    _tg_enviar_texto(token, chat_id, f"⏳ Conectando via PAT...")
     try:
-        resultado = _get_token_com_access(pat, pat_cfg.get("tipo","REAL"))
+        # Tenta REAL primeiro; se falhar tenta DEMO
+        resultado = _get_token_com_access(pat, "REAL")
+        if not resultado.get("wss_url") or not resultado.get("conta_id"):
+            resultado = _get_token_com_access(pat, "DEMO")
+
         if resultado.get("wss_url"):
+            conta_id  = resultado.get("conta_id","")
+            # Detecta tipo real pelo ID da conta (ignora o que o usuário digitou)
+            tipo_real = _pat_detectar_tipo(conta_id) if conta_id else pat_cfg.get("tipo","REAL")
             with _token_lock:
                 _token_recebido["access_token"]    = pat
                 _token_recebido["ts"]              = time.time()
                 _token_recebido["_bot_confirmou"]  = False
                 _token_recebido["_wss_url_cache"]  = resultado["wss_url"]
-                _token_recebido["_conta_id_cache"] = resultado.get("conta_id","")
-            _access_token["tipo"] = pat_cfg.get("tipo","REAL")
+                _token_recebido["_conta_id_cache"] = conta_id
+            _access_token["tipo"] = tipo_real
+            # Salva conta_id e tipo detectado de forma persistente
+            _pat_salvar(pat, tipo_real, conta_id)
+            icone = "🧪" if tipo_real == "DEMO" else "💰"
             _tg_enviar_texto(token, chat_id,
                 f"✅ <b>Conectado!</b>\n"
-                f"📋 Conta: <code>{resultado.get('conta_id','?')}</code>\n"
-                f"💼 Tipo: <b>{pat_cfg.get('tipo','REAL')}</b>",
-                _kb_menu_principal(False))
+                f"📋 Conta: <code>{conta_id or '—'}</code>\n"
+                f"{icone} Tipo: <b>{tipo_real}</b>\n\n"
+                f"Use /start para ver o painel.", _KB_FIXO)
         else:
-            _tg_enviar_texto(token, chat_id, "❌ Falha. Verifique o PAT com /setpat",
-                             _kb_menu_principal(False))
+            _tg_enviar_texto(token, chat_id,
+                "❌ Falha ao conectar.\nVerifique o PAT com /setpat", _KB_FIXO)
     except Exception as e:
         _tg_enviar_texto(token, chat_id, f"❌ Erro: {e}")
 
