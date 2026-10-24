@@ -17946,7 +17946,26 @@ def _tg_bot_controller_loop():
         print(f"[TG Controller] Aviso no init: {e}")
 
     _409_contador = 0
+    _polling_ativo = True   # se False, esta instância cedeu o polling para outra
     while True:
+        if not _polling_ativo:
+            # Esta instância parou — verifica a cada 30s se a outra ainda está viva
+            time.sleep(30)
+            try:
+                cfg2 = _tg_carregar()
+                tok2 = cfg2.get("token","")
+                if tok2:
+                    r2 = requests.get(_tg_url(tok2, "getUpdates"),
+                                      params={"offset": _TG_POLL_OFFSET + 1,
+                                              "timeout": 0, "allowed_updates": ["message"]},
+                                      timeout=8, verify=False)
+                    if r2.status_code == 200:
+                        _tg_log("[TG] Outra instancia morreu — retomando polling.")
+                        _polling_ativo = True
+                        _409_contador = 0
+            except Exception:
+                pass
+            continue
         try:
             cfg = _tg_carregar()
             token   = cfg.get("token","")
@@ -17961,9 +17980,13 @@ def _tg_bot_controller_loop():
             )
             if resp.status_code == 409:
                 _409_contador += 1
-                # Backoff exponencial: 10s, 20s, 40s, 60s, 60s...
-                espera = min(10 * (2 ** min(_409_contador - 1, 3)), 60)
-                _tg_log(f"[TG] 409 #{_409_contador} — outra instancia ativa. Aguardando {espera}s...")
+                if _409_contador >= 3:
+                    # Após 3 tentativas, cede o polling para a outra instância
+                    _polling_ativo = False
+                    _tg_log(f"[TG] 409 x{_409_contador} — cedendo polling para instancia mais nova. Monitorando...")
+                    continue
+                espera = 10 * _409_contador
+                _tg_log(f"[TG] 409 #{_409_contador} — aguardando {espera}s...")
                 time.sleep(espera)
                 continue
             if resp.status_code != 200:
