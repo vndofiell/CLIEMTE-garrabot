@@ -17969,18 +17969,31 @@ def _tg_bot_controller_loop():
         time.sleep(0.5)
 
 # ── Garante que o thread de polling está vivo no worker atual ────────────────
-# NÃO usa flag booleana — verifica se o thread está realmente rodando.
-# Isso é fork-safe: após fork do gunicorn, threads morrem mas a verificação
-# detecta isso e reinicia o thread no processo filho correto.
-_tg_controller_lock = threading.Lock()
+# Usa um Event como flag de "já foi iniciado" para evitar race condition:
+# com gunicorn --threads 4, múltiplas threads podem chamar _tg_garantir_controller()
+# simultaneamente. O Event é setado ANTES de iniciar a thread, impedindo que uma
+# segunda thread passe pelo check antes da primeira aparecer em threading.enumerate().
+_tg_controller_lock    = threading.Lock()
+_tg_controller_iniciado = threading.Event()   # flag atômica: evita duplo start
 
 def _tg_garantir_controller():
-    """Reinicia o thread de polling se não estiver vivo (fork-safe)."""
-    with _tg_controller_lock:
+    """Inicia o thread de polling apenas uma vez por processo (fork-safe)."""
+    # Verificação rápida sem lock (evita contenção no caminho quente)
+    if _tg_controller_iniciado.is_set():
+        # Confirma que a thread ainda está viva; se morreu, permite reinício
         vivo = any(t.name == "tg-controller" and t.is_alive()
                    for t in threading.enumerate())
         if vivo:
             return
+        # Thread morreu (ex: crash) — limpa o flag para permitir reinício
+        _tg_controller_iniciado.clear()
+
+    with _tg_controller_lock:
+        # Double-checked locking: reconfirma após adquirir o lock
+        if _tg_controller_iniciado.is_set():
+            return
+        # Seta o flag ANTES de iniciar a thread — elimina a race condition
+        _tg_controller_iniciado.set()
         t = threading.Thread(target=_tg_bot_controller_loop,
                               daemon=True, name="tg-controller")
         t.start()
