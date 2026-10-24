@@ -1,0 +1,8 @@
+[{
+      "relation": ["delegate_permission/common.handle_all_urls"],
+      "target": {
+        "namespace": "android_app",
+        "package_name": "com.onrender.bot_garra_uv2r.twa",
+        "sha256_cert_fingerprints": ["B4:B3:4D:24:D7:3B:94:CD:A1:0A:82:93:20:AC:BC:E0:67:A7:47:FF:7B:4B:56:BF:E4:2A:D3:74:8B:6D:0D:A1"]
+      }
+    }]
