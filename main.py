@@ -17580,23 +17580,31 @@ def _tg_executar_conectar(token: str, chat_id: str):
 def _tg_processar_callback(cb: dict, token: str, chat_id_autorizado: str):
     """Processa clique em botão inline (callback_query)."""
     cb_id   = cb.get("id","")
-    chat_id = str(cb.get("from",{}).get("id","") or cb.get("message",{}).get("chat",{}).get("id",""))
+    # Pega chat_id da mensagem (mais confiável para grupos e privado)
+    chat_id = str(cb.get("message",{}).get("chat",{}).get("id","")
+                  or cb.get("from",{}).get("id",""))
     msg_id  = cb.get("message",{}).get("message_id", 0)
     data    = cb.get("data","")
 
+    print(f"[TG CB] data={data!r} chat_id={chat_id} autorizado={chat_id_autorizado}")
+
     if chat_id != str(chat_id_autorizado):
         _tg_responder_callback(token, cb_id, "⛔ Não autorizado")
+        print(f"[TG CB] BLOQUEADO: chat_id={chat_id} != {chat_id_autorizado}")
         return
+
+    # ── sempre responde o callback primeiro para remover o 'loading' do botão ─
+    _tg_responder_callback(token, cb_id)
 
     rodando = _tg_bot_estado.get("running", False)
 
     # ── Menu CONTAS CADASTRADAS ───────────────────────────────────────────────
     if data == "menu_contas":
-        _tg_responder_callback(token, cb_id)
-        _tg_editar_mensagem(token, chat_id, msg_id, _tg_texto_contas(), _kb_contas_menu())
+        ok = _tg_editar_mensagem(token, chat_id, msg_id, _tg_texto_contas(), _kb_contas_menu())
+        if not ok:
+            _tg_enviar_texto(token, chat_id, _tg_texto_contas(), _kb_contas_menu())
 
     elif data == "conta_add":
-        _tg_responder_callback(token, cb_id)
         _tg_cadastro_conta[chat_id] = {"etapa": "nome"}
         _tg_enviar_texto(token, chat_id,
             "📝 <b>CADASTRAR NOVA CONTA</b>\n\n"
@@ -17605,12 +17613,13 @@ def _tg_processar_callback(cb: dict, token: str, chat_id_autorizado: str):
 
     elif data.startswith("conta_info_"):
         nome_c = data[len("conta_info_"):]
-        _tg_responder_callback(token, cb_id)
         d = _mc_carregar()
         c = d.get("contas", {}).get(nome_c)
         if not c:
-            _tg_editar_mensagem(token, chat_id, msg_id,
-                f"❌ Conta <b>{nome_c}</b> não encontrada.", _kb_contas_menu())
+            ok = _tg_editar_mensagem(token, chat_id, msg_id,
+                "❌ Conta não encontrada.", _kb_contas_menu())
+            if not ok:
+                _tg_enviar_texto(token, chat_id, "❌ Conta não encontrada.", _kb_contas_menu())
             return
         tipo_c   = _pat_detectar_tipo(c.get("conta_id","")) if c.get("conta_id") else c.get("tipo","?")
         icone_t  = "🧪" if tipo_c == "DEMO" else "💰"
@@ -17621,44 +17630,45 @@ def _tg_processar_callback(cb: dict, token: str, chat_id_autorizado: str):
         txt = (
             f"{icone_t} <b>{nome_c}</b>{ativa_mk}\n"
             f"━━━━━━━━━━━━━━━━━━━━━\n"
-            f"🆔 ID: <code>{c.get('conta_id','—') or '—'}</code>\n"
-            f"📋 Tipo: <b>{tipo_c}</b>\n"
-            f"💰 Banca: <b>${banca_c:.2f}</b>\n"
-            f"🔑 PAT: <code>{pat_prev}</code>\n"
+            f"ID: <code>{c.get('conta_id','—') or '—'}</code>\n"
+            f"Tipo: <b>{tipo_c}</b>\n"
+            f"Banca: <b>${banca_c:.2f}</b>\n"
+            f"PAT: <code>{pat_prev}</code>"
         )
-        _tg_editar_mensagem(token, chat_id, msg_id, txt, _kb_conta_opcoes(nome_c))
+        ok = _tg_editar_mensagem(token, chat_id, msg_id, txt, _kb_conta_opcoes(nome_c))
+        if not ok:
+            _tg_enviar_texto(token, chat_id, txt, _kb_conta_opcoes(nome_c))
 
     elif data.startswith("conta_usar_"):
         nome_c = data[len("conta_usar_"):]
-        _tg_responder_callback(token, cb_id, f"✅ Usando {nome_c}")
         d = _mc_carregar()
         if nome_c in d.get("contas", {}):
             d["ativa"] = nome_c
             _mc_salvar(d)
-        _tg_editar_mensagem(token, chat_id, msg_id, _tg_texto_contas(), _kb_contas_menu())
+        ok = _tg_editar_mensagem(token, chat_id, msg_id, _tg_texto_contas(), _kb_contas_menu())
+        if not ok:
+            _tg_enviar_texto(token, chat_id, _tg_texto_contas(), _kb_contas_menu())
 
     elif data.startswith("conta_remover_"):
         nome_c = data[len("conta_remover_"):]
-        _tg_responder_callback(token, cb_id, f"🗑️ Removendo {nome_c}...")
         d = _mc_carregar()
         if nome_c in d.get("contas", {}):
             del d["contas"][nome_c]
             if d.get("ativa") == nome_c:
                 d["ativa"] = next(iter(d["contas"]), "")
             _mc_salvar(d)
-        _tg_editar_mensagem(token, chat_id, msg_id, _tg_texto_contas(), _kb_contas_menu())
+        ok = _tg_editar_mensagem(token, chat_id, msg_id, _tg_texto_contas(), _kb_contas_menu())
+        if not ok:
+            _tg_enviar_texto(token, chat_id, _tg_texto_contas(), _kb_contas_menu())
 
     elif data.startswith("conta_tipo_"):
         # formato: conta_tipo_DEMO_nome ou conta_tipo_REAL_nome
         partes = data[len("conta_tipo_"):].split("_", 1)
         if len(partes) == 2:
             tipo_escolhido, nome_c = partes[0].upper(), partes[1]
-            _tg_responder_callback(token, cb_id)
-            # Recupera PAT do estado de cadastro ou do dict existente
             estado_cad = _tg_cadastro_conta.pop(chat_id, {})
             pat_cad    = estado_cad.get("pat", "")
             if not pat_cad:
-                # Callback chegou sem estado (ex: re-envio) — tenta do dicionário existente
                 d2 = _mc_carregar()
                 pat_cad = d2.get("contas",{}).get(nome_c,{}).get("pat","")
             if pat_cad:
@@ -17671,51 +17681,45 @@ def _tg_processar_callback(cb: dict, token: str, chat_id_autorizado: str):
                 if not d.get("ativa"):
                     d["ativa"] = nome_c
                 _mc_salvar(d)
-                icone_t = "🧪" if tipo_escolhido == "DEMO" else "💰"
+                icone_t  = "🧪" if tipo_escolhido == "DEMO" else "💰"
                 acao_txt = "✏️ Atualizada" if ja_existe else "✅ Cadastrada"
                 _tg_enviar_texto(token, chat_id,
-                    f"{acao_txt}! Conta <b>{nome_c}</b> salva com sucesso!\n\n"
-                    f"🆔 Nome: <b>{nome_c}</b>\n"
+                    f"{acao_txt}! Conta <b>{nome_c}</b> salva!\n\n"
+                    f"Nome: <b>{nome_c}</b>\n"
                     f"{icone_t} Tipo: <b>{tipo_escolhido}</b>\n"
-                    f"🔑 PAT: <code>{pat_cad[:14]}...</code>\n\n"
+                    f"PAT: <code>{pat_cad[:14]}...</code>\n\n"
                     f"Use /conectar para autenticar.")
-                _tg_editar_mensagem(token, chat_id, msg_id, _tg_texto_contas(), _kb_contas_menu())
+                ok = _tg_editar_mensagem(token, chat_id, msg_id, _tg_texto_contas(), _kb_contas_menu())
+                if not ok:
+                    _tg_enviar_texto(token, chat_id, _tg_texto_contas(), _kb_contas_menu())
             else:
                 _tg_enviar_texto(token, chat_id,
-                    "❌ Sessão de cadastro expirada. Use /contas para recomeçar.")
-        else:
-            _tg_responder_callback(token, cb_id, "❌ Dados inválidos")
+                    "❌ Sessao expirada. Use /contas para recomeçar.")
 
     # ── Menu principal ────────────────────────────────────────────────────────
     elif data == "menu_principal":
-        _tg_responder_callback(token, cb_id)
         _tg_editar_mensagem(token, chat_id, msg_id, _tg_texto_status(),
                             _kb_menu_principal(rodando))
 
     elif data == "cmd_status":
-        _tg_responder_callback(token, cb_id, "🔄 Atualizando...")
         _tg_editar_mensagem(token, chat_id, msg_id, _tg_texto_status(),
                             _kb_menu_principal(rodando))
 
     elif data == "cmd_iniciar":
         _tg_enfileirar({"acao": "iniciar"})
-        _tg_responder_callback(token, cb_id, "▶️ Iniciando...")
         _tg_editar_mensagem(token, chat_id, msg_id, _tg_texto_status(),
                             _kb_menu_principal(True))
 
     elif data == "cmd_parar":
         _tg_enfileirar({"acao": "parar"})
-        _tg_responder_callback(token, cb_id, "⏹️ Parando...")
         _tg_editar_mensagem(token, chat_id, msg_id, _tg_texto_status(),
                             _kb_menu_principal(False))
 
     elif data == "cmd_conectar":
-        _tg_responder_callback(token, cb_id, "⏳ Conectando...")
         threading.Thread(target=_tg_executar_conectar, args=(token, chat_id), daemon=True).start()
 
     # ── Submenu Config ────────────────────────────────────────────────────────
     elif data == "menu_config":
-        _tg_responder_callback(token, cb_id)
         cfg = {}
         try:
             if os.path.exists(BOT_CFG_ARQUIVO):
@@ -17731,23 +17735,19 @@ def _tg_processar_callback(cb: dict, token: str, chat_id_autorizado: str):
         _tg_editar_mensagem(token, chat_id, msg_id, txt, _kb_config())
 
     elif data == "cfg_entrada":
-        _tg_responder_callback(token, cb_id)
         _tg_aguardando_input[chat_id] = "entrada"
         _tg_enviar_texto(token, chat_id, "💵 Digite o novo valor da <b>Entrada</b> (ex: <code>2.00</code>):")
 
     elif data == "cfg_stopwin":
-        _tg_responder_callback(token, cb_id)
         _tg_aguardando_input[chat_id] = "stopwin"
         _tg_enviar_texto(token, chat_id, "🎯 Digite o novo valor do <b>Stop Win</b> (ex: <code>20</code>):")
 
     elif data == "cfg_stoploss":
-        _tg_responder_callback(token, cb_id)
         _tg_aguardando_input[chat_id] = "stoploss"
         _tg_enviar_texto(token, chat_id, "🛑 Digite o novo valor do <b>Stop Loss</b> (ex: <code>100</code>):")
 
     # ── Submenu Estratégia ────────────────────────────────────────────────────
     elif data == "menu_estrategia":
-        _tg_responder_callback(token, cb_id)
         atual = _tg_bot_estado.get("estrategia","")
         txt = f"📊 <b>ESTRATÉGIAS</b>\nAtual: <b>{atual or '—'}</b>\n\nEscolha:"
         _tg_editar_mensagem(token, chat_id, msg_id, txt, _kb_estrategias())
@@ -17757,14 +17757,12 @@ def _tg_processar_callback(cb: dict, token: str, chat_id_autorizado: str):
         if 0 <= idx < len(ESTRATEGIAS_LISTA):
             escolha = ESTRATEGIAS_LISTA[idx]
             _tg_enfileirar({"acao": "set_estrategia", "valor": escolha})
-            _tg_responder_callback(token, cb_id, f"✅ {escolha}")
             _tg_editar_mensagem(token, chat_id, msg_id,
                 f"📊 <b>Estratégia selecionada:</b>\n<b>{escolha}</b>",
                 _kb_menu_principal(rodando))
 
     # ── Submenu Gerenciamento ─────────────────────────────────────────────────
     elif data == "menu_gerenciamento":
-        _tg_responder_callback(token, cb_id)
         atual = _tg_bot_estado.get("gerenciamento","")
         txt = f"⚙️ <b>GERENCIAMENTOS</b>\nAtual: <b>{atual or '—'}</b>\n\nEscolha:"
         _tg_editar_mensagem(token, chat_id, msg_id, txt, _kb_gerenciamentos())
@@ -17774,7 +17772,6 @@ def _tg_processar_callback(cb: dict, token: str, chat_id_autorizado: str):
         if 0 <= idx < len(GERENCIAMENTOS_LISTA):
             escolha = GERENCIAMENTOS_LISTA[idx]
             _tg_enfileirar({"acao": "set_gerenciamento", "valor": escolha})
-            _tg_responder_callback(token, cb_id, f"✅ {escolha}")
             _tg_editar_mensagem(token, chat_id, msg_id,
                 f"⚙️ <b>Gerenciamento selecionado:</b>\n<b>{escolha}</b>",
                 _kb_menu_principal(rodando))
