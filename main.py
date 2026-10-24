@@ -15188,16 +15188,21 @@ def _ping():
 
 # ── Auto-ping: mantém o Render sempre acordado (nunca hiberna) ───────────────
 def _auto_ping_loop():
-    """Pinga o próprio servidor a cada 4 minutos para evitar hibernação no Render."""
+    """Pinga o próprio servidor a cada 3 minutos para evitar hibernação no Render.
+    Usa timeout de 55s para aguentar o wake-up do Render (~30-50s)."""
     import urllib.request
     time.sleep(30)  # aguarda o servidor subir completamente
     while True:
         try:
             base = RENDER_PERMANENTE or "http://localhost:10000"
-            urllib.request.urlopen(f"{base}/ping", timeout=10)
+            urllib.request.urlopen(f"{base}/ping", timeout=55)
         except Exception:
-            pass
-        time.sleep(240)  # 4 minutos
+            # Segunda tentativa imediata se falhar
+            try:
+                urllib.request.urlopen(f"{base}/ping", timeout=55)
+            except Exception:
+                pass
+        time.sleep(180)  # 3 minutos
 
 threading.Thread(target=_auto_ping_loop, daemon=True, name="auto-ping").start()
 
