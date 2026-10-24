@@ -16778,3 +16778,383 @@ def modo_avancado_multimercado_ui():
 if __name__ == "__main__":
     print("🚀 Iniciando Interface Cyber Cloud...")
     start_server()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TELEGRAM BOT CONTROLLER — Controle total via Telegram + conexão via PAT Deriv
+# ═══════════════════════════════════════════════════════════════════════════════
+
+_TG_PAT_ARQUIVO = os.path.join(_BASE_DIR, "deriv_pat.json")
+
+def _pat_carregar() -> dict:
+    """Lê o PAT da Deriv salvo localmente ou da variável de ambiente."""
+    padrao = {"pat": "", "tipo": "REAL"}
+    try:
+        if os.path.exists(_TG_PAT_ARQUIVO):
+            with open(_TG_PAT_ARQUIVO, "r", encoding="utf-8") as f:
+                dados = json.load(f)
+            if isinstance(dados, dict):
+                padrao.update(dados)
+    except Exception:
+        pass
+    # Fallback: variável de ambiente DERIV_PAT no Render
+    if not padrao.get("pat"):
+        env_pat = os.environ.get("DERIV_PAT", "")
+        if env_pat:
+            padrao["pat"] = env_pat
+    return padrao
+
+def _pat_salvar(pat: str, tipo: str = "REAL"):
+    try:
+        with open(_TG_PAT_ARQUIVO, "w", encoding="utf-8") as f:
+            json.dump({"pat": pat, "tipo": tipo}, f, indent=2)
+    except Exception as e:
+        print(f"[PAT] Erro ao salvar: {e}")
+
+@app.route('/tg-pat-config', methods=['GET'])
+def tg_pat_config_get():
+    d = _pat_carregar()
+    pat = d.get("pat", "")
+    return jsonify({"ok": True, "configurado": bool(pat), "tipo": d.get("tipo","REAL"),
+                    "pat_preview": pat[:8] + "..." if pat else ""})
+
+@app.route('/tg-pat-config', methods=['POST'])
+def tg_pat_config_post():
+    """Salva PAT da Deriv para uso exclusivo do Telegram bot."""
+    dados = request.get_json(force=True, silent=True) or {}
+    pat  = str(dados.get("pat", "")).strip()
+    tipo = str(dados.get("tipo", "REAL")).upper()
+    if not pat:
+        return jsonify({"ok": False, "erro": "PAT vazio"})
+    _pat_salvar(pat, tipo)
+    return jsonify({"ok": True})
+
+@app.route('/tg-pat-conectar', methods=['POST'])
+def tg_pat_conectar():
+    """Conecta a Deriv via PAT (Personal Access Token) — usado exclusivamente pelo Telegram bot.
+    O PAT é tratado como access_token e usa o mesmo fluxo de geração de wss_url."""
+    dados = request.get_json(force=True, silent=True) or {}
+    pat  = dados.get("pat") or _pat_carregar().get("pat", "")
+    tipo = str(dados.get("tipo") or _pat_carregar().get("tipo", "REAL")).upper()
+    if not pat:
+        return jsonify({"ok": False, "erro": "PAT não configurado. Envie /setpat <token> no Telegram."})
+    try:
+        resultado = _get_token_com_access(pat, tipo)
+        if resultado.get("wss_url"):
+            with _token_lock:
+                _token_recebido["access_token"]   = pat
+                _token_recebido["ts"]             = time.time()
+                _token_recebido["_bot_confirmou"] = False
+                _token_recebido["_wss_url_cache"] = resultado["wss_url"]
+                _token_recebido["_conta_id_cache"]= resultado.get("conta_id","")
+            _access_token["tipo"] = tipo
+            print(f"[PAT] Conexão via PAT bem-sucedida — tipo={tipo} | conta={resultado.get('conta_id','')}")
+            return jsonify({"ok": True, "wss_url": resultado["wss_url"],
+                            "conta_id": resultado.get("conta_id",""), "tipo": tipo})
+        return jsonify({"ok": False, "erro": "Não foi possível gerar wss_url com este PAT."})
+    except Exception as e:
+        return jsonify({"ok": False, "erro": str(e)})
+
+# ── Estado do bot lido/escrito pelo Telegram ─────────────────────────────────
+_tg_bot_estado = {
+    "running":      False,
+    "wins":         0,
+    "losses":       0,
+    "lucro":        0.0,
+    "banca":        0.0,
+    "estrategia":   "",
+    "gerenciamento":"",
+    "stake":        0.35,
+    "stopWin":      10.0,
+    "stopLoss":     100.0,
+}
+
+@app.route('/tg-bot-estado', methods=['POST'])
+def tg_bot_estado_post():
+    """Frontend atualiza o estado do bot (running, wins, losses, lucro, banca)."""
+    dados = request.get_json(force=True, silent=True) or {}
+    for k in _tg_bot_estado:
+        if k in dados:
+            _tg_bot_estado[k] = dados[k]
+    return jsonify({"ok": True})
+
+@app.route('/tg-bot-estado', methods=['GET'])
+def tg_bot_estado_get():
+    return jsonify(_tg_bot_estado)
+
+# ── Comandos que o Telegram quer executar (fila consumida pelo frontend) ──────
+_tg_fila_cmds: list = []
+_tg_fila_lock = threading.Lock()
+
+@app.route('/tg-cmd-pendente', methods=['GET'])
+def tg_cmd_pendente():
+    """Frontend consulta se há comando pendente do Telegram para executar."""
+    with _tg_fila_lock:
+        if _tg_fila_cmds:
+            return jsonify({"ok": True, "cmd": _tg_fila_cmds.pop(0)})
+    return jsonify({"ok": False})
+
+def _tg_enfileirar(cmd: dict):
+    with _tg_fila_lock:
+        _tg_fila_cmds.append(cmd)
+
+# ── Listener de comandos do Telegram ─────────────────────────────────────────
+_TG_POLL_OFFSET = 0
+
+ESTRATEGIAS_LISTA = [
+    "🎯 DIGITUNDER 5","🎯 DIGITOVER 4","🎯 DIGITOVER 3","🎯 DIGITOVER 2",
+    "🎯 DIGITUNDER 6","🎯 DIGITUNDER 7","🎯 DIGITUNDER 8",
+    "🏎️ TREND PRO","📊 HMA DERIV","📈 CANDLE STRATEGY",
+]
+
+GERENCIAMENTOS_LISTA = [
+    "📐 MA-Adaptativo","🔄 Martingale","💰 Stake Fixa","⚡ SorosGale",
+    "📉 Loss Recovery","🛡️ Recovery Conservador","📐 QSR","📊 Masaniello",
+    "🎯 Ciclos","🤖 Recovery Adaptativo","💹 Juros Compostos",
+    "🏦 RAL","🔒 CCR","🧠 RIA","🛡️ RIC PRO",
+]
+
+def _tg_processar_comando(msg: dict, token: str, chat_id_autorizado: str):
+    """Processa um comando recebido do Telegram e responde."""
+    global _TG_POLL_OFFSET
+    chat_id = str(msg.get("chat", {}).get("id", ""))
+    texto   = (msg.get("text") or "").strip()
+    if not texto:
+        return
+
+    # Segurança: só responde ao chat_id autorizado
+    if chat_id != str(chat_id_autorizado):
+        _tg_enviar_texto(token, chat_id, "⛔ Acesso não autorizado.")
+        return
+
+    cmd   = texto.split()[0].lower().lstrip("/")
+    args  = texto.split()[1:]
+
+    # ── /start ou /ajuda ──────────────────────────────────────────────────────
+    if cmd in ("start", "ajuda", "help"):
+        resp = (
+            "🤖 <b>GARRABOT ELITE — Comandos</b>\n\n"
+            "━━━━━━━━━━━━━━━━━━━━━\n"
+            "🔌 <b>CONEXÃO</b>\n"
+            "/conectar — Conecta Deriv via PAT\n"
+            "/setpat &lt;token&gt; [DEMO|REAL] — Salva PAT\n\n"
+            "🚀 <b>ROBÔ</b>\n"
+            "/iniciar — Inicia operações\n"
+            "/parar — Para o robô\n"
+            "/pausar — Pausa o robô\n"
+            "/status — Status atual\n\n"
+            "⚙️ <b>CONFIGURAR</b>\n"
+            "/entrada &lt;valor&gt; — Ex: /entrada 2.00\n"
+            "/stopwin &lt;valor&gt; — Ex: /stopwin 20\n"
+            "/stoploss &lt;valor&gt; — Ex: /stoploss 100\n\n"
+            "📊 <b>ESTRATÉGIA / GERENCIAMENTO</b>\n"
+            "/estrategia — Lista estratégias\n"
+            "/estrategia &lt;nº&gt; — Seleciona estratégia\n"
+            "/gerenciamento — Lista gerenciamentos\n"
+            "/gerenciamento &lt;nº&gt; — Seleciona gerenciamento\n\n"
+            "━━━━━━━━━━━━━━━━━━━━━"
+        )
+        _tg_enviar_texto(token, chat_id, resp)
+
+    # ── /setpat ───────────────────────────────────────────────────────────────
+    elif cmd == "setpat":
+        if not args:
+            _tg_enviar_texto(token, chat_id, "❌ Use: /setpat &lt;seu_token&gt; [DEMO|REAL]")
+            return
+        novo_pat = args[0].strip()
+        tipo_pat = args[1].upper() if len(args) > 1 else "REAL"
+        if tipo_pat not in ("DEMO","REAL"):
+            tipo_pat = "REAL"
+        _pat_salvar(novo_pat, tipo_pat)
+        _tg_enviar_texto(token, chat_id,
+            f"✅ PAT salvo!\n<b>Tipo:</b> {tipo_pat}\n<b>Preview:</b> <code>{novo_pat[:8]}...</code>\n\nAgora use /conectar")
+
+    # ── /conectar ─────────────────────────────────────────────────────────────
+    elif cmd == "conectar":
+        pat_cfg = _pat_carregar()
+        pat = pat_cfg.get("pat","")
+        if not pat:
+            _tg_enviar_texto(token, chat_id, "❌ PAT não configurado.\nUse: /setpat &lt;seu_token&gt; [DEMO|REAL]")
+            return
+        _tg_enviar_texto(token, chat_id, f"⏳ Conectando à Deriv via PAT ({pat_cfg.get('tipo','REAL')})...")
+        try:
+            resultado = _get_token_com_access(pat, pat_cfg.get("tipo","REAL"))
+            if resultado.get("wss_url"):
+                with _token_lock:
+                    _token_recebido["access_token"]    = pat
+                    _token_recebido["ts"]              = time.time()
+                    _token_recebido["_bot_confirmou"]  = False
+                    _token_recebido["_wss_url_cache"]  = resultado["wss_url"]
+                    _token_recebido["_conta_id_cache"] = resultado.get("conta_id","")
+                _access_token["tipo"] = pat_cfg.get("tipo","REAL")
+                _tg_enviar_texto(token, chat_id,
+                    f"✅ <b>Conectado!</b>\n"
+                    f"📋 Conta: <code>{resultado.get('conta_id','?')}</code>\n"
+                    f"💼 Tipo: <b>{pat_cfg.get('tipo','REAL')}</b>\n\n"
+                    f"Use /iniciar para começar as operações.")
+            else:
+                _tg_enviar_texto(token, chat_id, "❌ Falha ao conectar. Verifique o PAT com /setpat")
+        except Exception as e:
+            _tg_enviar_texto(token, chat_id, f"❌ Erro: {e}")
+
+    # ── /status ───────────────────────────────────────────────────────────────
+    elif cmd == "status":
+        cfg = {}
+        try:
+            if os.path.exists(BOT_CFG_ARQUIVO):
+                with open(BOT_CFG_ARQUIVO, "r", encoding="utf-8") as f:
+                    cfg = json.load(f)
+        except Exception:
+            pass
+        estado = _tg_bot_estado
+        icone  = "🟢" if estado.get("running") else "🔴"
+        lucro  = estado.get("lucro", 0.0)
+        cor_lucro = "+" if lucro >= 0 else ""
+        pat_ok = bool(_pat_carregar().get("pat"))
+        _tg_enviar_texto(token, chat_id,
+            f"📊 <b>STATUS DO BOT</b>\n"
+            f"━━━━━━━━━━━━━━━━━━━━━\n"
+            f"{icone} <b>Robô:</b> {'RODANDO' if estado.get('running') else 'PARADO'}\n"
+            f"🔌 <b>PAT:</b> {'✅ Configurado' if pat_ok else '❌ Não configurado'}\n"
+            f"━━━━━━━━━━━━━━━━━━━━━\n"
+            f"💰 <b>Banca:</b> ${estado.get('banca',0):.2f}\n"
+            f"📈 <b>Wins:</b> {estado.get('wins',0)}\n"
+            f"📉 <b>Losses:</b> {estado.get('losses',0)}\n"
+            f"💵 <b>Lucro:</b> {cor_lucro}${lucro:.2f}\n"
+            f"━━━━━━━━━━━━━━━━━━━━━\n"
+            f"⚡ <b>Entrada:</b> ${cfg.get('stake', estado.get('stake',0.35)):.2f}\n"
+            f"🎯 <b>Stop Win:</b> ${cfg.get('stopWin', estado.get('stopWin',10)):.2f}\n"
+            f"🛑 <b>Stop Loss:</b> ${cfg.get('stopLoss', estado.get('stopLoss',100)):.2f}\n"
+            f"📊 <b>Estratégia:</b> {cfg.get('estrategia', estado.get('estrategia','?'))}\n"
+            f"⚙️ <b>Gerenciamento:</b> {cfg.get('gerenciamento', estado.get('gerenciamento','?'))}"
+        )
+
+    # ── /iniciar ──────────────────────────────────────────────────────────────
+    elif cmd == "iniciar":
+        _tg_enfileirar({"acao": "iniciar"})
+        _tg_enviar_texto(token, chat_id, "▶️ Comando <b>INICIAR</b> enviado ao bot!")
+
+    # ── /parar ────────────────────────────────────────────────────────────────
+    elif cmd == "parar":
+        _tg_enfileirar({"acao": "parar"})
+        _tg_enviar_texto(token, chat_id, "⏹️ Comando <b>PARAR</b> enviado ao bot!")
+
+    # ── /pausar ───────────────────────────────────────────────────────────────
+    elif cmd == "pausar":
+        _tg_enfileirar({"acao": "pausar"})
+        _tg_enviar_texto(token, chat_id, "⏸️ Comando <b>PAUSAR</b> enviado ao bot!")
+
+    # ── /entrada ──────────────────────────────────────────────────────────────
+    elif cmd == "entrada":
+        if not args:
+            _tg_enviar_texto(token, chat_id, "❌ Use: /entrada &lt;valor&gt;  Ex: /entrada 2.00")
+            return
+        try:
+            val = float(args[0].replace(",","."))
+            if val < 0.35:
+                _tg_enviar_texto(token, chat_id, "❌ Valor mínimo: $0.35")
+                return
+            _tg_enfileirar({"acao": "set_stake", "valor": val})
+            _tg_enviar_texto(token, chat_id, f"✅ Entrada alterada para <b>${val:.2f}</b>")
+        except ValueError:
+            _tg_enviar_texto(token, chat_id, "❌ Valor inválido. Ex: /entrada 2.00")
+
+    # ── /stopwin ──────────────────────────────────────────────────────────────
+    elif cmd == "stopwin":
+        if not args:
+            _tg_enviar_texto(token, chat_id, "❌ Use: /stopwin &lt;valor&gt;  Ex: /stopwin 20")
+            return
+        try:
+            val = float(args[0].replace(",","."))
+            _tg_enfileirar({"acao": "set_stopwin", "valor": val})
+            _tg_enviar_texto(token, chat_id, f"✅ Stop Win alterado para <b>${val:.2f}</b>")
+        except ValueError:
+            _tg_enviar_texto(token, chat_id, "❌ Valor inválido. Ex: /stopwin 20")
+
+    # ── /stoploss ─────────────────────────────────────────────────────────────
+    elif cmd == "stoploss":
+        if not args:
+            _tg_enviar_texto(token, chat_id, "❌ Use: /stoploss &lt;valor&gt;  Ex: /stoploss 100")
+            return
+        try:
+            val = float(args[0].replace(",","."))
+            _tg_enfileirar({"acao": "set_stoploss", "valor": val})
+            _tg_enviar_texto(token, chat_id, f"✅ Stop Loss alterado para <b>${val:.2f}</b>")
+        except ValueError:
+            _tg_enviar_texto(token, chat_id, "❌ Valor inválido. Ex: /stoploss 100")
+
+    # ── /estrategia ───────────────────────────────────────────────────────────
+    elif cmd == "estrategia":
+        if not args:
+            lista = "\n".join(f"{i+1}. {e}" for i, e in enumerate(ESTRATEGIAS_LISTA))
+            _tg_enviar_texto(token, chat_id,
+                f"📊 <b>Estratégias disponíveis:</b>\n\n{lista}\n\nUse: /estrategia &lt;número&gt;")
+        else:
+            try:
+                idx = int(args[0]) - 1
+                if 0 <= idx < len(ESTRATEGIAS_LISTA):
+                    escolha = ESTRATEGIAS_LISTA[idx]
+                    _tg_enfileirar({"acao": "set_estrategia", "valor": escolha})
+                    _tg_enviar_texto(token, chat_id, f"✅ Estratégia: <b>{escolha}</b>")
+                else:
+                    _tg_enviar_texto(token, chat_id, f"❌ Número inválido (1-{len(ESTRATEGIAS_LISTA)})")
+            except ValueError:
+                _tg_enviar_texto(token, chat_id, "❌ Use um número. Ex: /estrategia 1")
+
+    # ── /gerenciamento ────────────────────────────────────────────────────────
+    elif cmd == "gerenciamento":
+        if not args:
+            lista = "\n".join(f"{i+1}. {g}" for i, g in enumerate(GERENCIAMENTOS_LISTA))
+            _tg_enviar_texto(token, chat_id,
+                f"⚙️ <b>Gerenciamentos disponíveis:</b>\n\n{lista}\n\nUse: /gerenciamento &lt;número&gt;")
+        else:
+            try:
+                idx = int(args[0]) - 1
+                if 0 <= idx < len(GERENCIAMENTOS_LISTA):
+                    escolha = GERENCIAMENTOS_LISTA[idx]
+                    _tg_enfileirar({"acao": "set_gerenciamento", "valor": escolha})
+                    _tg_enviar_texto(token, chat_id, f"✅ Gerenciamento: <b>{escolha}</b>")
+                else:
+                    _tg_enviar_texto(token, chat_id, f"❌ Número inválido (1-{len(GERENCIAMENTOS_LISTA)})")
+            except ValueError:
+                _tg_enviar_texto(token, chat_id, "❌ Use um número. Ex: /gerenciamento 1")
+
+    else:
+        _tg_enviar_texto(token, chat_id, "❓ Comando desconhecido. Use /ajuda para ver os comandos.")
+
+
+def _tg_bot_controller_loop():
+    """Loop de polling que lê mensagens do Telegram e processa comandos."""
+    global _TG_POLL_OFFSET
+    time.sleep(10)  # aguarda o servidor subir
+    while True:
+        try:
+            cfg = _tg_carregar()
+            token   = cfg.get("token","")
+            chat_id = str(cfg.get("chat_id",""))
+            if not token or not chat_id:
+                time.sleep(15)
+                continue
+            resp = requests.get(
+                _tg_url(token, "getUpdates"),
+                params={"offset": _TG_POLL_OFFSET + 1, "timeout": 20, "allowed_updates": ["message"]},
+                timeout=25
+            )
+            if resp.status_code != 200:
+                time.sleep(10)
+                continue
+            updates = resp.json().get("result", [])
+            for upd in updates:
+                uid = upd.get("update_id", 0)
+                if uid > _TG_POLL_OFFSET:
+                    _TG_POLL_OFFSET = uid
+                msg = upd.get("message")
+                if msg:
+                    _tg_processar_comando(msg, token, chat_id)
+        except Exception as e:
+            print(f"[TG Controller] Erro no loop: {e}")
+            time.sleep(10)
+        time.sleep(1)
+
+threading.Thread(target=_tg_bot_controller_loop, daemon=True, name="tg-controller").start()
+print("[TG Controller] Loop de comandos Telegram iniciado.")

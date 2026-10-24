@@ -15525,6 +15525,86 @@ function runCmd(cmd) {
     document.getElementById('cmd-input').focus();
 }
 
+// ── Telegram Bot Controller — polling de comandos e envio de estado ──────────
+(function _tgControllerInit() {
+    // Envia estado atual do bot para o servidor a cada 10s
+    function _tgEnviarEstado() {
+        try {
+            const banca = parseFloat((document.getElementById('hd-balance')?.textContent || '0').replace('$','').replace(',','')) || 0;
+            fetch('/tg-bot-estado', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    running:       typeof bot !== 'undefined' ? !!bot.running : false,
+                    wins:          typeof bot !== 'undefined' ? (bot.wins || 0) : 0,
+                    losses:        typeof bot !== 'undefined' ? (bot.losses || 0) : 0,
+                    lucro:         typeof bot !== 'undefined' ? (bot.lucro || 0) : 0,
+                    banca:         banca,
+                    estrategia:    typeof bot !== 'undefined' ? (bot.estrategia || '') : '',
+                    gerenciamento: typeof bot !== 'undefined' ? (bot.gerenciamento || '') : '',
+                    stake:         typeof bot !== 'undefined' ? (bot.initialStake || 0.35) : 0.35,
+                    stopWin:       typeof bot !== 'undefined' ? (bot.stopWin || 10) : 10,
+                    stopLoss:      typeof bot !== 'undefined' ? (bot.stopLoss || 100) : 100,
+                })
+            }).catch(()=>{});
+        } catch(e) {}
+    }
+
+    // Consome fila de comandos do Telegram a cada 2s
+    function _tgPollCmds() {
+        fetch('/tg-cmd-pendente')
+            .then(r => r.json())
+            .then(d => {
+                if (!d.ok || !d.cmd) return;
+                const cmd = d.cmd;
+                const acao = cmd.acao;
+                if (acao === 'iniciar') {
+                    if (typeof bot !== 'undefined' && !bot.running) runCmd('iniciar');
+                } else if (acao === 'parar') {
+                    if (typeof bot !== 'undefined' && bot.running) runCmd('parar');
+                } else if (acao === 'pausar') {
+                    if (typeof bot !== 'undefined' && bot.running) runCmd('parar');
+                } else if (acao === 'set_stake') {
+                    const v = parseFloat(cmd.valor) || 0;
+                    if (v >= 0.35) {
+                        runCmd('entrada ' + v.toFixed(2));
+                        // Atualiza input visual
+                        const inp = document.getElementById('cfg-val-entrada');
+                        if (inp) inp.value = v.toFixed(2);
+                    }
+                } else if (acao === 'set_stopwin') {
+                    const v = parseFloat(cmd.valor) || 0;
+                    if (v > 0) runCmd('stopwin ' + v.toFixed(2));
+                } else if (acao === 'set_stoploss') {
+                    const v = parseFloat(cmd.valor) || 0;
+                    if (v > 0) runCmd('stoploss ' + v.toFixed(2));
+                } else if (acao === 'set_estrategia') {
+                    if (typeof bot !== 'undefined' && cmd.valor) {
+                        runCmd('estrategia ' + cmd.valor);
+                    }
+                } else if (acao === 'set_gerenciamento') {
+                    if (typeof bot !== 'undefined' && cmd.valor) {
+                        // Seleciona gerenciamento e aplica com config padrão
+                        bot.gerenciamento = cmd.valor;
+                        bot.mgr = new GerenciadorUnificado(cmd.valor, { stake: bot.initialStake });
+                        const btn = document.getElementById('btn-gerenciamento');
+                        if (btn) btn.childNodes[0].textContent = cmd.valor + ' ';
+                        print(`⚙️ [TELEGRAM] Gerenciamento: ${cmd.valor}`, 'log-info');
+                    }
+                }
+                // Continua consumindo se houver mais comandos
+                setTimeout(_tgPollCmds, 100);
+            })
+            .catch(() => {});
+    }
+
+    // Inicia loops
+    setInterval(_tgEnviarEstado, 10000);
+    setInterval(_tgPollCmds,     2000);
+    // Primeiro envio após 5s (aguarda bot inicializar)
+    setTimeout(_tgEnviarEstado, 5000);
+})();
+
 function askCmd(type) {
     const msgs = {
         'entrada':  'Digite o valor da entrada (ex: 0.35):',
