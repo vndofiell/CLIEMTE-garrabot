@@ -17945,6 +17945,7 @@ def _tg_bot_controller_loop():
     except Exception as e:
         print(f"[TG Controller] Aviso no init: {e}")
 
+    _409_contador = 0
     while True:
         try:
             cfg = _tg_carregar()
@@ -17958,11 +17959,18 @@ def _tg_bot_controller_loop():
                         "allowed_updates": ["message","callback_query"]},
                 timeout=10, verify=False,
             )
+            if resp.status_code == 409:
+                _409_contador += 1
+                # Backoff exponencial: 10s, 20s, 40s, 60s, 60s...
+                espera = min(10 * (2 ** min(_409_contador - 1, 3)), 60)
+                _tg_log(f"[TG] 409 #{_409_contador} — outra instancia ativa. Aguardando {espera}s...")
+                time.sleep(espera)
+                continue
             if resp.status_code != 200:
                 _tg_log(f"[TG] HTTP {resp.status_code}: {resp.text[:200]}")
-                if resp.status_code == 409:
-                    _tg_log("[TG] CONFLITO 409 — outro processo está usando o mesmo token!")
                 time.sleep(5); continue
+            # Sucesso — reseta contador de 409
+            _409_contador = 0
             results = resp.json().get("result", [])
             if results:
                 _tg_log(f"[TG] {len(results)} update(s) recebidos")
@@ -18003,31 +18011,22 @@ def _tg_garantir_controller():
         if vivo:
             return
 
-        # Tenta adquirir lock de arquivo (exclusivo entre processos)
+        # Tenta adquirir lock de arquivo exclusivo (Linux/Render usa fcntl)
         try:
             import fcntl
             lf = open(_TG_LOCKFILE, "w")
             fcntl.flock(lf, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            # Conseguiu o lock — este processo é o dono do polling
             lf.write(str(os.getpid()))
             lf.flush()
-            # Guarda referência para não fechar o file descriptor
-            globals()["_tg_lockfile_fd"] = lf
-            print(f"[TG] Lock obtido. Polling iniciado no PID={os.getpid()}")
-        except (ImportError, OSError):
-            # fcntl não disponível (Windows) ou lock já em uso por outro processo
-            # Verifica se o PID no lockfile ainda está vivo
-            try:
-                with open(_TG_LOCKFILE, "r") as lf2:
-                    pid_dono = int(lf2.read().strip())
-                import psutil
-                if psutil.pid_exists(pid_dono):
-                    print(f"[TG] Polling já rodando no PID={pid_dono}. Este worker ({os.getpid()}) não inicia.")
-                    return
-            except Exception:
-                pass
-            # Se chegou aqui: lockfile antigo ou sem fcntl — inicia mesmo assim
-            print(f"[TG] Lock indisponível — iniciando polling no PID={os.getpid()} (modo fallback)")
+            globals()["_tg_lockfile_fd"] = lf   # mantém fd aberto = lock ativo
+            print(f"[TG] Lock obtido. PID={os.getpid()}")
+        except OSError:
+            # Outro processo já tem o lock — não inicia polling aqui
+            print(f"[TG] Lock em uso por outro processo. PID={os.getpid()} não inicia polling.")
+            return
+        except ImportError:
+            # Windows (desenvolvimento local) — sem fcntl, inicia sempre
+            print(f"[TG] fcntl indisponível (Windows). Iniciando polling sem lock.")
 
         t = threading.Thread(target=_tg_bot_controller_loop,
                               daemon=True, name="tg-controller")
