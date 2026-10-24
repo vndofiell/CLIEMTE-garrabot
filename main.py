@@ -16818,56 +16818,112 @@ if __name__ == "__main__":
 
 _TG_PAT_ARQUIVO = os.path.join(_BASE_DIR, "deriv_pat.json")
 
-def _pat_carregar() -> dict:
-    """Lê o PAT da Deriv salvo localmente ou da variável de ambiente."""
-    padrao = {"pat": "", "tipo": "REAL", "conta_id": "", "banca": 0.0}
+# ── Estrutura do arquivo deriv_pat.json ──────────────────────────────────────
+# {
+#   "ativa": "minha_conta",          ← nome da conta ativa
+#   "contas": {
+#     "minha_conta": {
+#       "nome": "minha_conta",
+#       "pat": "pat_xxx...",
+#       "conta_id": "CR123456",
+#       "tipo": "REAL",
+#       "banca": 299.00
+#     },
+#     "demo": { ... }
+#   }
+# }
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _mc_carregar() -> dict:
+    """Carrega o arquivo de multi-contas."""
+    padrao = {"ativa": "", "contas": {}}
     try:
         if os.path.exists(_TG_PAT_ARQUIVO):
             with open(_TG_PAT_ARQUIVO, "r", encoding="utf-8") as f:
                 dados = json.load(f)
             if isinstance(dados, dict):
-                padrao.update(dados)
+                # Migração: arquivo antigo com formato {"pat":...}
+                if "pat" in dados and "contas" not in dados:
+                    pat_antigo = dados.get("pat","")
+                    if pat_antigo:
+                        padrao["contas"]["principal"] = {
+                            "nome": "principal",
+                            "pat": pat_antigo,
+                            "conta_id": dados.get("conta_id",""),
+                            "tipo": dados.get("tipo","REAL"),
+                            "banca": dados.get("banca", 0.0),
+                        }
+                        padrao["ativa"] = "principal"
+                else:
+                    padrao.update(dados)
     except Exception:
         pass
-    # Fallback: variável de ambiente DERIV_PAT no Render
-    if not padrao.get("pat"):
-        env_pat = os.environ.get("DERIV_PAT", "")
-        if env_pat:
-            padrao["pat"] = env_pat
+    # Fallback: variável de ambiente
+    if not padrao["contas"] and os.environ.get("DERIV_PAT",""):
+        padrao["contas"]["principal"] = {
+            "nome": "principal",
+            "pat": os.environ["DERIV_PAT"],
+            "conta_id": "", "tipo": "REAL", "banca": 0.0,
+        }
+        padrao["ativa"] = "principal"
     return padrao
 
-def _pat_salvar(pat: str, tipo: str = "REAL", conta_id: str = "", banca: float = 0.0):
-    """Salva PAT + info da conta de forma persistente."""
-    atual = _pat_carregar()
-    atual.update({"pat": pat, "tipo": tipo})
-    if conta_id:
-        atual["conta_id"] = conta_id
-    if banca > 0:
-        atual["banca"] = banca
+def _mc_salvar(dados: dict):
     try:
         with open(_TG_PAT_ARQUIVO, "w", encoding="utf-8") as f:
-            json.dump(atual, f, indent=2)
+            json.dump(dados, f, indent=2, ensure_ascii=False)
     except Exception as e:
-        print(f"[PAT] Erro ao salvar: {e}")
+        print(f"[MC] Erro ao salvar: {e}")
+
+def _mc_conta_ativa() -> dict:
+    """Retorna a conta ativa ou {} se nenhuma."""
+    d = _mc_carregar()
+    nome = d.get("ativa","")
+    return d["contas"].get(nome, {})
+
+def _mc_atualizar_banca(banca: float):
+    """Atualiza banca da conta ativa."""
+    d = _mc_carregar()
+    nome = d.get("ativa","")
+    if nome and nome in d["contas"]:
+        d["contas"][nome]["banca"] = round(banca, 2)
+        _mc_salvar(d)
+
+def _mc_atualizar_conta_id(nome: str, conta_id: str, tipo: str):
+    """Salva conta_id e tipo detectado na conta após conectar."""
+    d = _mc_carregar()
+    if nome in d["contas"]:
+        d["contas"][nome]["conta_id"] = conta_id
+        d["contas"][nome]["tipo"]     = tipo
+        _mc_salvar(d)
+
+# ── Compatibilidade com código antigo que usa _pat_carregar ───────────────────
+def _pat_carregar() -> dict:
+    c = _mc_conta_ativa()
+    return {"pat": c.get("pat",""), "tipo": c.get("tipo","REAL"),
+            "conta_id": c.get("conta_id",""), "banca": c.get("banca",0.0)}
+
+def _pat_salvar(pat: str, tipo: str = "REAL", conta_id: str = "", banca: float = 0.0):
+    d = _mc_carregar()
+    nome = d.get("ativa","") or "principal"
+    if nome not in d["contas"]:
+        d["contas"][nome] = {"nome": nome, "pat": pat, "conta_id": conta_id,
+                              "tipo": tipo, "banca": banca}
+    else:
+        d["contas"][nome].update({"pat": pat, "tipo": tipo})
+        if conta_id: d["contas"][nome]["conta_id"] = conta_id
+        if banca > 0: d["contas"][nome]["banca"] = banca
+    if not d.get("ativa"): d["ativa"] = nome
+    _mc_salvar(d)
 
 def _pat_detectar_tipo(conta_id: str) -> str:
-    """Detecta se uma conta Deriv é DEMO ou REAL pelo ID."""
     cid = str(conta_id).upper()
-    # Contas virtuais/demo: começam com VR, VRTC, DOT
     if cid.startswith(("VR", "DOT", "VRTC")):
         return "DEMO"
-    # Contas reais: CR, MLT, MF, ROT, etc.
     return "REAL"
 
 def _pat_atualizar_banca(banca: float):
-    """Atualiza só o valor da banca no arquivo salvo."""
-    atual = _pat_carregar()
-    atual["banca"] = round(banca, 2)
-    try:
-        with open(_TG_PAT_ARQUIVO, "w", encoding="utf-8") as f:
-            json.dump(atual, f, indent=2)
-    except Exception:
-        pass
+    _mc_atualizar_banca(banca)
 
 @app.route('/tg-pat-config', methods=['GET'])
 def tg_pat_config_get():
@@ -17001,6 +17057,10 @@ _KB_FIXO = {
     "input_field_placeholder": "Escolha uma opção...",
 }
 
+# ── Estado de cadastro de conta (por chat_id) ─────────────────────────────────
+# Formato: { chat_id: {"etapa": "nome"|"pat"|"tipo", "nome": str, "pat": str} }
+_tg_cadastro_conta: dict = {}
+
 def _kb_menu_principal(rodando: bool) -> dict:
     """Teclado inline que aparece dentro da mensagem."""
     robo_btn = "⏹️ PARAR" if rodando else "▶️ INICIAR"
@@ -17045,6 +17105,80 @@ def _kb_gerenciamentos() -> dict:
         rows.append(row)
     rows.append([{"text": "◀️ Voltar", "callback_data": "menu_principal"}])
     return {"inline_keyboard": rows}
+
+def _kb_contas_menu() -> dict:
+    """Teclado inline do menu CONTAS CADASTRADAS."""
+    d = _mc_carregar()
+    contas_dict = d.get("contas", {})
+    ativa = d.get("ativa", "")
+    rows = []
+    for nome_c, c in contas_dict.items():
+        tipo_c = _pat_detectar_tipo(c.get("conta_id","")) if c.get("conta_id") else c.get("tipo","?")
+        icone_t  = "🧪" if tipo_c == "DEMO" else "💰"
+        ativa_mk = " ✅" if nome_c == ativa else ""
+        rows.append([
+            {"text": f"{icone_t} {nome_c}{ativa_mk}", "callback_data": f"conta_info_{nome_c}"},
+        ])
+    rows.append([{"text": "➕ CADASTRAR NOVA CONTA", "callback_data": "conta_add"}])
+    rows.append([{"text": "◀️ Voltar", "callback_data": "menu_principal"}])
+    return {"inline_keyboard": rows}
+
+def _kb_conta_opcoes(nome_c: str) -> dict:
+    """Teclado inline com opções de uma conta específica."""
+    return {"inline_keyboard": [
+        [{"text": "✅ USAR ESTA CONTA", "callback_data": f"conta_usar_{nome_c}"}],
+        [{"text": "🗑️ REMOVER",         "callback_data": f"conta_remover_{nome_c}"}],
+        [{"text": "◀️ Voltar às Contas", "callback_data": "menu_contas"}],
+    ]}
+
+def _kb_conta_tipo(nome_c: str) -> dict:
+    """Teclado inline para escolher tipo DEMO ou REAL."""
+    return {"inline_keyboard": [
+        [{"text": "🧪 DEMO",  "callback_data": f"conta_tipo_DEMO_{nome_c}"},
+         {"text": "💰 REAL",  "callback_data": f"conta_tipo_REAL_{nome_c}"}],
+        [{"text": "❌ Cancelar", "callback_data": "menu_contas"}],
+    ]}
+
+def _tg_texto_contas() -> str:
+    """Gera o texto resumo do menu CONTAS CADASTRADAS."""
+    d = _mc_carregar()
+    contas_dict = d.get("contas", {})
+    ativa = d.get("ativa", "")
+    banca_atual = _tg_bot_estado.get("banca", 0.0)
+    try:
+        conta_id_mem = _token_recebido.get("_conta_id_cache", "")
+    except Exception:
+        conta_id_mem = ""
+
+    if not contas_dict:
+        return (
+            "👤 <b>CONTAS CADASTRADAS</b>\n\n"
+            "❌ Nenhuma conta cadastrada ainda.\n\n"
+            "Clique em <b>➕ CADASTRAR NOVA CONTA</b> para adicionar."
+        )
+
+    linhas = [f"👤 <b>CONTAS CADASTRADAS</b> ({len(contas_dict)})\n━━━━━━━━━━━━━━━━━━━━━"]
+    for nome_c, c in contas_dict.items():
+        e_ativa   = (nome_c == ativa)
+        conectada = e_ativa and bool(conta_id_mem)
+        tipo_c    = _pat_detectar_tipo(c.get("conta_id","")) if c.get("conta_id") else c.get("tipo","?")
+        icone_t   = "🧪" if tipo_c == "DEMO" else "💰"
+        icone_s   = "🟢" if conectada else ("🔵" if e_ativa else "⚪")
+        banca_c   = banca_atual if (e_ativa and banca_atual > 0) else c.get("banca", 0.0)
+        ativa_tag = " ✅ <b>ATIVA</b>" if e_ativa else ""
+        pat_prev  = c.get("pat","")[:14] + "..." if c.get("pat") else "—"
+        status_txt = "Conectada (sessão ativa)" if conectada else ("Ativa (não conectada)" if e_ativa else "Inativa")
+        linhas.append(
+            f"\n✏️ <b>{nome_c}</b>{ativa_tag}\n"
+            f"   🆔 ID: <code>{c.get('conta_id','—') or '—'}</code>\n"
+            f"   📋 Tipo: <b>{tipo_c}</b>\n"
+            f"   💰 Banca: <b>${banca_c:.2f}</b>\n"
+            f"   🔑 PAT: <code>{pat_prev}</code>\n"
+            f"   📡 Status: {icone_s} {status_txt}"
+        )
+    linhas.append("\n━━━━━━━━━━━━━━━━━━━━━")
+    linhas.append("Selecione uma conta ou cadastre uma nova:")
+    return "\n".join(linhas)
 
 def _tg_texto_status() -> str:
     estado = _tg_bot_estado
@@ -17118,6 +17252,49 @@ def _tg_processar_comando(msg: dict, token: str, chat_id_autorizado: str):
     if _texto_norm in _ALIAS_BOTOES:
         texto = "/" + _ALIAS_BOTOES[_texto_norm]
 
+    # ── Captura etapa de cadastro de conta ───────────────────────────────────
+    if chat_id in _tg_cadastro_conta:
+        etapa = _tg_cadastro_conta[chat_id].get("etapa")
+        if etapa == "nome":
+            nome_novo = texto.strip().lower().replace(" ","_")
+            if not nome_novo.replace("_","").replace("-","").isalnum() or len(nome_novo) < 2:
+                _tg_enviar_texto(token, chat_id,
+                    "❌ Nome inválido. Use letras, números, _ ou - (mínimo 2 caracteres).\n"
+                    "Digite o <b>nome da conta</b>:")
+                return
+            d = _mc_carregar()
+            if nome_novo in d.get("contas", {}):
+                _tg_enviar_texto(token, chat_id,
+                    f"⚠️ Já existe uma conta com o nome <b>{nome_novo}</b>.\n"
+                    "Escolha outro nome ou use /contas para gerenciá-la.\n\n"
+                    "Digite um <b>nome diferente</b>:")
+                return
+            _tg_cadastro_conta[chat_id]["nome"] = nome_novo
+            _tg_cadastro_conta[chat_id]["etapa"] = "pat"
+            _tg_enviar_texto(token, chat_id,
+                f"✅ Nome: <b>{nome_novo}</b>\n\n"
+                "Agora envie o <b>PAT (Personal Access Token)</b> da Deriv:\n"
+                "<i>Começa com <code>pat_</code></i>")
+            return
+        elif etapa == "pat":
+            pat_novo = texto.strip()
+            if not (pat_novo.startswith("pat_") or pat_novo.startswith("PAT_")):
+                _tg_enviar_texto(token, chat_id,
+                    "❌ PAT inválido. Deve começar com <code>pat_</code>\n\n"
+                    "Envie o <b>PAT</b> novamente:")
+                return
+            _tg_cadastro_conta[chat_id]["pat"] = pat_novo
+            _tg_cadastro_conta[chat_id]["etapa"] = "tipo"
+            nome_c = _tg_cadastro_conta[chat_id]["nome"]
+            _tg_enviar_texto(token, chat_id,
+                f"✅ PAT recebido!\n\n"
+                f"Conta: <b>{nome_c}</b>\n"
+                f"PAT: <code>{pat_novo[:14]}...</code>\n\n"
+                "Escolha o <b>tipo da conta</b>:",
+                _kb_conta_tipo(nome_c))
+            return
+        # etapa "tipo" é tratada via callback — não via texto livre
+
     cmd  = texto.split()[0].lower().lstrip("/")
     args = texto.split()[1:]
     rodando = _tg_bot_estado.get("running", False)
@@ -17138,70 +17315,90 @@ def _tg_processar_comando(msg: dict, token: str, chat_id_autorizado: str):
                 "▶️ <b>BOT INICIADO</b>\n\nClique novamente para pausar.", _KB_FIXO)
 
     elif cmd == "contas":
-        # Botão 👤 CONTAS — mostra contas salvas + banca atual
-        pat_cfg = _pat_carregar()
-        pat_ok  = bool(pat_cfg.get("pat",""))
+        # Abre o menu inline de contas cadastradas
+        _tg_enviar_texto(token, chat_id, _tg_texto_contas(), _kb_contas_menu())
 
-        # ID salvo persistentemente + ID em memória (sessão ativa)
-        conta_id_salvo  = pat_cfg.get("conta_id","")
-        try:
-            conta_id_mem = _token_recebido.get("_conta_id_cache","")
-        except Exception:
-            conta_id_mem = ""
-        conta_id_exibir = conta_id_mem or conta_id_salvo
-
-        if not pat_ok and not conta_id_exibir:
+    elif cmd == "addconta":
+        # /addconta <nome> <pat>
+        if len(args) < 2:
             _tg_enviar_texto(token, chat_id,
-                "👤 <b>CONTAS CADASTRADAS</b>\n\n"
-                "❌ Nenhuma conta configurada.\n\n"
-                "Use /setpat &lt;token&gt; para adicionar uma conta.", _KB_FIXO)
+                "❌ Uso incorreto.\n\n"
+                "📌 Formato:\n<code>/addconta nome pat_xxx...</code>\n\n"
+                "Exemplo:\n"
+                "<code>/addconta real pat_abc123xyz</code>\n"
+                "<code>/addconta demo pat_xyz456abc</code>")
             return
+        nome_novo = args[0].lower().strip()
+        pat_novo  = args[1].strip()
+        if not nome_novo.replace("_","").replace("-","").isalnum():
+            _tg_enviar_texto(token, chat_id, "❌ Nome inválido. Use só letras, números, _ ou -")
+            return
+        if not pat_novo.startswith("pat_") and not pat_novo.startswith("PAT_"):
+            _tg_enviar_texto(token, chat_id, "❌ PAT inválido. Deve começar com <code>pat_</code>")
+            return
+        d = _mc_carregar()
+        ja_existe = nome_novo in d["contas"]
+        d["contas"][nome_novo] = {
+            "nome": nome_novo, "pat": pat_novo,
+            "conta_id": "", "tipo": "?", "banca": 0.0,
+        }
+        if not d.get("ativa"):
+            d["ativa"] = nome_novo
+        _mc_salvar(d)
+        acao_txt = "✏️ Atualizada" if ja_existe else "✅ Adicionada"
+        _tg_enviar_texto(token, chat_id,
+            f"{acao_txt}! Conta <b>{nome_novo}</b> salva.\n\n"
+            f"🔑 PAT: <code>{pat_novo[:14]}...</code>\n\n"
+            f"Use <code>/usarconta {nome_novo}</code> para ativá-la\n"
+            f"e depois <code>/conectar</code> para autenticar.", _KB_FIXO)
 
-        linhas = ["👤 <b>CONTAS CADASTRADAS</b>\n━━━━━━━━━━━━━━━━━━━━━"]
+    elif cmd == "usarconta":
+        # /usarconta <nome>
+        if not args:
+            d = _mc_carregar()
+            nomes = list(d.get("contas",{}).keys())
+            if not nomes:
+                _tg_enviar_texto(token, chat_id, "❌ Nenhuma conta cadastrada. Use /addconta")
+                return
+            lista = "\n".join(f"• <code>/usarconta {n}</code>" for n in nomes)
+            _tg_enviar_texto(token, chat_id,
+                f"📋 <b>Contas disponíveis:</b>\n\n{lista}\n\nQual deseja ativar?")
+            return
+        nome_usar = args[0].lower().strip()
+        d = _mc_carregar()
+        if nome_usar not in d.get("contas",{}):
+            nomes = list(d.get("contas",{}).keys())
+            _tg_enviar_texto(token, chat_id,
+                f"❌ Conta <b>{nome_usar}</b> não encontrada.\n\n"
+                f"Contas disponíveis: {', '.join(nomes) or 'nenhuma'}")
+            return
+        d["ativa"] = nome_usar
+        _mc_salvar(d)
+        c = d["contas"][nome_usar]
+        _tg_enviar_texto(token, chat_id,
+            f"✅ Conta <b>{nome_usar}</b> ativada!\n\n"
+            f"🆔 ID: <code>{c.get('conta_id','—') or '—'}</code>\n"
+            f"📋 Tipo: <b>{c.get('tipo','?')}</b>\n\n"
+            f"Use /conectar para autenticar.", _KB_FIXO)
 
-        if pat_ok:
-            pat      = pat_cfg.get("pat","")
-            tipo_pat = pat_cfg.get("tipo","REAL")
-            # Detecta tipo pelo ID salvo (mais confiável que o digitado pelo usuário)
-            if conta_id_exibir:
-                tipo_pat = _pat_detectar_tipo(conta_id_exibir)
-            icone_tipo = "🧪" if tipo_pat == "DEMO" else "💰"
-            # Banca: usa estado em tempo real se disponível, senão usa o salvo
-            banca_atual = _tg_bot_estado.get("banca", 0.0)
-            banca_salva = pat_cfg.get("banca", 0.0)
-            banca_exib  = banca_atual if banca_atual > 0 else banca_salva
-            # Atualiza banca salva se tiver valor novo
-            if banca_atual > 0 and banca_atual != banca_salva:
-                _pat_atualizar_banca(banca_atual)
-            # Status de conexão
-            conectada = bool(conta_id_mem)
-            status_txt = "🟢 Conectada (sessão ativa)" if conectada else "🟡 Salva (reconectar com /conectar)"
-            linhas.append(
-                f"\n{icone_tipo} <b>Conta Principal</b>\n"
-                f"   🆔 ID: <code>{conta_id_exibir or '—'}</code>\n"
-                f"   📋 Tipo: <b>{tipo_pat}</b>\n"
-                f"   💰 Banca: <b>${banca_exib:.2f}</b>\n"
-                f"   🔑 PAT: <code>{pat[:12]}...</code>\n"
-                f"   📡 Status: {status_txt}"
-            )
-
-        # Contas secundárias registradas no AccountManager
-        contas_sec = _account_manager.listar_contas()
-        for c in contas_sec:
-            cid    = c.get("id","?")
-            tipo_c = c.get("tipo","?")
-            nome_c = c.get("nome","") or cid
-            estado = c.get("estado","?")
-            icone_e = {"PRODUCAO":"🟢","APRENDIZADO":"🔵","PAUSADA":"🟡","APROVADA":"✅"}.get(estado,"⚪")
-            icone_t = "🧪" if "TESTE" in tipo_c.upper() or "VR" in cid.upper() else "💰"
-            linhas.append(
-                f"\n{icone_t} <b>{nome_c}</b>\n"
-                f"   🆔 ID: <code>{cid}</code>\n"
-                f"   📋 Tipo: <b>{tipo_c}</b>\n"
-                f"   📡 Estado: {icone_e} {estado}"
-            )
-
-        _tg_enviar_texto(token, chat_id, "\n".join(linhas), _KB_FIXO)
+    elif cmd == "removerconta":
+        # /removerconta <nome>
+        if not args:
+            _tg_enviar_texto(token, chat_id,
+                "❌ Uso: <code>/removerconta nome</code>"); return
+        nome_rem = args[0].lower().strip()
+        d = _mc_carregar()
+        if nome_rem not in d.get("contas",{}):
+            _tg_enviar_texto(token, chat_id, f"❌ Conta <b>{nome_rem}</b> não encontrada.")
+            return
+        del d["contas"][nome_rem]
+        if d.get("ativa") == nome_rem:
+            d["ativa"] = next(iter(d["contas"]), "")
+        _mc_salvar(d)
+        nova_ativa = d.get("ativa","nenhuma")
+        _tg_enviar_texto(token, chat_id,
+            f"🗑️ Conta <b>{nome_rem}</b> removida.\n"
+            f"Conta ativa agora: <b>{nova_ativa}</b>", _KB_FIXO)
 
     elif cmd == "status":
         _tg_enviar_texto(token, chat_id, _tg_texto_status(), _KB_FIXO)
@@ -17393,8 +17590,104 @@ def _tg_processar_callback(cb: dict, token: str, chat_id_autorizado: str):
 
     rodando = _tg_bot_estado.get("running", False)
 
+    # ── Menu CONTAS CADASTRADAS ───────────────────────────────────────────────
+    if data == "menu_contas":
+        _tg_responder_callback(token, cb_id)
+        _tg_editar_mensagem(token, chat_id, msg_id, _tg_texto_contas(), _kb_contas_menu())
+
+    elif data == "conta_add":
+        _tg_responder_callback(token, cb_id)
+        _tg_cadastro_conta[chat_id] = {"etapa": "nome"}
+        _tg_enviar_texto(token, chat_id,
+            "📝 <b>CADASTRAR NOVA CONTA</b>\n\n"
+            "Digite um <b>nome</b> para identificar esta conta\n"
+            "<i>(ex: principal, real2, demo-teste)</i>:")
+
+    elif data.startswith("conta_info_"):
+        nome_c = data[len("conta_info_"):]
+        _tg_responder_callback(token, cb_id)
+        d = _mc_carregar()
+        c = d.get("contas", {}).get(nome_c)
+        if not c:
+            _tg_editar_mensagem(token, chat_id, msg_id,
+                f"❌ Conta <b>{nome_c}</b> não encontrada.", _kb_contas_menu())
+            return
+        tipo_c   = _pat_detectar_tipo(c.get("conta_id","")) if c.get("conta_id") else c.get("tipo","?")
+        icone_t  = "🧪" if tipo_c == "DEMO" else "💰"
+        e_ativa  = (nome_c == d.get("ativa",""))
+        ativa_mk = " ✅ ATIVA" if e_ativa else ""
+        banca_c  = _tg_bot_estado.get("banca",0.0) if e_ativa else c.get("banca",0.0)
+        pat_prev = c.get("pat","")[:14] + "..." if c.get("pat") else "—"
+        txt = (
+            f"{icone_t} <b>{nome_c}</b>{ativa_mk}\n"
+            f"━━━━━━━━━━━━━━━━━━━━━\n"
+            f"🆔 ID: <code>{c.get('conta_id','—') or '—'}</code>\n"
+            f"📋 Tipo: <b>{tipo_c}</b>\n"
+            f"💰 Banca: <b>${banca_c:.2f}</b>\n"
+            f"🔑 PAT: <code>{pat_prev}</code>\n"
+        )
+        _tg_editar_mensagem(token, chat_id, msg_id, txt, _kb_conta_opcoes(nome_c))
+
+    elif data.startswith("conta_usar_"):
+        nome_c = data[len("conta_usar_"):]
+        _tg_responder_callback(token, cb_id, f"✅ Usando {nome_c}")
+        d = _mc_carregar()
+        if nome_c in d.get("contas", {}):
+            d["ativa"] = nome_c
+            _mc_salvar(d)
+        _tg_editar_mensagem(token, chat_id, msg_id, _tg_texto_contas(), _kb_contas_menu())
+
+    elif data.startswith("conta_remover_"):
+        nome_c = data[len("conta_remover_"):]
+        _tg_responder_callback(token, cb_id, f"🗑️ Removendo {nome_c}...")
+        d = _mc_carregar()
+        if nome_c in d.get("contas", {}):
+            del d["contas"][nome_c]
+            if d.get("ativa") == nome_c:
+                d["ativa"] = next(iter(d["contas"]), "")
+            _mc_salvar(d)
+        _tg_editar_mensagem(token, chat_id, msg_id, _tg_texto_contas(), _kb_contas_menu())
+
+    elif data.startswith("conta_tipo_"):
+        # formato: conta_tipo_DEMO_nome ou conta_tipo_REAL_nome
+        partes = data[len("conta_tipo_"):].split("_", 1)
+        if len(partes) == 2:
+            tipo_escolhido, nome_c = partes[0].upper(), partes[1]
+            _tg_responder_callback(token, cb_id)
+            # Recupera PAT do estado de cadastro ou do dict existente
+            estado_cad = _tg_cadastro_conta.pop(chat_id, {})
+            pat_cad    = estado_cad.get("pat", "")
+            if not pat_cad:
+                # Callback chegou sem estado (ex: re-envio) — tenta do dicionário existente
+                d2 = _mc_carregar()
+                pat_cad = d2.get("contas",{}).get(nome_c,{}).get("pat","")
+            if pat_cad:
+                d = _mc_carregar()
+                ja_existe = nome_c in d["contas"]
+                d["contas"][nome_c] = {
+                    "nome": nome_c, "pat": pat_cad,
+                    "conta_id": "", "tipo": tipo_escolhido, "banca": 0.0,
+                }
+                if not d.get("ativa"):
+                    d["ativa"] = nome_c
+                _mc_salvar(d)
+                icone_t = "🧪" if tipo_escolhido == "DEMO" else "💰"
+                acao_txt = "✏️ Atualizada" if ja_existe else "✅ Cadastrada"
+                _tg_enviar_texto(token, chat_id,
+                    f"{acao_txt}! Conta <b>{nome_c}</b> salva com sucesso!\n\n"
+                    f"🆔 Nome: <b>{nome_c}</b>\n"
+                    f"{icone_t} Tipo: <b>{tipo_escolhido}</b>\n"
+                    f"🔑 PAT: <code>{pat_cad[:14]}...</code>\n\n"
+                    f"Use /conectar para autenticar.")
+                _tg_editar_mensagem(token, chat_id, msg_id, _tg_texto_contas(), _kb_contas_menu())
+            else:
+                _tg_enviar_texto(token, chat_id,
+                    "❌ Sessão de cadastro expirada. Use /contas para recomeçar.")
+        else:
+            _tg_responder_callback(token, cb_id, "❌ Dados inválidos")
+
     # ── Menu principal ────────────────────────────────────────────────────────
-    if data == "menu_principal":
+    elif data == "menu_principal":
         _tg_responder_callback(token, cb_id)
         _tg_editar_mensagem(token, chat_id, msg_id, _tg_texto_status(),
                             _kb_menu_principal(rodando))
