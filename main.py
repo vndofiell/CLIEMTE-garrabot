@@ -15219,13 +15219,30 @@ def _ping():
 
 @app.route('/tg-debug', methods=['GET'])
 def _tg_debug():
-    """Diagnóstico do polling do Telegram — mostra offset atual e testa getUpdates."""
+    """Diagnóstico completo: webhook, offset, updates pendentes."""
+    global _TG_POLL_OFFSET
     try:
         cfg = _tg_carregar()
         tok = cfg.get("token","")
         if not tok:
             return jsonify({"ok": False, "erro": "Token não configurado"})
-        # Consulta updates pendentes sem consumir (timeout=0)
+
+        # 1. Verifica webhook
+        wh = requests.get(_tg_url(tok, "getWebhookInfo"), timeout=8, verify=False).json()
+        webhook_url = wh.get("result", {}).get("url", "")
+        webhook_ativo = bool(webhook_url)
+
+        # 2. Se tem webhook ativo, remove agora
+        webhook_removido = False
+        if webhook_ativo:
+            rd = requests.post(_tg_url(tok, "deleteWebhook"),
+                               json={"drop_pending_updates": True},
+                               timeout=8, verify=False).json()
+            webhook_removido = rd.get("ok", False)
+            if webhook_removido:
+                _TG_POLL_OFFSET = 0
+
+        # 3. Updates pendentes
         r = requests.get(
             _tg_url(tok, "getUpdates"),
             params={"offset": _TG_POLL_OFFSET + 1, "timeout": 0,
@@ -15233,25 +15250,34 @@ def _tg_debug():
             timeout=8, verify=False,
         )
         data = r.json()
+        upds = data.get("result", [])
+
         return jsonify({
-            "ok":           True,
-            "offset_atual": _TG_POLL_OFFSET,
-            "updates_pend": len(data.get("result",[])),
-            "ultimo_upd":   data.get("result",[-1])[-1] if data.get("result") else None,
-            "tg_ok":        data.get("ok"),
+            "ok":               True,
+            "offset_atual":     _TG_POLL_OFFSET,
+            "updates_pend":     len(upds),
+            "webhook_url":      webhook_url or "(nenhum)",
+            "webhook_ativo":    webhook_ativo,
+            "webhook_removido": webhook_removido,
+            "tg_ok":            data.get("ok"),
         })
     except Exception as e:
         return jsonify({"ok": False, "erro": str(e)})
 
 @app.route('/tg-reset-offset', methods=['POST'])
 def _tg_reset_offset():
-    """Reseta o offset do polling — descarta todos os updates pendentes."""
+    """Reseta offset e remove webhook se existir."""
     global _TG_POLL_OFFSET
     try:
         cfg = _tg_carregar()
         tok = cfg.get("token","")
         if not tok:
             return jsonify({"ok": False, "erro": "Token não configurado"})
+        # Remove webhook
+        requests.post(_tg_url(tok, "deleteWebhook"),
+                      json={"drop_pending_updates": True},
+                      timeout=8, verify=False)
+        # Pega último update_id para avançar offset
         r = requests.get(
             _tg_url(tok, "getUpdates"),
             params={"offset": -1, "timeout": 0},
@@ -15260,6 +15286,12 @@ def _tg_reset_offset():
         res = r.json().get("result", [])
         if res:
             _TG_POLL_OFFSET = res[-1]["update_id"]
+            # Confirma consumo do offset
+            requests.get(
+                _tg_url(tok, "getUpdates"),
+                params={"offset": _TG_POLL_OFFSET + 1, "timeout": 0},
+                timeout=8, verify=False,
+            )
         return jsonify({"ok": True, "novo_offset": _TG_POLL_OFFSET,
                         "updates_descartados": len(res)})
     except Exception as e:
@@ -17832,11 +17864,22 @@ def _tg_bot_controller_loop():
     """Loop de polling que lê mensagens e callbacks do Telegram."""
     global _TG_POLL_OFFSET
     time.sleep(10)
-    # Descarta updates acumulados antes de iniciar (evita reprocessar callbacks antigos)
+    # ── Inicialização: remove webhook e descarta updates acumulados ───────────
     try:
-        cfg0  = _tg_carregar()
-        tok0  = cfg0.get("token","")
+        cfg0 = _tg_carregar()
+        tok0 = cfg0.get("token","")
         if tok0:
+            # 1. Remove qualquer webhook ativo (impede que callbacks sejam interceptados)
+            wh_resp = requests.get(_tg_url(tok0, "getWebhookInfo"), timeout=8, verify=False).json()
+            wh_url  = wh_resp.get("result", {}).get("url", "")
+            if wh_url:
+                del_resp = requests.post(_tg_url(tok0, "deleteWebhook"),
+                                         json={"drop_pending_updates": True},
+                                         timeout=8, verify=False).json()
+                print(f"[TG Controller] Webhook removido ({wh_url}): {del_resp.get('ok')}")
+            else:
+                print("[TG Controller] Nenhum webhook ativo.")
+            # 2. Descarta updates acumulados avançando o offset
             r0 = requests.get(
                 _tg_url(tok0, "getUpdates"),
                 params={"offset": -1, "timeout": 0},
@@ -17845,7 +17888,9 @@ def _tg_bot_controller_loop():
             res0 = r0.json().get("result", [])
             if res0:
                 _TG_POLL_OFFSET = res0[-1]["update_id"]
-                print(f"[TG Controller] Descartados updates antigos. Offset inicial: {_TG_POLL_OFFSET}")
+                print(f"[TG Controller] Offset inicial: {_TG_POLL_OFFSET} ({len(res0)} updates descartados)")
+            else:
+                print("[TG Controller] Nenhum update pendente. Polling pronto.")
     except Exception as e:
         print(f"[TG Controller] Aviso no init: {e}")
 
