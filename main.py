@@ -17988,23 +17988,51 @@ def _tg_bot_controller_loop():
             time.sleep(5)
         time.sleep(0.5)
 
-# ── Garante que o thread de polling está vivo no worker atual ────────────────
-# NÃO usa flag booleana — verifica se o thread está realmente rodando.
-# Isso é fork-safe: após fork do gunicorn, threads morrem mas a verificação
-# detecta isso e reinicia o thread no processo filho correto.
+# ── Garante que APENAS 1 processo no servidor faz polling ───────────────────
+# Usa lock de arquivo: apenas o processo que conseguir o lock roda o polling.
+# Outros processos/workers detectam o lock e não iniciam segundo polling.
 _tg_controller_lock = threading.Lock()
+_TG_LOCKFILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".tg_poll.lock")
 
 def _tg_garantir_controller():
-    """Reinicia o thread de polling se não estiver vivo (fork-safe)."""
+    """Inicia o polling apenas se nenhum outro processo já estiver rodando."""
     with _tg_controller_lock:
+        # Verifica se já tem thread vivo NESTE processo
         vivo = any(t.name == "tg-controller" and t.is_alive()
                    for t in threading.enumerate())
         if vivo:
             return
+
+        # Tenta adquirir lock de arquivo (exclusivo entre processos)
+        try:
+            import fcntl
+            lf = open(_TG_LOCKFILE, "w")
+            fcntl.flock(lf, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            # Conseguiu o lock — este processo é o dono do polling
+            lf.write(str(os.getpid()))
+            lf.flush()
+            # Guarda referência para não fechar o file descriptor
+            globals()["_tg_lockfile_fd"] = lf
+            print(f"[TG] Lock obtido. Polling iniciado no PID={os.getpid()}")
+        except (ImportError, OSError):
+            # fcntl não disponível (Windows) ou lock já em uso por outro processo
+            # Verifica se o PID no lockfile ainda está vivo
+            try:
+                with open(_TG_LOCKFILE, "r") as lf2:
+                    pid_dono = int(lf2.read().strip())
+                import psutil
+                if psutil.pid_exists(pid_dono):
+                    print(f"[TG] Polling já rodando no PID={pid_dono}. Este worker ({os.getpid()}) não inicia.")
+                    return
+            except Exception:
+                pass
+            # Se chegou aqui: lockfile antigo ou sem fcntl — inicia mesmo assim
+            print(f"[TG] Lock indisponível — iniciando polling no PID={os.getpid()} (modo fallback)")
+
         t = threading.Thread(target=_tg_bot_controller_loop,
                               daemon=True, name="tg-controller")
         t.start()
-        print(f"[TG Controller] Thread (re)iniciado no PID={os.getpid()}")
+        print(f"[TG] Thread de polling iniciado no PID={os.getpid()}")
 
-# Inicia imediatamente (python main.py / carregamento do módulo)
+# Inicia ao carregar o módulo
 _tg_garantir_controller()

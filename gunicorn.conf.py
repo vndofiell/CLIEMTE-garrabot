@@ -1,30 +1,40 @@
 """
-Configuração do Gunicorn para o Bot Garra no Render.
-Usa post_fork hook para iniciar threads daemon DEPOIS do fork do worker,
-garantindo que o polling do Telegram funcione corretamente.
+Gunicorn config — Bot Garra (Render)
+Usa --preload para carregar o módulo 1x só, evitando múltiplos threads de polling.
+post_fork reinicia o thread de polling dentro do worker correto.
 """
-import threading
 import os
+import threading
 
-# ── Configurações de servidor ────────────────────────────────────────────────
-bind        = f"0.0.0.0:{os.environ.get('PORT', '10000')}"
-workers     = 1
-threads     = 4
-timeout     = 120
+bind         = f"0.0.0.0:{os.environ.get('PORT', '10000')}"
+workers      = 1
+threads      = 4
+timeout      = 120
 worker_class = "gthread"
-# SEM --preload: módulo carregado em cada worker, threads sobrevivem ao fork
+preload_app  = True   # carrega o módulo 1x no master — sem múltiplos pollings
 
 def post_fork(server, worker):
-    """Executado em cada worker APÓS o fork — momento seguro para iniciar threads."""
+    """
+    Executado no processo FILHO após o fork.
+    Threads do processo pai morreram — reinicia o polling aqui.
+    """
     pid = os.getpid()
-    server.log.info(f"[Gunicorn] Worker {pid} iniciado. Iniciando thread Telegram...")
+    server.log.info(f"[Gunicorn post_fork] Worker PID={pid} — reiniciando thread Telegram...")
     try:
-        import main as _app_module
-        fn = getattr(_app_module, "_tg_garantir_controller", None)
+        # Remove lockfile antigo do processo pai (se existir)
+        import main as _m
+        lf_path = getattr(_m, "_TG_LOCKFILE", None)
+        if lf_path and os.path.exists(lf_path):
+            try:
+                os.remove(lf_path)
+            except Exception:
+                pass
+        # Força reinício do polling neste worker
+        fn = getattr(_m, "_tg_garantir_controller", None)
         if fn:
             fn()
-            server.log.info(f"[Gunicorn] Thread Telegram iniciado no worker {pid}")
+            server.log.info(f"[Gunicorn post_fork] Thread Telegram OK no PID={pid}")
         else:
-            server.log.warning(f"[Gunicorn] _tg_garantir_controller não encontrado no worker {pid}")
+            server.log.warning(f"[Gunicorn post_fork] _tg_garantir_controller não encontrado!")
     except Exception as e:
-        server.log.error(f"[Gunicorn] Erro ao iniciar thread Telegram: {e}")
+        server.log.error(f"[Gunicorn post_fork] Erro: {e}")
