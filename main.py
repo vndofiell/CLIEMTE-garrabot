@@ -61,6 +61,15 @@ def _add_ngrok_header(resp):
     resp.headers['ngrok-skip-browser-warning'] = '1'
     return resp
 
+# _tg_garantir_controller é definida no final do arquivo após _tg_bot_controller_loop
+# O before_request abaixo usa uma referência lazy via globals()
+@app.before_request
+def _garantir_tg_thread():
+    """Chama _tg_garantir_controller se já estiver definida (gunicorn fork-safe)."""
+    fn = globals().get("_tg_garantir_controller")
+    if fn:
+        fn()
+
 APP_ID       = "33qw17TW2WM9OqeTqtRaC"
 
 # ── URL base: sempre o Render (servidor remoto) ─────────────────────────────
@@ -17923,5 +17932,30 @@ def _tg_bot_controller_loop():
             time.sleep(5)
         time.sleep(0.5)
 
-threading.Thread(target=_tg_bot_controller_loop, daemon=True, name="tg-controller").start()
-print("[TG Controller] Loop de comandos Telegram iniciado.")
+# ── Garante que o thread de polling inicia DENTRO do worker do gunicorn ──────
+# Com gunicorn --preload, threads criados no nível do módulo morrem no fork.
+# Usamos before_first_request para iniciar no contexto correto do worker.
+_tg_controller_iniciado = False
+_tg_controller_lock     = threading.Lock()
+
+def _tg_garantir_controller():
+    """Inicia o thread de polling apenas uma vez por processo worker."""
+    global _tg_controller_iniciado
+    with _tg_controller_lock:
+        if _tg_controller_iniciado:
+            return
+        _tg_controller_iniciado = True
+        t = threading.Thread(target=_tg_bot_controller_loop, daemon=True, name="tg-controller")
+        t.start()
+        print(f"[TG Controller] Thread iniciado no worker PID={os.getpid()}")
+
+# Inicia imediatamente (modo desenvolvimento / python main.py)
+_tg_garantir_controller()
+
+# Hook do Flask para garantir inicialização no primeiro request (gunicorn/Render)
+try:
+    # Flask >= 2.3 removeu before_first_request — usamos with app.app_context()
+    with app.app_context():
+        _tg_garantir_controller()
+except Exception:
+    pass
