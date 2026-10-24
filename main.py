@@ -15226,6 +15226,16 @@ def trading_pro_config():
 def _ping():
     return jsonify({"ok": True, "status": "online"})
 
+@app.route('/tg-start', methods=['POST','GET'])
+def _tg_start():
+    """Força o (re)início do thread de polling do Telegram."""
+    fn = globals().get("_tg_garantir_controller")
+    if fn:
+        fn()
+    import threading as _thr
+    vivo = any(t.name == "tg-controller" and t.is_alive() for t in _thr.enumerate())
+    return jsonify({"ok": True, "thread_vivo": vivo, "pid": os.getpid()})
+
 @app.route('/tg-debug', methods=['GET'])
 def _tg_debug():
     """Diagnóstico completo: webhook, offset, updates raw do Telegram."""
@@ -17947,30 +17957,23 @@ def _tg_bot_controller_loop():
             time.sleep(5)
         time.sleep(0.5)
 
-# ── Garante que o thread de polling inicia DENTRO do worker do gunicorn ──────
-# Com gunicorn --preload, threads criados no nível do módulo morrem no fork.
-# Usamos before_first_request para iniciar no contexto correto do worker.
-_tg_controller_iniciado = False
-_tg_controller_lock     = threading.Lock()
+# ── Garante que o thread de polling está vivo no worker atual ────────────────
+# NÃO usa flag booleana — verifica se o thread está realmente rodando.
+# Isso é fork-safe: após fork do gunicorn, threads morrem mas a verificação
+# detecta isso e reinicia o thread no processo filho correto.
+_tg_controller_lock = threading.Lock()
 
 def _tg_garantir_controller():
-    """Inicia o thread de polling apenas uma vez por processo worker."""
-    global _tg_controller_iniciado
+    """Reinicia o thread de polling se não estiver vivo (fork-safe)."""
     with _tg_controller_lock:
-        if _tg_controller_iniciado:
+        vivo = any(t.name == "tg-controller" and t.is_alive()
+                   for t in threading.enumerate())
+        if vivo:
             return
-        _tg_controller_iniciado = True
-        t = threading.Thread(target=_tg_bot_controller_loop, daemon=True, name="tg-controller")
+        t = threading.Thread(target=_tg_bot_controller_loop,
+                              daemon=True, name="tg-controller")
         t.start()
-        print(f"[TG Controller] Thread iniciado no worker PID={os.getpid()}")
+        print(f"[TG Controller] Thread (re)iniciado no PID={os.getpid()}")
 
-# Inicia imediatamente (modo desenvolvimento / python main.py)
+# Inicia imediatamente (python main.py / carregamento do módulo)
 _tg_garantir_controller()
-
-# Hook do Flask para garantir inicialização no primeiro request (gunicorn/Render)
-try:
-    # Flask >= 2.3 removeu before_first_request — usamos with app.app_context()
-    with app.app_context():
-        _tg_garantir_controller()
-except Exception:
-    pass
