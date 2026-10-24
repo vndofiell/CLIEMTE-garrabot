@@ -17986,7 +17986,5 @@ def _tg_garantir_controller():
         t.start()
         print(f"[TG Controller] Thread (re)iniciado no PID={os.getpid()}")
 
-# Não iniciar polling na importação: Gunicorn --preload cria threads no master.
-# O @app.before_request e o hook post_fork do worker iniciam o controlador.
-if __name__ == "__main__":
-    _tg_garantir_controller()
+# Inicia o thread ao carregar o módulo (gunicorn sem --preload carrega dentro do worker)
+_tg_garantir_controller()
