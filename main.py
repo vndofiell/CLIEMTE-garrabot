@@ -15217,6 +15217,54 @@ def trading_pro_config():
 def _ping():
     return jsonify({"ok": True, "status": "online"})
 
+@app.route('/tg-debug', methods=['GET'])
+def _tg_debug():
+    """Diagnóstico do polling do Telegram — mostra offset atual e testa getUpdates."""
+    try:
+        cfg = _tg_carregar()
+        tok = cfg.get("token","")
+        if not tok:
+            return jsonify({"ok": False, "erro": "Token não configurado"})
+        # Consulta updates pendentes sem consumir (timeout=0)
+        r = requests.get(
+            _tg_url(tok, "getUpdates"),
+            params={"offset": _TG_POLL_OFFSET + 1, "timeout": 0,
+                    "allowed_updates": ["message","callback_query"]},
+            timeout=8, verify=False,
+        )
+        data = r.json()
+        return jsonify({
+            "ok":           True,
+            "offset_atual": _TG_POLL_OFFSET,
+            "updates_pend": len(data.get("result",[])),
+            "ultimo_upd":   data.get("result",[-1])[-1] if data.get("result") else None,
+            "tg_ok":        data.get("ok"),
+        })
+    except Exception as e:
+        return jsonify({"ok": False, "erro": str(e)})
+
+@app.route('/tg-reset-offset', methods=['POST'])
+def _tg_reset_offset():
+    """Reseta o offset do polling — descarta todos os updates pendentes."""
+    global _TG_POLL_OFFSET
+    try:
+        cfg = _tg_carregar()
+        tok = cfg.get("token","")
+        if not tok:
+            return jsonify({"ok": False, "erro": "Token não configurado"})
+        r = requests.get(
+            _tg_url(tok, "getUpdates"),
+            params={"offset": -1, "timeout": 0},
+            timeout=8, verify=False,
+        )
+        res = r.json().get("result", [])
+        if res:
+            _TG_POLL_OFFSET = res[-1]["update_id"]
+        return jsonify({"ok": True, "novo_offset": _TG_POLL_OFFSET,
+                        "updates_descartados": len(res)})
+    except Exception as e:
+        return jsonify({"ok": False, "erro": str(e)})
+
 
 # ── Auto-ping: mantém o Render sempre acordado (nunca hiberna) ───────────────
 def _auto_ping_loop():
