@@ -21995,6 +21995,26 @@ function iniciarTelaAuth(dadosLogin) {
 
     overlayAuth.style.display = 'flex';
 
+    // ── Acorda o Render imediatamente ao abrir a tela de loading ─────────────
+    // Pinga em background sem bloquear a animação — tenta até 3x com intervalo
+    (function _pingRenderNoLogin() {
+        let _tentativas = 0;
+        function _tentar() {
+            _tentativas++;
+            fetch('/ping', { signal: AbortSignal.timeout(55000) })
+                .then(r => r.json())
+                .then(() => {
+                    // Atualiza botão do painel se existir
+                    const lbl = document.getElementById('lbl-acordar-render');
+                    if (lbl) { lbl.textContent = '✅ Servidor online'; lbl.style.color = '#00ff64'; }
+                })
+                .catch(() => {
+                    if (_tentativas < 3) setTimeout(_tentar, 3000);
+                });
+        }
+        _tentar();
+    })();
+
     const DURACAO_MS  = 20000;   // 20 segundos total
     const username    = dadosLogin.username || 'AGENTE';
     const email       = dadosLogin.email    || '—';
