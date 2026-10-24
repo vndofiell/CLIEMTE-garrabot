@@ -16961,17 +16961,14 @@ GERENCIAMENTOS_LISTA = [
 ]
 
 # ── Helpers de teclados inline ───────────────────────────────────────────────
-# ── Reply Keyboard FIXO (aparece embaixo do campo de texto, sempre visível) ──
+# ── Reply Keyboard FIXO — 3 botões fixos embaixo do campo de texto ───────────
 _KB_FIXO = {
     "keyboard": [
-        ["▶️ INICIAR", "⏹️ PARAR",   "📊 STATUS"],
-        ["🔌 CONECTAR","⚙️ CONFIG",   "📈 ESTRATÉGIA"],
-        ["🔄 GERENCIAM.","💵 ENTRADA","🎯 STOPWIN"],
-        ["🛑 STOPLOSS",  "❓ AJUDA",  "🔄 MENU"],
+        ["▶️ INICIAR / PAUSAR", "👤 CONTAS", "📊 STATUS"],
     ],
-    "resize_keyboard":   True,   # adapta ao tamanho da tela
-    "persistent":        True,   # mantém visível sempre (Telegram 7.0+)
-    "input_field_placeholder": "Escolha uma opção ou digite um comando...",
+    "resize_keyboard":   True,
+    "persistent":        True,
+    "input_field_placeholder": "Escolha uma opção...",
 }
 
 def _kb_menu_principal(rodando: bool) -> dict:
@@ -17083,18 +17080,9 @@ def _tg_processar_comando(msg: dict, token: str, chat_id_autorizado: str):
 
     # ── Normaliza texto dos botões fixos para comandos ────────────────────────
     _ALIAS_BOTOES = {
-        "▶️ iniciar":    "iniciar",
-        "⏹️ parar":      "parar",
-        "📊 status":     "status",
-        "🔌 conectar":   "conectar",
-        "⚙️ config":     "config",
-        "📈 estratégia": "estrategia",
-        "🔄 gerenciam.": "gerenciamento",
-        "💵 entrada":    "entrada",
-        "🎯 stopwin":    "stopwin",
-        "🛑 stoploss":   "stoploss",
-        "❓ ajuda":      "ajuda",
-        "🔄 menu":       "menu",
+        "▶️ iniciar / pausar": "toggle",
+        "👤 contas":            "contas",
+        "📊 status":            "status",
     }
     _texto_norm = texto.lower().strip()
     if _texto_norm in _ALIAS_BOTOES:
@@ -17105,16 +17093,73 @@ def _tg_processar_comando(msg: dict, token: str, chat_id_autorizado: str):
     rodando = _tg_bot_estado.get("running", False)
 
     if cmd in ("start", "menu"):
-        # /start envia o teclado fixo pela primeira vez (ou reexibe)
-        _tg_enviar_texto(token, chat_id, _tg_texto_status(),
-                         _KB_FIXO)
-        # Envia também o painel inline logo abaixo
-        _tg_enviar_texto(token, chat_id, "🎮 <b>Painel de controle:</b>",
-                         _kb_menu_principal(rodando))
+        # /start envia o teclado fixo + status completo
+        _tg_enviar_texto(token, chat_id, _tg_texto_status(), _KB_FIXO)
+
+    elif cmd == "toggle":
+        # Botão ▶️ INICIAR / PAUSAR — alterna entre iniciar e parar
+        if rodando:
+            _tg_enfileirar({"acao": "parar"})
+            _tg_enviar_texto(token, chat_id,
+                "⏸️ <b>BOT PAUSADO</b>\n\nClique novamente para iniciar.", _KB_FIXO)
+        else:
+            _tg_enfileirar({"acao": "iniciar"})
+            _tg_enviar_texto(token, chat_id,
+                "▶️ <b>BOT INICIADO</b>\n\nClique novamente para pausar.", _KB_FIXO)
+
+    elif cmd == "contas":
+        # Botão 👤 CONTAS — mostra a conta conectada
+        contas = _account_manager.listar_contas()
+        pat_cfg = _pat_carregar()
+        pat_ok  = bool(pat_cfg.get("pat",""))
+        conta_principal_id = _token_recebido.get("_conta_id_cache","") if '_token_recebido' not in dir() else ""
+        try:
+            conta_principal_id = _token_recebido.get("_conta_id_cache","")
+        except Exception:
+            conta_principal_id = ""
+
+        if not contas and not conta_principal_id:
+            _tg_enviar_texto(token, chat_id,
+                "👤 <b>CONTAS CADASTRADAS</b>\n\n"
+                "❌ Nenhuma conta conectada.\n\n"
+                "Use /conectar para autenticar via PAT.", _KB_FIXO)
+            return
+
+        linhas = ["👤 <b>CONTAS CADASTRADAS</b>\n━━━━━━━━━━━━━━━━━━━━━"]
+
+        # Conta PAT (principal)
+        if pat_ok:
+            pat = pat_cfg.get("pat","")
+            tipo_pat = pat_cfg.get("tipo","REAL")
+            icone_tipo = "💰" if tipo_pat == "REAL" else "🧪"
+            ativo_txt = "🟢 Conectada" if conta_principal_id else "🟡 PAT salvo"
+            linhas.append(
+                f"\n{icone_tipo} <b>Conta Principal</b>\n"
+                f"   ID: <code>{conta_principal_id or '—'}</code>\n"
+                f"   Tipo: <b>{tipo_pat}</b>\n"
+                f"   PAT: <code>{pat[:8]}...</code>\n"
+                f"   Status: {ativo_txt}"
+            )
+
+        # Contas secundárias registradas no AccountManager
+        for c in contas:
+            cid    = c.get("id","?")
+            tipo_c = c.get("tipo","?")
+            nome_c = c.get("nome","") or cid
+            estado = c.get("estado","?")
+            icone_e = {"PRODUCAO":"🟢","APRENDIZADO":"🔵","PAUSADA":"🟡","APROVADA":"✅"}.get(estado,"⚪")
+            icone_t = "💰" if "REAL" in tipo_c.upper() else "🧪"
+            linhas.append(
+                f"\n{icone_t} <b>{nome_c}</b>\n"
+                f"   ID: <code>{cid}</code>\n"
+                f"   Tipo: <b>{tipo_c}</b>\n"
+                f"   Estado: {icone_e} {estado}"
+            )
+
+        _tg_enviar_texto(token, chat_id, "\n".join(linhas), _KB_FIXO)
 
     elif cmd == "status":
-        _tg_enviar_texto(token, chat_id, _tg_texto_status(),
-                         _kb_menu_principal(rodando))
+        _tg_enviar_texto(token, chat_id, _tg_texto_status(), _KB_FIXO)
 
     elif cmd == "config":
         cfg = {}
