@@ -17366,48 +17366,69 @@ def _tg_processar_comando(msg: dict, token: str, chat_id_autorizado: str):
     if _texto_norm in _ALIAS_BOTOES:
         texto = "/" + _ALIAS_BOTOES[_texto_norm]
 
-    # ── Captura etapa de cadastro de conta ───────────────────────────────────
+    # ── Captura etapa de cadastro de conta (novo fluxo) ──────────────────────
+    # Fluxo: conta_add clicado → etapa "pat" → etapa "tipo" (inline)
+    #        → etapa "confirmar" (inline) → etapa "nome" → salva
     if chat_id in _tg_cadastro_conta:
         etapa = _tg_cadastro_conta[chat_id].get("etapa")
-        if etapa == "nome":
-            nome_novo = texto.strip().lower().replace(" ","_")
-            if not nome_novo.replace("_","").replace("-","").isalnum() or len(nome_novo) < 2:
-                _tg_enviar_texto(token, chat_id,
-                    "❌ Nome inválido. Use letras, números, _ ou - (mínimo 2 caracteres).\n"
-                    "Digite o <b>nome da conta</b>:")
-                return
-            d = _mc_carregar()
-            if nome_novo in d.get("contas", {}):
-                _tg_enviar_texto(token, chat_id,
-                    f"⚠️ Já existe uma conta com o nome <b>{nome_novo}</b>.\n"
-                    "Escolha outro nome ou use /contas para gerenciá-la.\n\n"
-                    "Digite um <b>nome diferente</b>:")
-                return
-            _tg_cadastro_conta[chat_id]["nome"] = nome_novo
-            _tg_cadastro_conta[chat_id]["etapa"] = "pat"
-            _tg_enviar_texto(token, chat_id,
-                f"✅ Nome: <b>{nome_novo}</b>\n\n"
-                "Agora envie o <b>PAT (Personal Access Token)</b> da Deriv:\n"
-                "<i>Começa com <code>pat_</code></i>")
-            return
-        elif etapa == "pat":
+
+        if etapa == "pat":
+            # Etapa 1: usuário enviou o PAT
             pat_novo = texto.strip()
-            if not (pat_novo.startswith("pat_") or pat_novo.startswith("PAT_")):
+            if not (pat_novo.lower().startswith("pat_")):
                 _tg_enviar_texto(token, chat_id,
                     "❌ PAT inválido. Deve começar com <code>pat_</code>\n\n"
                     "Envie o <b>PAT</b> novamente:")
                 return
             _tg_cadastro_conta[chat_id]["pat"] = pat_novo
             _tg_cadastro_conta[chat_id]["etapa"] = "tipo"
-            nome_c = _tg_cadastro_conta[chat_id]["nome"]
+            # Pede o tipo via botões inline
             _tg_enviar_texto(token, chat_id,
-                f"✅ PAT recebido!\n\n"
-                f"Conta: <b>{nome_c}</b>\n"
-                f"PAT: <code>{pat_novo[:14]}...</code>\n\n"
-                "Escolha o <b>tipo da conta</b>:",
-                _kb_conta_tipo(nome_c))
+                f"✅ PAT recebido: <code>{pat_novo[:16]}...</code>\n\n"
+                "Esta conta é <b>DEMO</b> ou <b>REAL</b>?",
+                {"inline_keyboard": [[
+                    {"text": "🧪 DEMO", "callback_data": "cad_tipo_DEMO"},
+                    {"text": "💰 REAL", "callback_data": "cad_tipo_REAL"},
+                ],[
+                    {"text": "❌ Cancelar", "callback_data": "cad_cancelar"},
+                ]]})
             return
-        # etapa "tipo" é tratada via callback — não via texto livre
+
+        elif etapa == "nome":
+            # Etapa final: usuário enviou o nome da conta
+            nome_novo = texto.strip().lower().replace(" ", "_")
+            if not nome_novo.replace("_","").replace("-","").isalnum() or len(nome_novo) < 2:
+                _tg_enviar_texto(token, chat_id,
+                    "❌ Nome inválido. Use letras, números, _ ou -\n\n"
+                    "Digite o <b>nome</b> da conta:")
+                return
+            d = _mc_carregar()
+            if nome_novo in d.get("contas", {}):
+                _tg_enviar_texto(token, chat_id,
+                    f"⚠️ Já existe uma conta chamada <b>{nome_novo}</b>.\n\n"
+                    "Digite um <b>nome diferente</b>:")
+                return
+            # Salva a conta
+            pat_c  = _tg_cadastro_conta[chat_id].get("pat", "")
+            tipo_c = _tg_cadastro_conta[chat_id].get("tipo", "REAL")
+            d["contas"][nome_novo] = {
+                "nome": nome_novo, "pat": pat_c,
+                "conta_id": "", "tipo": tipo_c, "banca": 0.0,
+            }
+            if not d.get("ativa"):
+                d["ativa"] = nome_novo
+            _mc_salvar(d)
+            _tg_cadastro_conta.pop(chat_id, None)
+            icone = "🧪" if tipo_c == "DEMO" else "💰"
+            _tg_enviar_texto(token, chat_id,
+                f"✅ <b>Conta salva com sucesso!</b>\n\n"
+                f"✏️ Nome: <b>{nome_novo}</b>\n"
+                f"{icone} Tipo: <b>{tipo_c}</b>\n"
+                f"🔑 PAT: <code>{pat_c[:16]}...</code>\n\n"
+                "Use /conectar para autenticar.",
+                _kb_contas_menu())
+            return
+        # outras etapas (tipo, confirmar) são tratadas via callback inline
 
     cmd  = texto.split()[0].lower().lstrip("/")
     args = texto.split()[1:]
@@ -17538,19 +17559,11 @@ def _tg_processar_comando(msg: dict, token: str, chat_id_autorizado: str):
             "Use os <b>botões fixos</b> abaixo ou digite:\n\n"
             "/menu — Painel com botões\n"
             "/status — Status atual\n"
-            "/conectar — Conecta Deriv via PAT\n"
-            "/setpat &lt;token&gt; [DEMO|REAL] — Salva PAT\n"
+            "/conectar — Conecta conta ativa\n"
             "/iniciar · /parar · /pausar\n"
             "/entrada 2.00 · /stopwin 20 · /stoploss 100\n"
-            "/estrategia · /gerenciamento")
-
-    elif cmd == "setpat":
-        if not args:
-            _tg_enviar_texto(token, chat_id, "❌ Use: /setpat &lt;token&gt; [DEMO|REAL]"); return
-        tipo_pat = args[1].upper() if len(args) > 1 and args[1].upper() in ("DEMO","REAL") else "REAL"
-        _pat_salvar(args[0].strip(), tipo_pat)
-        _tg_enviar_texto(token, chat_id,
-            f"✅ PAT salvo! <b>Tipo:</b> {tipo_pat}\nUse /conectar para autenticar.")
+            "/estrategia · /gerenciamento\n\n"
+            "👤 Use o botão <b>CONTAS</b> para cadastrar contas")
 
     elif cmd == "conectar":
         _tg_executar_conectar(token, chat_id)
@@ -17719,11 +17732,46 @@ def _tg_processar_callback(cb: dict, token: str, chat_id_autorizado: str):
             _tg_enviar_texto(token, chat_id, _tg_texto_contas(), _kb_contas_menu())
 
     elif data == "conta_add":
-        _tg_cadastro_conta[chat_id] = {"etapa": "nome"}
+        # Novo fluxo: começa pedindo o PAT diretamente
+        _tg_cadastro_conta[chat_id] = {"etapa": "pat"}
         _tg_enviar_texto(token, chat_id,
-            "📝 <b>CADASTRAR NOVA CONTA</b>\n\n"
-            "Digite um <b>nome</b> para identificar esta conta\n"
-            "<i>(ex: principal, real2, demo-teste)</i>:")
+            "🔑 <b>CADASTRAR NOVA CONTA</b>\n\n"
+            "Envie o <b>PAT (Personal Access Token)</b> da Deriv:\n\n"
+            "<i>O PAT começa com <code>pat_</code></i>\n"
+            "<i>Encontre em: Deriv → Configurações → Tokens API</i>")
+
+    elif data == "cad_tipo_DEMO" or data == "cad_tipo_REAL":
+        tipo_escolhido = "DEMO" if data == "cad_tipo_DEMO" else "REAL"
+        if chat_id not in _tg_cadastro_conta:
+            _tg_enviar_texto(token, chat_id, "❌ Sessão expirada. Use /contas para recomeçar.")
+            return
+        _tg_cadastro_conta[chat_id]["tipo"] = tipo_escolhido
+        _tg_cadastro_conta[chat_id]["etapa"] = "confirmar"
+        pat_c  = _tg_cadastro_conta[chat_id].get("pat","")
+        icone  = "🧪" if tipo_escolhido == "DEMO" else "💰"
+        _tg_editar_mensagem(token, chat_id, msg_id,
+            f"✅ Tipo selecionado: {icone} <b>{tipo_escolhido}</b>\n\n"
+            f"🔑 PAT: <code>{pat_c[:16]}...</code>\n\n"
+            "Deseja <b>salvar</b> esta conta?",
+            {"inline_keyboard": [[
+                {"text": "✅ SIM, SALVAR", "callback_data": "cad_confirmar_sim"},
+                {"text": "❌ NÃO",         "callback_data": "cad_cancelar"},
+            ]]})
+
+    elif data == "cad_confirmar_sim":
+        if chat_id not in _tg_cadastro_conta:
+            _tg_enviar_texto(token, chat_id, "❌ Sessão expirada. Use /contas para recomeçar.")
+            return
+        _tg_cadastro_conta[chat_id]["etapa"] = "nome"
+        _tg_editar_mensagem(token, chat_id, msg_id,
+            "✏️ Escolha um <b>nome</b> para identificar esta conta:\n\n"
+            "<i>Ex: principal, real2, demo-trade</i>")
+
+    elif data == "cad_cancelar":
+        _tg_cadastro_conta.pop(chat_id, None)
+        ok = _tg_editar_mensagem(token, chat_id, msg_id, _tg_texto_contas(), _kb_contas_menu())
+        if not ok:
+            _tg_enviar_texto(token, chat_id, "❌ Cadastro cancelado.", _kb_contas_menu())
 
     elif data.startswith("conta_info_"):
         nome_c = data[len("conta_info_"):]
