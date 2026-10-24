@@ -17921,8 +17921,8 @@ def _tg_bot_controller_loop():
             )
             res0 = r0.json().get("result", [])
             if res0:
-                _TG_POLL_OFFSET = res0[-1]["update_id"]
-                print(f"[TG Controller] Offset inicial: {_TG_POLL_OFFSET} ({len(res0)} updates descartados)")
+                _TG_POLL_OFFSET = res0[-1]["update_id"] - 1
+                print(f"[TG Controller] Retomando a partir do update {_TG_POLL_OFFSET + 1}")
             else:
                 print("[TG Controller] Nenhum update pendente. Polling pronto.")
     except Exception as e:
@@ -17942,16 +17942,25 @@ def _tg_bot_controller_loop():
                 timeout=10, verify=False,
             )
             if resp.status_code != 200:
+                print(f"[TG Controller] getUpdates HTTP {resp.status_code}: {resp.text[:350]}")
+                if resp.status_code == 409:
+                    print("[TG Controller] CONFLITO: outro processo ou webhook está consumindo o mesmo token. Execute apenas um controlador Telegram.")
                 time.sleep(5); continue
             results = resp.json().get("result", [])
             for upd in results:
                 uid = upd.get("update_id", 0)
                 if uid > _TG_POLL_OFFSET:
                     _TG_POLL_OFFSET = uid
-                if upd.get("message"):
-                    _tg_processar_comando(upd["message"], token, chat_id)
-                elif upd.get("callback_query"):
-                    _tg_processar_callback(upd["callback_query"], token, chat_id)
+                try:
+                    if upd.get("callback_query"):
+                        print(f"[TG Controller] Clique recebido: {upd['callback_query'].get('data')}")
+                        _tg_processar_callback(upd["callback_query"], token, chat_id)
+                    elif upd.get("message"):
+                        _tg_processar_comando(upd["message"], token, chat_id)
+                except Exception as erro_update:
+                    import traceback
+                    print(f"[TG Controller] Erro ao processar update {uid}: {erro_update}")
+                    traceback.print_exc()
         except Exception as e:
             print(f"[TG Controller] Erro: {e}")
             time.sleep(5)
