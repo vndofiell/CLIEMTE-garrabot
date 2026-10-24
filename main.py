@@ -15226,6 +15226,15 @@ def trading_pro_config():
 def _ping():
     return jsonify({"ok": True, "status": "online"})
 
+@app.route('/tg-log', methods=['GET'])
+def _tg_log_route():
+    """Mostra os últimos 50 eventos do polling do Telegram."""
+    import threading as _thr
+    vivo = any(t.name == "tg-controller" and t.is_alive() for t in _thr.enumerate())
+    buf  = list(_tg_log_buffer) if _tg_log_buffer else ["(nenhum evento ainda)"]
+    return jsonify({"thread_vivo": vivo, "offset": _TG_POLL_OFFSET,
+                    "pid": os.getpid(), "log": buf})
+
 @app.route('/tg-start', methods=['POST','GET'])
 def _tg_start():
     """Força o (re)início do thread de polling do Telegram."""
@@ -17894,6 +17903,14 @@ def _tg_processar_callback(cb: dict, token: str, chat_id_autorizado: str):
         _tg_responder_callback(token, cb_id, "❓ Ação desconhecida")
 
 
+# Buffer dos últimos eventos do polling (para diagnóstico via /tg-log)
+_tg_log_buffer: list = []
+def _tg_log(msg: str):
+    _tg_log_buffer.append(f"{time.strftime('%H:%M:%S')} {msg}")
+    if len(_tg_log_buffer) > 50:
+        _tg_log_buffer.pop(0)
+    print(msg)
+
 def _tg_bot_controller_loop():
     """Loop de polling que lê mensagens e callbacks do Telegram."""
     global _TG_POLL_OFFSET
@@ -17942,27 +17959,32 @@ def _tg_bot_controller_loop():
                 timeout=10, verify=False,
             )
             if resp.status_code != 200:
-                print(f"[TG Controller] getUpdates HTTP {resp.status_code}: {resp.text[:350]}")
+                _tg_log(f"[TG] HTTP {resp.status_code}: {resp.text[:200]}")
                 if resp.status_code == 409:
-                    print("[TG Controller] CONFLITO: outro processo ou webhook está consumindo o mesmo token. Execute apenas um controlador Telegram.")
+                    _tg_log("[TG] CONFLITO 409 — outro processo está usando o mesmo token!")
                 time.sleep(5); continue
             results = resp.json().get("result", [])
+            if results:
+                _tg_log(f"[TG] {len(results)} update(s) recebidos")
             for upd in results:
                 uid = upd.get("update_id", 0)
                 if uid > _TG_POLL_OFFSET:
                     _TG_POLL_OFFSET = uid
                 try:
                     if upd.get("callback_query"):
-                        print(f"[TG Controller] Clique recebido: {upd['callback_query'].get('data')}")
+                        data_cb = upd["callback_query"].get("data","")
+                        _tg_log(f"[TG] CALLBACK: {data_cb!r} chat={upd['callback_query'].get('from',{}).get('id')}")
                         _tg_processar_callback(upd["callback_query"], token, chat_id)
                     elif upd.get("message"):
+                        txt = upd["message"].get("text","")[:40]
+                        _tg_log(f"[TG] MSG: {txt!r}")
                         _tg_processar_comando(upd["message"], token, chat_id)
                 except Exception as erro_update:
-                    import traceback
-                    print(f"[TG Controller] Erro ao processar update {uid}: {erro_update}")
-                    traceback.print_exc()
+                    import traceback as _tb
+                    _tg_log(f"[TG] ERRO update {uid}: {erro_update}")
+                    _tb.print_exc()
         except Exception as e:
-            print(f"[TG Controller] Erro: {e}")
+            _tg_log(f"[TG] Erro loop: {e}")
             time.sleep(5)
         time.sleep(0.5)
 
