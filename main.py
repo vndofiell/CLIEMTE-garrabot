@@ -16934,9 +16934,23 @@ def _tg_enfileirar(cmd: dict):
 _TG_POLL_OFFSET = 0
 
 ESTRATEGIAS_LISTA = [
-    "🎯 DIGITUNDER 5","🎯 DIGITOVER 4","🎯 DIGITOVER 3","🎯 DIGITOVER 2",
-    "🎯 DIGITUNDER 6","🎯 DIGITUNDER 7","🎯 DIGITUNDER 8",
-    "🏎️ TREND PRO","📊 HMA DERIV","📈 CANDLE STRATEGY",
+    # ── Digit Under / Over ────────────────────────────────────────────────────
+    "🎯 DIGITUNDER 5",
+    "🎯 DIGITUNDER 4",
+    "🎯 DIGITUNDER 6",
+    "🎯 DIGITUNDER 7",
+    "🎯 DIGITUNDER 8",
+    "🎯 DIGITOVER 4",
+    "🎯 DIGITOVER 3",
+    "🎯 DIGITOVER 2",
+    "🎯 DIGITOVER 5",
+    "🎯 DIGITOVER 6",
+    # ── IAs e motores avançados ───────────────────────────────────────────────
+    "🤖 TRADING PRO AI",
+    "🤖 ECT Dinâmica",
+    "🧠 GARRA AI CORE — HMA",
+    "🟠 GARRA AI CORE — HMA QUOTEX",
+    "📈 OTC FLUXO EMA PRO",
 ]
 
 GERENCIAMENTOS_LISTA = [
