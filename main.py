@@ -17980,14 +17980,9 @@ def _tg_bot_controller_loop():
             )
             if resp.status_code == 409:
                 _409_contador += 1
-                if _409_contador >= 3:
-                    # Após 3 tentativas, cede o polling para a outra instância
-                    _polling_ativo = False
-                    _tg_log(f"[TG] 409 x{_409_contador} — cedendo polling para instancia mais nova. Monitorando...")
-                    continue
-                espera = 10 * _409_contador
-                _tg_log(f"[TG] 409 #{_409_contador} — aguardando {espera}s...")
-                time.sleep(espera)
+                # Cede imediatamente ao primeiro 409 — outra instância já está ativa
+                _polling_ativo = False
+                _tg_log(f"[TG] 409 — cedendo polling para instancia mais nova. PID={os.getpid()} em espera.")
                 continue
             if resp.status_code != 200:
                 _tg_log(f"[TG] HTTP {resp.status_code}: {resp.text[:200]}")
