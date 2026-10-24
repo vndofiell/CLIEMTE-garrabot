@@ -2463,6 +2463,11 @@
     <div class="cmd-panel-title">⚡ PAINEL</div>
 
     <div class="cmd-section">▸ CONEXÃO</div>
+    <button class="cmd-btn" id="btn-acordar-render" onclick="acordarRender()"
+        style="border-color:rgba(255,214,0,0.6); color:#ffd600;">
+        ⚡ acordar servidor
+        <span class="cmd-label" id="lbl-acordar-render" style="color:#57606a;">Render offline? Clique aqui</span>
+    </button>
     <button class="cmd-btn" id="btn-conectar-deriv" onclick="runCmd('conectar')">
         conectar
         <span class="cmd-label">Login na Deriv</span>
@@ -9162,6 +9167,46 @@ function escolherConta(tipo) {
  * Desconecta a conta principal atual e abre o modal de login
  * para o usuário escolher outra conta (DEMO ou REAL).
  */
+
+// ── Acordar Render manualmente ────────────────────────────────────────────────
+function acordarRender() {
+    const btn = document.getElementById('btn-acordar-render');
+    const lbl = document.getElementById('lbl-acordar-render');
+    if (!btn || !lbl) return;
+
+    // Estado: acordando
+    btn.disabled = true;
+    btn.style.opacity = '0.7';
+    lbl.textContent = '⏳ Acordando servidor...';
+    lbl.style.color = '#ffd600';
+
+    const inicio = Date.now();
+    fetch('/ping', { signal: AbortSignal.timeout(60000) })
+        .then(r => r.json())
+        .then(() => {
+            const ms = Date.now() - inicio;
+            lbl.textContent = `✅ Online! (${ms}ms)`;
+            lbl.style.color = '#00ff64';
+            btn.disabled = false;
+            btn.style.opacity = '1';
+            // Volta ao texto original após 4s
+            setTimeout(() => {
+                lbl.textContent = 'Render offline? Clique aqui';
+                lbl.style.color = '#57606a';
+            }, 4000);
+        })
+        .catch(() => {
+            lbl.textContent = '❌ Sem resposta. Tente novamente.';
+            lbl.style.color = '#ff4455';
+            btn.disabled = false;
+            btn.style.opacity = '1';
+            setTimeout(() => {
+                lbl.textContent = 'Render offline? Clique aqui';
+                lbl.style.color = '#57606a';
+            }, 5000);
+        });
+}
+
 function trocarContaPrincipal() {
     // Para o robô se estiver rodando
     if (bot.running) {
