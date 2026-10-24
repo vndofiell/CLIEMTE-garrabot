@@ -15226,15 +15226,6 @@ def trading_pro_config():
 def _ping():
     return jsonify({"ok": True, "status": "online"})
 
-@app.route('/tg-log', methods=['GET'])
-def _tg_log_route():
-    """Mostra os últimos 50 eventos do polling do Telegram."""
-    import threading as _thr
-    vivo = any(t.name == "tg-controller" and t.is_alive() for t in _thr.enumerate())
-    buf  = list(_tg_log_buffer) if _tg_log_buffer else ["(nenhum evento ainda)"]
-    return jsonify({"thread_vivo": vivo, "offset": _TG_POLL_OFFSET,
-                    "pid": os.getpid(), "log": buf})
-
 @app.route('/tg-start', methods=['POST','GET'])
 def _tg_start():
     """Força o (re)início do thread de polling do Telegram."""
@@ -17709,7 +17700,7 @@ def _tg_processar_callback(cb: dict, token: str, chat_id_autorizado: str):
     msg_id  = cb.get("message",{}).get("message_id", 0)
     data    = cb.get("data","")
 
-    print(f"[TG CB] data={data!r} chat_id={chat_id} autorizado={chat_id_autorizado}")
+    print(f"[TG CB] data={data!r} chat_id={chat_id} autorizado={chat_id_autorizado}", flush=True)
 
     if chat_id != str(chat_id_autorizado):
         _tg_responder_callback(token, cb_id, "⛔ Não autorizado")
@@ -17903,14 +17894,6 @@ def _tg_processar_callback(cb: dict, token: str, chat_id_autorizado: str):
         _tg_responder_callback(token, cb_id, "❓ Ação desconhecida")
 
 
-# Buffer dos últimos eventos do polling (para diagnóstico via /tg-log)
-_tg_log_buffer: list = []
-def _tg_log(msg: str):
-    _tg_log_buffer.append(f"{time.strftime('%H:%M:%S')} {msg}")
-    if len(_tg_log_buffer) > 50:
-        _tg_log_buffer.pop(0)
-    print(msg)
-
 def _tg_bot_controller_loop():
     """Loop de polling que lê mensagens e callbacks do Telegram."""
     global _TG_POLL_OFFSET
@@ -17945,27 +17928,7 @@ def _tg_bot_controller_loop():
     except Exception as e:
         print(f"[TG Controller] Aviso no init: {e}")
 
-    _409_contador = 0
-    _polling_ativo = True   # se False, esta instância cedeu o polling para outra
     while True:
-        if not _polling_ativo:
-            # Esta instância parou — verifica a cada 30s se a outra ainda está viva
-            time.sleep(30)
-            try:
-                cfg2 = _tg_carregar()
-                tok2 = cfg2.get("token","")
-                if tok2:
-                    r2 = requests.get(_tg_url(tok2, "getUpdates"),
-                                      params={"offset": _TG_POLL_OFFSET + 1,
-                                              "timeout": 0, "allowed_updates": ["message"]},
-                                      timeout=8, verify=False)
-                    if r2.status_code == 200:
-                        _tg_log("[TG] Outra instancia morreu — retomando polling.")
-                        _polling_ativo = True
-                        _409_contador = 0
-            except Exception:
-                pass
-            continue
         try:
             cfg = _tg_carregar()
             token   = cfg.get("token","")
@@ -17978,78 +17941,52 @@ def _tg_bot_controller_loop():
                         "allowed_updates": ["message","callback_query"]},
                 timeout=10, verify=False,
             )
-            if resp.status_code == 409:
-                _409_contador += 1
-                # Cede imediatamente ao primeiro 409 — outra instância já está ativa
-                _polling_ativo = False
-                _tg_log(f"[TG] 409 — cedendo polling para instancia mais nova. PID={os.getpid()} em espera.")
-                continue
             if resp.status_code != 200:
-                _tg_log(f"[TG] HTTP {resp.status_code}: {resp.text[:200]}")
+                print(f"[TG Controller] getUpdates HTTP {resp.status_code}: {resp.text[:350]}")
+                if resp.status_code == 409:
+                    print("[TG Controller] CONFLITO: outro processo ou webhook está consumindo o mesmo token. Execute apenas um controlador Telegram.")
                 time.sleep(5); continue
-            # Sucesso — reseta contador de 409
-            _409_contador = 0
             results = resp.json().get("result", [])
             if results:
-                _tg_log(f"[TG] {len(results)} update(s) recebidos")
+                print(f"[TG Controller] {len(results)} update(s) recebidos", flush=True)
             for upd in results:
                 uid = upd.get("update_id", 0)
                 if uid > _TG_POLL_OFFSET:
                     _TG_POLL_OFFSET = uid
                 try:
                     if upd.get("callback_query"):
-                        data_cb = upd["callback_query"].get("data","")
-                        _tg_log(f"[TG] CALLBACK: {data_cb!r} chat={upd['callback_query'].get('from',{}).get('id')}")
+                        print(f"[TG Controller] Clique recebido: {upd['callback_query'].get('data')}")
                         _tg_processar_callback(upd["callback_query"], token, chat_id)
                     elif upd.get("message"):
-                        txt = upd["message"].get("text","")[:40]
-                        _tg_log(f"[TG] MSG: {txt!r}")
                         _tg_processar_comando(upd["message"], token, chat_id)
                 except Exception as erro_update:
-                    import traceback as _tb
-                    _tg_log(f"[TG] ERRO update {uid}: {erro_update}")
-                    _tb.print_exc()
+                    import traceback
+                    print(f"[TG Controller] Erro ao processar update {uid}: {erro_update}")
+                    traceback.print_exc()
         except Exception as e:
-            _tg_log(f"[TG] Erro loop: {e}")
+            print(f"[TG Controller] Erro: {e}")
             time.sleep(5)
         time.sleep(0.5)
 
-# ── Garante que APENAS 1 processo no servidor faz polling ───────────────────
-# Usa lock de arquivo: apenas o processo que conseguir o lock roda o polling.
-# Outros processos/workers detectam o lock e não iniciam segundo polling.
+# ── Garante que o thread de polling está vivo no worker atual ────────────────
+# NÃO usa flag booleana — verifica se o thread está realmente rodando.
+# Isso é fork-safe: após fork do gunicorn, threads morrem mas a verificação
+# detecta isso e reinicia o thread no processo filho correto.
 _tg_controller_lock = threading.Lock()
-_TG_LOCKFILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".tg_poll.lock")
 
 def _tg_garantir_controller():
-    """Inicia o polling apenas se nenhum outro processo já estiver rodando."""
+    """Reinicia o thread de polling se não estiver vivo (fork-safe)."""
     with _tg_controller_lock:
-        # Verifica se já tem thread vivo NESTE processo
         vivo = any(t.name == "tg-controller" and t.is_alive()
                    for t in threading.enumerate())
         if vivo:
             return
-
-        # Tenta adquirir lock de arquivo exclusivo (Linux/Render usa fcntl)
-        try:
-            import fcntl
-            lf = open(_TG_LOCKFILE, "w")
-            fcntl.flock(lf, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            lf.write(str(os.getpid()))
-            lf.flush()
-            globals()["_tg_lockfile_fd"] = lf   # mantém fd aberto = lock ativo
-            print(f"[TG] Lock obtido. PID={os.getpid()}")
-        except OSError:
-            # Outro processo já tem o lock — não inicia polling aqui
-            print(f"[TG] Lock em uso por outro processo. PID={os.getpid()} não inicia polling.")
-            return
-        except ImportError:
-            # Windows (desenvolvimento local) — sem fcntl, inicia sempre
-            print(f"[TG] fcntl indisponível (Windows). Iniciando polling sem lock.")
-
         t = threading.Thread(target=_tg_bot_controller_loop,
                               daemon=True, name="tg-controller")
         t.start()
-        print(f"[TG] Thread de polling iniciado no PID={os.getpid()}")
+        print(f"[TG Controller] Thread (re)iniciado no PID={os.getpid()}")
 
-# Inicia ao carregar o módulo
-_tg_garantir_controller()
+# Não iniciar polling na importação: Gunicorn --preload cria threads no master.
+# O @app.before_request e o hook post_fork do worker iniciam o controlador.
+if __name__ == "__main__":
+    _tg_garantir_controller()
