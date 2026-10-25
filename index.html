@@ -30169,6 +30169,20 @@ function _derivPatOnResultado(res, tipo, nome) {
 
         if (typeof print === 'function')
             print(`🔑 DERIV PAT — ${icone} ${tipo} conectado | Conta: ${res.conta_id || '—'}`, 'log-ok');
+
+        // ── Inicia WebSocket exatamente como o fluxo OAuth ──────────────────
+        // Isso preenche bot.token e abre o WS, permitindo 'iniciar' sem nova conexão
+        if (res.wss_url) {
+            bot.token = res.wss_url;
+            if (typeof initWebSocket === 'function') {
+                initWebSocket(res.wss_url);
+            }
+            // Mostra botão "trocar conta" no painel lateral
+            const btnTrocar = document.getElementById('btn-trocar-conta');
+            const lblTrocar = document.getElementById('lbl-trocar-conta');
+            if (btnTrocar) btnTrocar.style.display = '';
+            if (lblTrocar) lblTrocar.textContent = (res.conta_id || '') + ' (' + tipo + ')';
+        }
     } else {
         _derivPatSetBadge('❌ ' + (res.erro || 'Falha ao conectar'), 'erro');
         if (typeof print === 'function')
@@ -30220,14 +30234,58 @@ function _derivPatSelecionarConta(nome, conta) {
     _derivPatSetBadge(`📋 Conta "${nome}" selecionada — clique DEMO ou REAL para conectar`, 'aviso');
 }
 
-// Restaura estado ao carregar a página
+// ── Auto-reconexão PAT ao carregar a página ─────────────────────────────────
+// Se o PAT já está configurado, conecta automaticamente sem o usuário clicar.
+// Isso garante que bot.token e o WebSocket ficam prontos assim que o painel abre.
 (function _derivPatRestaurar() {
     fetch('/tg-pat-config')
         .then(r => r.json())
         .then(d => {
             if (!d.configurado) return;
+
+            // Atualiza label imediatamente
             const lbl = document.getElementById('lbl-deriv-pat-status');
-            if (lbl) { lbl.textContent = `🔑 ${d.tipo} • token salvo`; lbl.style.color = '#ff0080'; }
+            if (lbl) { lbl.textContent = `⏳ ${d.tipo} • reconectando...`; lbl.style.color = '#ffd600'; }
+
+            // Conecta via PAT automaticamente (aguarda 1.5s para a página terminar de carregar)
+            setTimeout(() => {
+                // Só conecta se ainda não há WS aberto (evita conflito com OAuth)
+                if (bot.token) return;
+
+                fetch('/tg-pat-conectar', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tipo: d.tipo })
+                })
+                .then(r => r.json())
+                .then(res => {
+                    if (res.ok && res.wss_url) {
+                        const tipo  = d.tipo || 'REAL';
+                        const icone = tipo === 'DEMO' ? '🧪' : '💰';
+
+                        // Preenche bot.token e inicia WebSocket — mesmo fluxo do OAuth
+                        bot.token = res.wss_url;
+                        if (typeof initWebSocket === 'function') initWebSocket(res.wss_url);
+
+                        // Atualiza botão no painel lateral
+                        if (lbl) { lbl.textContent = `${icone} ${tipo} • ${res.conta_id || '—'}`; lbl.style.color = tipo === 'REAL' ? '#00ff41' : '#fbbf24'; }
+
+                        // Mostra botão "trocar conta"
+                        const btnTrocar = document.getElementById('btn-trocar-conta');
+                        const lblTrocar = document.getElementById('lbl-trocar-conta');
+                        if (btnTrocar) btnTrocar.style.display = '';
+                        if (lblTrocar) lblTrocar.textContent = (res.conta_id || '') + ' (' + tipo + ')';
+
+                        if (typeof print === 'function')
+                            print(`🔑 DERIV PAT — ${icone} ${tipo} reconectado automaticamente | Conta: ${res.conta_id || '—'}`, 'log-ok');
+                    } else {
+                        if (lbl) { lbl.textContent = `🔑 ${d.tipo} • token salvo`; lbl.style.color = '#ff0080'; }
+                    }
+                })
+                .catch(() => {
+                    if (lbl) { lbl.textContent = `🔑 ${d.tipo} • token salvo`; lbl.style.color = '#ff0080'; }
+                });
+            }, 1500);
         })
         .catch(() => {});
 })();
