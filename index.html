@@ -15665,12 +15665,18 @@ function runCmd(cmd) {
                 if (!d.ok || !d.cmd) return;
                 const cmd = d.cmd;
                 const acao = cmd.acao;
-                if (acao === 'iniciar') {
+                if (acao === 'iniciar' || acao === 'retomar') {
                     if (typeof bot !== 'undefined' && !bot.running) runCmd('iniciar');
                 } else if (acao === 'parar') {
                     if (typeof bot !== 'undefined' && bot.running) runCmd('parar');
                 } else if (acao === 'pausar') {
                     if (typeof bot !== 'undefined' && bot.running) runCmd('parar');
+                } else if (acao === 'resetar_sessao') {
+                    if (typeof bot !== 'undefined') {
+                        bot.wins = 0; bot.losses = 0; bot.profit = 0;
+                    }
+                    if (typeof resetarPlacar === 'function') resetarPlacar();
+                    print('🔄 [TELEGRAM] Sessão resetada via Telegram.', 'log-info');
                 } else if (acao === 'set_stake') {
                     const v = parseFloat(cmd.valor) || 0;
                     if (v >= 0.35) {

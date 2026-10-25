@@ -17185,18 +17185,19 @@ def tg_bot_estado_get():
 # ── Comandos que o Telegram quer executar (fila consumida pelo frontend) ──────
 _tg_fila_cmds: list = []
 _tg_fila_lock = threading.Lock()
-
-@app.route('/tg-cmd-pendente', methods=['GET'])
-def tg_cmd_pendente():
-    """Frontend consulta se há comando pendente do Telegram para executar."""
-    with _tg_fila_lock:
-        if _tg_fila_cmds:
-            return jsonify({"ok": True, "cmd": _tg_fila_cmds.pop(0)})
-    return jsonify({"ok": False})
+_tg_pausado: bool = False
 
 def _tg_enfileirar(cmd: dict):
     with _tg_fila_lock:
         _tg_fila_cmds.append(cmd)
+
+@app.route('/tg-cmd-pendente', methods=['GET'])
+def tg_cmd_pendente():
+    """O computador consulta esta rota a cada 1 segundo para receber os comandos."""
+    with _tg_fila_lock:
+        if _tg_fila_cmds:
+            return jsonify({"ok": True, "cmd": _tg_fila_cmds.pop(0)})
+    return jsonify({"ok": False})
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -17257,50 +17258,79 @@ def api_contas_pat_post():
 _TG_POLL_OFFSET = 0
 
 ESTRATEGIAS_LISTA = [
-    # ── Digit Under / Over ────────────────────────────────────────────────────
     "🎯 DIGITUNDER 5",
-    "🎯 DIGITUNDER 4",
-    "🎯 DIGITUNDER 6",
-    "🎯 DIGITUNDER 7",
-    "🎯 DIGITUNDER 8",
-    "🎯 DIGITOVER 4",
-    "🎯 DIGITOVER 3",
-    "🎯 DIGITOVER 2",
-    "🎯 DIGITOVER 5",
-    "🎯 DIGITOVER 6",
-    # ── IAs e motores avançados ───────────────────────────────────────────────
-    "🤖 TRADING PRO AI",
     "🤖 ECT Dinâmica",
+    "🤖 TRADING PRO AI",
     "🧠 GARRA AI CORE — HMA",
     "🟠 GARRA AI CORE — HMA QUOTEX",
     "📈 OTC FLUXO EMA PRO",
+    "📊 Planilha JC",
+    "⚙️ Cyber Sort",
+    "🔴 Live Tick Sort",
+    "🏢 Digit Barrier 356",
+    "🎯 Digit Sniper PRO",
+    "🧬 Digit Matrix PRO",
+    "🎛️ MODO AVANÇADO (MULTI-MERCADO)",
 ]
 
 GERENCIAMENTOS_LISTA = [
-    "📐 MA-Adaptativo","🔄 Martingale","💰 Stake Fixa","⚡ SorosGale",
-    "📉 Loss Recovery","🛡️ Recovery Conservador","📐 QSR","📊 Masaniello",
-    "🎯 Ciclos","🤖 Recovery Adaptativo","💹 Juros Compostos",
-    "🏦 RAL","🔒 CCR","🧠 RIA","🛡️ RIC PRO",
+    "📐 MA-Adaptativo",
+    "🔄 Martingale",
+    "💰 Stake Fixa",
+    "⚡ SorosGale",
+    "📉 Loss Recovery",
+    "🛡️ Recovery Conservador",
+    "📐 QSR",
+    "📊 Masaniello",
+    "🎯 Ciclos",
+    "🤖 Recovery Adaptativo",
+    "💹 Juros Compostos",
+    "🏦 RAL",
+    "🔒 CCR",
+    "🧠 RIA",
+    "🛡️ RIC PRO",
 ]
 
-# ── Helpers de teclados inline ───────────────────────────────────────────────
-# Estado global: True = bot pausado (botão do meio vira RETOMAR)
-_tg_pausado: bool = False
-
 def _get_teclado_controle(pausado: bool = False) -> dict:
-    """Gera o teclado com 3 botões, alternando PAUSAR ⇄ RETOMAR."""
+    """Gera o teclado fixo de 6 botões (2 linhas de 3 botões)."""
     botao_meio = "▶️ RETOMAR" if pausado else "⏸️ PAUSAR"
     return {
         "keyboard": [
-            [{"text": "▶️ INICIAR"}, {"text": botao_meio}, {"text": "⏹️ PARAR"}]
+            [{"text": "▶️ INICIAR"}, {"text": botao_meio}, {"text": "⏹️ PARAR"}],
+            [{"text": "🔄 RESETAR SESSÃO"}, {"text": "📊 ESTRATÉGIAS"}, {"text": "⚙️ GERENCIAMENTO"}],
         ],
         "resize_keyboard": True,
         "persistent": True,
-        "input_field_placeholder": "Controle remoto do Bot...",
+        "input_field_placeholder": "Controle do GarraBot...",
     }
 
-# KB_FIXO e _KB_CONTROLE agora são dinâmicos via _get_teclado_controle()
-# Mantidos como fallback para código legado que os referencie diretamente
+def _kb_inline_estrategias() -> dict:
+    """Gera menu inline das estratégias (2 por linha)."""
+    rows = []
+    for i in range(0, len(ESTRATEGIAS_LISTA), 2):
+        row = []
+        for j in range(2):
+            if i + j < len(ESTRATEGIAS_LISTA):
+                e = ESTRATEGIAS_LISTA[i + j]
+                row.append({"text": e, "callback_data": f"set_est_{i+j}"})
+        rows.append(row)
+    rows.append([{"text": "❌ Fechar Menu", "callback_data": "fechar_menu"}])
+    return {"inline_keyboard": rows}
+
+def _kb_inline_gerenciamentos() -> dict:
+    """Gera menu inline dos gerenciamentos (2 por linha)."""
+    rows = []
+    for i in range(0, len(GERENCIAMENTOS_LISTA), 2):
+        row = []
+        for j in range(2):
+            if i + j < len(GERENCIAMENTOS_LISTA):
+                g = GERENCIAMENTOS_LISTA[i + j]
+                row.append({"text": g, "callback_data": f"set_ger_{i+j}"})
+        rows.append(row)
+    rows.append([{"text": "❌ Fechar Menu", "callback_data": "fechar_menu"}])
+    return {"inline_keyboard": rows}
+
+# _KB_FIXO/_KB_CONTROLE mantidos como fallback para código legado
 _KB_FIXO     = _get_teclado_controle(pausado=False)
 _KB_CONTROLE = _KB_FIXO
 
@@ -17486,7 +17516,7 @@ def _tg_texto_status() -> str:
 _tg_aguardando_input: dict = {}   # { chat_id: "entrada"|"stopwin"|"stoploss" }
 
 def _tg_processar_comando(msg: dict, token: str, chat_id_autorizado: str):
-    """Interpreta os comandos e troca o botão entre PAUSAR e RETOMAR."""
+    """Processa os 6 botões de controle remoto."""
     global _tg_pausado
     chat_id = str(msg.get("chat", {}).get("id", "")).strip()
     texto   = (msg.get("text") or "").strip()
@@ -17500,55 +17530,77 @@ def _tg_processar_comando(msg: dict, token: str, chat_id_autorizado: str):
 
     t = texto.lower()
 
-    # 1. CLICOU EM PAUSAR → muda botão do meio para RETOMAR
-    if "pausar" in t:
+    # 1. INICIAR
+    if "iniciar" in t:
+        _tg_pausado = False
+        _tg_enfileirar({"acao": "iniciar"})
+        _tg_enviar_texto(token, chat_id,
+            "▶️ <b>INICIAR:</b> Comando enviado ao computador!",
+            _get_teclado_controle(pausado=False))
+
+    # 2. PAUSAR
+    elif "pausar" in t:
         _tg_pausado = True
         _tg_enfileirar({"acao": "pausar"})
         _tg_enviar_texto(token, chat_id,
-            "⏸️ <b>ROBÔ PAUSADO!</b>\n\n"
-            "O botão do meio mudou para <b>▶️ RETOMAR</b>.\n"
-            "Clique nele quando quiser continuar as operações.",
-            _get_teclado_controle(pausado=True)
-        )
+            "⏸️ <b>PAUSADO:</b> Bot pausado no computador.\n"
+            "Clique em <b>▶️ RETOMAR</b> para voltar.",
+            _get_teclado_controle(pausado=True))
 
-    # 2. CLICOU EM RETOMAR → volta botão para PAUSAR
+    # 3. RETOMAR
     elif "retomar" in t:
         _tg_pausado = False
         _tg_enfileirar({"acao": "retomar"})
         _tg_enviar_texto(token, chat_id,
-            "▶️ <b>OPERAÇÕES RETOMADAS!</b>\n\n"
-            "O robô voltou a operar no computador.",
-            _get_teclado_controle(pausado=False)
-        )
+            "▶️ <b>RETOMADO:</b> Operações continuadas no computador!",
+            _get_teclado_controle(pausado=False))
 
-    # 3. CLICOU EM INICIAR
-    elif "iniciar" in t:
-        _tg_pausado = False
-        _tg_enfileirar({"acao": "iniciar"})
-        _tg_enviar_texto(token, chat_id,
-            "▶️ <b>ROBÔ INICIADO!</b>\n\n"
-            "Comando de início enviado para o seu computador.",
-            _get_teclado_controle(pausado=False)
-        )
-
-    # 4. CLICOU EM PARAR
+    # 4. PARAR
     elif "parar" in t or "stop" in t:
         _tg_pausado = False
         _tg_enfileirar({"acao": "parar"})
         _tg_enviar_texto(token, chat_id,
-            "⏹️ <b>ROBÔ PARADO!</b>\n\n"
-            "Sessão encerrada no computador.",
-            _get_teclado_controle(pausado=False)
-        )
+            "⏹️ <b>PARAR:</b> Sessão finalizada no computador.",
+            _get_teclado_controle(pausado=False))
+
+    # 5. RESETAR SESSÃO
+    elif "resetar" in t or "sessão" in t or "sessao" in t:
+        _tg_enfileirar({"acao": "resetar_sessao"})
+        _tg_bot_estado["wins"]   = 0
+        _tg_bot_estado["losses"] = 0
+        _tg_bot_estado["lucro"]  = 0.0
+        _tg_enviar_texto(token, chat_id,
+            "🔄 <b>SESSÃO RESETADA!</b>\n"
+            "Placar e lucros zerados no robô do computador.",
+            _get_teclado_controle(pausado=_tg_pausado))
+
+    # 6. ESTRATÉGIAS
+    elif "estratégia" in t or "estrategia" in t:
+        _tg_enviar_texto(token, chat_id,
+            "📊 <b>ESCOLHA UMA ESTRATÉGIA:</b>\n"
+            "<i>Clique na estratégia desejada para aplicar no robô:</i>",
+            _kb_inline_estrategias())
+
+    # 7. GERENCIAMENTO
+    elif "gerenciamento" in t:
+        _tg_enviar_texto(token, chat_id,
+            "⚙️ <b>ESCOLHA O GERENCIAMENTO:</b>\n"
+            "<i>Clique no modo de gestão para aplicar no robô:</i>",
+            _kb_inline_gerenciamentos())
 
     # QUALQUER OUTRA MENSAGEM OU /start
     else:
         _tg_enviar_texto(token, chat_id,
-            "🕹️ <b>CONTROLE REMOTO DO GARRABOT</b>\n"
+            "🕹️ <b>CONTROLE REMOTO — GARRABOT</b>\n"
             "━━━━━━━━━━━━━━━━━━━━━\n"
-            "Clique em um dos botões abaixo para controlar o robô no computador:",
-            _get_teclado_controle(pausado=_tg_pausado)
-        )
+            "Use os botões abaixo para controlar o robô no computador:\n\n"
+            "▶️ <b>INICIAR:</b> Inicia as operações\n"
+            "⏸️ <b>PAUSAR:</b> Pausa temporariamente\n"
+            "⏹️ <b>PARAR:</b> Encerra as operações\n"
+            "🔄 <b>RESETAR SESSÃO:</b> Zera placar e lucros\n"
+            "📊 <b>ESTRATÉGIAS:</b> Escolher estratégia\n"
+            "⚙️ <b>GERENCIAMENTO:</b> Escolher gestão",
+            _get_teclado_controle(pausado=_tg_pausado))
 
 
 def _tg_executar_conectar(token: str, chat_id: str):
@@ -17915,24 +17967,53 @@ def _tg_parar_robo_nuvem():
 
 
 def _tg_processar_callback(cb: dict, token: str, chat_id_autorizado: str):
-    """Processa clique em botão inline (callback_query)."""
+    """Processa a seleção das estratégias e gerenciamentos via botões inline."""
     cb_id   = cb.get("id", "")
     from_id = str(cb.get("from", {}).get("id", "")).strip()
     chat_id = str(cb.get("message", {}).get("chat", {}).get("id", "") or from_id).strip()
     msg_id  = cb.get("message", {}).get("message_id", 0)
-    data    = _tg_normalizar_cb(cb.get("data", ""))
-
+    data    = str(cb.get("data", "")).strip()
     auth_id = str(chat_id_autorizado).strip()
 
-    # Responde imediatamente ao Telegram para tirar o 'relógio/loading' do botão
     _tg_responder_callback(token, cb_id)
 
-    print(f"[TG CB] data={data!r} chat_id={chat_id} from_id={from_id} autorizado={auth_id}", flush=True)
-
-    # Valida tanto o chat_id quanto o from_id
     if auth_id and chat_id != auth_id and from_id != auth_id:
-        _tg_enviar_texto(token, chat_id, "⛔ Acesso não autorizado a este comando.")
         return
+
+    # Fechar menu
+    if data == "fechar_menu":
+        _tg_editar_mensagem(token, chat_id, msg_id, "Menu fechado.")
+        return
+
+    # Selecionou Estratégia
+    if data.startswith("set_est_"):
+        try:
+            idx = int(data.replace("set_est_", ""))
+        except ValueError:
+            return
+        if 0 <= idx < len(ESTRATEGIAS_LISTA):
+            escolha = ESTRATEGIAS_LISTA[idx]
+            _tg_bot_estado["estrategia"] = escolha
+            _tg_enfileirar({"acao": "set_estrategia", "valor": escolha})
+            _tg_editar_mensagem(token, chat_id, msg_id,
+                f"✅ <b>Estratégia aplicada no computador:</b>\n\n🎯 <b>{escolha}</b>")
+        return
+
+    # Selecionou Gerenciamento
+    if data.startswith("set_ger_"):
+        try:
+            idx = int(data.replace("set_ger_", ""))
+        except ValueError:
+            return
+        if 0 <= idx < len(GERENCIAMENTOS_LISTA):
+            escolha = GERENCIAMENTOS_LISTA[idx]
+            _tg_bot_estado["gerenciamento"] = escolha
+            _tg_enfileirar({"acao": "set_gerenciamento", "valor": escolha})
+            _tg_editar_mensagem(token, chat_id, msg_id,
+                f"✅ <b>Gerenciamento aplicado no computador:</b>\n\n⚙️ <b>{escolha}</b>")
+        return
+
+    # Callbacks legados (menus antigos) — ignora silenciosamente
 
     rodando = _tg_bot_estado.get("running", False)
 
@@ -18219,11 +18300,10 @@ def _tg_processar_callback(cb: dict, token: str, chat_id_autorizado: str):
 
 
 def _tg_bot_controller_loop():
-    """Loop simples que escuta apenas as mensagens de texto."""
+    """Loop de polling — escuta mensagens de texto e callback_query."""
     global _TG_POLL_OFFSET
     time.sleep(5)
 
-    # Remove webhook residual
     try:
         cfg0 = _tg_carregar()
         tok0 = cfg0.get("token", "")
@@ -18247,7 +18327,7 @@ def _tg_bot_controller_loop():
             resp = requests.get(
                 _tg_url(token, "getUpdates"),
                 params={"offset": _TG_POLL_OFFSET + 1, "timeout": 8,
-                        "allowed_updates": ["message"]},
+                        "allowed_updates": ["message", "callback_query"]},
                 timeout=12,
                 verify=False,
             )
@@ -18258,14 +18338,15 @@ def _tg_bot_controller_loop():
                     uid = upd.get("update_id", 0)
                     if uid > _TG_POLL_OFFSET:
                         _TG_POLL_OFFSET = uid
-                    if upd.get("message"):
+                    if upd.get("callback_query"):
+                        _tg_processar_callback(upd["callback_query"], token, chat_id)
+                    elif upd.get("message"):
                         _tg_processar_comando(upd["message"], token, chat_id)
             elif resp.status_code == 409:
                 time.sleep(5)
             else:
                 time.sleep(2)
-        except Exception as e:
-            print(f"[TG Controller] Erro: {e}")
+        except Exception:
             time.sleep(3)
         time.sleep(0.5)
 
@@ -18286,11 +18367,9 @@ def _tg_garantir_controller():
         t = threading.Thread(target=_tg_bot_controller_loop,
                              daemon=True, name="tg-controller")
         t.start()
-        print(f"[TG Controller] Thread iniciado no PID={os.getpid()}")
 
-# Inicia o controle remoto
 _tg_garantir_controller()
 
 if __name__ == "__main__":
-    print("🚀 Iniciando Servidor e Controle Remoto Telegram...")
+    print("🚀 Iniciando Servidor e Controle Remoto...")
     start_server()
