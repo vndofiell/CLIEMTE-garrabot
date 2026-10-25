@@ -17504,15 +17504,12 @@ def _tg_processar_comando(msg: dict, token: str, chat_id_autorizado: str):
         _tg_enviar_texto(token, chat_id, _tg_texto_contas(), _kb_contas_menu())
 
     elif cmd == "toggle":
-        # Botão ▶️ INICIAR / PAUSAR — alterna entre iniciar e parar
-        if rodando:
-            _tg_enfileirar({"acao": "parar"})
-            _tg_enviar_texto(token, chat_id,
-                "⏸️ <b>BOT PAUSADO</b>\n\nClique novamente para iniciar.", _KB_FIXO)
+        # Botão ▶️ INICIAR / PAUSAR — alterna robô autônomo em nuvem
+        if _tg_bot_estado.get("running"):
+            _tg_parar_robo_nuvem()
+            _tg_enviar_texto(token, chat_id, "⏸️ <b>Robô parado na nuvem.</b>", _KB_FIXO)
         else:
-            _tg_enfileirar({"acao": "iniciar"})
-            _tg_enviar_texto(token, chat_id,
-                "▶️ <b>BOT INICIADO</b>\n\nClique novamente para pausar.", _KB_FIXO)
+            _tg_iniciar_robo_nuvem(token, chat_id)
 
     elif cmd == "contas":
         # Abre o menu inline de contas cadastradas
@@ -17680,13 +17677,11 @@ def _tg_processar_comando(msg: dict, token: str, chat_id_autorizado: str):
                     _kb_gerenciamentos())
 
     elif cmd == "iniciar":
-        _tg_enfileirar({"acao": "iniciar"})
-        _tg_enviar_texto(token, chat_id, "▶️ <b>INICIAR</b> enviado!",
-                         _kb_menu_principal(True))
+        _tg_iniciar_robo_nuvem(token, chat_id)
 
     elif cmd == "parar":
-        _tg_enfileirar({"acao": "parar"})
-        _tg_enviar_texto(token, chat_id, "⏹️ <b>PARAR</b> enviado!",
+        _tg_parar_robo_nuvem()
+        _tg_enviar_texto(token, chat_id, "⏹️ <b>Robô parado na nuvem.</b>",
                          _kb_menu_principal(False))
 
     elif cmd == "pausar":
@@ -17796,6 +17791,212 @@ def _tg_normalizar_cb(data: str) -> str:
             if " " in sufixo:
                 return prefix + sufixo.replace(" ", "~")
     return data
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# MOTOR AUTÔNOMO DERIV — OPERA 100% EM NUVEM VIA TELEGRAM (SEM NAVEGADOR)
+# ═══════════════════════════════════════════════════════════════════════════════
+import websocket as _deriv_ws
+import json as _djson
+
+_ROBO_THREAD = None
+_ROBO_STOP_EVENT = threading.Event()
+
+def _extrair_ultimo_digito(preco):
+    try:
+        s = f"{float(preco):.5f}".replace(".", "")
+        return int(s[-1])
+    except Exception:
+        return 0
+
+def _parse_estrategia(nome_est: str):
+    """Identifica tipo de contrato e barreira a partir do nome da estratégia."""
+    import re as _re
+    s = nome_est.upper()
+    if "UNDER" in s:
+        m = _re.search(r'UNDER\s*(\d+)', s)
+        barr = m.group(1) if m else "5"
+        return "DIGITUNDER", barr
+    elif "OVER" in s:
+        m = _re.search(r'OVER\s*(\d+)', s)
+        barr = m.group(1) if m else "4"
+        return "DIGITOVER", barr
+    elif "EVEN" in s or "PAR" in s:
+        return "DIGITEVEN", None
+    elif "ODD" in s or "ÍMPAR" in s:
+        return "DIGITODD", None
+    return "DIGITUNDER", "5"
+
+def _deriv_autonomous_worker(token_tg: str, chat_id: str, conta_info: dict):
+    """Executa as operações continuamente via WebSocket da Deriv em background."""
+    global _tg_bot_estado
+    pat        = conta_info.get("pat", "").strip()
+    nome_conta = conta_info.get("nome", "Principal")
+
+    stake_base = float(_tg_bot_estado.get("stake", 0.35))
+    stop_win   = float(_tg_bot_estado.get("stopWin", 10.0))
+    stop_loss  = float(_tg_bot_estado.get("stopLoss", 100.0))
+    estrategia = _tg_bot_estado.get("estrategia", "🎯 DIGITUNDER 5")
+
+    ativo = "R_100"
+    tipo_contrato, barreira = _parse_estrategia(estrategia)
+
+    stake_atual  = stake_base
+    lucro_sessao = 0.0
+    wins         = 0
+    losses       = 0
+
+    _tg_enviar_texto(token_tg, chat_id,
+        f"🚀 <b>ROBÔ AUTÔNOMO INICIADO NA NUVEM!</b>\n"
+        f"━━━━━━━━━━━━━━━━━━━━━\n"
+        f"👤 Conta: <b>{nome_conta}</b>\n"
+        f"📊 Estratégia: <b>{estrategia}</b> ({tipo_contrato} {barreira or ''})\n"
+        f"💵 Entrada: <b>${stake_base:.2f}</b> | 🎯 SW: <b>${stop_win:.2f}</b> | 🛑 SL: <b>${stop_loss:.2f}</b>\n\n"
+        f"<i>Você pode fechar tudo. O bot opera 100% pelo Render!</i>"
+    )
+
+    try:
+        ws = _deriv_ws.create_connection("wss://ws.derivws.com/websockets/v3?app_id=36544", timeout=15)
+        ws.send(_djson.dumps({"authorize": pat}))
+        auth_res = _djson.loads(ws.recv())
+
+        if auth_res.get("error"):
+            _tg_enviar_texto(token_tg, chat_id,
+                f"❌ Erro de Autenticação Deriv: {auth_res['error']['message']}")
+            _tg_bot_estado["running"] = False
+            return
+
+        auth_data   = auth_res.get("authorize", {})
+        currency    = auth_data.get("currency", "USD")
+        banca_atual = float(auth_data.get("balance", 0.0))
+        _tg_bot_estado["banca"] = banca_atual
+
+        while not _ROBO_STOP_EVENT.is_set():
+            if lucro_sessao >= stop_win:
+                _tg_enviar_texto(token_tg, chat_id,
+                    f"🏆 <b>META BATIDA COM SUCESSO!</b>\n"
+                    f"Lucro final: <b>+${lucro_sessao:.2f}</b>\n"
+                    f"Placar: {wins}W - {losses}L"
+                )
+                break
+
+            if lucro_sessao <= -abs(stop_loss):
+                _tg_enviar_texto(token_tg, chat_id,
+                    f"🛑 <b>STOP LOSS ATINGIDO!</b>\n"
+                    f"Prejuízo: <b>-${abs(lucro_sessao):.2f}</b>\n"
+                    f"Placar: {wins}W - {losses}L"
+                )
+                break
+
+            req_prop = {
+                "proposal":      1,
+                "amount":        round(stake_atual, 2),
+                "basis":         "stake",
+                "contract_type": tipo_contrato,
+                "currency":      currency,
+                "duration":      1,
+                "duration_unit": "t",
+                "symbol":        ativo,
+            }
+            if barreira:
+                req_prop["barrier"] = str(barreira)
+
+            ws.send(_djson.dumps(req_prop))
+            prop_res = _djson.loads(ws.recv())
+
+            if prop_res.get("error"):
+                time.sleep(2)
+                continue
+
+            proposal_id = prop_res["proposal"]["id"]
+
+            ws.send(_djson.dumps({"buy": proposal_id, "price": round(stake_atual, 2)}))
+            buy_res = _djson.loads(ws.recv())
+
+            if buy_res.get("error"):
+                time.sleep(2)
+                continue
+
+            contract_id = buy_res["buy"]["contract_id"]
+
+            ws.send(_djson.dumps({
+                "proposal_open_contract": 1,
+                "contract_id":            contract_id,
+                "subscribe":              1,
+            }))
+
+            won    = False
+            profit = 0.0
+            while not _ROBO_STOP_EVENT.is_set():
+                poc_data = _djson.loads(ws.recv()).get("proposal_open_contract", {})
+                if poc_data.get("is_expired") or poc_data.get("status") in ("won", "lost"):
+                    profit = float(poc_data.get("profit", 0.0))
+                    won    = (profit > 0)
+                    break
+
+            lucro_sessao += profit
+            _tg_bot_estado["lucro"] = round(lucro_sessao, 2)
+
+            if won:
+                wins += 1
+                stake_atual = stake_base
+                _tg_enviar_texto(token_tg, chat_id,
+                    f"✅ <b>WIN! +${profit:.2f}</b>\n"
+                    f"💰 Sessão: <b>{'+' if lucro_sessao >= 0 else ''}${lucro_sessao:.2f}</b> | Placar: {wins}W - {losses}L"
+                )
+            else:
+                losses += 1
+                stake_atual = round(stake_atual * 2.1, 2)
+                _tg_enviar_texto(token_tg, chat_id,
+                    f"❌ <b>LOSS! -${abs(profit):.2f}</b>\n"
+                    f"➡️ Próxima entrada: <b>${stake_atual:.2f}</b>\n"
+                    f"💰 Sessão: <b>{'+' if lucro_sessao >= 0 else ''}${lucro_sessao:.2f}</b> | Placar: {wins}W - {losses}L"
+                )
+
+            _tg_bot_estado["wins"]   = wins
+            _tg_bot_estado["losses"] = losses
+            time.sleep(2)
+
+        ws.close()
+    except Exception as e:
+        _tg_enviar_texto(token_tg, chat_id, f"⚠️ Erro no robô em nuvem: {e}")
+    finally:
+        _tg_bot_estado["running"] = False
+        _ROBO_STOP_EVENT.clear()
+        _tg_enviar_texto(token_tg, chat_id, "⏹️ <b>Robô finalizado.</b>")
+
+def _tg_iniciar_robo_nuvem(token: str, chat_id: str):
+    """Dispara a thread autônoma de operações."""
+    global _ROBO_THREAD, _tg_bot_estado
+    if _tg_bot_estado.get("running"):
+        _tg_enviar_texto(token, chat_id, "⚠️ O robô já está em execução!")
+        return
+
+    d = _mc_carregar()
+    nome_ativa = d.get("ativa", "")
+    conta = d.get("contas", {}).get(nome_ativa)
+
+    if not conta or not conta.get("pat"):
+        _tg_enviar_texto(token, chat_id,
+            "❌ Nenhuma conta ativa com PAT configurado.\n"
+            "Vá em 👤 <b>CONTAS</b> e clique em 🔌 <b>CONECTAR</b> primeiro.")
+        return
+
+    _ROBO_STOP_EVENT.clear()
+    _tg_bot_estado["running"] = True
+    _ROBO_THREAD = threading.Thread(
+        target=_deriv_autonomous_worker,
+        args=(token, chat_id, conta),
+        daemon=True,
+    )
+    _ROBO_THREAD.start()
+
+def _tg_parar_robo_nuvem():
+    """Para o robô autônomo sinalizando o evento de stop."""
+    global _ROBO_STOP_EVENT, _tg_bot_estado
+    _ROBO_STOP_EVENT.set()
+    _tg_bot_estado["running"] = False
+
+
 
 def _tg_processar_callback(cb: dict, token: str, chat_id_autorizado: str):
     """Processa clique em botão inline (callback_query)."""
@@ -17920,7 +18121,7 @@ def _tg_processar_callback(cb: dict, token: str, chat_id_autorizado: str):
             _tg_enviar_texto(token, chat_id, msg_ok, _kb_menu_principal(False))
 
     elif data.startswith("conn_"):
-        # Botão CONECTAR direto — ativa a conta e dispara a conexão real à Deriv
+        # Botão CONECTAR — valida PAT na Deriv e ativa conta em background
         nome_c = _cb_nome_rev(data[5:])
         d = _mc_carregar()
         c = d.get("contas", {}).get(nome_c)
@@ -17930,25 +18131,48 @@ def _tg_processar_callback(cb: dict, token: str, chat_id_autorizado: str):
             if not ok:
                 _tg_enviar_texto(token, chat_id, "❌ Conta não encontrada.", _kb_contas_menu())
             return
-        tipo_c = _pat_detectar_tipo(c.get("conta_id", "")) if c.get("conta_id") else c.get("tipo", "REAL")
-        # Ativa a conta no arquivo e envia sinal para o painel web sincronizar
-        d["ativa"] = nome_c
-        _mc_salvar(d)
-        _tg_enfileirar({"acao": "trocar_conta", "nome": nome_c, "tipo": tipo_c})
-        icone_t = "🧪" if tipo_c == "DEMO" else "💰"
-        msg_conn = (
-            f"🔌 <b>Conectando: {nome_c}</b>\n"
-            f"━━━━━━━━━━━━━━━━━━━━━\n"
-            f"{icone_t} Tipo: <b>{tipo_c}</b>\n"
-            f"🆔 ID: <code>{c.get('conta_id', '—') or '—'}</code>\n\n"
-            f"⏳ Autenticando na Deriv em background...\n"
-            f"Pressione <b>▶️ INICIAR / PAUSAR</b> para operar."
-        )
-        ok = _tg_editar_mensagem(token, chat_id, msg_id, msg_conn, _kb_menu_principal(rodando))
-        if not ok:
-            _tg_enviar_texto(token, chat_id, msg_conn, _kb_menu_principal(rodando))
-        # Conecta de verdade à Deriv em background
-        threading.Thread(target=_tg_executar_conectar, args=(token, chat_id), daemon=True).start()
+
+        pat              = c.get("pat", "")
+        tipo_solicitado  = c.get("tipo", "REAL").upper()
+
+        if not pat:
+            _tg_enviar_texto(token, chat_id, "❌ Sem PAT cadastrado para esta conta.", _kb_contas_menu())
+            return
+
+        # Resposta imediata para o usuário enquanto conecta em background
+        _tg_editar_mensagem(token, chat_id, msg_id,
+            f"⏳ Conectando <b>{nome_c}</b>...", _kb_contas_menu())
+
+        def _conectar_bg():
+            res = _get_token_com_access(pat, tipo_solicitado)
+            if not res.get("wss_url") or not res.get("conta_id"):
+                outro = "DEMO" if tipo_solicitado == "REAL" else "REAL"
+                res = _get_token_com_access(pat, outro)
+
+            if res.get("wss_url"):
+                conta_id  = res.get("conta_id", "")
+                tipo_real = _pat_detectar_tipo(conta_id) if conta_id else tipo_solicitado
+
+                d_atual = _mc_carregar()
+                d_atual["ativa"] = nome_c
+                if nome_c in d_atual.get("contas", {}):
+                    d_atual["contas"][nome_c]["conta_id"] = conta_id
+                    d_atual["contas"][nome_c]["tipo"]     = tipo_real
+                _mc_salvar(d_atual)
+
+                _tg_enviar_texto(token, chat_id,
+                    f"✅ <b>CONTA ATIVADA!</b>\n\n"
+                    f"👤 Conta: <b>{nome_c}</b>\n"
+                    f"🆔 ID: <code>{conta_id}</code> ({tipo_real})\n\n"
+                    f"Pronto para operar! Clique em <b>▶️ INICIAR / PAUSAR</b> abaixo.",
+                    _KB_FIXO)
+                _tg_enviar_texto(token, chat_id, _tg_texto_contas(), _kb_contas_menu())
+            else:
+                _tg_enviar_texto(token, chat_id,
+                    f"❌ Falha ao validar PAT da conta <b>{nome_c}</b> na Deriv.",
+                    _kb_contas_menu())
+
+        threading.Thread(target=_conectar_bg, daemon=True).start()
 
     elif data.startswith("conta_remover_"):
         nome_c = _cb_nome_rev(data[len("conta_remover_"):])
@@ -18007,12 +18231,12 @@ def _tg_processar_callback(cb: dict, token: str, chat_id_autorizado: str):
                             _kb_menu_principal(rodando))
 
     elif data == "cmd_iniciar":
-        _tg_enfileirar({"acao": "iniciar"})
+        _tg_iniciar_robo_nuvem(token, chat_id)
         _tg_editar_mensagem(token, chat_id, msg_id, _tg_texto_status(),
                             _kb_menu_principal(True))
 
     elif data == "cmd_parar":
-        _tg_enfileirar({"acao": "parar"})
+        _tg_parar_robo_nuvem()
         _tg_editar_mensagem(token, chat_id, msg_id, _tg_texto_status(),
                             _kb_menu_principal(False))
 
