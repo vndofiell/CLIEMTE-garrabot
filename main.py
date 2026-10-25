@@ -17290,6 +17290,15 @@ def _kb_gerenciamentos() -> dict:
     rows.append([{"text": "◀️ Voltar", "callback_data": "menu_principal"}])
     return {"inline_keyboard": rows}
 
+def _cb_nome(nome: str) -> str:
+    """Sanitiza nome de conta para uso em callback_data do Telegram.
+    Substitui espaços e caracteres inválidos por ~ (reversível)."""
+    return nome.replace(" ", "~").replace("|", "-")[:40]
+
+def _cb_nome_rev(cb: str) -> str:
+    """Reverte a sanitização: converte ~ de volta para espaço."""
+    return cb.replace("~", " ")
+
 def _kb_contas_menu() -> dict:
     """Teclado inline do menu CONTAS CADASTRADAS.
     Cada conta tem botão DEMO + REAL para troca direta com 1 clique."""
@@ -17302,16 +17311,17 @@ def _kb_contas_menu() -> dict:
         icone_t = "🧪" if tipo_c == "DEMO" else "💰"
         e_ativa = (nome_c == ativa)
         ativa_mk = " ✅" if e_ativa else ""
+        cb_nome = _cb_nome(nome_c)   # versão segura para callback_data
         # Linha 1: nome da conta (clica para ver detalhes)
         rows.append([
-            {"text": f"{icone_t} {nome_c}{ativa_mk}", "callback_data": f"conta_info_{nome_c}"},
+            {"text": f"{icone_t} {nome_c}{ativa_mk}", "callback_data": f"conta_info_{cb_nome}"},
         ])
-        # Linha 2: botões DEMO e REAL para troca direta
+        # Linha 2: botões DEMO e REAL para troca direta (1 clique)
         rows.append([
             {"text": f"🧪 DEMO{'  ←' if (e_ativa and tipo_c=='DEMO') else ''}",
-             "callback_data": f"conta_trocar_{nome_c}_DEMO"},
+             "callback_data": f"ctr_{cb_nome}_D"},
             {"text": f"💰 REAL{'  ←' if (e_ativa and tipo_c=='REAL') else ''}",
-             "callback_data": f"conta_trocar_{nome_c}_REAL"},
+             "callback_data": f"ctr_{cb_nome}_R"},
         ])
     rows.append([{"text": "➕ CADASTRAR NOVA CONTA", "callback_data": "conta_add"}])
     rows.append([{"text": "◀️ Voltar", "callback_data": "menu_principal"}])
@@ -17319,17 +17329,19 @@ def _kb_contas_menu() -> dict:
 
 def _kb_conta_opcoes(nome_c: str) -> dict:
     """Teclado inline com opções de uma conta específica."""
+    cb = _cb_nome(nome_c)
     return {"inline_keyboard": [
-        [{"text": "✅ USAR ESTA CONTA", "callback_data": f"conta_usar_{nome_c}"}],
-        [{"text": "🗑️ REMOVER",         "callback_data": f"conta_remover_{nome_c}"}],
+        [{"text": "✅ USAR ESTA CONTA", "callback_data": f"conta_usar_{cb}"}],
+        [{"text": "🗑️ REMOVER",         "callback_data": f"conta_remover_{cb}"}],
         [{"text": "◀️ Voltar às Contas", "callback_data": "menu_contas"}],
     ]}
 
 def _kb_conta_tipo(nome_c: str) -> dict:
     """Teclado inline para escolher tipo DEMO ou REAL."""
+    cb = _cb_nome(nome_c)
     return {"inline_keyboard": [
-        [{"text": "🧪 DEMO",  "callback_data": f"conta_tipo_DEMO_{nome_c}"},
-         {"text": "💰 REAL",  "callback_data": f"conta_tipo_REAL_{nome_c}"}],
+        [{"text": "🧪 DEMO",  "callback_data": f"conta_tipo_DEMO_{cb}"},
+         {"text": "💰 REAL",  "callback_data": f"conta_tipo_REAL_{cb}"}],
         [{"text": "❌ Cancelar", "callback_data": "menu_contas"}],
     ]}
 
@@ -17806,7 +17818,7 @@ def _tg_processar_callback(cb: dict, token: str, chat_id_autorizado: str):
             "<i>(ex: principal, real2, demo-teste)</i>:")
 
     elif data.startswith("conta_info_"):
-        nome_c = data[len("conta_info_"):]
+        nome_c = _cb_nome_rev(data[len("conta_info_"):])
         d = _mc_carregar()
         c = d.get("contas", {}).get(nome_c)
         if not c:
@@ -17834,7 +17846,7 @@ def _tg_processar_callback(cb: dict, token: str, chat_id_autorizado: str):
             _tg_enviar_texto(token, chat_id, txt, _kb_conta_opcoes(nome_c))
 
     elif data.startswith("conta_usar_"):
-        nome_c = data[len("conta_usar_"):]
+        nome_c = _cb_nome_rev(data[len("conta_usar_"):])
         d = _mc_carregar()
         c = d.get("contas", {}).get(nome_c)
         if not c:
@@ -17853,16 +17865,15 @@ def _tg_processar_callback(cb: dict, token: str, chat_id_autorizado: str):
             f"O painel web irá conectar automaticamente.\n"
             f"Use <b>▶️ INICIAR</b> para começar.", _kb_menu_principal(False))
 
-    elif data.startswith("conta_trocar_"):
-        # formato: conta_trocar_<nome>_DEMO ou conta_trocar_<nome>_REAL
-        resto = data[len("conta_trocar_"):]
-        # extrai tipo do final (_DEMO ou _REAL)
-        if resto.endswith("_DEMO"):
-            tipo_c  = "DEMO"
-            nome_c  = resto[:-5]
-        elif resto.endswith("_REAL"):
-            tipo_c  = "REAL"
-            nome_c  = resto[:-5]
+    elif data.startswith("ctr_"):
+        # formato curto: ctr_<cb_nome>_D ou ctr_<cb_nome>_R
+        resto = data[4:]
+        if resto.endswith("_D"):
+            tipo_c = "DEMO"
+            nome_c = _cb_nome_rev(resto[:-2])
+        elif resto.endswith("_R"):
+            tipo_c = "REAL"
+            nome_c = _cb_nome_rev(resto[:-2])
         else:
             _tg_enviar_texto(token, chat_id, "❌ Formato inválido.", _kb_contas_menu())
             return
@@ -17894,7 +17905,7 @@ def _tg_processar_callback(cb: dict, token: str, chat_id_autorizado: str):
             _tg_enviar_texto(token, chat_id, msg_ok, _kb_menu_principal(False))
 
     elif data.startswith("conta_remover_"):
-        nome_c = data[len("conta_remover_"):]
+        nome_c = _cb_nome_rev(data[len("conta_remover_"):])
         d = _mc_carregar()
         if nome_c in d.get("contas", {}):
             del d["contas"][nome_c]
@@ -17906,10 +17917,10 @@ def _tg_processar_callback(cb: dict, token: str, chat_id_autorizado: str):
             _tg_enviar_texto(token, chat_id, _tg_texto_contas(), _kb_contas_menu())
 
     elif data.startswith("conta_tipo_"):
-        # formato: conta_tipo_DEMO_nome ou conta_tipo_REAL_nome
+        # formato: conta_tipo_DEMO_<cb_nome> ou conta_tipo_REAL_<cb_nome>
         partes = data[len("conta_tipo_"):].split("_", 1)
         if len(partes) == 2:
-            tipo_escolhido, nome_c = partes[0].upper(), partes[1]
+            tipo_escolhido, nome_c = partes[0].upper(), _cb_nome_rev(partes[1])
             estado_cad = _tg_cadastro_conta.pop(chat_id, {})
             pat_cad    = estado_cad.get("pat", "")
             if not pat_cad:
