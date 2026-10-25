@@ -6,6 +6,8 @@ jc_sec_progresso.json
 memory_vault.json
 sec_config.json
 contas_config.json
+contas_pat.json
+deriv_pat.json
 usuarios_sistema.json
 login_historico.json
 agendamentos.json

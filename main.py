@@ -17198,6 +17198,61 @@ def _tg_enfileirar(cmd: dict):
     with _tg_fila_lock:
         _tg_fila_cmds.append(cmd)
 
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# GERENCIADOR PERMANENTE DE CONTAS E PATS (JSON ANTI-PERDA)
+# ═══════════════════════════════════════════════════════════════════════════════
+CONTAS_PAT_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "contas_pat.json")
+
+def _carregar_contas_pat() -> dict:
+    """Lê todas as contas e tokens PAT salvos no disco."""
+    if os.path.exists(CONTAS_PAT_FILE):
+        try:
+            with open(CONTAS_PAT_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"[PAT] Erro ao ler JSON: {e}")
+    return {"ativa": "", "contas": {}}
+
+def _salvar_contas_pat(dados: dict):
+    """Salva permanentemente no arquivo JSON contas_pat.json."""
+    try:
+        with open(CONTAS_PAT_FILE, "w", encoding="utf-8") as f:
+            json.dump(dados, f, indent=2, ensure_ascii=False)
+        print(f"[PAT] Contas gravadas com sucesso em {CONTAS_PAT_FILE}")
+    except Exception as e:
+        print(f"[PAT] Erro ao salvar JSON: {e}")
+
+@app.route('/api/contas-pat', methods=['GET'])
+def api_contas_pat_get():
+    """Retorna todas as contas PAT salvas — usado pelo painel na inicialização."""
+    return jsonify({"ok": True, "dados": _carregar_contas_pat()})
+
+@app.route('/api/contas-pat', methods=['POST'])
+def api_contas_pat_post():
+    """Salva ou atualiza uma conta PAT pelo painel."""
+    body = request.get_json(force=True, silent=True) or {}
+    nome = str(body.get("nome", "")).strip()
+    pat  = str(body.get("pat", "")).strip()
+    tipo = str(body.get("tipo", "REAL")).upper()
+
+    if not nome or not pat:
+        return jsonify({"ok": False, "erro": "Nome e PAT são obrigatórios."}), 400
+
+    db = _carregar_contas_pat()
+    db["contas"][nome] = {
+        "nome": nome,
+        "pat":  pat,
+        "tipo": tipo,
+        "atualizado_em": time.strftime("%Y-%m-%d %H:%M:%S"),
+    }
+    if not db.get("ativa") or body.get("ativar"):
+        db["ativa"] = nome
+
+    _salvar_contas_pat(db)
+    return jsonify({"ok": True, "msg": f"Conta '{nome}' salva permanentemente no JSON!"})
+
+
 # ── Listener de comandos do Telegram ─────────────────────────────────────────
 _TG_POLL_OFFSET = 0
 
@@ -17229,17 +17284,24 @@ GERENCIAMENTOS_LISTA = [
 ]
 
 # ── Helpers de teclados inline ───────────────────────────────────────────────
-# ── Reply Keyboard FIXO — 3 botões fixos embaixo do campo de texto ───────────
-_KB_FIXO = {
-    "keyboard": [
-        [{"text": "▶️ INICIAR"}, {"text": "⏸️ PAUSAR"}, {"text": "⏹️ PARAR"}]
-    ],
-    "resize_keyboard": True,
-    "persistent": True,
-    "input_field_placeholder": "Clique em um dos botões...",
-}
+# Estado global: True = bot pausado (botão do meio vira RETOMAR)
+_tg_pausado: bool = False
 
-# Alias para compatibilidade com código antigo
+def _get_teclado_controle(pausado: bool = False) -> dict:
+    """Gera o teclado com 3 botões, alternando PAUSAR ⇄ RETOMAR."""
+    botao_meio = "▶️ RETOMAR" if pausado else "⏸️ PAUSAR"
+    return {
+        "keyboard": [
+            [{"text": "▶️ INICIAR"}, {"text": botao_meio}, {"text": "⏹️ PARAR"}]
+        ],
+        "resize_keyboard": True,
+        "persistent": True,
+        "input_field_placeholder": "Controle remoto do Bot...",
+    }
+
+# KB_FIXO e _KB_CONTROLE agora são dinâmicos via _get_teclado_controle()
+# Mantidos como fallback para código legado que os referencie diretamente
+_KB_FIXO     = _get_teclado_controle(pausado=False)
 _KB_CONTROLE = _KB_FIXO
 
 # ── Estado de cadastro de conta (por chat_id) ─────────────────────────────────
@@ -17424,7 +17486,8 @@ def _tg_texto_status() -> str:
 _tg_aguardando_input: dict = {}   # { chat_id: "entrada"|"stopwin"|"stoploss" }
 
 def _tg_processar_comando(msg: dict, token: str, chat_id_autorizado: str):
-    """Processa os 3 botões de controle remoto: INICIAR, PAUSAR, PARAR."""
+    """Interpreta os comandos e troca o botão entre PAUSAR e RETOMAR."""
+    global _tg_pausado
     chat_id = str(msg.get("chat", {}).get("id", "")).strip()
     texto   = (msg.get("text") or "").strip()
     auth_id = str(chat_id_autorizado).strip()
@@ -17435,46 +17498,56 @@ def _tg_processar_comando(msg: dict, token: str, chat_id_autorizado: str):
         _tg_enviar_texto(token, chat_id, "⛔ Acesso não autorizado.")
         return
 
-    texto_lower = texto.lower()
+    t = texto.lower()
 
-    # 1. COMANDO INICIAR
-    if "iniciar" in texto_lower:
-        _tg_enfileirar({"acao": "iniciar"})
-        _tg_enviar_texto(token, chat_id,
-            "▶️ <b>INICIAR:</b> Comando enviado com sucesso!\n"
-            "O robô no seu computador começou a operar.",
-            _KB_CONTROLE
-        )
-
-    # 2. COMANDO PAUSAR
-    elif "pausar" in texto_lower:
+    # 1. CLICOU EM PAUSAR → muda botão do meio para RETOMAR
+    if "pausar" in t:
+        _tg_pausado = True
         _tg_enfileirar({"acao": "pausar"})
         _tg_enviar_texto(token, chat_id,
-            "⏸️ <b>PAUSAR:</b> Comando enviado!\n"
-            "O robô no computador pausou as entradas.",
-            _KB_CONTROLE
+            "⏸️ <b>ROBÔ PAUSADO!</b>\n\n"
+            "O botão do meio mudou para <b>▶️ RETOMAR</b>.\n"
+            "Clique nele quando quiser continuar as operações.",
+            _get_teclado_controle(pausado=True)
         )
 
-    # 3. COMANDO PARAR / STOP
-    elif "parar" in texto_lower or "stop" in texto_lower:
+    # 2. CLICOU EM RETOMAR → volta botão para PAUSAR
+    elif "retomar" in t:
+        _tg_pausado = False
+        _tg_enfileirar({"acao": "retomar"})
+        _tg_enviar_texto(token, chat_id,
+            "▶️ <b>OPERAÇÕES RETOMADAS!</b>\n\n"
+            "O robô voltou a operar no computador.",
+            _get_teclado_controle(pausado=False)
+        )
+
+    # 3. CLICOU EM INICIAR
+    elif "iniciar" in t:
+        _tg_pausado = False
+        _tg_enfileirar({"acao": "iniciar"})
+        _tg_enviar_texto(token, chat_id,
+            "▶️ <b>ROBÔ INICIADO!</b>\n\n"
+            "Comando de início enviado para o seu computador.",
+            _get_teclado_controle(pausado=False)
+        )
+
+    # 4. CLICOU EM PARAR
+    elif "parar" in t or "stop" in t:
+        _tg_pausado = False
         _tg_enfileirar({"acao": "parar"})
         _tg_enviar_texto(token, chat_id,
-            "⏹️ <b>PARAR:</b> Comando enviado!\n"
-            "O robô no computador encerrou a sessão.",
-            _KB_CONTROLE
+            "⏹️ <b>ROBÔ PARADO!</b>\n\n"
+            "Sessão encerrada no computador.",
+            _get_teclado_controle(pausado=False)
         )
 
     # QUALQUER OUTRA MENSAGEM OU /start
     else:
         _tg_enviar_texto(token, chat_id,
-            "🕹️ <b>CONTROLE REMOTO — GARRABOT</b>\n"
+            "🕹️ <b>CONTROLE REMOTO DO GARRABOT</b>\n"
             "━━━━━━━━━━━━━━━━━━━━━\n"
-            "O robô roda direto no seu computador.\n\n"
-            "Clique em um dos <b>3 botões abaixo</b> para controlar à distância:\n\n"
-            "▶️ <b>INICIAR:</b> Liga o robô\n"
-            "⏸️ <b>PAUSAR:</b> Pausa temporariamente\n"
-            "⏹️ <b>PARAR:</b> Encerra as operações",
-            _KB_CONTROLE
+            "Clique em um dos botões abaixo para controlar o robô no computador:",
+            _get_teclado_controle(pausado=_tg_pausado)
         )
 
 
