@@ -17048,20 +17048,66 @@ def tg_pat_config_get():
 
 @app.route('/tg-pat-config', methods=['POST'])
 def tg_pat_config_post():
-    """Salva PAT da Deriv para uso exclusivo do Telegram bot."""
+    """Salva PAT da Deriv. Aceita também nome da conta (multi-conta)."""
     dados = request.get_json(force=True, silent=True) or {}
     pat  = str(dados.get("pat", "")).strip()
     tipo = str(dados.get("tipo", "REAL")).upper()
+    nome = str(dados.get("nome", "")).strip() or "principal"
     if not pat:
         return jsonify({"ok": False, "erro": "PAT vazio"})
-    _pat_salvar(pat, tipo)
+    # Usa nome para salvar em multi-conta
+    d = _mc_carregar()
+    if nome not in d["contas"]:
+        d["contas"][nome] = {"nome": nome, "pat": pat, "conta_id": "", "tipo": tipo, "banca": 0.0}
+    else:
+        d["contas"][nome].update({"pat": pat, "tipo": tipo})
+    if not d.get("ativa"):
+        d["ativa"] = nome
+    _mc_salvar(d)
     return jsonify({"ok": True})
+
+@app.route('/mc-listar', methods=['GET'])
+def mc_listar():
+    """Retorna todas as contas salvas (sem expor o PAT completo)."""
+    d = _mc_carregar()
+    contas_safe = {}
+    for nome, c in d.get("contas", {}).items():
+        pat = c.get("pat", "")
+        contas_safe[nome] = {
+            "nome":     nome,
+            "conta_id": c.get("conta_id", ""),
+            "tipo":     c.get("tipo", "REAL"),
+            "banca":    c.get("banca", 0.0),
+            "pat":      pat[:8] + "..." if pat else "",
+        }
+    return jsonify({"ok": True, "ativa": d.get("ativa", ""), "contas": contas_safe})
+
+@app.route('/mc-ativar', methods=['POST'])
+def mc_ativar():
+    """Define qual conta está ativa no multi-conta."""
+    dados = request.get_json(force=True, silent=True) or {}
+    nome  = str(dados.get("nome", "")).strip()
+    if not nome:
+        return jsonify({"ok": False, "erro": "Nome da conta obrigatório."})
+    d = _mc_carregar()
+    if nome not in d["contas"]:
+        return jsonify({"ok": False, "erro": f"Conta '{nome}' não encontrada."})
+    d["ativa"] = nome
+    _mc_salvar(d)
+    return jsonify({"ok": True, "ativa": nome})
 
 @app.route('/tg-pat-conectar', methods=['POST'])
 def tg_pat_conectar():
-    """Conecta a Deriv via PAT (Personal Access Token) — usado exclusivamente pelo Telegram bot.
-    O PAT é tratado como access_token e usa o mesmo fluxo de geração de wss_url."""
+    """Conecta a Deriv via PAT (Personal Access Token).
+    Se 'nome' for passado, ativa essa conta antes de conectar."""
     dados = request.get_json(force=True, silent=True) or {}
+    # Permite ativar uma conta pelo nome antes de conectar
+    nome_conta = str(dados.get("nome", "")).strip()
+    if nome_conta:
+        d = _mc_carregar()
+        if nome_conta in d["contas"]:
+            d["ativa"] = nome_conta
+            _mc_salvar(d)
     pat  = dados.get("pat") or _pat_carregar().get("pat", "")
     tipo = str(dados.get("tipo") or _pat_carregar().get("tipo", "REAL")).upper()
     if not pat:

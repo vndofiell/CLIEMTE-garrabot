@@ -1813,6 +1813,86 @@
 </div>
 
 <!-- ══════════════════════════════════════
+     MODAL — CONEXÃO DERIV VIA PAT
+════════════════════════════════════════ -->
+<div id="modal-deriv-pat" class="modal-overlay" style="display:none;">
+    <div class="modal-box" style="max-width:380px;">
+        <div class="modal-title" style="color:#ff0080;">🔑 CONECTAR DERIV VIA PAT</div>
+        <div class="modal-sub" id="pat-modal-sub">Insira seu Personal Access Token da Deriv</div>
+
+        <!-- Status badge -->
+        <div id="pat-status-badge" style="
+            display:none; margin:8px 0 4px; padding:6px 10px; border-radius:4px;
+            font-family:'Share Tech Mono'; font-size:0.72rem;
+            letter-spacing:1px; text-align:center;">
+        </div>
+
+        <!-- Campo do token -->
+        <div style="margin-bottom:10px;">
+            <label style="font-size:0.65rem; color:#888; letter-spacing:1px; display:block; margin-bottom:4px;">
+                TOKEN PAT
+                <span style="color:#555; font-size:0.6rem;">(começa com pat_...)</span>
+            </label>
+            <input id="pat-token-inp" type="text" autocomplete="off"
+                placeholder="pat_xxxxxxxxxxxxxxxxxxxx"
+                style="width:100%; background:#0a0a12; border:1px solid rgba(255,0,128,0.5);
+                       color:#ff0080; padding:10px 12px; font-family:'Share Tech Mono';
+                       font-size:0.78rem; border-radius:4px; outline:none;
+                       box-sizing:border-box; margin-bottom:6px;"
+                oninput="derivPatTokenVerificar(this.value)">
+            <div id="pat-token-hint" style="font-size:0.62rem; color:#555; letter-spacing:0.5px; min-height:14px;"></div>
+        </div>
+
+        <!-- Nome da conta (opcional) -->
+        <div style="margin-bottom:12px;">
+            <label style="font-size:0.65rem; color:#888; letter-spacing:1px; display:block; margin-bottom:4px;">
+                NOME DA CONTA
+                <span style="color:#555; font-size:0.6rem;">(ex: principal, real2...)</span>
+            </label>
+            <input id="pat-nome-inp" type="text" autocomplete="off"
+                placeholder="principal"
+                style="width:100%; background:#0a0a12; border:1px solid rgba(255,0,128,0.3);
+                       color:#cc0066; padding:8px 12px; font-family:'Share Tech Mono';
+                       font-size:0.78rem; border-radius:4px; outline:none;
+                       box-sizing:border-box;">
+        </div>
+
+        <!-- Botões DEMO / REAL -->
+        <div style="display:flex; gap:8px; margin-bottom:12px;">
+            <button id="pat-btn-demo" onclick="derivPatConectar('DEMO')"
+                style="flex:1; padding:10px; background:rgba(255,0,128,0.08);
+                       border:1px solid #ff0080; color:#ff0080;
+                       font-family:'Share Tech Mono'; font-size:0.75rem;
+                       letter-spacing:1px; cursor:pointer; border-radius:4px;">
+                🧪 DEMO
+            </button>
+            <button id="pat-btn-real" onclick="derivPatConectar('REAL')"
+                style="flex:1; padding:10px; background:rgba(255,0,128,0.08);
+                       border:1px solid #c0005e; color:#c0005e;
+                       font-family:'Share Tech Mono'; font-size:0.75rem;
+                       letter-spacing:1px; cursor:pointer; border-radius:4px;">
+                💰 REAL
+            </button>
+        </div>
+
+        <!-- Secção: contas salvas -->
+        <div id="pat-contas-wrap" style="display:none; margin-bottom:10px;">
+            <div style="font-size:0.6rem; color:#555; letter-spacing:2px; margin-bottom:6px;">▸ CONTAS SALVAS</div>
+            <div id="pat-contas-lista" style="display:flex; flex-direction:column; gap:4px;"></div>
+        </div>
+
+        <!-- Info após conexão bem-sucedida -->
+        <div id="pat-info-conta" style="display:none; margin-bottom:10px; padding:8px 10px;
+            background:rgba(255,0,128,0.06); border:1px solid rgba(255,0,128,0.3); border-radius:4px;">
+            <div style="font-size:0.68rem; color:#888; margin-bottom:2px;" id="pat-info-id"></div>
+            <div style="font-size:1rem; font-weight:bold; color:#ff0080;" id="pat-info-saldo"></div>
+        </div>
+
+        <button class="modal-cancel" onclick="fecharModal('modal-deriv-pat')" style="margin-top:4px;">✕ Fechar</button>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════
      MODAL — ESTRATÉGIA (lista)
 ════════════════════════════════════════ -->
 <div id="modal-estrategia" class="modal-overlay">
@@ -2471,6 +2551,11 @@
     <button class="cmd-btn" id="btn-conectar-deriv" onclick="runCmd('conectar')">
         conectar
         <span class="cmd-label">Login na Deriv</span>
+    </button>
+    <button class="cmd-btn" id="btn-deriv-pat" onclick="derivPatAbrirModal()"
+        style="border-color:rgba(255,0,128,0.55); color:#ff0080;">
+        🔑 Deriv PAT
+        <span class="cmd-label" id="lbl-deriv-pat-status" style="color:#57606a;">Conectar via token</span>
     </button>
     <button class="cmd-btn" id="btn-quotex-conectar" onclick="quotexAbrirModal()"
         style="border-color:rgba(255,80,0,0.55); color:#ff6b00;">
@@ -29933,6 +30018,216 @@ setInterval(() => {
                     (d.is_demo ? 'DEMO' : 'REAL') + ' • $' + _po.saldo.toFixed(2));
                 if (_po.saldo > 0 && typeof updateHeader === 'function') updateHeader(_po.saldo);
             }
+        })
+        .catch(() => {});
+})();
+
+// ════════════════════════════════════════════════════════════════════════════
+// DERIV PAT — Conexão via Personal Access Token
+// ════════════════════════════════════════════════════════════════════════════
+const _derivPat = { status: 'desconectado', contaId: '', tipo: '', saldo: 0 };
+
+function derivPatAbrirModal() {
+    // Limpa badge de status
+    const badge = document.getElementById('pat-status-badge');
+    if (badge) { badge.style.display = 'none'; badge.textContent = ''; }
+
+    // Pré-preenche token salvo (se existir)
+    fetch('/tg-pat-config')
+        .then(r => r.json())
+        .then(d => {
+            if (d.configurado) {
+                const inp = document.getElementById('pat-token-inp');
+                if (inp && !inp.value) inp.placeholder = d.pat_preview + ' (salvo)';
+                const hint = document.getElementById('pat-token-hint');
+                if (hint) hint.textContent = '✅ Token já salvo — deixe em branco para reutilizar o atual';
+            }
+            _derivPatCarregarContas();
+        })
+        .catch(() => { _derivPatCarregarContas(); });
+
+    const m = document.getElementById('modal-deriv-pat');
+    if (m) m.style.display = 'flex';
+}
+
+function derivPatTokenVerificar(val) {
+    const hint = document.getElementById('pat-token-hint');
+    if (!hint) return;
+    if (!val) { hint.textContent = ''; hint.style.color = '#555'; return; }
+    if (val.startsWith('pat_') && val.length > 20) {
+        hint.textContent = '✅ Formato válido';
+        hint.style.color = '#00ff41';
+    } else {
+        hint.textContent = '⚠️ PAT deve começar com pat_ e ter mais de 20 caracteres';
+        hint.style.color = '#fbbf24';
+    }
+}
+
+function _derivPatSetBadge(msg, cor) {
+    const badge = document.getElementById('pat-status-badge');
+    if (!badge) return;
+    badge.style.display = 'block';
+    badge.textContent = msg;
+    badge.style.background = cor === 'ok'   ? 'rgba(0,255,65,0.1)'  :
+                              cor === 'erro' ? 'rgba(255,68,68,0.1)' :
+                                              'rgba(255,200,0,0.08)';
+    badge.style.color = cor === 'ok' ? '#00ff41' : cor === 'erro' ? '#f44' : '#ffd600';
+    badge.style.border = '1px solid ' + (cor === 'ok' ? 'rgba(0,255,65,0.4)' :
+                                          cor === 'erro' ? 'rgba(255,68,68,0.4)' :
+                                                           'rgba(255,200,0,0.3)');
+}
+
+function _derivPatSetBotoes(desabilitado) {
+    ['pat-btn-demo','pat-btn-real'].forEach(id => {
+        const b = document.getElementById(id);
+        if (b) { b.disabled = desabilitado; b.style.opacity = desabilitado ? '0.5' : '1'; }
+    });
+}
+
+async function derivPatConectar(tipo) {
+    const tokenInp = document.getElementById('pat-token-inp');
+    const nomeInp  = document.getElementById('pat-nome-inp');
+    const pat      = tokenInp ? tokenInp.value.trim() : '';
+    const nome     = nomeInp  ? (nomeInp.value.trim() || 'principal') : 'principal';
+
+    // Se não digitou token, usa o salvo (pode ter nome de conta selecionada)
+    if (!pat) {
+        const cfg = await fetch('/tg-pat-config').then(r=>r.json()).catch(()=>({configurado:false}));
+        if (!cfg.configurado) {
+            _derivPatSetBadge('⚠️ Informe um token PAT', 'aviso'); return;
+        }
+        // Usa token já salvo: passa nome para ativar a conta correta
+        _derivPatSetBotoes(true);
+        _derivPatSetBadge('⏳ Conectando...', 'aviso');
+        try {
+            const body = { tipo };
+            if (nome && nome !== 'principal') body.nome = nome;
+            const res = await fetch('/tg-pat-conectar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            }).then(r => r.json());
+            _derivPatOnResultado(res, tipo, nome);
+        } catch(e) {
+            _derivPatSetBadge('❌ Erro de rede: ' + e.message, 'erro');
+        }
+        _derivPatSetBotoes(false);
+        return;
+    }
+
+    if (!pat.startsWith('pat_') || pat.length < 20) {
+        _derivPatSetBadge('⚠️ PAT inválido. Deve começar com pat_', 'aviso'); return;
+    }
+
+    _derivPatSetBotoes(true);
+    _derivPatSetBadge('⏳ Salvando e conectando...', 'aviso');
+
+    try {
+        // 1. Salva o token + nome no servidor
+        await fetch('/tg-pat-config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pat, tipo, nome })
+        });
+
+        // 2. Conecta via PAT
+        const res = await fetch('/tg-pat-conectar', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pat, tipo })
+        }).then(r => r.json());
+
+        _derivPatOnResultado(res, tipo, nome);
+        _derivPatCarregarContas();
+    } catch(e) {
+        _derivPatSetBadge('❌ Erro de rede: ' + e.message, 'erro');
+    }
+    _derivPatSetBotoes(false);
+}
+
+function _derivPatOnResultado(res, tipo, nome) {
+    if (res.ok) {
+        _derivPat.status  = 'conectado';
+        _derivPat.contaId = res.conta_id || '';
+        _derivPat.tipo    = tipo;
+
+        const icone = tipo === 'DEMO' ? '🧪' : '💰';
+        _derivPatSetBadge(`✅ Conectado! ${icone} ${tipo} — Conta: ${res.conta_id || '—'}`, 'ok');
+
+        // Atualiza label do botão no painel lateral
+        const lbl = document.getElementById('lbl-deriv-pat-status');
+        if (lbl) lbl.textContent = `${icone} ${tipo} • ${res.conta_id || '—'}`;
+        if (lbl) lbl.style.color = tipo === 'REAL' ? '#00ff41' : '#fbbf24';
+
+        // Mostra info de conta no modal
+        const infoWrap = document.getElementById('pat-info-conta');
+        const infoId   = document.getElementById('pat-info-id');
+        const infoSaldo = document.getElementById('pat-info-saldo');
+        if (infoWrap) infoWrap.style.display = 'block';
+        if (infoId)   infoId.textContent   = `Conta: ${res.conta_id || '—'}  •  Tipo: ${tipo}`;
+        if (infoSaldo) infoSaldo.textContent = nome ? `✅ Conta "${nome}" salva e conectada` : '✅ Conectado!';
+
+        if (typeof print === 'function')
+            print(`🔑 DERIV PAT — ${icone} ${tipo} conectado | Conta: ${res.conta_id || '—'}`, 'log-ok');
+    } else {
+        _derivPatSetBadge('❌ ' + (res.erro || 'Falha ao conectar'), 'erro');
+        if (typeof print === 'function')
+            print('❌ DERIV PAT — ' + (res.erro || 'Falha ao conectar'), 'log-loss');
+    }
+}
+
+function _derivPatCarregarContas() {
+    // Lista contas salvas via multi-conta
+    fetch('/mc-listar')
+        .then(r => r.json())
+        .then(d => {
+            const wrap  = document.getElementById('pat-contas-wrap');
+            const lista = document.getElementById('pat-contas-lista');
+            if (!wrap || !lista) return;
+            const contas = d.contas || {};
+            const nomes  = Object.keys(contas);
+            if (nomes.length === 0) { wrap.style.display = 'none'; return; }
+            wrap.style.display = 'block';
+            lista.innerHTML = '';
+            const ativa = d.ativa || '';
+            nomes.forEach(nome => {
+                const c     = contas[nome];
+                const tipo  = c.tipo || 'REAL';
+                const icone = tipo === 'DEMO' ? '🧪' : '💰';
+                const eAtiva = (nome === ativa);
+                const btn = document.createElement('button');
+                btn.style.cssText = `padding:7px 10px; background:${eAtiva?'rgba(255,0,128,0.12)':'transparent'};
+                    border:1px solid ${eAtiva?'rgba(255,0,128,0.6)':'rgba(255,255,255,0.1)'};
+                    color:${eAtiva?'#ff0080':'#aaa'}; font-family:'Share Tech Mono'; font-size:0.7rem;
+                    letter-spacing:1px; cursor:pointer; border-radius:4px; text-align:left; width:100%;`;
+                btn.innerHTML = `${icone} <b>${nome}</b>${eAtiva?' ✅':''}  <span style="color:#555">${c.conta_id||'—'}</span>`;
+                btn.onclick = () => _derivPatSelecionarConta(nome, c);
+                lista.appendChild(btn);
+            });
+        })
+        .catch(() => {});
+}
+
+function _derivPatSelecionarConta(nome, conta) {
+    // Preenche somente o campo de nome (PAT fica no servidor, não exposto)
+    const nomeInp  = document.getElementById('pat-nome-inp');
+    const tokenInp = document.getElementById('pat-token-inp');
+    if (nomeInp)  nomeInp.value  = nome;
+    // Limpa campo de token para forçar uso do token salvo no servidor
+    if (tokenInp) { tokenInp.value = ''; tokenInp.placeholder = conta.pat + ' (salvo no servidor)'; }
+    const hint = document.getElementById('pat-token-hint');
+    if (hint) { hint.textContent = '✅ Token carregado do servidor — clique DEMO ou REAL para conectar'; hint.style.color = '#00ff41'; }
+    _derivPatSetBadge(`📋 Conta "${nome}" selecionada — clique DEMO ou REAL para conectar`, 'aviso');
+}
+
+// Restaura estado ao carregar a página
+(function _derivPatRestaurar() {
+    fetch('/tg-pat-config')
+        .then(r => r.json())
+        .then(d => {
+            if (!d.configurado) return;
+            const lbl = document.getElementById('lbl-deriv-pat-status');
+            if (lbl) { lbl.textContent = `🔑 ${d.tipo} • token salvo`; lbl.style.color = '#ff0080'; }
         })
         .catch(() => {});
 })();
