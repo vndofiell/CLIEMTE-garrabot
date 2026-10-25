@@ -17300,8 +17300,9 @@ def _cb_nome_rev(cb: str) -> str:
     return cb.replace("~", " ")
 
 def _kb_contas_menu() -> dict:
-    """Teclado inline do menu CONTAS CADASTRADAS.
-    Cada conta tem botão DEMO + REAL para troca direta com 1 clique."""
+    """Teclado inline do menu TROCA DE CONTA.
+    Cada conta ocupa UMA linha: [nome/status] [🔌 CONECTAR].
+    Clicar em CONECTAR troca para essa conta imediatamente."""
     d = _mc_carregar()
     contas_dict = d.get("contas", {})
     ativa = d.get("ativa", "")
@@ -17311,17 +17312,13 @@ def _kb_contas_menu() -> dict:
         icone_t = "🧪" if tipo_c == "DEMO" else "💰"
         e_ativa = (nome_c == ativa)
         ativa_mk = " ✅" if e_ativa else ""
-        cb_nome = _cb_nome(nome_c)   # versão segura para callback_data
-        # Linha 1: nome da conta (clica para ver detalhes)
+        cb_nome = _cb_nome(nome_c)
+        # Uma única linha por conta: info à esquerda, CONECTAR à direita
         rows.append([
-            {"text": f"{icone_t} {nome_c}{ativa_mk}", "callback_data": f"conta_info_{cb_nome}"},
-        ])
-        # Linha 2: botões DEMO e REAL para troca direta (1 clique)
-        rows.append([
-            {"text": f"🧪 DEMO{'  ←' if (e_ativa and tipo_c=='DEMO') else ''}",
-             "callback_data": f"ctr_{cb_nome}_D"},
-            {"text": f"💰 REAL{'  ←' if (e_ativa and tipo_c=='REAL') else ''}",
-             "callback_data": f"ctr_{cb_nome}_R"},
+            {"text": f"{icone_t} {nome_c}{ativa_mk} ({tipo_c})",
+             "callback_data": f"conta_info_{cb_nome}"},
+            {"text": "🔌 CONECTAR",
+             "callback_data": f"conn_{cb_nome}"},
         ])
     rows.append([{"text": "➕ CADASTRAR NOVA CONTA", "callback_data": "conta_add"}])
     rows.append([{"text": "◀️ Voltar", "callback_data": "menu_principal"}])
@@ -17925,6 +17922,35 @@ def _tg_processar_callback(cb: dict, token: str, chat_id_autorizado: str):
         ok = _tg_editar_mensagem(token, chat_id, msg_id, msg_ok, _kb_menu_principal(False))
         if not ok:
             _tg_enviar_texto(token, chat_id, msg_ok, _kb_menu_principal(False))
+
+    elif data.startswith("conn_"):
+        # Botão CONECTAR direto — usa o tipo já salvo na conta
+        nome_c = _cb_nome_rev(data[5:])
+        d = _mc_carregar()
+        c = d.get("contas", {}).get(nome_c)
+        if not c:
+            ok = _tg_editar_mensagem(token, chat_id, msg_id,
+                "❌ Conta não encontrada.", _kb_contas_menu())
+            if not ok:
+                _tg_enviar_texto(token, chat_id, "❌ Conta não encontrada.", _kb_contas_menu())
+            return
+        tipo_c = _pat_detectar_tipo(c.get("conta_id","")) if c.get("conta_id") else c.get("tipo","REAL")
+        # Ativa a conta e enfileira troca para o painel web
+        d["ativa"] = nome_c
+        _mc_salvar(d)
+        _tg_enfileirar({"acao": "trocar_conta", "nome": nome_c, "tipo": tipo_c})
+        icone_t = "🧪" if tipo_c == "DEMO" else "💰"
+        msg_conn = (
+            f"🔌 <b>Conectando: {nome_c}</b>\n"
+            f"━━━━━━━━━━━━━━━━━━━━━\n"
+            f"{icone_t} Tipo: <b>{tipo_c}</b>\n"
+            f"🆔 ID: <code>{c.get('conta_id','—') or '—'}</code>\n\n"
+            f"✅ Conta ativada! O bot está usando esta conta.\n"
+            f"Pressione <b>▶️ INICIAR / PAUSAR</b> para operar."
+        )
+        ok = _tg_editar_mensagem(token, chat_id, msg_id, msg_conn, _kb_menu_principal(rodando))
+        if not ok:
+            _tg_enviar_texto(token, chat_id, msg_conn, _kb_menu_principal(rodando))
 
     elif data.startswith("conta_remover_"):
         nome_c = _cb_nome_rev(data[len("conta_remover_"):])
