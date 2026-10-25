@@ -16921,11 +16921,6 @@ def modo_avancado_multimercado_ui():
 </html>"""
     return Response(html_page, mimetype='text/html; charset=utf-8', headers={'Cache-Control':'no-store'})
 
-if __name__ == "__main__":
-    print("🚀 Iniciando Interface Cyber Cloud...")
-    start_server()
-
-
 # ═══════════════════════════════════════════════════════════════════════════════
 # TELEGRAM BOT CONTROLLER — Controle total via Telegram + conexão via PAT Deriv
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -17804,22 +17799,23 @@ def _tg_normalizar_cb(data: str) -> str:
 
 def _tg_processar_callback(cb: dict, token: str, chat_id_autorizado: str):
     """Processa clique em botão inline (callback_query)."""
-    cb_id   = cb.get("id","")
-    # Pega chat_id da mensagem (mais confiável para grupos e privado)
-    chat_id = str(cb.get("message",{}).get("chat",{}).get("id","")
-                  or cb.get("from",{}).get("id",""))
-    msg_id  = cb.get("message",{}).get("message_id", 0)
-    data    = _tg_normalizar_cb(cb.get("data",""))   # normaliza formato antigo → novo
+    cb_id   = cb.get("id", "")
+    from_id = str(cb.get("from", {}).get("id", "")).strip()
+    chat_id = str(cb.get("message", {}).get("chat", {}).get("id", "") or from_id).strip()
+    msg_id  = cb.get("message", {}).get("message_id", 0)
+    data    = _tg_normalizar_cb(cb.get("data", ""))
 
-    print(f"[TG CB] data={data!r} chat_id={chat_id} autorizado={chat_id_autorizado}", flush=True)
+    auth_id = str(chat_id_autorizado).strip()
 
-    if chat_id != str(chat_id_autorizado):
-        _tg_responder_callback(token, cb_id, "⛔ Não autorizado")
-        print(f"[TG CB] BLOQUEADO: chat_id={chat_id} != {chat_id_autorizado}")
-        return
-
-    # ── sempre responde o callback primeiro para remover o 'loading' do botão ─
+    # Responde imediatamente ao Telegram para tirar o 'relógio/loading' do botão
     _tg_responder_callback(token, cb_id)
+
+    print(f"[TG CB] data={data!r} chat_id={chat_id} from_id={from_id} autorizado={auth_id}", flush=True)
+
+    # Valida tanto o chat_id quanto o from_id
+    if auth_id and chat_id != auth_id and from_id != auth_id:
+        _tg_enviar_texto(token, chat_id, "⛔ Acesso não autorizado a este comando.")
+        return
 
     rodando = _tg_bot_estado.get("running", False)
 
@@ -17924,7 +17920,7 @@ def _tg_processar_callback(cb: dict, token: str, chat_id_autorizado: str):
             _tg_enviar_texto(token, chat_id, msg_ok, _kb_menu_principal(False))
 
     elif data.startswith("conn_"):
-        # Botão CONECTAR direto — usa o tipo já salvo na conta
+        # Botão CONECTAR direto — ativa a conta e dispara a conexão real à Deriv
         nome_c = _cb_nome_rev(data[5:])
         d = _mc_carregar()
         c = d.get("contas", {}).get(nome_c)
@@ -17934,8 +17930,8 @@ def _tg_processar_callback(cb: dict, token: str, chat_id_autorizado: str):
             if not ok:
                 _tg_enviar_texto(token, chat_id, "❌ Conta não encontrada.", _kb_contas_menu())
             return
-        tipo_c = _pat_detectar_tipo(c.get("conta_id","")) if c.get("conta_id") else c.get("tipo","REAL")
-        # Ativa a conta e enfileira troca para o painel web
+        tipo_c = _pat_detectar_tipo(c.get("conta_id", "")) if c.get("conta_id") else c.get("tipo", "REAL")
+        # Ativa a conta no arquivo e envia sinal para o painel web sincronizar
         d["ativa"] = nome_c
         _mc_salvar(d)
         _tg_enfileirar({"acao": "trocar_conta", "nome": nome_c, "tipo": tipo_c})
@@ -17944,13 +17940,15 @@ def _tg_processar_callback(cb: dict, token: str, chat_id_autorizado: str):
             f"🔌 <b>Conectando: {nome_c}</b>\n"
             f"━━━━━━━━━━━━━━━━━━━━━\n"
             f"{icone_t} Tipo: <b>{tipo_c}</b>\n"
-            f"🆔 ID: <code>{c.get('conta_id','—') or '—'}</code>\n\n"
-            f"✅ Conta ativada! O bot está usando esta conta.\n"
+            f"🆔 ID: <code>{c.get('conta_id', '—') or '—'}</code>\n\n"
+            f"⏳ Autenticando na Deriv em background...\n"
             f"Pressione <b>▶️ INICIAR / PAUSAR</b> para operar."
         )
         ok = _tg_editar_mensagem(token, chat_id, msg_id, msg_conn, _kb_menu_principal(rodando))
         if not ok:
             _tg_enviar_texto(token, chat_id, msg_conn, _kb_menu_principal(rodando))
+        # Conecta de verdade à Deriv em background
+        threading.Thread(target=_tg_executar_conectar, args=(token, chat_id), daemon=True).start()
 
     elif data.startswith("conta_remover_"):
         nome_c = _cb_nome_rev(data[len("conta_remover_"):])
@@ -18190,3 +18188,7 @@ def _tg_garantir_controller():
 
 # Inicia o thread ao carregar o módulo (gunicorn sem --preload carrega dentro do worker)
 _tg_garantir_controller()
+
+if __name__ == "__main__":
+    print("🚀 Iniciando Interface Cyber Cloud e Bot Telegram...")
+    start_server()
