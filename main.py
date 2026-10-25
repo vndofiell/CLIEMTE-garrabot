@@ -17096,6 +17096,24 @@ def mc_ativar():
     _mc_salvar(d)
     return jsonify({"ok": True, "ativa": nome})
 
+@app.route('/mc-remover', methods=['POST'])
+def mc_remover():
+    """Remove uma conta do multi-conta pelo nome."""
+    dados = request.get_json(force=True, silent=True) or {}
+    nome  = str(dados.get("nome", "")).strip()
+    if not nome:
+        return jsonify({"ok": False, "erro": "Nome da conta obrigatório."})
+    d = _mc_carregar()
+    if nome not in d["contas"]:
+        return jsonify({"ok": False, "erro": f"Conta '{nome}' não encontrada."})
+    del d["contas"][nome]
+    # Se era a conta ativa, limpa ou escolhe outra
+    if d.get("ativa") == nome:
+        restantes = list(d["contas"].keys())
+        d["ativa"] = restantes[0] if restantes else ""
+    _mc_salvar(d)
+    return jsonify({"ok": True, "ativa": d.get("ativa", "")})
+
 @app.route('/tg-pat-conectar', methods=['POST'])
 def tg_pat_conectar():
     """Conecta a Deriv via PAT (Personal Access Token).
