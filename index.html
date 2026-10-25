@@ -15698,6 +15698,14 @@ function runCmd(cmd) {
                         if (btn) btn.childNodes[0].textContent = cmd.valor + ' ';
                         print(`⚙️ [TELEGRAM] Gerenciamento: ${cmd.valor}`, 'log-info');
                     }
+                } else if (acao === 'trocar_conta') {
+                    // Comando do Telegram: trocar para outra conta PAT
+                    const nomeConta = cmd.nome || '';
+                    const tipoConta = (cmd.tipo || 'REAL').toUpperCase();
+                    if (nomeConta && typeof derivPatConectarSalva === 'function') {
+                        print(`🔄 [TELEGRAM] Trocando para conta: ${nomeConta} (${tipoConta})`, 'log-info');
+                        derivPatConectarSalva(nomeConta, tipoConta);
+                    }
                 }
                 // Continua consumindo se houver mais comandos
                 setTimeout(_tgPollCmds, 100);
