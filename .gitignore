@@ -50,3 +50,8 @@ whatsapp-api/package-lock.json
 local.properties
 build/
 .gradle/
+
+deriv_pat.json
+bot_config.json
+adaptive_config.json
+bot_cfg.json

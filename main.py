@@ -17506,8 +17506,10 @@ def _tg_processar_comando(msg: dict, token: str, chat_id_autorizado: str):
     rodando = _tg_bot_estado.get("running", False)
 
     if cmd in ("start", "menu"):
-        # /start envia o teclado fixo + status completo
+        # Envia status + menu inline com botões frescos (sem cache)
         _tg_enviar_texto(token, chat_id, _tg_texto_status(), _KB_FIXO)
+        # Envia também o menu de contas atualizado para substituir mensagens antigas
+        _tg_enviar_texto(token, chat_id, _tg_texto_contas(), _kb_contas_menu())
 
     elif cmd == "toggle":
         # Botão ▶️ INICIAR / PAUSAR — alterna entre iniciar e parar
@@ -17783,6 +17785,26 @@ def _tg_executar_conectar(token: str, chat_id: str):
         _tg_enviar_texto(token, chat_id, f"❌ Erro: {e}")
 
 
+def _tg_normalizar_cb(data: str) -> str:
+    """Normaliza callback_data para o formato atual.
+    Converte formatos antigos (com espaços, conta_trocar_) para o novo (ctr_ com ~)."""
+    # Formato antigo: conta_trocar_NOME COM ESPACO_DEMO → ctr_NOME~COM~ESPACO_D
+    if data.startswith("conta_trocar_"):
+        resto = data[len("conta_trocar_"):]
+        if resto.endswith("_DEMO"):
+            nome_raw = resto[:-5]
+            return "ctr_" + nome_raw.replace(" ", "~") + "_D"
+        elif resto.endswith("_REAL"):
+            nome_raw = resto[:-5]
+            return "ctr_" + nome_raw.replace(" ", "~") + "_R"
+    # conta_info_, conta_usar_, conta_remover_ com espaços → substitui espaço por ~
+    for prefix in ("conta_info_", "conta_usar_", "conta_remover_"):
+        if data.startswith(prefix):
+            sufixo = data[len(prefix):]
+            if " " in sufixo:
+                return prefix + sufixo.replace(" ", "~")
+    return data
+
 def _tg_processar_callback(cb: dict, token: str, chat_id_autorizado: str):
     """Processa clique em botão inline (callback_query)."""
     cb_id   = cb.get("id","")
@@ -17790,7 +17812,7 @@ def _tg_processar_callback(cb: dict, token: str, chat_id_autorizado: str):
     chat_id = str(cb.get("message",{}).get("chat",{}).get("id","")
                   or cb.get("from",{}).get("id",""))
     msg_id  = cb.get("message",{}).get("message_id", 0)
-    data    = cb.get("data","")
+    data    = _tg_normalizar_cb(cb.get("data",""))   # normaliza formato antigo → novo
 
     print(f"[TG CB] data={data!r} chat_id={chat_id} autorizado={chat_id_autorizado}", flush=True)
 
