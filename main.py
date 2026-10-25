@@ -17232,12 +17232,15 @@ GERENCIAMENTOS_LISTA = [
 # ── Reply Keyboard FIXO — 3 botões fixos embaixo do campo de texto ───────────
 _KB_FIXO = {
     "keyboard": [
-        ["▶️ INICIAR / PAUSAR", "👤 CONTAS", "📊 STATUS"],
+        [{"text": "▶️ INICIAR"}, {"text": "⏸️ PAUSAR"}, {"text": "⏹️ PARAR"}]
     ],
-    "resize_keyboard":   True,
-    "persistent":        True,
-    "input_field_placeholder": "Escolha uma opção...",
+    "resize_keyboard": True,
+    "persistent": True,
+    "input_field_placeholder": "Clique em um dos botões...",
 }
+
+# Alias para compatibilidade com código antigo
+_KB_CONTROLE = _KB_FIXO
 
 # ── Estado de cadastro de conta (por chat_id) ─────────────────────────────────
 # Formato: { chat_id: {"etapa": "nome"|"pat"|"tipo", "nome": str, "pat": str} }
@@ -17421,325 +17424,58 @@ def _tg_texto_status() -> str:
 _tg_aguardando_input: dict = {}   # { chat_id: "entrada"|"stopwin"|"stoploss" }
 
 def _tg_processar_comando(msg: dict, token: str, chat_id_autorizado: str):
-    """Processa mensagem de texto recebida do Telegram."""
-    chat_id = str(msg.get("chat", {}).get("id", ""))
+    """Processa os 3 botões de controle remoto: INICIAR, PAUSAR, PARAR."""
+    chat_id = str(msg.get("chat", {}).get("id", "")).strip()
     texto   = (msg.get("text") or "").strip()
+    auth_id = str(chat_id_autorizado).strip()
+
     if not texto:
         return
-    if chat_id != str(chat_id_autorizado):
+    if auth_id and chat_id != auth_id:
         _tg_enviar_texto(token, chat_id, "⛔ Acesso não autorizado.")
         return
 
-    # ── Verifica se está aguardando input numérico ────────────────────────────
-    if chat_id in _tg_aguardando_input:
-        campo = _tg_aguardando_input.pop(chat_id)
-        try:
-            val = float(texto.replace(",","."))
-            if campo == "entrada" and val < 0.35:
-                _tg_enviar_texto(token, chat_id, "❌ Mínimo $0.35", _kb_config())
-                return
-            acoes = {"entrada": "set_stake", "stopwin": "set_stopwin", "stoploss": "set_stoploss"}
-            labels = {"entrada": "Entrada", "stopwin": "Stop Win", "stoploss": "Stop Loss"}
-            _tg_enfileirar({"acao": acoes[campo], "valor": val})
-            _tg_enviar_texto(token, chat_id,
-                f"✅ <b>{labels[campo]}</b> → <b>${val:.2f}</b>",
-                _kb_menu_principal(_tg_bot_estado.get("running", False)))
-        except ValueError:
-            _tg_enviar_texto(token, chat_id, "❌ Valor inválido. Digite só o número (ex: 2.00)")
-            _tg_aguardando_input[chat_id] = campo
-        return
+    texto_lower = texto.lower()
 
-    # ── Normaliza texto dos botões fixos para comandos ────────────────────────
-    _ALIAS_BOTOES = {
-        "▶️ iniciar / pausar": "toggle",
-        "👤 contas":            "contas",
-        "📊 status":            "status",
-    }
-    _texto_norm = texto.lower().strip()
-    if _texto_norm in _ALIAS_BOTOES:
-        texto = "/" + _ALIAS_BOTOES[_texto_norm]
-
-    # ── Captura etapa de cadastro de conta ───────────────────────────────────
-    if chat_id in _tg_cadastro_conta:
-        etapa = _tg_cadastro_conta[chat_id].get("etapa")
-        if etapa == "nome":
-            nome_novo = texto.strip().lower().replace(" ","_")
-            if not nome_novo.replace("_","").replace("-","").isalnum() or len(nome_novo) < 2:
-                _tg_enviar_texto(token, chat_id,
-                    "❌ Nome inválido. Use letras, números, _ ou - (mínimo 2 caracteres).\n"
-                    "Digite o <b>nome da conta</b>:")
-                return
-            d = _mc_carregar()
-            if nome_novo in d.get("contas", {}):
-                _tg_enviar_texto(token, chat_id,
-                    f"⚠️ Já existe uma conta com o nome <b>{nome_novo}</b>.\n"
-                    "Escolha outro nome ou use /contas para gerenciá-la.\n\n"
-                    "Digite um <b>nome diferente</b>:")
-                return
-            _tg_cadastro_conta[chat_id]["nome"] = nome_novo
-            _tg_cadastro_conta[chat_id]["etapa"] = "pat"
-            _tg_enviar_texto(token, chat_id,
-                f"✅ Nome: <b>{nome_novo}</b>\n\n"
-                "Agora envie o <b>PAT (Personal Access Token)</b> da Deriv:\n"
-                "<i>Começa com <code>pat_</code></i>")
-            return
-        elif etapa == "pat":
-            pat_novo = texto.strip()
-            if not (pat_novo.startswith("pat_") or pat_novo.startswith("PAT_")):
-                _tg_enviar_texto(token, chat_id,
-                    "❌ PAT inválido. Deve começar com <code>pat_</code>\n\n"
-                    "Envie o <b>PAT</b> novamente:")
-                return
-            _tg_cadastro_conta[chat_id]["pat"] = pat_novo
-            _tg_cadastro_conta[chat_id]["etapa"] = "tipo"
-            nome_c = _tg_cadastro_conta[chat_id]["nome"]
-            _tg_enviar_texto(token, chat_id,
-                f"✅ PAT recebido!\n\n"
-                f"Conta: <b>{nome_c}</b>\n"
-                f"PAT: <code>{pat_novo[:14]}...</code>\n\n"
-                "Escolha o <b>tipo da conta</b>:",
-                _kb_conta_tipo(nome_c))
-            return
-        # etapa "tipo" é tratada via callback — não via texto livre
-
-    cmd  = texto.split()[0].lower().lstrip("/")
-    args = texto.split()[1:]
-    rodando = _tg_bot_estado.get("running", False)
-
-    if cmd in ("start", "menu"):
-        # Envia status + menu inline com botões frescos (sem cache)
-        _tg_enviar_texto(token, chat_id, _tg_texto_status(), _KB_FIXO)
-        # Envia também o menu de contas atualizado para substituir mensagens antigas
-        _tg_enviar_texto(token, chat_id, _tg_texto_contas(), _kb_contas_menu())
-
-    elif cmd == "toggle":
-        # Botão ▶️ INICIAR / PAUSAR — alterna robô autônomo em nuvem
-        if _tg_bot_estado.get("running"):
-            _tg_parar_robo_nuvem()
-            _tg_enviar_texto(token, chat_id, "⏸️ <b>Robô parado na nuvem.</b>", _KB_FIXO)
-        else:
-            _tg_iniciar_robo_nuvem(token, chat_id)
-
-    elif cmd == "contas":
-        # Abre o menu inline de contas cadastradas
-        _tg_enviar_texto(token, chat_id, _tg_texto_contas(), _kb_contas_menu())
-
-    elif cmd == "addconta":
-        # /addconta <nome> <pat>
-        if len(args) < 2:
-            _tg_enviar_texto(token, chat_id,
-                "❌ Uso incorreto.\n\n"
-                "📌 Formato:\n<code>/addconta nome pat_xxx...</code>\n\n"
-                "Exemplo:\n"
-                "<code>/addconta real pat_abc123xyz</code>\n"
-                "<code>/addconta demo pat_xyz456abc</code>")
-            return
-        nome_novo = args[0].lower().strip()
-        pat_novo  = args[1].strip()
-        if not nome_novo.replace("_","").replace("-","").isalnum():
-            _tg_enviar_texto(token, chat_id, "❌ Nome inválido. Use só letras, números, _ ou -")
-            return
-        if not pat_novo.startswith("pat_") and not pat_novo.startswith("PAT_"):
-            _tg_enviar_texto(token, chat_id, "❌ PAT inválido. Deve começar com <code>pat_</code>")
-            return
-        d = _mc_carregar()
-        ja_existe = nome_novo in d["contas"]
-        d["contas"][nome_novo] = {
-            "nome": nome_novo, "pat": pat_novo,
-            "conta_id": "", "tipo": "?", "banca": 0.0,
-        }
-        if not d.get("ativa"):
-            d["ativa"] = nome_novo
-        _mc_salvar(d)
-        acao_txt = "✏️ Atualizada" if ja_existe else "✅ Adicionada"
+    # 1. COMANDO INICIAR
+    if "iniciar" in texto_lower:
+        _tg_enfileirar({"acao": "iniciar"})
         _tg_enviar_texto(token, chat_id,
-            f"{acao_txt}! Conta <b>{nome_novo}</b> salva.\n\n"
-            f"🔑 PAT: <code>{pat_novo[:14]}...</code>\n\n"
-            f"Use <code>/usarconta {nome_novo}</code> para ativá-la\n"
-            f"e depois <code>/conectar</code> para autenticar.", _KB_FIXO)
+            "▶️ <b>INICIAR:</b> Comando enviado com sucesso!\n"
+            "O robô no seu computador começou a operar.",
+            _KB_CONTROLE
+        )
 
-    elif cmd == "usarconta":
-        # /usarconta <nome>
-        if not args:
-            d = _mc_carregar()
-            nomes = list(d.get("contas",{}).keys())
-            if not nomes:
-                _tg_enviar_texto(token, chat_id, "❌ Nenhuma conta cadastrada. Use /addconta")
-                return
-            lista = "\n".join(f"• <code>/usarconta {n}</code>" for n in nomes)
-            _tg_enviar_texto(token, chat_id,
-                f"📋 <b>Contas disponíveis:</b>\n\n{lista}\n\nQual deseja ativar?")
-            return
-        nome_usar = args[0].lower().strip()
-        d = _mc_carregar()
-        if nome_usar not in d.get("contas",{}):
-            nomes = list(d.get("contas",{}).keys())
-            _tg_enviar_texto(token, chat_id,
-                f"❌ Conta <b>{nome_usar}</b> não encontrada.\n\n"
-                f"Contas disponíveis: {', '.join(nomes) or 'nenhuma'}")
-            return
-        d["ativa"] = nome_usar
-        _mc_salvar(d)
-        c = d["contas"][nome_usar]
-        _tg_enviar_texto(token, chat_id,
-            f"✅ Conta <b>{nome_usar}</b> ativada!\n\n"
-            f"🆔 ID: <code>{c.get('conta_id','—') or '—'}</code>\n"
-            f"📋 Tipo: <b>{c.get('tipo','?')}</b>\n\n"
-            f"Use /conectar para autenticar.", _KB_FIXO)
-
-    elif cmd == "removerconta":
-        # /removerconta <nome>
-        if not args:
-            _tg_enviar_texto(token, chat_id,
-                "❌ Uso: <code>/removerconta nome</code>"); return
-        nome_rem = args[0].lower().strip()
-        d = _mc_carregar()
-        if nome_rem not in d.get("contas",{}):
-            _tg_enviar_texto(token, chat_id, f"❌ Conta <b>{nome_rem}</b> não encontrada.")
-            return
-        del d["contas"][nome_rem]
-        if d.get("ativa") == nome_rem:
-            d["ativa"] = next(iter(d["contas"]), "")
-        _mc_salvar(d)
-        nova_ativa = d.get("ativa","nenhuma")
-        _tg_enviar_texto(token, chat_id,
-            f"🗑️ Conta <b>{nome_rem}</b> removida.\n"
-            f"Conta ativa agora: <b>{nova_ativa}</b>", _KB_FIXO)
-
-    elif cmd == "status":
-        _tg_enviar_texto(token, chat_id, _tg_texto_status(), _KB_FIXO)
-
-    elif cmd == "config":
-        cfg = {}
-        try:
-            if os.path.exists(BOT_CFG_ARQUIVO):
-                with open(BOT_CFG_ARQUIVO,"r",encoding="utf-8") as f: cfg = json.load(f)
-        except Exception: pass
-        est = _tg_bot_estado
-        txt = (f"⚙️ <b>CONFIGURAÇÕES</b>\n"
-               f"━━━━━━━━━━━━━━━━━━━━━\n"
-               f"💵 Entrada: <b>${cfg.get('stake', est.get('stake',0.35)):.2f}</b>\n"
-               f"🎯 Stop Win: <b>${cfg.get('stopWin', est.get('stopWin',10)):.2f}</b>\n"
-               f"🛑 Stop Loss: <b>${cfg.get('stopLoss', est.get('stopLoss',100)):.2f}</b>\n"
-               f"\nClique para alterar:")
-        _tg_enviar_texto(token, chat_id, txt, _kb_config())
-
-    elif cmd == "ajuda":
-        _tg_enviar_texto(token, chat_id,
-            "🤖 <b>GARRABOT — Comandos</b>\n\n"
-            "Use os <b>botões fixos</b> abaixo ou digite:\n\n"
-            "/menu — Painel com botões\n"
-            "/status — Status atual\n"
-            "/conectar — Conecta Deriv via PAT\n"
-            "/setpat &lt;token&gt; [DEMO|REAL] — Salva PAT\n"
-            "/iniciar · /parar · /pausar\n"
-            "/entrada 2.00 · /stopwin 20 · /stoploss 100\n"
-            "/estrategia · /gerenciamento")
-
-    elif cmd == "setpat":
-        if not args:
-            _tg_enviar_texto(token, chat_id, "❌ Use: /setpat &lt;token&gt; [DEMO|REAL]"); return
-        tipo_pat = args[1].upper() if len(args) > 1 and args[1].upper() in ("DEMO","REAL") else "REAL"
-        _pat_salvar(args[0].strip(), tipo_pat)
-        _tg_enviar_texto(token, chat_id,
-            f"✅ PAT salvo! <b>Tipo:</b> {tipo_pat}\nUse /conectar para autenticar.")
-
-    elif cmd == "conectar":
-        _tg_executar_conectar(token, chat_id)
-
-    elif cmd == "estrategia":
-        if not args:
-            _tg_enviar_texto(token, chat_id,
-                f"📊 <b>ESTRATÉGIAS</b>\nAtual: <b>{_tg_bot_estado.get('estrategia','—')}</b>\n\nEscolha:",
-                _kb_estrategias())
-        else:
-            try:
-                idx = int(args[0]) - 1
-                if 0 <= idx < len(ESTRATEGIAS_LISTA):
-                    escolha = ESTRATEGIAS_LISTA[idx]
-                    _tg_enfileirar({"acao": "set_estrategia", "valor": escolha})
-                    _tg_enviar_texto(token, chat_id, f"✅ Estratégia: <b>{escolha}</b>")
-                else:
-                    _tg_enviar_texto(token, chat_id, f"❌ Número inválido (1-{len(ESTRATEGIAS_LISTA)})")
-            except ValueError:
-                _tg_enviar_texto(token, chat_id,
-                    f"📊 <b>ESTRATÉGIAS</b>\nAtual: <b>{_tg_bot_estado.get('estrategia','—')}</b>\n\nEscolha:",
-                    _kb_estrategias())
-
-    elif cmd == "gerenciamento":
-        if not args:
-            _tg_enviar_texto(token, chat_id,
-                f"⚙️ <b>GERENCIAMENTOS</b>\nAtual: <b>{_tg_bot_estado.get('gerenciamento','—')}</b>\n\nEscolha:",
-                _kb_gerenciamentos())
-        else:
-            try:
-                idx = int(args[0]) - 1
-                if 0 <= idx < len(GERENCIAMENTOS_LISTA):
-                    escolha = GERENCIAMENTOS_LISTA[idx]
-                    _tg_enfileirar({"acao": "set_gerenciamento", "valor": escolha})
-                    _tg_enviar_texto(token, chat_id, f"✅ Gerenciamento: <b>{escolha}</b>")
-                else:
-                    _tg_enviar_texto(token, chat_id, f"❌ Número inválido (1-{len(GERENCIAMENTOS_LISTA)})")
-            except ValueError:
-                _tg_enviar_texto(token, chat_id,
-                    f"⚙️ <b>GERENCIAMENTOS</b>\nAtual: <b>{_tg_bot_estado.get('gerenciamento','—')}</b>\n\nEscolha:",
-                    _kb_gerenciamentos())
-
-    elif cmd == "iniciar":
-        _tg_iniciar_robo_nuvem(token, chat_id)
-
-    elif cmd == "parar":
-        _tg_parar_robo_nuvem()
-        _tg_enviar_texto(token, chat_id, "⏹️ <b>Robô parado na nuvem.</b>",
-                         _kb_menu_principal(False))
-
-    elif cmd == "pausar":
+    # 2. COMANDO PAUSAR
+    elif "pausar" in texto_lower:
         _tg_enfileirar({"acao": "pausar"})
-        _tg_enviar_texto(token, chat_id, "⏸️ <b>PAUSAR</b> enviado!",
-                         _kb_menu_principal(False))
+        _tg_enviar_texto(token, chat_id,
+            "⏸️ <b>PAUSAR:</b> Comando enviado!\n"
+            "O robô no computador pausou as entradas.",
+            _KB_CONTROLE
+        )
 
-    elif cmd == "entrada":
-        if args:
-            try:
-                val = float(args[0].replace(",",".")); assert val >= 0.35
-                _tg_enfileirar({"acao":"set_stake","valor":val})
-                _tg_enviar_texto(token, chat_id, f"✅ Entrada → <b>${val:.2f}</b>",
-                                 _kb_menu_principal(_tg_bot_estado.get("running",False)))
-            except Exception:
-                _tg_enviar_texto(token, chat_id, "❌ Valor inválido ou menor que $0.35")
-        else:
-            _tg_aguardando_input[chat_id] = "entrada"
-            _tg_enviar_texto(token, chat_id, "💵 Digite o valor da <b>Entrada</b> (ex: 2.00):")
+    # 3. COMANDO PARAR / STOP
+    elif "parar" in texto_lower or "stop" in texto_lower:
+        _tg_enfileirar({"acao": "parar"})
+        _tg_enviar_texto(token, chat_id,
+            "⏹️ <b>PARAR:</b> Comando enviado!\n"
+            "O robô no computador encerrou a sessão.",
+            _KB_CONTROLE
+        )
 
-    elif cmd == "stopwin":
-        if args:
-            try:
-                val = float(args[0].replace(",","."))
-                _tg_enfileirar({"acao":"set_stopwin","valor":val})
-                _tg_enviar_texto(token, chat_id, f"✅ Stop Win → <b>${val:.2f}</b>",
-                                 _kb_menu_principal(_tg_bot_estado.get("running",False)))
-            except Exception:
-                _tg_enviar_texto(token, chat_id, "❌ Valor inválido")
-        else:
-            _tg_aguardando_input[chat_id] = "stopwin"
-            _tg_enviar_texto(token, chat_id, "🎯 Digite o valor do <b>Stop Win</b> (ex: 20):")
-
-    elif cmd == "stoploss":
-        if args:
-            try:
-                val = float(args[0].replace(",","."))
-                _tg_enfileirar({"acao":"set_stoploss","valor":val})
-                _tg_enviar_texto(token, chat_id, f"✅ Stop Loss → <b>${val:.2f}</b>",
-                                 _kb_menu_principal(_tg_bot_estado.get("running",False)))
-            except Exception:
-                _tg_enviar_texto(token, chat_id, "❌ Valor inválido")
-        else:
-            _tg_aguardando_input[chat_id] = "stoploss"
-            _tg_enviar_texto(token, chat_id, "🛑 Digite o valor do <b>Stop Loss</b> (ex: 100):")
-
+    # QUALQUER OUTRA MENSAGEM OU /start
     else:
-        _tg_enviar_texto(token, chat_id, "❓ Comando desconhecido. Use /menu ou /ajuda.",
-                         _kb_menu_principal(_tg_bot_estado.get("running",False)))
+        _tg_enviar_texto(token, chat_id,
+            "🕹️ <b>CONTROLE REMOTO — GARRABOT</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━\n"
+            "O robô roda direto no seu computador.\n\n"
+            "Clique em um dos <b>3 botões abaixo</b> para controlar à distância:\n\n"
+            "▶️ <b>INICIAR:</b> Liga o robô\n"
+            "⏸️ <b>PAUSAR:</b> Pausa temporariamente\n"
+            "⏹️ <b>PARAR:</b> Encerra as operações",
+            _KB_CONTROLE
+        )
 
 
 def _tg_executar_conectar(token: str, chat_id: str):
@@ -18410,113 +18146,78 @@ def _tg_processar_callback(cb: dict, token: str, chat_id_autorizado: str):
 
 
 def _tg_bot_controller_loop():
-    """Loop de polling que lê mensagens e callbacks do Telegram."""
+    """Loop simples que escuta apenas as mensagens de texto."""
     global _TG_POLL_OFFSET
-    time.sleep(10)
-    # ── Inicialização: remove webhook e descarta updates acumulados ───────────
+    time.sleep(5)
+
+    # Remove webhook residual
     try:
         cfg0 = _tg_carregar()
-        tok0 = cfg0.get("token","")
+        tok0 = cfg0.get("token", "")
         if tok0:
-            # 1. Remove qualquer webhook ativo (impede que callbacks sejam interceptados)
-            wh_resp = requests.get(_tg_url(tok0, "getWebhookInfo"), timeout=8, verify=False).json()
-            wh_url  = wh_resp.get("result", {}).get("url", "")
-            if wh_url:
-                del_resp = requests.post(_tg_url(tok0, "deleteWebhook"),
-                                         json={"drop_pending_updates": True},
-                                         timeout=8, verify=False).json()
-                print(f"[TG Controller] Webhook removido ({wh_url}): {del_resp.get('ok')}")
-            else:
-                print("[TG Controller] Nenhum webhook ativo.")
-            # 2. Descarta updates acumulados avançando o offset
-            r0 = requests.get(
-                _tg_url(tok0, "getUpdates"),
-                params={"offset": -1, "timeout": 0},
-                timeout=10, verify=False,
-            )
-            res0 = r0.json().get("result", [])
-            if res0:
-                _TG_POLL_OFFSET = res0[-1]["update_id"] - 1
-                print(f"[TG Controller] Retomando a partir do update {_TG_POLL_OFFSET + 1}")
-            else:
-                print("[TG Controller] Nenhum update pendente. Polling pronto.")
-    except Exception as e:
-        print(f"[TG Controller] Aviso no init: {e}")
+            requests.post(_tg_url(tok0, "deleteWebhook"),
+                          json={"drop_pending_updates": True},
+                          timeout=8, verify=False)
+    except Exception:
+        pass
 
     while True:
         try:
-            cfg = _tg_carregar()
-            token   = cfg.get("token","")
-            chat_id = str(cfg.get("chat_id",""))
+            cfg     = _tg_carregar()
+            token   = cfg.get("token", "").strip()
+            chat_id = str(cfg.get("chat_id", "")).strip()
+
             if not token or not chat_id:
-                time.sleep(15); continue
+                time.sleep(10)
+                continue
+
             resp = requests.get(
                 _tg_url(token, "getUpdates"),
-                params={"offset": _TG_POLL_OFFSET + 1, "timeout": 5,
-                        "allowed_updates": ["message","callback_query"]},
-                timeout=10, verify=False,
+                params={"offset": _TG_POLL_OFFSET + 1, "timeout": 8,
+                        "allowed_updates": ["message"]},
+                timeout=12,
+                verify=False,
             )
-            if resp.status_code != 200:
-                print(f"[TG Controller] getUpdates HTTP {resp.status_code}: {resp.text[:350]}")
-                if resp.status_code == 409:
-                    print("[TG Controller] CONFLITO: outro processo ou webhook está consumindo o mesmo token. Execute apenas um controlador Telegram.")
-                time.sleep(5); continue
-            results = resp.json().get("result", [])
-            if results:
-                print(f"[TG Controller] {len(results)} update(s) recebidos", flush=True)
-            for upd in results:
-                uid = upd.get("update_id", 0)
-                if uid > _TG_POLL_OFFSET:
-                    _TG_POLL_OFFSET = uid
-                try:
-                    if upd.get("callback_query"):
-                        print(f"[TG Controller] Clique recebido: {upd['callback_query'].get('data')}")
-                        _tg_processar_callback(upd["callback_query"], token, chat_id)
-                    elif upd.get("message"):
+
+            if resp.status_code == 200:
+                results = resp.json().get("result", [])
+                for upd in results:
+                    uid = upd.get("update_id", 0)
+                    if uid > _TG_POLL_OFFSET:
+                        _TG_POLL_OFFSET = uid
+                    if upd.get("message"):
                         _tg_processar_comando(upd["message"], token, chat_id)
-                except Exception as erro_update:
-                    import traceback
-                    print(f"[TG Controller] Erro ao processar update {uid}: {erro_update}")
-                    traceback.print_exc()
+            elif resp.status_code == 409:
+                time.sleep(5)
+            else:
+                time.sleep(2)
         except Exception as e:
             print(f"[TG Controller] Erro: {e}")
-            time.sleep(5)
+            time.sleep(3)
         time.sleep(0.5)
 
-# ── Garante que o thread de polling está vivo no worker atual ────────────────
-# Usa um Event como flag de "já foi iniciado" para evitar race condition:
-# com gunicorn --threads 4, múltiplas threads podem chamar _tg_garantir_controller()
-# simultaneamente. O Event é setado ANTES de iniciar a thread, impedindo que uma
-# segunda thread passe pelo check antes da primeira aparecer em threading.enumerate().
-_tg_controller_lock    = threading.Lock()
-_tg_controller_iniciado = threading.Event()   # flag atômica: evita duplo start
+_tg_controller_lock     = threading.Lock()
+_tg_controller_iniciado = threading.Event()
 
 def _tg_garantir_controller():
-    """Inicia o thread de polling apenas uma vez por processo (fork-safe)."""
-    # Verificação rápida sem lock (evita contenção no caminho quente)
     if _tg_controller_iniciado.is_set():
-        # Confirma que a thread ainda está viva; se morreu, permite reinício
-        vivo = any(t.name == "tg-controller" and t.is_alive()
-                   for t in threading.enumerate())
-        if vivo:
+        if any(t.name == "tg-controller" and t.is_alive()
+               for t in threading.enumerate()):
             return
-        # Thread morreu (ex: crash) — limpa o flag para permitir reinício
         _tg_controller_iniciado.clear()
 
     with _tg_controller_lock:
-        # Double-checked locking: reconfirma após adquirir o lock
         if _tg_controller_iniciado.is_set():
             return
-        # Seta o flag ANTES de iniciar a thread — elimina a race condition
         _tg_controller_iniciado.set()
         t = threading.Thread(target=_tg_bot_controller_loop,
-                              daemon=True, name="tg-controller")
+                             daemon=True, name="tg-controller")
         t.start()
-        print(f"[TG Controller] Thread (re)iniciado no PID={os.getpid()}")
+        print(f"[TG Controller] Thread iniciado no PID={os.getpid()}")
 
-# Inicia o thread ao carregar o módulo (gunicorn sem --preload carrega dentro do worker)
+# Inicia o controle remoto
 _tg_garantir_controller()
 
 if __name__ == "__main__":
-    print("🚀 Iniciando Interface Cyber Cloud e Bot Telegram...")
+    print("🚀 Iniciando Servidor e Controle Remoto Telegram...")
     start_server()
