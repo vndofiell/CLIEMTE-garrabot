@@ -17811,8 +17811,12 @@ import json as _djson
 _ROBO_THREAD = None
 _ROBO_STOP_EVENT = threading.Event()
 
-_DERIV_WS_URL = "wss://ws.derivws.com/websockets/v3?app_id=1089&l=PT&brand=deriv"
-_DERIV_WS_SSL = {"cert_reqs": _ssl.CERT_NONE}
+# Cabeçalhos de navegador real para o Cloudflare não bloquear (evita Erro 520)
+_DERIV_HEADERS = [
+    "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Origin: https://app.deriv.com",
+    "Accept-Language: pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
+]
 
 def _extrair_ultimo_digito(preco):
     try:
@@ -17839,21 +17843,54 @@ def _parse_estrategia(nome_est: str):
         return "DIGITODD", None
     return "DIGITUNDER", "5"
 
+def _criar_ws_deriv():
+    """Conecta no WebSocket da Deriv com proteção anti-bloqueio Cloudflare.
+    Tenta binaryws primeiro (mais estável), depois derivws como fallback."""
+    endpoints = [
+        "wss://ws.binaryws.com/websockets/v3?app_id=1089",
+        "wss://ws.derivws.com/websockets/v3?app_id=1089",
+    ]
+    ultimo_erro = None
+    for url in endpoints:
+        try:
+            ws = _deriv_ws.create_connection(
+                url,
+                header=_DERIV_HEADERS,
+                timeout=12,
+                sslopt={"cert_reqs": _ssl.CERT_NONE, "check_hostname": False},
+            )
+            return ws
+        except Exception as e:
+            ultimo_erro = e
+            continue
+    raise ultimo_erro
+
 def _conectar_pat_deriv_ws(pat: str) -> dict:
-    """Autentica o PAT diretamente no WebSocket universal da Deriv (app_id=1089).
-    Retorna dict com ok, conta_id, banca, currency, tipo."""
+    """Autentica o PAT e puxa o ID real da conta e o Saldo."""
     try:
-        ws = _deriv_ws.create_connection(_DERIV_WS_URL, timeout=12, sslopt=_DERIV_WS_SSL)
+        ws = _criar_ws_deriv()
         ws.send(_djson.dumps({"authorize": pat.strip()}))
-        auth_res = _djson.loads(ws.recv())
+
+        auth_data = None
+        for _ in range(5):
+            raw = ws.recv()
+            msg = _djson.loads(raw)
+            if msg.get("error"):
+                ws.close()
+                return {"ok": False, "erro": msg["error"].get("message", "Token rejeitado")}
+            if msg.get("msg_type") == "authorize":
+                auth_data = msg.get("authorize", {})
+                break
+
         ws.close()
-        if auth_res.get("error"):
-            return {"ok": False, "erro": auth_res["error"]["message"]}
-        dados    = auth_res.get("authorize", {})
-        loginid  = dados.get("loginid", "")
-        balance  = float(dados.get("balance", 0.0))
-        currency = dados.get("currency", "USD")
-        is_virt  = bool(dados.get("is_virtual", 0))
+
+        if not auth_data:
+            return {"ok": False, "erro": "Tempo esgotado na autorização"}
+
+        loginid  = auth_data.get("loginid", "")
+        balance  = float(auth_data.get("balance", 0.0))
+        currency = auth_data.get("currency", "USD")
+        is_virt  = bool(auth_data.get("is_virtual", 0))
         return {
             "ok":       True,
             "conta_id": loginid,
@@ -17865,7 +17902,7 @@ def _conectar_pat_deriv_ws(pat: str) -> dict:
         return {"ok": False, "erro": str(e)}
 
 def _deriv_autonomous_worker(token_tg: str, chat_id: str, conta_info: dict):
-    """Executa as operações 100% na nuvem via WebSocket direto da Deriv (app_id=1089)."""
+    """Motor autônomo que opera 100% no servidor sem navegador."""
     global _tg_bot_estado
     pat        = conta_info.get("pat", "").strip()
     nome_conta = conta_info.get("nome", "Principal")
@@ -17874,40 +17911,51 @@ def _deriv_autonomous_worker(token_tg: str, chat_id: str, conta_info: dict):
     stop_win   = float(_tg_bot_estado.get("stopWin", 10.0))
     stop_loss  = float(_tg_bot_estado.get("stopLoss", 100.0))
     estrategia = _tg_bot_estado.get("estrategia", "🎯 DIGITUNDER 5")
+    ativo      = "R_100"
 
-    ativo = "R_100"
     tipo_contrato, barreira = _parse_estrategia(estrategia)
-
     stake_atual  = stake_base
     lucro_sessao = 0.0
     wins         = 0
     losses       = 0
 
     try:
-        ws = _deriv_ws.create_connection(_DERIV_WS_URL, timeout=15, sslopt=_DERIV_WS_SSL)
+        ws = _criar_ws_deriv()
         ws.send(_djson.dumps({"authorize": pat}))
-        auth_res = _djson.loads(ws.recv())
 
-        if auth_res.get("error"):
-            erro_msg = auth_res["error"].get("message", "Falha de autorização")
-            _tg_enviar_texto(token_tg, chat_id, f"❌ Erro na Deriv: {erro_msg}")
-            _tg_bot_estado["running"] = False
+        auth_data = None
+        for _ in range(5):
+            raw = ws.recv()
+            msg = _djson.loads(raw)
+            if msg.get("error"):
+                _tg_enviar_texto(token_tg, chat_id,
+                    f"❌ Erro Deriv: {msg['error']['message']}")
+                ws.close()
+                _tg_bot_estado["running"] = False
+                return
+            if msg.get("msg_type") == "authorize":
+                auth_data = msg.get("authorize", {})
+                break
+
+        if not auth_data:
+            _tg_enviar_texto(token_tg, chat_id, "❌ Falha ao autorizar conta na Deriv.")
             ws.close()
+            _tg_bot_estado["running"] = False
             return
 
-        auth_data = auth_res.get("authorize", {})
-        currency  = auth_data.get("currency", "USD")
-        banca     = float(auth_data.get("balance", 0.0))
+        currency      = auth_data.get("currency", "USD")
+        banca         = float(auth_data.get("balance", 0.0))
+        conta_id_real = auth_data.get("loginid", "")
         _tg_bot_estado["banca"] = banca
 
         _tg_enviar_texto(token_tg, chat_id,
             f"🚀 <b>ROBÔ EM OPERAÇÃO NA NUVEM!</b>\n"
             f"━━━━━━━━━━━━━━━━━━━━━\n"
-            f"👤 Conta: <b>{nome_conta}</b> ({auth_data.get('loginid', '')})\n"
-            f"💰 Banca Inicial: <b>${banca:.2f}</b>\n"
+            f"👤 Conta: <b>{nome_conta}</b> (<code>{conta_id_real}</code>)\n"
+            f"💰 Saldo: <b>${banca:.2f} {currency}</b>\n"
             f"📊 Estratégia: <b>{estrategia}</b> ({tipo_contrato} {barreira or ''})\n"
             f"💵 Entrada: <b>${stake_base:.2f}</b> | 🎯 Meta: <b>+${stop_win:.2f}</b>\n\n"
-            f"<i>Pode fechar tudo. As operações acontecem no servidor!</i>"
+            f"<i>Operando 100% no servidor. Aguarde as entradas...</i>"
         )
 
         while not _ROBO_STOP_EVENT.is_set():
@@ -17922,11 +17970,12 @@ def _deriv_autonomous_worker(token_tg: str, chat_id: str, conta_info: dict):
             if lucro_sessao <= -abs(stop_loss):
                 _tg_enviar_texto(token_tg, chat_id,
                     f"🛑 <b>STOP LOSS ATINGIDO!</b>\n"
-                    f"Perda total: <b>-${abs(lucro_sessao):.2f}</b>\n"
+                    f"Perda: <b>-${abs(lucro_sessao):.2f}</b>\n"
                     f"Placar: {wins}W - {losses}L"
                 )
                 break
 
+            # 1. Proposta
             req_prop = {
                 "proposal":      1,
                 "amount":        round(stake_atual, 2),
@@ -17941,27 +17990,41 @@ def _deriv_autonomous_worker(token_tg: str, chat_id: str, conta_info: dict):
                 req_prop["barrier"] = str(barreira)
 
             ws.send(_djson.dumps(req_prop))
-            prop_res = _djson.loads(ws.recv())
 
-            if prop_res.get("error"):
-                _tg_enviar_texto(token_tg, chat_id,
-                    f"⚠️ Erro proposta: {prop_res['error']['message']}")
-                time.sleep(3)
+            prop_id = None
+            while not _ROBO_STOP_EVENT.is_set():
+                r = _djson.loads(ws.recv())
+                if r.get("error"):
+                    _tg_enviar_texto(token_tg, chat_id,
+                        f"⚠️ Erro proposta: {r['error']['message']}")
+                    break
+                if r.get("msg_type") == "proposal":
+                    prop_id = r["proposal"]["id"]
+                    break
+
+            if not prop_id:
+                time.sleep(2)
                 continue
 
-            prop_id = prop_res["proposal"]["id"]
-
+            # 2. Compra do Contrato
             ws.send(_djson.dumps({"buy": prop_id, "price": round(stake_atual, 2)}))
-            buy_res = _djson.loads(ws.recv())
 
-            if buy_res.get("error"):
-                _tg_enviar_texto(token_tg, chat_id,
-                    f"⚠️ Erro compra: {buy_res['error']['message']}")
-                time.sleep(3)
+            contract_id = None
+            while not _ROBO_STOP_EVENT.is_set():
+                r = _djson.loads(ws.recv())
+                if r.get("error"):
+                    _tg_enviar_texto(token_tg, chat_id,
+                        f"⚠️ Erro compra: {r['error']['message']}")
+                    break
+                if r.get("msg_type") == "buy":
+                    contract_id = r["buy"]["contract_id"]
+                    break
+
+            if not contract_id:
+                time.sleep(2)
                 continue
 
-            contract_id = buy_res["buy"]["contract_id"]
-
+            # 3. Aguarda Resultado
             ws.send(_djson.dumps({
                 "proposal_open_contract": 1,
                 "contract_id":            contract_id,
@@ -17985,15 +18048,15 @@ def _deriv_autonomous_worker(token_tg: str, chat_id: str, conta_info: dict):
                 stake_atual = stake_base
                 _tg_enviar_texto(token_tg, chat_id,
                     f"✅ <b>WIN! +${profit:.2f}</b>\n"
-                    f"💰 Sessão: <b>{'+' if lucro_sessao >= 0 else ''}${lucro_sessao:.2f}</b> | Placar: {wins}W - {losses}L"
+                    f"💰 Lucro Sessão: <b>{'+' if lucro_sessao >= 0 else ''}${lucro_sessao:.2f}</b> | Placar: {wins}W - {losses}L"
                 )
             else:
                 losses += 1
                 stake_atual = round(stake_atual * 2.1, 2)
                 _tg_enviar_texto(token_tg, chat_id,
                     f"❌ <b>LOSS! -${abs(profit):.2f}</b>\n"
-                    f"➡️ Próxima entrada: <b>${stake_atual:.2f}</b>\n"
-                    f"💰 Sessão: <b>{'+' if lucro_sessao >= 0 else ''}${lucro_sessao:.2f}</b> | Placar: {wins}W - {losses}L"
+                    f"➡️ Próxima entrada (Gale): <b>${stake_atual:.2f}</b>\n"
+                    f"💰 Lucro Sessão: <b>{'+' if lucro_sessao >= 0 else ''}${lucro_sessao:.2f}</b> | Placar: {wins}W - {losses}L"
                 )
 
             _tg_bot_estado["wins"]   = wins
@@ -18002,7 +18065,7 @@ def _deriv_autonomous_worker(token_tg: str, chat_id: str, conta_info: dict):
 
         ws.close()
     except Exception as e:
-        _tg_enviar_texto(token_tg, chat_id, f"⚠️ Erro de conexão no robô: {e}")
+        _tg_enviar_texto(token_tg, chat_id, f"⚠️ Erro de execução: {e}")
     finally:
         _tg_bot_estado["running"] = False
         _ROBO_STOP_EVENT.clear()
