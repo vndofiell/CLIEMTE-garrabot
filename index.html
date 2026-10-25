@@ -30176,7 +30176,20 @@ async function derivPatConectar(tipo) {
 
 // ── Conectar conta já salva (a partir dos cards) ──────────────────────────────
 async function derivPatConectarSalva(nome, tipo) {
-    _derivPatSetBadge(`⏳ Conectando "${nome}"...`, 'aviso');
+    _derivPatSetBadge(`⏳ Conectando "${nome}" (${tipo})...`, 'aviso');
+    // ── Fecha WS anterior e reseta estado do bot ANTES de abrir novo WS ──
+    if (bot.ws) {
+        bot._wssUrl = null;     // impede reconexão automática do WS antigo
+        try { bot.ws.close(); } catch(_) {}
+        bot.ws = null;
+    }
+    bot.token          = null;
+    bot.saldoMostrado  = false;  // permite mostrar "SALDO: $X" para a nova conta
+    bot._loginid       = undefined;
+    bot._lastBalance   = undefined;
+    // Reseta o hd-balance para não mostrar saldo da conta anterior
+    const _hdBal = document.getElementById('hd-balance');
+    if (_hdBal) _hdBal.textContent = '--';
     try {
         const res = await fetch('/tg-pat-conectar', {
             method: 'POST',
@@ -30227,8 +30240,19 @@ function _derivPatOnResultado(res, tipo, nome) {
         if (typeof print === 'function')
             print(`🔑 DERIV PAT — ${icone} ${tipo} conectado | Conta: ${res.conta_id || '—'}`, 'log-ok');
 
+        // ── Fecha WS anterior se ainda aberto (troca de conta) ──
+        if (res.wss_url && bot.ws && bot.ws.readyState === WebSocket.OPEN) {
+            bot._wssUrl = null;
+            try { bot.ws.close(); } catch(_) {}
+            bot.ws = null;
+        }
         // Inicia WebSocket — mesmo fluxo do OAuth
         if (res.wss_url) {
+            bot.saldoMostrado = false;    // garante exibição do saldo da nova conta
+            bot._loginid      = undefined;
+            bot._lastBalance  = undefined;
+            const _hdBal = document.getElementById('hd-balance');
+            if (_hdBal && _hdBal.textContent !== '--') _hdBal.textContent = '--';
             bot.token = res.wss_url;
             if (typeof initWebSocket === 'function') initWebSocket(res.wss_url);
             const btnTrocar = document.getElementById('btn-trocar-conta');
@@ -30288,40 +30312,66 @@ function _derivPatCarregarContas() {
                         ${c.conta_id ? c.conta_id : '—'} &nbsp;·&nbsp; ${tipo}
                     </div>`;
 
-                // Botões de ação
+                // ── Botões de ação ──
                 const acoes = document.createElement('div');
-                acoes.style.cssText = 'display:flex; gap:4px; flex-shrink:0;';
+                acoes.style.cssText = 'display:flex; flex-direction:column; gap:4px; flex-shrink:0;';
 
-                // Botão DEMO
+                // Linha superior: DEMO + REAL
+                const linhaConn = document.createElement('div');
+                linhaConn.style.cssText = 'display:flex; gap:4px;';
+
+                const _btnStyle = (bg, bord, cor) =>
+                    `padding:4px 9px; background:${bg}; border:1px solid ${bord}; color:${cor};
+                     border-radius:4px; font-size:0.65rem; cursor:pointer; font-family:'Share Tech Mono';
+                     letter-spacing:0.5px; white-space:nowrap;`;
+
                 const btnDemo = document.createElement('button');
-                btnDemo.textContent = '🧪';
-                btnDemo.title       = 'Conectar como DEMO';
-                btnDemo.style.cssText = `padding:5px 8px; background:rgba(255,0,128,0.08);
-                    border:1px solid rgba(255,0,128,0.4); color:#ff0080; border-radius:4px;
-                    font-size:0.75rem; cursor:pointer; font-family:'Share Tech Mono';`;
+                btnDemo.innerHTML = 'DEMO';
+                btnDemo.title     = 'Conectar como DEMO';
+                btnDemo.style.cssText = _btnStyle('rgba(255,0,128,0.08)','rgba(255,0,128,0.4)','#ff0080');
                 btnDemo.onclick = (e) => { e.stopPropagation(); derivPatConectarSalva(nome, 'DEMO'); };
 
-                // Botão REAL
                 const btnReal = document.createElement('button');
-                btnReal.textContent = '💰';
-                btnReal.title       = 'Conectar como REAL';
-                btnReal.style.cssText = `padding:5px 8px; background:rgba(192,0,94,0.08);
-                    border:1px solid rgba(192,0,94,0.5); color:#c0005e; border-radius:4px;
-                    font-size:0.75rem; cursor:pointer; font-family:'Share Tech Mono';`;
+                btnReal.innerHTML = 'REAL';
+                btnReal.title     = 'Conectar como REAL';
+                btnReal.style.cssText = _btnStyle('rgba(0,200,80,0.08)','rgba(0,200,80,0.45)','#00c850');
                 btnReal.onclick = (e) => { e.stopPropagation(); derivPatConectarSalva(nome, 'REAL'); };
 
-                // Botão REMOVER
-                const btnRem = document.createElement('button');
-                btnRem.textContent = '🗑️';
-                btnRem.title       = 'Remover conta';
-                btnRem.style.cssText = `padding:5px 8px; background:rgba(255,68,68,0.06);
-                    border:1px solid rgba(255,68,68,0.3); color:#f44; border-radius:4px;
-                    font-size:0.75rem; cursor:pointer; font-family:'Share Tech Mono';`;
-                btnRem.onclick = (e) => { e.stopPropagation(); derivPatRemoverConta(nome); };
+                linhaConn.appendChild(btnDemo);
+                linhaConn.appendChild(btnReal);
 
-                acoes.appendChild(btnDemo);
-                acoes.appendChild(btnReal);
-                acoes.appendChild(btnRem);
+                // Linha inferior: DESCONECTAR (só na conta ativa) + REMOVER
+                const linhaExtra = document.createElement('div');
+                linhaExtra.style.cssText = 'display:flex; gap:4px;';
+
+                if (eAtiva) {
+                    const btnDeconn = document.createElement('button');
+                    btnDeconn.innerHTML = 'DESCONECTAR';
+                    btnDeconn.title     = 'Fechar WebSocket desta conta';
+                    btnDeconn.style.cssText = _btnStyle('rgba(255,180,0,0.07)','rgba(255,180,0,0.4)','#ffb400') + 'flex:1;';
+                    btnDeconn.onclick = (e) => {
+                        e.stopPropagation();
+                        if (bot.ws) { bot._wssUrl = null; try { bot.ws.close(); } catch(_){} bot.ws = null; }
+                        bot.token = null; bot.saldoMostrado = false; bot._loginid = undefined; bot._lastBalance = undefined;
+                        const hd = document.getElementById('hd-balance'); if (hd) hd.textContent = '--';
+                        const lbl = document.getElementById('lbl-deriv-pat-status');
+                        if (lbl) { lbl.textContent = 'Desconectado'; lbl.style.color = '#555'; }
+                        _derivPatSetBadge(`🔌 "${nome}" desconectada.`, 'aviso');
+                        if (typeof print === 'function') print(`🔌 DERIV PAT — "${nome}" desconectada.`, 'log-info');
+                        _derivPatCarregarContas();
+                    };
+                    linhaExtra.appendChild(btnDeconn);
+                }
+
+                const btnRem = document.createElement('button');
+                btnRem.innerHTML = 'DEL';
+                btnRem.title     = 'Remover conta';
+                btnRem.style.cssText = _btnStyle('rgba(255,68,68,0.06)','rgba(255,68,68,0.3)','#f44');
+                btnRem.onclick = (e) => { e.stopPropagation(); derivPatRemoverConta(nome); };
+                linhaExtra.appendChild(btnRem);
+
+                acoes.appendChild(linhaConn);
+                acoes.appendChild(linhaExtra);
                 card.appendChild(info);
                 card.appendChild(acoes);
                 lista.appendChild(card);
