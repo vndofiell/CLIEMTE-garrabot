@@ -63,6 +63,15 @@ DEFAULT_CONFIG = {
     "usar_volatilidade": True,
     "usar_historico": True,
     "usar_volume_proxy": True,
+    # ── Filtro de Volume de Dígitos Inimigos ──────────────────────────────────
+    # janela de ticks analisada para volume
+    "volume_janela": 30,
+    # % máxima de dígitos inimigos permitida antes de bloquear
+    # Ex: Under 7 → inimigos são 7,8,9. Se aparecerem > 30% dos últimos 30 ticks → BLOQUEADO
+    "volume_inimigo_max": 0.30,
+    # % mínima de dígitos favoráveis exigida
+    # Ex: Under 7 → favoráveis são 0..6. Se < 55% → BLOQUEADO
+    "volume_favoravel_min": 0.55,
     "entrada_usd": 0.35,
     "take_profit_usd": 10.0,
     "stop_loss_usd": 100.0,
@@ -337,6 +346,48 @@ class DigitMatrixEngine:
         wins = sum(x["result"] == "WIN" for x in rows)
         return _clamp(wins / len(rows) * 100)
 
+    def _filtro_volume_inimigo(self, digits, contract, barrier):
+        """
+        Filtro de volume de dígitos inimigos.
+        DIGITUNDER X → inimigos = dígitos >= X  (ex: Under 7 → 7,8,9)
+        DIGITOVER  X → inimigos = dígitos <= X  (ex: Over  4 → 0,1,2,3,4)
+
+        Retorna (ok, pct_inimigo, pct_favoravel, motivo)
+        """
+        janela        = int(self.config.get("volume_janela",        30))
+        inimigo_max   = float(self.config.get("volume_inimigo_max",   0.30))
+        favoravel_min = float(self.config.get("volume_favoravel_min", 0.55))
+
+        amostra = digits[-janela:]
+        n = len(amostra)
+        if n < 10:
+            return True, 0.0, 0.0, ""
+
+        if contract == "DIGITUNDER":
+            inimigos   = [d for d in amostra if d >= barrier]
+            favoraveis = [d for d in amostra if d < barrier]
+            lista_inim = list(range(barrier, 10))
+        else:
+            inimigos   = [d for d in amostra if d <= barrier]
+            favoraveis = [d for d in amostra if d > barrier]
+            lista_inim = list(range(0, barrier + 1))
+
+        pct_inim = len(inimigos)  / n
+        pct_fav  = len(favoraveis) / n
+        motivos  = []
+
+        if pct_inim > inimigo_max:
+            motivos.append(
+                f"vol.inimigo {pct_inim*100:.0f}% (dígitos {lista_inim} > {inimigo_max*100:.0f}%)"
+            )
+        if pct_fav < favoravel_min:
+            motivos.append(
+                f"vol.favorável {pct_fav*100:.0f}% < {favoravel_min*100:.0f}%"
+            )
+
+        ok = len(motivos) == 0
+        return ok, round(pct_inim * 100, 1), round(pct_fav * 100, 1), "; ".join(motivos)
+
     def _candidate(self, asset, digits, contract, barrier):
         if not _barrier_ok(contract, barrier): return None
 
@@ -411,6 +462,12 @@ class DigitMatrixEngine:
         elif history <= 45: reasons.append(f"histórico fraco: {history:.1f}%")
 
         score = _clamp(score)
+
+        # ── Filtro de volume inimigo — bloqueia mesmo com score alto ──────────
+        vol_ok, pct_inim, pct_fav, vol_motivo = self._filtro_volume_inimigo(digits, contract, barrier)
+        if not vol_ok:
+            score = 0.0   # zera o score para garantir bloqueio
+            reasons.append(f"🚫 VOLUME INIMIGO: {vol_motivo}")
 
         return Candidate(
             contract=contract, barrier=int(barrier),

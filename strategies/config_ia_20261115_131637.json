@@ -1,0 +1,19 @@
+{
+  "ativo": "R_100",
+  "barreira": 1,
+  "descricao": "Over 1 no R_100 após 2 dígitos <=1. Soros 2 níveis com gale leve.",
+  "duracao": 1,
+  "entrada_usd": 20,
+  "gerenciamento": "martingale",
+  "nome": "Over 1 R100 Soros 2",
+  "seq_gatilho": 2,
+  "stop_loss_usd": 100,
+  "take_profit_usd": 100,
+  "tipo_contrato": "DIGITOVER",
+  "velas": 0,
+  "_prompt_original": "Quero uma estratégia para Volatility 100 (R_100) usando dígitos no contrato Over 1 (Acima de 1). A entrada só deve acontecer após aparecerem 2 dígitos seguidos menores ou iguais a 1 (0 ou 1) nos últimos ticks. Use gerenciamento conservador com Soros de 2 níveis para alavancar os ganhos e, em caso de loss, faça no máximo 2 gales leves ou volte para a stake inicial. Defina Take Profit de 5% da banca e Stop Loss rígido de 10%.",
+  "_arquivo": "config_ia_20261115_131637.json",
+  "data": "2026-11-15 13:16",
+  "mart_gales": 10,
+  "mart_mult": 3.8
+}

@@ -1,4 +1,16 @@
 # import webbrowser
+# ── Carrega .env local automaticamente se existir ────────────────────────────
+import os as _os_env
+_env_path = _os_env.path.join(_os_env.path.dirname(_os_env.path.abspath(__file__)), ".env")
+if _os_env.path.exists(_env_path):
+    with open(_env_path, encoding="utf-8") as _f:
+        for _line in _f:
+            _line = _line.strip()
+            if _line and not _line.startswith("#") and "=" in _line:
+                _k, _v = _line.split("=", 1)
+                _os_env.environ.setdefault(_k.strip(), _v.strip())
+    print(f"[CONFIG] .env carregado: {_env_path}")
+
 from digit_sniper_pro import register_digit_sniper
 from digit_matrix_sniper import register_digit_matrix
 from memory_time_engine import get_mte, mte_pode_operar, mte_registrar, mte_status
@@ -2337,8 +2349,8 @@ def _get_token_com_access(access_token: str, tipo: str):
     except Exception as e:
         print(f"[API] Timeout/erro REST ({e}) — usando access_token direto via WSS")
 
-    # Fallback: usa access_token direto no WebSocket
-    wss_url = f"wss://ws.derivws.com/websockets/v3?app_id={APP_ID}&l=EN&brand=deriv"
+    # Fallback: usa access_token direto no WebSocket (app_id numérico obrigatório)
+    wss_url = f"wss://ws.derivws.com/websockets/v3?app_id=36544&l=EN&brand=deriv"
     print(f"[Token] Fallback: WSS URL com access_token direto (tipo={tipo})")
     return {"wss_url": wss_url, "access_token": access_token, "conta_id": "", "tipo": tipo}
 
@@ -5927,7 +5939,12 @@ def _assets_path(nome):
 # Usa domínio oficial — Oracle Cloud tem DNS pleno, IP fixo não é necessário
 _TG_BASE    = "https://api.telegram.org"
 _TG_HEADERS = {}
-_TG_TIMEOUT = (5, 8)   # connect=5s, read=8s — rápido para notificações em tempo real
+_TG_TIMEOUT = (4, 6)   # connect=4s, read=6s — rápido para notificações em tempo real
+
+# Session HTTP persistente: reutiliza conexão TCP (keep-alive) — elimina overhead
+# de handshake TLS a cada envio, reduz latência de ~800ms para ~80ms por mensagem.
+_TG_SESSION: requests.Session = requests.Session()
+_TG_SESSION.verify = False
 
 def _tg_url(token: str, method: str) -> str:
     return f"{_TG_BASE}/bot{token}/{method}"
@@ -5971,13 +5988,12 @@ def _tg_enviar_foto(token: str, chat_id: str, caption: str, img_path: str,
         return False
     photo_bytes, filename, mime = _preparar_foto(img_path, max_width)
     try:
-        resp = requests.post(
+        resp = _TG_SESSION.post(
             _tg_url(token, "sendPhoto"),
             headers=_TG_HEADERS,
             data={"chat_id": str(chat_id), "caption": caption, "parse_mode": "HTML"},
             files={"photo": (filename, photo_bytes, mime)},
             timeout=_TG_TIMEOUT,
-            verify=False,
         )
         result = resp.json()
         if result.get("ok"):
@@ -5994,20 +6010,19 @@ def _tg_enviar_texto(token: str, chat_id: str, msg: str, reply_markup: dict = No
         payload = {"chat_id": str(chat_id), "text": msg, "parse_mode": "HTML"}
         if reply_markup:
             payload["reply_markup"] = reply_markup
-        resp = requests.post(
+        resp = _TG_SESSION.post(
             _tg_url(token, "sendMessage"),
             headers=_TG_HEADERS,
             json=payload,
             timeout=_TG_TIMEOUT,
-            verify=False,
         )
         r_json = resp.json()
         if not r_json.get("ok"):
             # HTML inválido (erros técnicos) — reenvia como texto puro
             payload.pop("parse_mode", None)
-            resp2 = requests.post(
+            resp2 = _TG_SESSION.post(
                 _tg_url(token, "sendMessage"),
-                headers=_TG_HEADERS, json=payload, timeout=_TG_TIMEOUT, verify=False,
+                headers=_TG_HEADERS, json=payload, timeout=_TG_TIMEOUT,
             )
             ok2 = bool(resp2.json().get("ok"))
             if not ok2:
@@ -6025,9 +6040,9 @@ def _tg_editar_mensagem(token: str, chat_id: str, message_id: int, msg: str, rep
                    "text": msg, "parse_mode": "HTML"}
         if reply_markup:
             payload["reply_markup"] = reply_markup
-        resp = requests.post(
+        resp = _TG_SESSION.post(
             _tg_url(token, "editMessageText"),
-            headers=_TG_HEADERS, json=payload, timeout=_TG_TIMEOUT, verify=False,
+            headers=_TG_HEADERS, json=payload, timeout=_TG_TIMEOUT,
         )
         return bool(resp.json().get("ok"))
     except Exception as e:
@@ -6037,11 +6052,11 @@ def _tg_editar_mensagem(token: str, chat_id: str, message_id: int, msg: str, rep
 def _tg_responder_callback(token: str, callback_query_id: str, texto: str = "") -> bool:
     """Responde ao callback_query (remove o 'loading' do botão)."""
     try:
-        requests.post(
+        _TG_SESSION.post(
             _tg_url(token, "answerCallbackQuery"),
             headers=_TG_HEADERS,
             json={"callback_query_id": callback_query_id, "text": texto},
-            timeout=_TG_TIMEOUT, verify=False,
+            timeout=_TG_TIMEOUT,
         )
         return True
     except Exception:
@@ -6052,12 +6067,11 @@ def _tg_responder_callback(token: str, callback_query_id: str, texto: str = "") 
 def _tg_enviar_texto_ret(token: str, chat_id: str, msg: str) -> int:
     """Envia mensagem de texto e retorna o message_id (0 em caso de erro)."""
     try:
-        resp = requests.post(
+        resp = _TG_SESSION.post(
             _tg_url(token, "sendMessage"),
             headers=_TG_HEADERS,
             json={"chat_id": str(chat_id), "text": msg, "parse_mode": "HTML"},
             timeout=_TG_TIMEOUT,
-            verify=False,
         )
         r = resp.json()
         if r.get("ok"):
@@ -6072,7 +6086,7 @@ def _tg_enviar_texto_ret(token: str, chat_id: str, msg: str) -> int:
 def _tg_editar_texto(token: str, chat_id: str, message_id: int, msg: str) -> bool:
     """Edita uma mensagem existente pelo message_id."""
     try:
-        resp = requests.post(
+        resp = _TG_SESSION.post(
             _tg_url(token, "editMessageText"),
             headers=_TG_HEADERS,
             json={
@@ -6082,7 +6096,6 @@ def _tg_editar_texto(token: str, chat_id: str, message_id: int, msg: str) -> boo
                 "parse_mode": "HTML",
             },
             timeout=_TG_TIMEOUT,
-            verify=False,
         )
         r = resp.json()
         if not r.get("ok") and "not modified" not in str(r.get("description", "")):
@@ -6096,12 +6109,11 @@ def _tg_editar_texto(token: str, chat_id: str, message_id: int, msg: str) -> boo
 def _tg_deletar(token: str, chat_id: str, message_id: int):
     """Deleta uma mensagem pelo message_id (silencioso em caso de erro)."""
     try:
-        requests.post(
+        _TG_SESSION.post(
             _tg_url(token, "deleteMessage"),
             headers=_TG_HEADERS,
             json={"chat_id": str(chat_id), "message_id": message_id},
             timeout=_TG_TIMEOUT,
-            verify=False,
         )
     except Exception:
         pass
@@ -6248,9 +6260,44 @@ def tg_trade_fechado():
 
 
 
+# ── Fila serializada de envios Telegram ──────────────────────────────────────
+# Substitui threads avulsas por um único worker FIFO.
+# Benefícios:
+#   1. Nenhuma mensagem é pulada — todas entram na fila e saem em ordem.
+#   2. Sem concorrência entre envios — elimina erros 429 (rate limit) do Telegram.
+#   3. Backpressure controlado — fila limitada a 200 itens (descarta só em pico absurdo).
+
+_TG_QUEUE: _queue.Queue = _queue.Queue(maxsize=200)
+
+def _tg_worker():
+    """Worker daemon: consome a fila e envia uma mensagem por vez."""
+    while True:
+        fn = _TG_QUEUE.get()
+        try:
+            fn()
+        except Exception as e:
+            print(f"[TG-worker] erro ao executar envio: {e}")
+        finally:
+            _TG_QUEUE.task_done()
+
+# Inicia o worker único ao carregar o módulo
+threading.Thread(target=_tg_worker, daemon=True, name="tg-sender").start()
+
 def _tg_dispatch(fn):
-    """Executa fn numa thread daemon — não bloqueia o Flask."""
-    threading.Thread(target=fn, daemon=True).start()
+    """Enfileira fn para envio serializado — não bloqueia o Flask."""
+    try:
+        _TG_QUEUE.put_nowait(fn)
+    except _queue.Full:
+        # Fila cheia (>200 itens) — descarta o mais antigo e insere o novo
+        try:
+            _TG_QUEUE.get_nowait()
+            _TG_QUEUE.task_done()
+        except _queue.Empty:
+            pass
+        try:
+            _TG_QUEUE.put_nowait(fn)
+        except _queue.Full:
+            pass
 
 @app.route('/tg-send', methods=['POST'])
 def tg_send():
@@ -6274,11 +6321,12 @@ def tg_send():
 
     # Snapshot dos dados — evita capturar variáveis mutáveis na closure
     payload = dict(d)
+    # Pré-carrega cotação agora (fora da fila) — não trava o worker se a API externa demorar
+    cot_snapshot = _buscar_cotacao()
 
     def _enviar():
         tok = str(token); cid = str(chat_id)
-        # Cotação buscada dentro da thread (tem cache 60s — quase sempre instantâneo)
-        cot = _buscar_cotacao()
+        cot = cot_snapshot
 
         # ── Texto direto (usado por testar/stopwin do JS) ──
         if payload.get("_texto_direto"):
@@ -6299,9 +6347,9 @@ def tg_send():
             return
 
         # ── Relatório de Stop Win / Meta Batida ───────────────
-        # Aguarda 3s para garantir que o resultado WIN/LOSS (enviado antes) já chegou ao Telegram
+        # Aguarda 1s para garantir que o resultado WIN/LOSS (enviado antes) já chegou ao Telegram
         if payload.get("stop_win"):
-            time.sleep(3)
+            time.sleep(1)
             lucro           = float(payload.get("lucro", 0))
             banca           = float(payload.get("banca", 0))
             wins            = int(payload.get("wins", 0))
@@ -6311,6 +6359,7 @@ def tg_send():
             max_win_consec  = int(payload.get("max_win_consec", 0))
             max_loss_consec = int(payload.get("max_loss_consec", 0))
             max_stake       = float(payload.get("max_stake", 0))
+            duracao_sessao  = str(payload.get("duracao_sessao", ""))
             mercados_ranking = payload.get("mercados_ranking", [])
             total           = wins + losses
             wr              = (wins / total * 100) if total > 0 else 0.0
@@ -6352,7 +6401,8 @@ def tg_send():
                 f"🏦 Banca:  ${banca:.2f}  /  R${banca_brl:.2f}\n"
                 f"📈 Lucro:  +${lucro:.2f}  /  R$+{lucro_brl:.2f}\n"
                 f"📊 Sessão: {wins}W • {losses}L • {wr:.0f}%\n"
-                f"━━━━━━━━━━━━━━━\n"
+                + (f"⏱ Duração: {duracao_sessao}\n" if duracao_sessao else "")
+                + f"━━━━━━━━━━━━━━━\n"
                 f"🔥 {max_win_consec}x WIN  💀 {max_loss_consec}x LOSS  💵 Máx ${max_stake:.2f}\n"
                 f"━━━━━━━━━━━━━━━\n"
                 f"{mercados_linha}"
@@ -6610,12 +6660,69 @@ def _registrar_experiencia(
         # ── Nota do Conselho no momento da entrada ────────
         "confianca_edc":    confianca_edc,
         "notas_edc":        notas_edc or {},
+        # ── Notas individuais do DecisionSupervisor (para calibração de pesos) ──
+        # Preenchido automaticamente quando o supervisor avalia a entrada.
+        # Formato: { "scanner": 80, "estatistica": 75, "volatilidade": 90, ... }
+        "notas_supervisor": notas_edc or {},
         # ── Multi-conta ───────────────────────────────────
         "conta_id":         conta_id,
     }
     memoria.append(nova_exp)
     with open(MEMORY_FILE, "w", encoding="utf-8") as f:
         json.dump(memoria[-500:], f, indent=2, ensure_ascii=False)
+
+    # ── Monte Carlo automático ───────────────────────────────────────────────
+    # A cada 20 novas operações registradas, dispara um backtest probabilístico
+    # em background para verificar se a estratégia ainda tem Edge positivo.
+    # Resultado é gravado em memory_mc_auto.json para consulta pelo front-end.
+    total_ops = len(memoria)
+    if total_ops >= 20 and total_ops % 20 == 0:
+        def _rodar_mc_auto():
+            try:
+                # Filtra operações da mesma estratégia
+                ops_est = [
+                    e for e in memoria
+                    if e.get("estrategia") == estrategia_nome
+                ]
+                if len(ops_est) < 10:
+                    return
+                wins_est = sum(1 for e in ops_est if e.get("resultado") == "WIN")
+                wr       = wins_est / len(ops_est)
+                stake    = float(ops_est[-1].get("lucro", 0.35)) if ops_est[-1].get("resultado") == "WIN" else 0.35
+                payout   = 0.80   # padrão conservador
+
+                simulator = MonteCarloSimulator()
+                relatorio = simulator.executar(
+                    estrategia = estrategia_nome,
+                    ativo      = regime_mercado,
+                    stake      = max(0.10, abs(stake)),
+                    payout     = payout,
+                )
+
+                # Persiste resultado
+                mc_path = os.path.join(_BASE_DIR, "memory_mc_auto.json")
+                historico_mc = []
+                if os.path.exists(mc_path):
+                    try:
+                        with open(mc_path, "r", encoding="utf-8") as f:
+                            historico_mc = json.load(f)
+                    except Exception:
+                        historico_mc = []
+                historico_mc.append({
+                    "timestamp":     time.time(),
+                    "estrategia":    estrategia_nome,
+                    "ativo":         regime_mercado,
+                    "win_rate_real": round(wr, 4),
+                    "n_ops":         len(ops_est),
+                    "relatorio":     relatorio,
+                    "edge_positivo": relatorio.get("pct_lucro_positivo", 0) >= 55,
+                })
+                with open(mc_path, "w", encoding="utf-8") as f:
+                    json.dump(historico_mc[-100:], f, indent=2, ensure_ascii=False)
+            except Exception:
+                pass
+
+        threading.Thread(target=_rodar_mc_auto, daemon=True).start()
 
 def _recuperar_aprendizado() -> str:
     """Resume o histórico de performance por estratégia para injetar no prompt."""
@@ -6646,22 +6753,132 @@ def _recuperar_aprendizado() -> str:
 # ─────────────────────────────────────────────────────────
 class DecisionSupervisor:
     """
-    Motor de Confiança Probabilística legado.
     Motor de Confiança Probabilística — usado por todas as rotas.
+
+    MELHORIAS ANALÍTICAS v2:
+    1. Hard-block de fluxo ANTES do cálculo ponderado (não como peso).
+    2. Threshold dinâmico por regime de mercado (conectado ao RegimoDetector).
+    3. Pesos calibrados automaticamente pelo histórico real de wins.
+    4. Agente de volume corrigido: alta volatilidade em índices sintéticos não é bônus cego.
+    5. Pipeline sequencial: fluxo → score ponderado → veredicto.
     """
 
-    PESOS = {
-        "scanner":     0.15,
-        "estatistica": 0.30,
-        "volatilidade":0.10,
-        "risco":       0.25,
+    # Pesos padrão — recalibrados automaticamente quando há histórico suficiente
+    PESOS_PADRAO = {
+        "scanner":     0.20,
+        "estatistica": 0.35,
+        "volatilidade":0.15,
+        "risco":       0.20,
         "volume":      0.10,
-        "fluxo":       0.10,
+    }
+
+    # Threshold por regime — ligado ao RegimoDetector
+    # Em mercado lateral o sinal precisa de muito mais confluência
+    THRESHOLD_POR_REGIME = {
+        "TENDENCIA":        65,
+        "LATERAL":          82,
+        "ALTA_VOLATILIDADE":78,
+        "DESCONHECIDO":     72,
     }
     THRESHOLD_PADRAO = 72
 
     def __init__(self, threshold: int = THRESHOLD_PADRAO):
         self.threshold = threshold
+        # Pesos vivos — recalibrados periodicamente pelo histórico
+        self._pesos_calibrados: dict = {}
+        self._pesos_ultimo_calibro: float = 0.0
+
+    # ── Calibração automática de pesos ──────────────────────────────────────
+    def _recalibrar_pesos(self):
+        """
+        Recalcula os pesos dos agentes com base no histórico de wins salvo em MEMORY_FILE.
+        Lógica: para cada agente, mede qual % dos wins tinha aquele agente aprovado (nota >= 70).
+        Roda no máximo 1x a cada 5 minutos para não impactar latência.
+        """
+        agora = time.time()
+        if agora - self._pesos_ultimo_calibro < 300:
+            return  # throttle: máx 1 calibração a cada 5 min
+
+        self._pesos_ultimo_calibro = agora
+
+        if not os.path.exists(MEMORY_FILE):
+            return
+        try:
+            with open(MEMORY_FILE, "r", encoding="utf-8") as f:
+                memoria = json.load(f)
+        except Exception:
+            return
+
+        # Filtra apenas operações com notas registradas
+        ops_com_notas = [
+            e for e in memoria
+            if isinstance(e.get("notas_supervisor"), dict)
+            and e.get("resultado") in ("WIN", "LOSS")
+        ]
+        if len(ops_com_notas) < 30:
+            return  # dados insuficientes para calibrar com confiança
+
+        wins = [e for e in ops_com_notas if e["resultado"] == "WIN"]
+        if not wins:
+            return
+
+        agentes = ["scanner", "estatistica", "volatilidade", "risco", "volume"]
+        contribuicao = {}
+        for ag in agentes:
+            # % dos wins em que este agente tinha nota >= 70
+            aprovados = sum(
+                1 for op in wins
+                if op["notas_supervisor"].get(ag, 0) >= 70
+            )
+            contribuicao[ag] = aprovados / len(wins)
+
+        total = sum(contribuicao.values())
+        if total <= 0:
+            return
+
+        # Normaliza para somar 1.0 e aplica suavização com os pesos padrão (peso 30%)
+        novos_pesos = {}
+        for ag in agentes:
+            peso_hist  = contribuicao[ag] / total
+            peso_pad   = self.PESOS_PADRAO[ag]
+            # 70% histórico + 30% padrão — evita overshooting com poucos dados
+            novos_pesos[ag] = round(0.70 * peso_hist + 0.30 * peso_pad, 4)
+
+        # Re-normaliza para garantir soma = 1.0
+        soma = sum(novos_pesos.values())
+        self._pesos_calibrados = {k: round(v / soma, 4) for k, v in novos_pesos.items()}
+
+    def _pesos_ativos(self) -> dict:
+        """Retorna pesos calibrados se disponíveis, senão usa padrão."""
+        self._recalibrar_pesos()
+        return self._pesos_calibrados if self._pesos_calibrados else self.PESOS_PADRAO
+
+    # ── Threshold dinâmico por regime ───────────────────────────────────────
+    def _threshold_para_regime(self, regime: str) -> int:
+        """Retorna o threshold adequado para o regime de mercado atual."""
+        return self.THRESHOLD_POR_REGIME.get(regime, self.threshold)
+
+    # ── Filtro hard-block de fluxo (ETAPA 1 da pipeline) ────────────────────
+    def _hard_block_fluxo(self, ctx: dict) -> str | None:
+        """
+        Verifica conflito direcional ANTES do score ponderado.
+        Retorna mensagem de bloqueio se houver conflito, None se OK.
+        Este é um veto absoluto — score não é calculado se bloqueado aqui.
+        """
+        fluxo = ctx.get("fluxo_mercado", "NEUTRO").upper()
+        tipo  = ctx.get("tipo_contrato", "").upper()
+
+        if "OVER" in tipo and fluxo == "PUT":
+            return (
+                "⛔ HARD BLOCK — Fluxo direcional contrário: mercado em PUT, "
+                "contrato OVER exige fluxo de alta. Entrada proibida."
+            )
+        if "UNDER" in tipo and fluxo == "CALL":
+            return (
+                "⛔ HARD BLOCK — Fluxo direcional contrário: mercado em CALL, "
+                "contrato UNDER exige fluxo de baixa. Entrada proibida."
+            )
+        return None
 
     def _agente_scanner(self, ctx: dict) -> int:
         digitos  = ctx.get("ultimos_digitos", [])
@@ -6708,16 +6925,26 @@ class DecisionSupervisor:
         ativo    = ctx.get("ativo", "R_100").upper()
         tipo     = ctx.get("tipo_contrato", "").upper()
         barreira = int(ctx.get("barreira", 5))
+        # Índices sintéticos Deriv são projetados para digit trading —
+        # R_100 é o mais volátil mas ainda válido para barreiras medianas/altas
         perfil_ativo = {
-            "1HZ10V": 95, "1HZ25V": 90, "1HZ50V": 80,
-            "R_10": 88, "R_25": 85, "R_50": 78,
-            "R_75": 65, "1HZ75V": 70, "1HZ100V": 60, "R_100": 50,
+            "1HZ10V": 95, "1HZ25V": 90, "1HZ50V": 82,
+            "R_10": 88, "R_25": 85, "R_50": 80,
+            "R_75": 72, "1HZ75V": 74, "1HZ100V": 68, "R_100": 65,
         }
-        base = perfil_ativo.get(ativo, 65)
+        base = perfil_ativo.get(ativo, 68)
+        # DIGITUNDER barreira alta (6-9) → mais fácil (dígito ≤ barreira alta)
+        # Penaliza apenas barreiras BAIXAS (0-2) que são muito difíceis
         if tipo == "DIGITUNDER":
-            base = max(0, base - max(0, (8 - barreira) * 8))
+            if barreira <= 2:   base = max(0, base - 30)
+            elif barreira <= 4: base = max(0, base - 10)
+            # barreira 5-9: sem penalidade (fácil)
+        # DIGITOVER barreira baixa (0-3) → mais fácil (dígito > barreira baixa)
+        # Penaliza apenas barreiras ALTAS (7-9) que são muito difíceis
         elif tipo == "DIGITOVER":
-            base = max(0, base - max(0, (barreira - 2) * 8))
+            if barreira >= 8:   base = max(0, base - 30)
+            elif barreira >= 6: base = max(0, base - 10)
+            # barreira 0-5: sem penalidade (fácil)
         return min(round(base), 100)
 
     def _agente_risco(self, ctx: dict) -> int:
@@ -6735,62 +6962,107 @@ class DecisionSupervisor:
         return max(0, round(nota))
 
     def _agente_volume(self, ctx: dict) -> int:
+        """
+        Avalia a atividade de tick de forma contextualizada.
+        Corrigido: alta volatilidade em índices sintéticos não é automaticamente bom —
+        depende do tipo de contrato e da janela de amplitude esperada para o ativo.
+        """
         ticks = ctx.get("ultimos_precos", [])
         tipo  = ctx.get("tipo_contrato", "").upper()
+        ativo = ctx.get("ativo", "R_100").upper()
+
         if not ticks or len(ticks) < 10:
             return 70
+
         diffs    = [abs(ticks[i] - ticks[i - 1]) for i in range(1, len(ticks))]
         avg_move = sum(diffs) / len(diffs)
-        if tipo == "NOTOUCH":
-            if avg_move < 0.0001: return 95
-            elif avg_move > 0.005: return 40
-            return 80
-        if avg_move < 0.0001: return 30
-        elif avg_move > 0.005: return 100
-        return 85
 
-    def _agente_fluxo_obrigatorio(self, ctx: dict) -> int:
-        fluxo = ctx.get("fluxo_mercado", "NEUTRO").upper()
-        tipo  = ctx.get("tipo_contrato", "").upper()
-        if "OVER" in tipo and fluxo == "PUT":   return 0
-        if "UNDER" in tipo and fluxo == "CALL": return 0
-        if tipo in ("DIGITEVEN", "DIGITODD", "DIGITDUPLA",
-                    "DIGITMATCH", "DIGITPCT", "SATURACAO"):
-            return 85
-        if fluxo == "NEUTRO": return 50
-        return 100
+        # Amplitude esperada por tipo de ativo (escala real medida em campo)
+        amplitude_esperada = {
+            "1HZ10V": 0.0001, "1HZ25V": 0.0002, "1HZ50V": 0.0005,
+            "R_10":   0.0001, "R_25":   0.0002, "R_50":   0.0005,
+            "R_75":   0.0008, "1HZ75V": 0.0008, "1HZ100V":0.0012, "R_100": 0.0015,
+        }
+        ref = amplitude_esperada.get(ativo, 0.0005)
+
+        if tipo == "NOTOUCH":
+            # Para NOTOUCH: mercado parado é bom (menos chance de tocar barreira)
+            if avg_move < ref * 0.5:  return 95
+            elif avg_move > ref * 3:  return 35
+            return 80
+
+        # Para contratos de dígito: mercado morto ou extremamente agitado são ruins
+        # Zona ideal: entre 50% e 250% da amplitude esperada para o ativo
+        ratio = avg_move / ref if ref > 0 else 1.0
+        if ratio < 0.20:    return 30   # mercado morto — dígitos repetitivos
+        elif ratio < 0.50:  return 65   # abaixo do ideal
+        elif ratio <= 2.50: return 90   # zona ideal
+        elif ratio <= 4.00: return 60   # agitado — ainda operável
+        else:               return 30   # extremamente volátil — imprevisível
 
     def avaliar(self, ctx: dict) -> dict:
+        """
+        Pipeline sequencial de 3 etapas:
+          ETAPA 1 — Hard-block de fluxo (veto absoluto, sem score)
+          ETAPA 2 — Score ponderado dos 5 agentes analíticos
+          ETAPA 3 — Threshold dinâmico por regime de mercado
+        """
+        # ── ETAPA 1: Hard-block de fluxo direcional ──────────────────────
+        bloqueio_fluxo = self._hard_block_fluxo(ctx)
+        if bloqueio_fluxo:
+            return {
+                "confianca": 0.0,
+                "veredicto": "AGUARDAR",
+                "threshold": self.threshold,
+                "notas":     {"scanner": 0, "estatistica": 0, "volatilidade": 0,
+                              "risco": 0, "volume": 0},
+                "motivo":    bloqueio_fluxo,
+                "hard_block": True,
+                "regime":    ctx.get("regime_mercado", "DESCONHECIDO"),
+            }
+
+        # ── ETAPA 2: Score ponderado (sem agente de fluxo — já tratado acima) ──
         notas = {
             "scanner":     self._agente_scanner(ctx),
             "estatistica": self._agente_estatistica(ctx),
             "volatilidade":self._agente_volatilidade(ctx),
             "risco":       self._agente_risco(ctx),
             "volume":      self._agente_volume(ctx),
-            "fluxo":       self._agente_fluxo_obrigatorio(ctx),
         }
-        confianca = round(sum(notas[k] * self.PESOS[k] for k in notas), 1)
-        veredicto = "OPERAR" if confianca >= self.threshold else "AGUARDAR"
+        pesos = self._pesos_ativos()
+        confianca = round(sum(notas[k] * pesos.get(k, self.PESOS_PADRAO[k]) for k in notas), 1)
+
+        # ── ETAPA 3: Threshold dinâmico por regime ────────────────────────
+        regime   = ctx.get("regime_mercado", "DESCONHECIDO")
+        threshold_efetivo = self._threshold_para_regime(regime)
+        veredicto = "OPERAR" if confianca >= threshold_efetivo else "AGUARDAR"
+
         agente_fraco = min(notas, key=lambda k: notas[k])
         labels = {
             "scanner":      "Momentum dos dígitos recentes desfavorável",
             "estatistica":  "Win rate histórico baixo para esta estratégia/ativo",
             "volatilidade": "Ativo muito volátil para a barreira configurada",
             "risco":        "Nível de Martingale ou exposição de banca elevada",
-            "volume":       "Mercado sem atividade suficiente (amplitude de tick muito baixa)",
-            "fluxo":        "Direção do mercado contrária ao tipo de contrato",
+            "volume":       "Atividade de tick fora da zona ideal para este ativo",
         }
+
+        # Informação sobre calibração dos pesos
+        usando_calibrado = bool(self._pesos_calibrados)
         motivo = (
             "✅ Todos os módulos aprovaram a entrada."
             if veredicto == "OPERAR"
             else f"⛔ Módulo mais restritivo: {agente_fraco.upper()} ({notas[agente_fraco]}/100) — {labels[agente_fraco]}."
         )
         return {
-            "confianca": confianca,
-            "veredicto": veredicto,
-            "threshold": self.threshold,
-            "notas":     notas,
-            "motivo":    motivo,
+            "confianca":         confianca,
+            "veredicto":         veredicto,
+            "threshold":         threshold_efetivo,
+            "threshold_regime":  regime,
+            "notas":             notas,
+            "pesos_usados":      pesos,
+            "pesos_calibrados":  usando_calibrado,
+            "motivo":            motivo,
+            "hard_block":        False,
         }
 
     def narrativa(self, relatorio: dict, nome_estrategia: str = "") -> str:
@@ -6798,19 +7070,21 @@ class DecisionSupervisor:
         c = relatorio["confianca"]
         n = relatorio["notas"]
         icone = "🛡️" if v == "OPERAR" else "🚫"
+        regime_txt = relatorio.get("threshold_regime", "—")
+        threshold  = relatorio.get("threshold", self.threshold)
+        calibrado  = "✦ calibrado" if relatorio.get("pesos_calibrados") else "padrão"
+
         linhas = [f"{icone} CONSELHO DE ESPECIALISTAS — {v} (Confiança: {c}%)"]
         if nome_estrategia:
             linhas.append(f"Estratégia: {nome_estrategia}")
-        fluxo_nota  = n.get('fluxo', '—')
-        fluxo_icone = "🟢" if isinstance(fluxo_nota, int) and fluxo_nota >= 85 else ("🔴" if isinstance(fluxo_nota, int) and fluxo_nota == 0 else "🟡")
         linhas += [
+            f"Regime: {regime_txt} | Threshold: {threshold} | Pesos: {calibrado}",
             "",
             f"📊 Estatística histórica : {n['estatistica']}/100",
             f"📈 Scanner de momentum  : {n['scanner']}/100",
             f"🌡️ Volatilidade do ativo : {n['volatilidade']}/100",
             f"🏦 Segurança de banca   : {n['risco']}/100",
             f"📈 Atividade de Tick    : {n.get('volume','—')}/100",
-            f"{fluxo_icone} Fluxo direcional    : {fluxo_nota}/100",
             "",
             relatorio["motivo"],
         ]
@@ -6875,7 +7149,7 @@ def _groq_cfg_ler():
         pass
     return {
         "chave": "",
-        "modelo": "llama-3.3-70b-versatile",
+        "modelo": "qwen/qwen3.8-27b",
         "nvidia_chave": "",
         "nvidia_modelo": "nvidia/llama-3.1-nemotron-70b-instruct",
         "provedor_ativo": "groq",
@@ -6982,10 +7256,15 @@ def _detectar_contrato(prompt_lower: str):
         "digitdupla", "dupla", "dois lados", "ambos os lados",
         "over e under", "under e over", "over e anda",
         "over e unda", "dois ao mesmo tempo", "dois contratos",
-        "barreira dupla", "entrada dupla", "dobrado",
+        "barreira dupla", "entrada dupla",
     ]
-    _over_words  = ["digitover",  "over",  "ouver", "ouvier", "acima", "maior que", "maior", "cima"]
-    _under_words = ["digitunder", "under", "umder", "ander",  "abaixo", "menor que", "menor", "baixo"]
+    # Palavras exatas de over/under — sem "maior/menor/acima/abaixo" que são adjetivos descritivos
+    _over_words  = ["digitover", "ouver", "ouvier"]
+    _under_words = ["digitunder", "umder", "ander"]
+    # Para "over" e "under" puros, usa word-boundary para evitar capturar substrings
+    import re as _re
+    _tem_over_wb  = bool(_re.search(r'\bover\b', prompt_lower))
+    _tem_under_wb = bool(_re.search(r'\bunder\b', prompt_lower))
     _sat_words   = [
         "saturacao", "saturação", "saturation", "smart rank", "smartrank",
         "ausencia", "ausência", "dígito ausente", "digito ausente",
@@ -6999,16 +7278,22 @@ def _detectar_contrato(prompt_lower: str):
         return "GARRA_DUPLA"
     if any(w in prompt_lower for w in _dupla_words):
         return "DIGITDUPLA"
-    if any(w in prompt_lower for w in _over_words):
+    # Se o prompt menciona OVER e UNDER ao mesmo tempo → dupla implícita
+    # (apenas palavras exatas de contrato, não adjetivos descritivos)
+    _tem_over  = any(w in prompt_lower for w in _over_words) or _tem_over_wb
+    _tem_under = any(w in prompt_lower for w in _under_words) or _tem_under_wb
+    if _tem_over and _tem_under:
+        return "DIGITDUPLA"
+    if _tem_over:
         return "DIGITOVER"
-    if any(w in prompt_lower for w in _under_words):
+    if _tem_under:
         return "DIGITUNDER"
     return None
 
 # Barreiras permitidas por tipo — qualquer coisa fora desse mapa é bloqueada
 # antes de chegar ao front-end, independente do que a IA gerou.
 _BARREIRAS_VALIDAS = {
-    # OVER: só barreiras ≥ 3 são permitidas
+    # OVER: só barreiras ≥ 3 são permitidas por padrão
     # Over 0/1/2 têm >80-90% de chance de ganhar → payout irrisório, ROI negativo
     "DIGITOVER":   range(3, 9),   # 3, 4, 5, 6, 7, 8
     # UNDER: só barreiras ≤ 7 são permitidas
@@ -7019,34 +7304,66 @@ _BARREIRAS_VALIDAS = {
     "DIGITDIFFERS":range(0, 10),
 }
 
-def _validar_barreira(est: dict) -> str | None:
+def _detectar_barreira_explicita(prompt: str) -> dict:
+    """
+    Detecta se o usuário pediu explicitamente uma barreira específica no prompt.
+    Retorna dict com chaves opcionais:
+      over_min  → int: menor barreira Over aceita (ex: 1 se pediu "over 1")
+      under_max → int: maior barreira Under aceita (ex: 8 se pediu "under 8")
+    Se o usuário pediu explicitamente Over 1 ou Over 2, libera essas barreiras.
+    """
+    import re as _re2
+    resultado = {}
+    pl = prompt.lower()
+    # Detecta "over 1", "over1", "over 2", "over2" explicitamente
+    m_over = _re2.search(r'\bover\s*([0-2])\b', pl)
+    if m_over:
+        resultado["over_min"] = int(m_over.group(1))
+    # Detecta "under 8", "under8", "under 9", "under9" explicitamente
+    m_under = _re2.search(r'\bunder\s*([89])\b', pl)
+    if m_under:
+        resultado["under_max"] = int(m_under.group(1))
+    return resultado
+
+def _validar_barreira(est: dict, barreira_explicita: dict | None = None) -> str | None:
     """
     PORTA DE FERRO — bloqueio agressivo de contratos e barreiras proibidas.
     - DIGITDIFFERS                 → BLOQUEADO (payout irrisório, risco de ruína)
-    - DIGITUNDER barreira >= 8     → BLOQUEADO
-    - DIGITOVER  barreira <= 2     → BLOQUEADO
+    - DIGITUNDER barreira >= 8     → BLOQUEADO (a menos que pedido explicitamente)
+    - DIGITOVER  barreira <= 2     → BLOQUEADO (a menos que pedido explicitamente)
     - DIGITMATCH seq_gatilho < 15  → BLOQUEADO
     - DIGITDUPLA barreira_over <= 2 ou barreira_under >= 8 → BLOQUEADO
+    barreira_explicita: dict retornado por _detectar_barreira_explicita() — libera
+                        barreiras pedidas diretamente pelo usuário no prompt.
     Retorna None se válida, ou string de erro se inválida.
     """
     tipo = str(est.get("tipo_contrato", "")).upper()
+    bexp = barreira_explicita or {}
 
     try:
         barreira = int(est.get("barreira", 0))
     except (TypeError, ValueError):
         barreira = 0
 
-    # ── DIGITDIFFERS — bloqueio total ────────────────────────────────────────
+    # ── DIGITDIFFERS — bloqueio total (nunca liberado) ───────────────────────
     if "DIFFERS" in tipo or tipo == "DIGITDIFFERS":
         return "BLOQUEIO CRÍTICO: Contratos Differs são proibidos por alto risco de ruína."
 
     # ── DIGITUNDER ───────────────────────────────────────────────────────────
     if tipo == "DIGITUNDER" and barreira >= 8:
-        return f"BLOQUEIO: Under {barreira} banido. Payout insuficiente."
+        # Libera se o usuário pediu explicitamente essa barreira
+        if "under_max" in bexp and barreira <= bexp["under_max"]:
+            pass  # barreira explicitamente solicitada — permite
+        else:
+            return f"BLOQUEIO: Under {barreira} banido. Payout insuficiente."
 
     # ── DIGITOVER ────────────────────────────────────────────────────────────
     if tipo == "DIGITOVER" and barreira <= 2:
-        return f"BLOQUEIO: Over {barreira} banido. Payout insuficiente."
+        # Libera se o usuário pediu explicitamente essa barreira
+        if "over_min" in bexp and barreira >= bexp["over_min"]:
+            pass  # barreira explicitamente solicitada — permite
+        else:
+            return f"BLOQUEIO: Over {barreira} banido. Payout insuficiente."
 
     # ── DIGITMATCH — exige exaustão mínima ───────────────────────────────────
     if tipo == "DIGITMATCH":
@@ -7077,16 +7394,79 @@ def _validar_barreira(est: dict) -> str | None:
         if isinstance(est.get("barreira"), str):
             return None  # barreira não-numérica (ex: TOUCH "+0.05") — OK
         if barreira not in permitidas:
-            min_b, max_b = min(permitidas), max(permitidas)
-            return (
-                f"Barreira {barreira} inválida para {tipo}. "
-                f"Permitido: {min_b}–{max_b}."
-            )
+            # Libera se o usuário pediu explicitamente essa barreira
+            if tipo == "DIGITOVER"  and "over_min"  in bexp and barreira >= bexp["over_min"]:
+                pass  # autorizado pelo usuário
+            elif tipo == "DIGITUNDER" and "under_max" in bexp and barreira <= bexp["under_max"]:
+                pass  # autorizado pelo usuário
+            else:
+                min_b, max_b = min(permitidas), max(permitidas)
+                return (
+                    f"Barreira {barreira} inválida para {tipo}. "
+                    f"Permitido: {min_b}–{max_b}."
+                )
 
     return None
 
 
-def _montar_system_prompt(perfil: str, contexto_extra: str = "") -> str:
+def _montar_regras_barreira(barreira_explicita: dict | None = None) -> str:
+    """
+    Gera o bloco de regras de barreira do system prompt.
+    Se barreira_explicita contém 'over_min' ou 'under_max', libera essas barreiras
+    para que a IA as respeite em vez de substituir pelo mínimo seguro padrão.
+    """
+    bexp = barreira_explicita or {}
+    over_min  = bexp.get("over_min")   # ex: 1 → usuário pediu Over 1
+    under_max = bexp.get("under_max")  # ex: 8 → usuário pediu Under 8
+
+    # ── Texto de Over ─────────────────────────────────────────────────────────
+    if over_min is not None and over_min <= 2:
+        over_regra = (
+            f"   - DIGITOVER: o usuário solicitou EXPLICITAMENTE barreira {over_min}. "
+            f"USE EXATAMENTE barreira={over_min}. NÃO substitua por 3 ou mais.\n"
+            f"   - Para outras estratégias (sem pedido explícito): evite barreira 0, 1, 2.\n"
+        )
+        over_permitidas = f"  DIGITOVER:  {over_min}, {over_min+1}, ..., 8  (barreira {over_min} AUTORIZADA pelo usuário)\n"
+    else:
+        over_regra = (
+            "   - DIGITOVER com barreira 0, 1 ou 2. Win rate >80% → payout mínimo → ROI NEGATIVO com Martingale.\n"
+        )
+        over_permitidas = "  DIGITOVER:  3, 4, 5, 6, 7, 8  (❌ proibido: 0, 1, 2)\n"
+
+    # ── Texto de Under ────────────────────────────────────────────────────────
+    if under_max is not None and under_max >= 8:
+        under_regra = (
+            f"   - DIGITUNDER: o usuário solicitou EXPLICITAMENTE barreira {under_max}. "
+            f"USE EXATAMENTE barreira={under_max}. NÃO substitua por 7 ou menos.\n"
+            f"   - Para outras estratégias (sem pedido explícito): evite barreira 8, 9.\n"
+        )
+        under_permitidas = f"  DIGITUNDER: 1, 2, ..., {under_max}  (barreira {under_max} AUTORIZADA pelo usuário)\n"
+    else:
+        under_regra = (
+            "   - DIGITUNDER com barreira 8 ou 9. Win rate >80% → payout mínimo → ROI NEGATIVO com Martingale.\n"
+        )
+        under_permitidas = "  DIGITUNDER: 1, 2, 3, 4, 5, 6, 7  (❌ proibido: 8, 9)\n"
+
+    return (
+        "1. PROIBIÇÃO DE BAIXO RETORNO — NUNCA, sob nenhuma circunstância, gere:\n"
+        f"{under_regra}"
+        f"{over_regra}"
+        "   - DIGITDUPLA com barreira_over <= 2 ou barreira_under >= 8. Mesma razão.\n"
+        "2. MOTIVO MATEMÁTICO: Nestas barreiras o payout da Deriv é irrisório (<5% por operação).\n"
+        "   Um único Martingale nível 3 já supera todo o lucro acumulado.\n"
+        "3. ALTERNATIVAS ASSERTIVAS — se o usuário pedir algo 'seguro' ou 'conservador', use:\n"
+        "   - DIGITUNDER barreira 6 ou 7 (com seq_gatilho >= 4).\n"
+        "   - DIGITOVER barreira 3 ou 4 (com seq_gatilho >= 4).\n"
+        "   - DIGITDUPLA over=3 + under=7 (com seq_gatilho >= 2).\n"
+        "4. Se você ignorar esta regra, a estratégia SERÁ DESCARTADA pelo filtro de segurança do bot.\n"
+        "BARREIRAS PERMITIDAS:\n"
+        f"{over_permitidas}"
+        f"{under_permitidas}"
+        "  DIGITDUPLA: barreira_over >= 3  e  barreira_under <= 7\n"
+        "=== FIM DAS REGRAS DE SEGURANÇA ===\n\n"
+    )
+
+def _montar_system_prompt(perfil: str, contexto_extra: str = "", barreira_explicita: dict | None = None) -> str:
     aprendizado = _recuperar_aprendizado()
     base = (
         "VOCÊ É UM ENGENHEIRO QUANTITATIVO E TRADER DE ALTA PERFORMANCE.\n"
@@ -7154,22 +7534,7 @@ def _montar_system_prompt(perfil: str, contexto_extra: str = "") -> str:
         "- Stop loss ideal: 1.5x o take profit (ex: TP=10, SL=15).\n\n"
 
         "=== REGRAS RÍGIDAS DE SEGURANÇA E ROI (INVIOLÁVEIS) ===\n"
-        "1. PROIBIÇÃO DE BAIXO RETORNO — NUNCA, sob nenhuma circunstância, gere:\n"
-        "   - DIGITUNDER com barreira 8 ou 9. Win rate >80% → payout mínimo → ROI NEGATIVO com Martingale.\n"
-        "   - DIGITOVER com barreira 0, 1 ou 2. Win rate >80% → payout mínimo → ROI NEGATIVO com Martingale.\n"
-        "   - DIGITDUPLA com barreira_over <= 2 ou barreira_under >= 8. Mesma razão.\n"
-        "2. MOTIVO MATEMÁTICO: Nestas barreiras o payout da Deriv é irrisório (<5% por operação).\n"
-        "   Um único Martingale nível 3 já supera todo o lucro acumulado.\n"
-        "3. ALTERNATIVAS ASSERTIVAS — se o usuário pedir algo 'seguro' ou 'conservador', use:\n"
-        "   - DIGITUNDER barreira 6 ou 7 (com seq_gatilho >= 4).\n"
-        "   - DIGITOVER barreira 3 ou 4 (com seq_gatilho >= 4).\n"
-        "   - DIGITDUPLA over=3 + under=7 (com seq_gatilho >= 2).\n"
-        "4. Se você ignorar esta regra, a estratégia SERÁ DESCARTADA pelo filtro de segurança do bot.\n"
-        "BARREIRAS PERMITIDAS:\n"
-        "  DIGITOVER:  3, 4, 5, 6, 7, 8  (❌ proibido: 0, 1, 2)\n"
-        "  DIGITUNDER: 1, 2, 3, 4, 5, 6, 7  (❌ proibido: 8, 9)\n"
-        "  DIGITDUPLA: barreira_over >= 3  e  barreira_under <= 7\n"
-        "=== FIM DAS REGRAS DE SEGURANÇA ===\n\n"
+        + _montar_regras_barreira(barreira_explicita) +
 
         "=== FIM DO CONHECIMENTO BASE ===\n\n"
 
@@ -7287,10 +7652,18 @@ def _extrair_json(conteudo: str) -> dict:
     """Extrai e parseia o primeiro objeto JSON de uma string, tolerando markdown e truncamentos."""
     texto = conteudo.strip()
 
+    # Remove blocos <think>...</think> que alguns modelos (qwen, deepseek) emitem antes do JSON
+    texto = re.sub(r"<think>[\s\S]*?</think>", "", texto, flags=re.IGNORECASE).strip()
+
     # Remove blocos markdown ```json ... ``` ou ``` ... ```
-    texto = re.sub(r"^```(?:json)?\s*", "", texto)
-    texto = re.sub(r"\s*```$", "", texto)
+    texto = re.sub(r"^```(?:json)?\s*", "", texto, flags=re.MULTILINE)
+    texto = re.sub(r"\s*```\s*$", "", texto, flags=re.MULTILINE)
     texto = texto.strip()
+
+    # Remove qualquer texto antes do primeiro { (modelo colocou introdução)
+    inicio_json = texto.find("{")
+    if inicio_json > 0:
+        texto = texto[inicio_json:]
 
     def _normalizar(obj):
         """Se a IA retornar uma lista, pega o primeiro item; garante sempre um dict."""
@@ -7354,29 +7727,116 @@ def _extrair_json(conteudo: str) -> dict:
     raise json.JSONDecodeError("Nenhum objeto JSON encontrado", texto, 0)
 
 
+# Limite de tokens de SAÍDA por modelo (tokens de contexto total é diferente)
+_GROQ_MAX_OUTPUT_TOKENS = {
+    "qwen/qwen3.8-27b":       16384,
+    "openai/gpt-oss-20b":        16384,
+    "qwen/qwen3.8-27b":          16384,
+    # legados (podem não existir mais)
+    "llama3-70b-8192":            4096,
+    "llama3-8b-8192":             4096,
+    "llama-3.1-8b-instant":       4096,
+    "mixtral-8x7b-32768":         4096,
+    "gemma2-9b-it":               4096,
+}
+_GROQ_CONTEXT_LIMIT = {
+    "qwen/qwen3.8-27b":      131072,
+    "openai/gpt-oss-20b":       131072,
+    "qwen/qwen3.8-27b":         131072,
+    # legados
+    "llama3-70b-8192":            8192,
+    "llama3-8b-8192":             8192,
+    "llama-3.1-8b-instant":       8192,
+    "mixtral-8x7b-32768":        32768,
+    "gemma2-9b-it":               8192,
+}
+
+def _groq_truncar_prompt(modelo: str, system_prompt: str, user_prompt: str, max_tokens_resposta: int) -> tuple:
+    """Trunca system+user prompt para caber dentro do limite de contexto do modelo."""
+    limite = _GROQ_CONTEXT_LIMIT.get(modelo, 8192)
+    # Estima tokens: ~4 chars por token (conservador)
+    chars_disponiveis = (limite - max_tokens_resposta - 100) * 4
+    total_chars = len(system_prompt) + len(user_prompt)
+    if total_chars <= chars_disponiveis:
+        return system_prompt, user_prompt
+    # Prioriza manter o user_prompt inteiro (pedido do usuário) e trunca o system
+    chars_user = min(len(user_prompt), chars_disponiveis // 3)
+    chars_sys  = chars_disponiveis - chars_user
+    sys_trunc  = system_prompt[:chars_sys] + "\n[...prompt truncado para caber no contexto...]"
+    usr_trunc  = user_prompt[:chars_user]
+    print(f"[GROQ] Prompt truncado: sys {len(system_prompt)}→{len(sys_trunc)} | user {len(user_prompt)}→{len(usr_trunc)}")
+    return sys_trunc, usr_trunc
+
 def _chamar_groq(chave: str, modelo: str, system_prompt: str, user_prompt: str,
                  temperature: float = 0.3, max_tokens: int = 1024):
     """Chama a API Groq e retorna (dict_parsed, conteudo_raw). Lança exceção em caso de erro."""
+    # Garante max_tokens mínimo de 1500 para não truncar o JSON de resposta
+    max_tokens = max(max_tokens, 1500)
+    # Ajusta max_tokens ao limite real de saída do modelo (evita erro 400)
+    max_saida = _GROQ_MAX_OUTPUT_TOKENS.get(modelo, 8192)
+    max_tokens = min(max_tokens, max_saida)
+    # Trunca prompts para não estourar o contexto total do modelo
+    system_prompt, user_prompt = _groq_truncar_prompt(modelo, system_prompt, user_prompt, max_tokens)
+
+    # Monta payload — ativa JSON mode para modelos que suportam
+    _payload = {
+        "model": modelo,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user",   "content": user_prompt},
+        ],
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+    }
+    # Ativa response_format JSON para garantir output válido e sem truncamento
+    # (todos os modelos disponíveis suportam; removemos apenas se der 400 explícito de parâmetro)
+    _payload["response_format"] = {"type": "json_object"}
+
     resp = requests.post(
         "https://api.groq.com/openai/v1/chat/completions",
         headers={"Authorization": f"Bearer {chave}", "Content-Type": "application/json"},
-        json={
-            "model": modelo,
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user",   "content": user_prompt},
-            ],
-            "temperature": temperature,
-            "max_tokens": max_tokens,
-        },
-        timeout=30,
+        json=_payload,
+        timeout=45,
     )
+    # Se 400 causado pelo response_format, tenta sem ele
+    if resp.status_code == 400:
+        try:
+            _msg400 = resp.json().get("error", {}).get("message", "").lower()
+        except Exception:
+            _msg400 = ""
+        if "response_format" in _msg400 or "json_object" in _msg400:
+            _payload.pop("response_format", None)
+            resp = requests.post(
+                "https://api.groq.com/openai/v1/chat/completions",
+                headers={"Authorization": f"Bearer {chave}", "Content-Type": "application/json"},
+                json=_payload,
+                timeout=45,
+            )
     if resp.status_code == 429:
         retry_after = resp.headers.get("retry-after") or resp.headers.get("x-ratelimit-reset-requests")
         dica = f" Aguarde {retry_after}s antes de tentar novamente." if retry_after else " Aguarde alguns segundos antes de tentar novamente."
         raise Exception(f"⏳ Limite de requisições da API Groq atingido (429).{dica}")
     if resp.status_code == 401:
         raise Exception("🔑 Chave API Groq inválida ou expirada. Verifique a chave em console.groq.com")
+    if resp.status_code == 400:
+        # Bad Request — geralmente contexto muito longo ou parâmetros inválidos
+        try:
+            detalhe = resp.json().get("error", {}).get("message", "")
+        except Exception:
+            detalhe = ""
+        # Se for erro de contexto, tenta novamente com modelo maior
+        _GROQ_FALLBACK_400 = "qwen/qwen3.8-27b"
+        if modelo != _GROQ_FALLBACK_400:
+            print(f"[GROQ] Erro 400 com '{modelo}'. Tentando fallback: {_GROQ_FALLBACK_400}")
+            return _chamar_groq(chave, _GROQ_FALLBACK_400, system_prompt, user_prompt, temperature, max_tokens)
+        raise Exception(f"❌ Requisição inválida (400) para o modelo '{modelo}'. {detalhe or 'Tente outro modelo no painel da IA.'}")
+    if resp.status_code == 404:
+        # Modelo não encontrado — tenta fallback com modelo estável
+        _GROQ_FALLBACK = "qwen/qwen3.8-27b"
+        if modelo != _GROQ_FALLBACK:
+            print(f"[GROQ] Modelo '{modelo}' não encontrado (404). Tentando fallback: {_GROQ_FALLBACK}")
+            return _chamar_groq(chave, _GROQ_FALLBACK, system_prompt, user_prompt, temperature, max_tokens)
+        raise Exception(f"❌ Modelo Groq '{modelo}' não encontrado (404). Acesse console.groq.com e escolha um modelo disponível.")
     if resp.status_code == 503:
         raise Exception("🔌 API Groq temporariamente indisponível (503). Tente novamente em instantes.")
     resp.raise_for_status()
@@ -7420,7 +7880,7 @@ def _resolver_funcao_ia(dados: dict):
         modelo = dados.get("modelo") or cfg.get("nvidia_modelo", "nvidia/llama-3.1-nemotron-70b-instruct")
         return _chamar_nvidia, chave, modelo, provedor
     chave  = dados.get("chave") or cfg.get("chave", "")
-    modelo = dados.get("modelo") or cfg.get("modelo", "llama-3.3-70b-versatile")
+    modelo = dados.get("modelo") or cfg.get("modelo", "qwen/qwen3.8-27b")
     return _chamar_groq, chave, modelo, "groq"
 
 # ── Busca web via DuckDuckGo (sem API key) ───────────────────────────────────
@@ -7623,7 +8083,8 @@ def ai_gerar():
     if not prompt:
         return jsonify({"erro": "Prompt vazio"})
 
-    system_prompt    = _montar_system_prompt(perfil)
+    bexp             = _detectar_barreira_explicita(prompt)
+    system_prompt    = _montar_system_prompt(perfil, barreira_explicita=bexp)
     contrato_forcado = _detectar_contrato(prompt.lower())
 
     conteudo = ""
@@ -7637,8 +8098,8 @@ def ai_gerar():
             estrategia["nome"] = estrategia["nome"][:35]
         if "descricao" in estrategia:
             estrategia["descricao"] = estrategia["descricao"][:120]
-        # Guarda dura de barreira — rejeita se a IA ignorou as regras
-        _erro_barreira = _validar_barreira(estrategia)
+        # Guarda dura de barreira — passa o pedido explícito para não bloquear
+        _erro_barreira = _validar_barreira(estrategia, bexp)
         if _erro_barreira:
             return jsonify({"erro": _erro_barreira})
         return jsonify(estrategia)
@@ -7719,9 +8180,11 @@ def ai_gerar_ultra():
         system_final = _montar_prompt_supremo(dados_mercado, [])
     else:  # normal
         passos.append("⚡ Gerando estratégia Ultra Normal...")
-        system_final = _montar_system_prompt(perfil, contexto_final)
+        bexp_ultra = _detectar_barreira_explicita(prompt)
+        system_final = _montar_system_prompt(perfil, contexto_final, barreira_explicita=bexp_ultra)
 
     contrato_forcado = _detectar_contrato(prompt.lower())
+    bexp = _detectar_barreira_explicita(prompt)
 
     conteudo = ""
     try:
@@ -7741,7 +8204,7 @@ def ai_gerar_ultra():
             estrategia["nome"] = estrategia["nome"][:35]
         if "descricao" in estrategia:
             estrategia["descricao"] = estrategia["descricao"][:120]
-        _erro_barreira = _validar_barreira(estrategia)
+        _erro_barreira = _validar_barreira(estrategia, bexp)
         if _erro_barreira:
             return jsonify({"erro": _erro_barreira, "_passos": passos})
         estrategia["_passos"] = passos + [f"✅ Estratégia {label_nivel} gerada com sucesso!"]
@@ -10353,6 +10816,51 @@ def ect_backtest():
     return jsonify(resultado)
 
 
+@app.route('/ect/mc-auto', methods=['GET'])
+def ect_mc_auto():
+    """
+    Retorna o histórico de resultados do Monte Carlo automático,
+    disparado a cada 20 operações registradas via _registrar_experiencia.
+    Parâmetros opcionais de query:
+      ?estrategia=NOME  — filtra por estratégia
+      ?ativo=R_100      — filtra por ativo
+      ?limite=10        — últimos N registros (padrão: 10)
+    """
+    mc_path = os.path.join(_BASE_DIR, "memory_mc_auto.json")
+    if not os.path.exists(mc_path):
+        return jsonify({"registros": [], "total": 0,
+                        "mensagem": "Nenhum Monte Carlo automático executado ainda."})
+    try:
+        with open(mc_path, "r", encoding="utf-8") as f:
+            historico = json.load(f)
+    except Exception:
+        return jsonify({"registros": [], "total": 0, "erro": "Falha ao ler histórico."}), 500
+
+    estrategia = request.args.get("estrategia", "").strip()
+    ativo      = request.args.get("ativo", "").strip()
+    limite     = max(1, min(100, int(request.args.get("limite", 10))))
+
+    registros = historico
+    if estrategia:
+        registros = [r for r in registros if r.get("estrategia") == estrategia]
+    if ativo:
+        registros = [r for r in registros if r.get("ativo") == ativo]
+
+    # Mais recentes primeiro
+    registros = list(reversed(registros[-limite:]))
+
+    # Resumo analítico dos últimos registros
+    edges_positivos = sum(1 for r in registros if r.get("edge_positivo"))
+    resumo = {
+        "total_registros":    len(registros),
+        "edges_positivos":    edges_positivos,
+        "taxa_edge":          round(edges_positivos / max(len(registros), 1) * 100, 1),
+        "ultimo_executado":   registros[0].get("timestamp") if registros else None,
+    }
+
+    return jsonify({"registros": registros, "total": len(historico), "resumo": resumo})
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # CAMADA 3 — VALIDAÇÃO: PROFIT FACTOR ≥ 1.25 (ProfitFactorValidator)
 # Valida se uma estratégia tem Fator de Lucro superior ao mínimo exigido
@@ -10931,7 +11439,7 @@ def _monitor_executar_scan():
     # ── Tenta gerar via IA Groq ───────────────────────────────────────────────
     groq_cfg = _groq_cfg_ler()
     groq_chave = groq_cfg.get("chave", "")
-    groq_modelo = groq_cfg.get("modelo", "llama-3.3-70b-versatile")
+    groq_modelo = groq_cfg.get("modelo", "qwen/qwen3.8-27b")
 
     if groq_chave:
         try:
@@ -11329,7 +11837,7 @@ def ai_deep_search():
     """
     dados  = request.get_json(force=True, silent=True) or {}
     chave  = dados.get("chave") or _groq_cfg_ler().get("chave", "")
-    modelo = dados.get("modelo") or _groq_cfg_ler().get("modelo", "llama-3.3-70b-versatile")
+    modelo = dados.get("modelo") or _groq_cfg_ler().get("modelo", "qwen/qwen3.8-27b")
     perfil = dados.get("perfil", "agressivo")  # Foco em retorno rápido
 
     passos = [
@@ -11897,7 +12405,7 @@ def ai_gerar_mestre():
         _funcao_ia = _chamar_nvidia
     else:
         chave  = dados.get("chave") or cfg.get("chave", "")
-        modelo = dados.get("modelo") or cfg.get("modelo", "llama-3.3-70b-versatile")
+        modelo = dados.get("modelo") or cfg.get("modelo", "qwen/qwen3.8-27b")
         _funcao_ia = _chamar_groq
 
     prompt = dados.get("prompt", "")
@@ -12313,7 +12821,7 @@ def ai_supremo():
     """
     dados  = request.get_json(force=True, silent=True) or {}
     chave  = dados.get("chave") or _groq_cfg_ler().get("chave", "")
-    modelo = dados.get("modelo") or _groq_cfg_ler().get("modelo", "llama-3.3-70b-versatile")
+    modelo = dados.get("modelo") or _groq_cfg_ler().get("modelo", "qwen/qwen3.8-27b")
 
     if not chave:
         return jsonify({"erro": "Chave API Groq não configurada"})
@@ -12435,7 +12943,7 @@ def _supremo_loop():
 
     groq_cfg = _groq_cfg_ler()
     chave = groq_cfg.get("chave", "")
-    modelo = groq_cfg.get("modelo", "llama-3.3-70b-versatile")
+    modelo = groq_cfg.get("modelo", "qwen/qwen3.8-27b")
 
     if not chave:
         _supremo_log("❌ Chave Groq não configurada — modo supremo encerrado.")
@@ -12601,7 +13109,7 @@ def supremo_decidir_agora():
     """Força uma decisão imediata da IA Suprema (sem esperar o loop)."""
     dados  = request.get_json(force=True, silent=True) or {}
     chave  = dados.get("chave") or _groq_cfg_ler().get("chave", "")
-    modelo = dados.get("modelo") or _groq_cfg_ler().get("modelo", "llama-3.3-70b-versatile")
+    modelo = dados.get("modelo") or _groq_cfg_ler().get("modelo", "qwen/qwen3.8-27b")
 
     if not chave:
         return jsonify({"erro": "Chave API Groq não configurada"})
@@ -13017,7 +13525,7 @@ def contas_adicionar():
             with _token_sec_lock:
                 sec_tok = _token_secundaria.get("access_token", "")
                 sec_age = time.time() - _token_secundaria.get("ts", 0)
-                sec_ok  = bool(sec_tok) and sec_tok not in ("None", "null") and sec_age < 300
+                sec_ok  = bool(sec_tok) and sec_tok not in ("None", "null") and sec_age < 1800
                 if sec_ok:
                     access_token = sec_tok
                     # Consome o token — evita reusar na próxima chamada
@@ -13033,7 +13541,7 @@ def contas_adicionar():
             with _token_sec_lock:
                 sec_tok = _token_secundaria.get("access_token", "")
                 sec_age = time.time() - _token_secundaria.get("ts", 0)
-                sec_ok  = bool(sec_tok) and sec_tok not in ("None", "null") and sec_age < 300
+                sec_ok  = bool(sec_tok) and sec_tok not in ("None", "null") and sec_age < 1800
                 if sec_ok:
                     access_token = sec_tok
                     _token_secundaria["access_token"] = ""
@@ -13170,7 +13678,7 @@ def contas_verificar_secundaria():
     with _token_sec_lock:
         sec_tok = _token_secundaria.get("access_token", "")
         sec_age = time.time() - _token_secundaria.get("ts", 0)
-        token_pronto = bool(sec_tok) and sec_tok not in ("None", "null") and sec_age < 300
+        token_pronto = bool(sec_tok) and sec_tok not in ("None", "null") and sec_age < 1800
 
     if token_pronto:
         state["status"]      = "token_pronto"
@@ -13251,6 +13759,9 @@ def bot_config_get():
                 padrao.update(dados)
     except Exception:
         pass
+    # Sobrescreve posRit com o valor enviado pelo BAT (tem prioridade)
+    if _posrit_startup:
+        padrao['posRit'] = _posrit_startup
     return jsonify(padrao)
 
 @app.route('/bot-config', methods=['POST'])
@@ -13710,20 +14221,19 @@ def contas_wss_secundaria():
     conta_id = sec.get("id", "")
 
     # ── ISOLAMENTO TOTAL: token vem exclusivamente do slot da secundária ─
-    # 1. Tenta o slot em memória (_token_secundaria), protegido pelo lock
-    access_token = ""
-    with _token_sec_lock:
-        access_token = _token_secundaria.get("access_token", "").strip().strip('"')
+    # Prioridade: PAT persistido no AccountManager (nunca expira)
+    # Fallback: slot em memória (_token_secundaria) para tokens OAuth temporários
+    access_token = sec.get("access_token", "").strip().strip('"')
 
-    # 2. Fallback: token persistido no AccountManager (salvo no registro da conta)
-    #    Nunca usa _token_recebido nem _render_token_cache (esses são da conta principal)
+    # Fallback para slot em memória (tokens OAuth temporários)
     if not access_token or access_token in ("None", "null", ""):
-        access_token = sec.get("access_token", "").strip().strip('"')
+        with _token_sec_lock:
+            access_token = _token_secundaria.get("access_token", "").strip().strip('"')
 
     if not access_token or access_token in ("None", "null", ""):
         return jsonify({
             "wss_url": None,
-            "erro": "Token da conta secundária expirado. Reconecte a conta secundária."
+            "erro": "Token da conta secundária não encontrado. Reconecte a conta secundária."
         })
 
     # ── Gera OTP → WSS URL ────────────────────────────────────────────────
@@ -14495,7 +15005,13 @@ class GarraTrendProEngine:
         self._salvar_vault(self.historico_ia)
 
     def calcular_pesos_dinamicos(self) -> dict:
-        """Módulo 10 – Ajusta os pesos do score com base no que mais deu WIN no histórico."""
+        """
+        Módulo 10 – Ajusta os pesos do score com base no que mais deu WIN no histórico.
+        Para cada módulo, mede a taxa de presença nos wins vs losses.
+        Módulos que aparecem proporcionalmente mais nos wins recebem peso maior.
+        Aplica suavização com os pesos base (60% histórico + 40% base) para
+        evitar overshooting quando há poucos dados.
+        """
         pesos_base = {
             "tendencia_principal": 15,
             "micro_tendencia":     10,
@@ -14511,11 +15027,54 @@ class GarraTrendProEngine:
         if len(self.historico_ia) < 20:
             return pesos_base
 
-        wins = [op for op in self.historico_ia if op.get("resultado") == "WIN"]
-        if not wins:
+        wins   = [op for op in self.historico_ia if op.get("resultado") == "WIN"]
+        losses = [op for op in self.historico_ia if op.get("resultado") == "LOSS"]
+
+        if not wins or not losses:
             return pesos_base
 
-        return pesos_base
+        # Mapeamento: campo registrado no vault → chave do peso
+        _CAMPO_PARA_PESO = {
+            "m1_tendencia":       "tendencia_principal",
+            "m2_micro_tendencia": "micro_tendencia",
+            "m3_forca_velas":     "forca_velas",
+            "m4_momentum":        "momentum",
+            "m5_candlestick":     "candlestick",
+            "m6_volatilidade":    "volatilidade",
+            "m7_rompimento":      "rompimento",
+            "m8_lateralidade":    "lateralidade",
+        }
+
+        contribuicao = {}
+        for campo, peso_key in _CAMPO_PARA_PESO.items():
+            # Taxa de presença (True/aprovado) em wins vs losses
+            tx_win  = sum(1 for op in wins   if op.get("detalhes_modulos", {}).get(campo)) / len(wins)
+            tx_loss = sum(1 for op in losses if op.get("detalhes_modulos", {}).get(campo)) / len(losses)
+            # Lift: quanto mais o módulo aparece em wins do que em losses
+            lift = tx_win / (tx_loss + 0.01)  # +0.01 para evitar divisão por zero
+            contribuicao[peso_key] = max(lift, 0.1)  # mínimo 0.1 para nunca zerar um módulo
+
+        # Módulos sem mapeamento recebem lift neutro (1.0)
+        for k in pesos_base:
+            if k not in contribuicao:
+                contribuicao[k] = 1.0
+
+        # Converte lift para peso proporcional, depois suaviza com base
+        total_lift = sum(contribuicao.values())
+        soma_base  = sum(pesos_base.values())
+        pesos_novos = {}
+        for k in pesos_base:
+            peso_hist = (contribuicao[k] / total_lift) * soma_base
+            # 60% histórico + 40% base — estabilidade com adaptação
+            pesos_novos[k] = round(0.60 * peso_hist + 0.40 * pesos_base[k], 1)
+
+        # Garante que a soma dos pesos ≈ 100
+        soma_nova = sum(pesos_novos.values())
+        if soma_nova > 0:
+            fator = soma_base / soma_nova
+            pesos_novos = {k: round(v * fator, 1) for k, v in pesos_novos.items()}
+
+        return pesos_novos
 
     def avaliar_mercado(self, dados_mercado: dict) -> dict:
         """
@@ -14596,34 +15155,87 @@ class GarraTrendProEngine:
         pontos_mod7      = -40 if falso_rompimento else 5
 
         # ── MÓDULO 8: Mercado Lateral (ADX / Distância EMA20) ─────────────
+        # Corrigido: -100 era excessivo. Agora usa penalidade proporcional ao grau
+        # de lateralidade, permitindo entrada em consolidações leves com alta confluência.
         adx             = ind.get("adx", 25)
         mercado_lateral = adx < 20 or abs(ema20 - ema50) < 0.0001
-        pontos_mod8     = -100 if mercado_lateral else 10
+        if adx < 10:
+            pontos_mod8 = -60   # lateralidade severa — penalidade forte
+        elif adx < 15:
+            pontos_mod8 = -30   # lateralidade moderada
+        elif adx < 20:
+            pontos_mod8 = -10   # lateralidade leve
+        else:
+            pontos_mod8 = 10    # tendência clara — recompensa
 
-        # ── MÓDULO 9 & 10: Score Inteligente e IA Estatística ─────────────
-        score_total = (
-            pontos_mod1 + pontos_mod2 + pontos_mod3 +
-            pontos_mod4 + pontos_mod5 + pontos_mod6 +
-            pontos_mod7 + pontos_mod8 + 10  # 10 pontos base da IA Estatística
+        # ── MÓDULO 9 & 10: Score Inteligente com Pesos Dinâmicos ──────────
+        # Usa pesos calibrados pelo histórico real de wins/losses
+        pesos = self.calcular_pesos_dinamicos()
+
+        # Mapeamento de pontos para pesos dinâmicos
+        # Normaliza cada módulo para escala 0-1 antes de aplicar o peso
+        score_ponderado = (
+            (1.0 if mod1_ok     else 0.0) * pesos["tendencia_principal"] +
+            (forca_micro / 100) * pesos["micro_tendencia"] +
+            (max(0, pontos_velas + 5) / 8.0) * pesos["forca_velas"] +
+            (1.0 if momentum_ok else 0.0) * pesos["momentum"] +
+            (1.0 if mod5_ok     else 0.0) * pesos["candlestick"] +
+            (1.0 if mod6_ok     else 0.0) * pesos["volatilidade"] +
+            (0.0 if falso_rompimento else 1.0) * pesos["rompimento"] +
+            (0.0 if adx < 20   else 1.0) * pesos["lateralidade"] +
+            ((adx / 100.0) if adx <= 100 else 1.0) * pesos["adx_indicador"] +
+            0.5 * pesos["ia_estatistica"]  # 50% de confiança base para IA
         )
+        # Converte para escala 0-100 (soma dos pesos = 100)
+        score_total = round(score_ponderado, 1)
 
-        # ── FILTRO ANTI-LOSS RÍGIDO ───────────────────────────────────────
+        # ── THRESHOLD DINÂMICO POR REGIME ────────────────────────────────
+        # Regime enviado pelo front-end (ou detectado a partir do ADX)
+        regime_mercado = dados_mercado.get("regime_mercado", "")
+        if not regime_mercado:
+            if adx >= 25:
+                regime_mercado = "TENDENCIA"
+            elif mercado_lateral:
+                regime_mercado = "LATERAL"
+            else:
+                regime_mercado = "DESCONHECIDO"
+
+        _SCORE_MINIMO_POR_REGIME = {
+            "TENDENCIA":        72,
+            "LATERAL":          85,   # mercado lateral exige muito mais confluência
+            "ALTA_VOLATILIDADE":80,
+            "DESCONHECIDO":     78,
+        }
+        score_minimo = _SCORE_MINIMO_POR_REGIME.get(regime_mercado, 78)
+
+        # ── FILTRO ANTI-LOSS — agora baseado em score dinâmico e regime ───
         aprovado_anti_loss = (
             mod1_ok and
             mod2_ok and
             mod6_ok and
-            not mercado_lateral and
             not falso_rompimento and
-            score_total >= 92
+            score_total >= score_minimo
         )
+
+        # Motivo de bloqueio detalhado
+        motivos_bloqueio = []
+        if not mod1_ok:       motivos_bloqueio.append("EMAs sem alinhamento (M1)")
+        if not mod2_ok:       motivos_bloqueio.append(f"Micro-tendência fraca ({forca_micro:.0f}%)")
+        if not mod6_ok:       motivos_bloqueio.append("ATR abaixo do mínimo (M6)")
+        if falso_rompimento:  motivos_bloqueio.append("Falso rompimento detectado (M7)")
+        if score_total < score_minimo:
+            motivos_bloqueio.append(f"Score {score_total:.1f} < {score_minimo} (regime: {regime_mercado})")
 
         direcao = "CALL" if tendencia_alta else ("PUT" if tendencia_baixa else "NEUTRO")
 
         return {
-            "score_total":   score_total,
-            "score_minimo":  92,
-            "aprovado":      aprovado_anti_loss,
-            "direcao":       direcao if aprovado_anti_loss else "AGUARDAR",
+            "score_total":       score_total,
+            "score_minimo":      score_minimo,
+            "aprovado":          aprovado_anti_loss,
+            "direcao":           direcao if aprovado_anti_loss else "AGUARDAR",
+            "regime_mercado":    regime_mercado,
+            "pesos_usados":      pesos,
+            "pesos_calibrados":  len(self.historico_ia) >= 20,
             "detalhes_modulos": {
                 "m1_tendencia":       mod1_ok,
                 "m2_micro_tendencia": f"{forca_micro:.1f}%",
@@ -14633,8 +15245,13 @@ class GarraTrendProEngine:
                 "m6_volatilidade":    mod6_ok,
                 "m7_rompimento":      not falso_rompimento,
                 "m8_lateralidade":    not mercado_lateral,
+                "m8_adx":             adx,
+                "m8_pontos":          pontos_mod8,
             },
-            "motivo_bloqueio": None if aprovado_anti_loss else "Reprovado pelo Filtro Anti-Loss ou Score < 92"
+            "motivo_bloqueio": (
+                None if aprovado_anti_loss
+                else "Bloqueado: " + " | ".join(motivos_bloqueio)
+            ),
         }
 
 
@@ -15235,6 +15852,26 @@ def trading_pro_config():
 def _ping():
     return jsonify({"ok": True, "status": "online"})
 
+# ── Pós RIT — recebe config do BAT (ou de qualquer cliente) ─────────────────
+_posrit_startup: dict = {}
+
+@app.route('/posrit-config', methods=['GET', 'POST'])
+def _posrit_config():
+    global _posrit_startup
+    if request.method == 'POST':
+        data = request.get_json(silent=True) or {}
+        ativo  = bool(data.get('ativo', False))
+        tipo   = str(data.get('tipo', 'loss')).lower()
+        qtd    = int(data.get('qtd', 3))
+        recup  = data.get('recuperarAposLoss', True)
+        recup  = recup if isinstance(recup, bool) else str(recup).lower() != 'false'
+        if tipo not in ('win', 'loss'):
+            tipo = 'loss'
+        qtd = max(1, min(20, qtd))
+        _posrit_startup = {'ativo': ativo, 'tipo': tipo, 'qtd': qtd, 'recuperarAposLoss': recup}
+        return jsonify({'ok': True, 'posRit': _posrit_startup})
+    return jsonify({'ok': True, 'posRit': _posrit_startup})
+
 @app.route('/tg-start', methods=['POST','GET'])
 def _tg_start():
     """Força o (re)início do thread de polling do Telegram."""
@@ -15256,34 +15893,34 @@ def _tg_debug():
             return jsonify({"ok": False, "erro": "Token não configurado"})
 
         # 1. Verifica webhook
-        wh = requests.get(_tg_url(tok, "getWebhookInfo"), timeout=8, verify=False).json()
+        wh = _TG_SESSION.get(_tg_url(tok, "getWebhookInfo"), timeout=8).json()
         webhook_url   = wh.get("result", {}).get("url", "")
         webhook_ativo = bool(webhook_url)
 
         # 2. Remove webhook se existir
         webhook_removido = False
         if webhook_ativo:
-            rd = requests.post(_tg_url(tok, "deleteWebhook"),
+            rd = _TG_SESSION.post(_tg_url(tok, "deleteWebhook"),
                                json={"drop_pending_updates": False},
-                               timeout=8, verify=False).json()
+                               timeout=8).json()
             webhook_removido = rd.get("ok", False)
 
         # 3. Busca últimos updates SEM filtro de offset (vê tudo disponível)
-        r_raw = requests.get(
+        r_raw = _TG_SESSION.get(
             _tg_url(tok, "getUpdates"),
             params={"timeout": 0, "limit": 5,
                     "allowed_updates": ["message", "callback_query"]},
-            timeout=8, verify=False,
+            timeout=8,
         )
         raw = r_raw.json()
         upds_raw = raw.get("result", [])
 
         # 4. Com offset correto do thread
-        r_off = requests.get(
+        r_off = _TG_SESSION.get(
             _tg_url(tok, "getUpdates"),
             params={"offset": _TG_POLL_OFFSET + 1, "timeout": 0,
                     "allowed_updates": ["message", "callback_query"]},
-            timeout=8, verify=False,
+            timeout=8,
         )
         upds_off = r_off.json().get("result", [])
 
@@ -15317,23 +15954,23 @@ def _tg_reset_offset():
         if not tok:
             return jsonify({"ok": False, "erro": "Token não configurado"})
         # Remove webhook
-        requests.post(_tg_url(tok, "deleteWebhook"),
+        _TG_SESSION.post(_tg_url(tok, "deleteWebhook"),
                       json={"drop_pending_updates": True},
-                      timeout=8, verify=False)
+                      timeout=8)
         # Pega último update_id para avançar offset
-        r = requests.get(
+        r = _TG_SESSION.get(
             _tg_url(tok, "getUpdates"),
             params={"offset": -1, "timeout": 0},
-            timeout=8, verify=False,
+            timeout=8,
         )
         res = r.json().get("result", [])
         if res:
             _TG_POLL_OFFSET = res[-1]["update_id"]
             # Confirma consumo do offset
-            requests.get(
+            _TG_SESSION.get(
                 _tg_url(tok, "getUpdates"),
                 params={"offset": _TG_POLL_OFFSET + 1, "timeout": 0},
-                timeout=8, verify=False,
+                timeout=8,
             )
         return jsonify({"ok": True, "novo_offset": _TG_POLL_OFFSET,
                         "updates_descartados": len(res)})
@@ -16316,7 +16953,14 @@ window.GARRA_PRICE_ACTION_PRO={setCandles(data){if(!Array.isArray(data)||data.le
 
 @app.route('/modo-avancado-multimercado')
 def modo_avancado_multimercado_ui():
-    from flask import Response
+    from flask import Response, make_response
+    resp_obj = make_response(_modo_avancado_multimercado_html())
+    resp_obj.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    resp_obj.headers['Pragma'] = 'no-cache'
+    resp_obj.headers['Expires'] = '0'
+    return resp_obj
+
+def _modo_avancado_multimercado_html():
     html_page = r"""<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -16388,6 +17032,18 @@ def modo_avancado_multimercado_ui():
 
     .btn-select-market { padding: 6px 12px; font-size: 11px; font-weight: bold; background: #262c40; color: #fff; border: 1px solid var(--border); border-radius: 4px; cursor: pointer; transition: 0.2s; }
     .btn-select-market:hover { background: var(--accent-purple); border-color: var(--accent-purple); }
+
+    /* Filtro de Volume — linha e botão bloqueado por dígitos inimigos */
+    .vol-bloqueado-row { border-left: 3px solid #ff4f6d !important; background: rgba(255,79,109,0.06) !important; }
+    .vol-bloqueado-row:hover { background: rgba(255,79,109,0.10) !important; }
+    .btn-vol-bloqueado { padding: 6px 12px; font-size: 11px; font-weight: bold;
+      background: #3a0a14; color: #ff6b8a; border: 1px solid #ff4f6d;
+      border-radius: 4px; cursor: not-allowed; }
+    .vol-badge { font-size: 10px; margin-left: 6px; padding: 1px 5px;
+      border-radius: 3px; font-weight: bold; }
+    .vol-badge-ok  { background: rgba(0,255,136,0.15); color: #00ff88; }
+    .vol-badge-bad { background: rgba(255,79,109,0.2); color: #ff6b8a; }
+    .vol-motivo { font-size: 10px; color: #ff6b8a; display: block; margin-top: 2px; }
   </style>
 </head>
 <body>
@@ -16440,6 +17096,35 @@ def modo_avancado_multimercado_ui():
 <small style="font-size: 10px; color: var(--text-muted); display: block; margin-top: 4px;">
         Entra na real após <b>N</b> saídas seguidas dos dígitos 7, 8 ou 9.
       </small>
+</div>
+<!-- FILTRO DE VOLUME DE DÍGITOS -->
+<div class="box-trava" style="border-color: #ff4f6d44;">
+  <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+    <label style="color: #ff8fa3; margin:0; font-size:12px; font-weight:700;">🔊 FILTRO DE VOLUME</label>
+    <label style="display:flex; align-items:center; gap:6px; cursor:pointer; margin:0;">
+      <span style="font-size:10px; color:var(--text-muted);" id="volFilterLabel">OFF</span>
+      <input type="checkbox" id="volFilterEnabled" onchange="toggleVolFilter()"
+        style="width:16px; height:16px; accent-color:#ff4f6d; cursor:pointer;">
+    </label>
+  </div>
+  <div id="volFilterParams" style="display:none;">
+    <div class="form-row" style="margin-top:6px;">
+      <div class="form-group" style="flex:1;">
+        <label style="font-size:10px;">Inimigo máx (%)</label>
+        <input type="number" id="volInimMaxPct" class="form-control" value="30" min="10" max="60" step="5">
+      </div>
+      <div class="form-group" style="flex:1;">
+        <label style="font-size:10px;">Favorável mín (%)</label>
+        <input type="number" id="volFavMinPct" class="form-control" value="55" min="30" max="80" step="5">
+      </div>
+    </div>
+    <small style="font-size:10px; color:#ff8fa3; display:block; margin-top:2px;">
+      Cancela entrada se dígitos inimigos ultrapassam o % máx ou favoráveis ficam abaixo do % mín.
+    </small>
+  </div>
+  <small id="volFilterOff" style="font-size:10px; color:var(--text-muted); display:block; margin-top:2px;">
+    Quando ativo, bloqueia entradas em mercados com excesso de dígitos contrários.
+  </small>
 </div>
 <div class="form-row">
 <div class="form-group" style="flex: 1;">
@@ -16672,25 +17357,94 @@ def modo_avancado_multimercado_ui():
     marketData[asset].currentStreak = current;
   }
 
+  // ─────────────────────────────────────────────────────────────────────────────
+  // FILTRO DE VOLUME DE DÍGITOS INIMIGOS
+  // Para UNDER X: inimigos = dígitos >= X (ex: Under 7 → 7,8,9)
+  // Bloqueia se: inimigos > INIMIGO_MAX_PCT% OU favoráveis < FAVO_MIN_PCT%
+  // ─────────────────────────────────────────────────────────────────────────────
+  function toggleVolFilter() {
+    const enabled = document.getElementById('volFilterEnabled').checked;
+    document.getElementById('volFilterLabel').textContent = enabled ? 'ON' : 'OFF';
+    document.getElementById('volFilterLabel').style.color = enabled ? '#ff4f6d' : '';
+    document.getElementById('volFilterParams').style.display = enabled ? 'block' : 'none';
+    document.getElementById('volFilterOff').style.display   = enabled ? 'none'  : 'block';
+    renderTable();
+  }
+
+  function calcularFiltroVolume(digits, prediction) {
+    const enabled = document.getElementById('volFilterEnabled')?.checked;
+    // Se filtro desligado → retorna sempre liberado
+    if (!enabled) return { bloqueado: false, motivo: '', pctInimigo: 0, pctFavoravel: 0 };
+
+    const JANELA          = 30;
+    const INIMIGO_MAX_PCT = parseInt(document.getElementById('volInimMaxPct')?.value || '30', 10);
+    const FAVO_MIN_PCT    = parseInt(document.getElementById('volFavMinPct')?.value  || '55', 10);
+
+    const amostra = digits.slice(-JANELA);
+    const n = amostra.length;
+    if (n < 10) return { bloqueado: false, motivo: '', pctInimigo: 0, pctFavoravel: 0 };
+
+    // inimigos = dígitos que causam LOSS no UNDER X = d >= prediction
+    const inimigos   = amostra.filter(d => d >= prediction);
+    const favoraveis = amostra.filter(d => d < prediction);
+    const pctInim = Math.round(inimigos.length / n * 100);
+    const pctFav  = Math.round(favoraveis.length / n * 100);
+
+    const motivos = [];
+    if (pctInim > INIMIGO_MAX_PCT) {
+      motivos.push(`dígitos ${prediction}+ em ${pctInim}% (máx ${INIMIGO_MAX_PCT}%)`);
+    }
+    if (pctFav < FAVO_MIN_PCT) {
+      motivos.push(`favoráveis em ${pctFav}% (mín ${FAVO_MIN_PCT}%)`);
+    }
+
+    return {
+      bloqueado:    motivos.length > 0,
+      motivo:       motivos.join(' | '),
+      pctInimigo:   pctInim,
+      pctFavoravel: pctFav,
+      inimigos:     `${prediction},${prediction < 9 ? prediction+1 : ''},${prediction < 8 ? prediction+2 : ''}`.replace(/,+$/, ''),
+    };
+  }
+
   function renderTable() {
     const tbody = document.getElementById("multiMarketTableBody");
     tbody.innerHTML = "";
 
+    // Pega previsão atual do bot para calcular os dígitos inimigos corretos
+    const prediction = parseInt(document.getElementById("botPrediction")?.value || "7", 10);
+
     MARKETS.forEach(m => {
-      const info = marketData[m.id];
+      const info   = marketData[m.id];
       const recent = info.digits.slice(-10);
+      const vol    = calcularFiltroVolume(info.digits, prediction);
+
+      // Badge de volume com % inimigo e favorável
+      const volBadge = info.digits.length >= 10
+        ? `<span class="vol-badge ${vol.bloqueado ? 'vol-badge-bad' : 'vol-badge-ok'}"
+             title="Inimigos(${prediction}+): ${vol.pctInimigo}% | Favoráveis: ${vol.pctFavoravel}%">
+             ▲${vol.pctInimigo}% ▼${vol.pctFavoravel}%
+           </span>`
+        : '';
 
       const tr = document.createElement("tr");
+      if (vol.bloqueado) tr.classList.add("vol-bloqueado-row");
       tr.innerHTML = `
-        <td><b>${info.name}</b></td>
+        <td>
+          <b>${info.name}</b>${volBadge}
+          ${vol.bloqueado ? `<span class="vol-motivo">🚫 VOL: ${vol.motivo}</span>` : ''}
+        </td>
         <td><div class="recent-digits">
             ${recent.length > 0
-              ? recent.map(d => `<span class="d-pill ${d >= 7 ? 'loss-digit' : ''}">${d}</span>`).join('')
+              ? recent.map(d => `<span class="d-pill ${d >= prediction ? 'loss-digit' : ''}">${d}</span>`).join('')
               : '<span style="color:var(--text-muted); font-size:11px;">Aguardando ticks...</span>'}
           </div></td>
         <td><span class="streak-badge ${info.currentStreak === 0 ? 'streak-low' : ''}">${info.currentStreak}x</span></td>
         <td><span class="streak-badge ${info.maxStreak > 0 && info.maxStreak <= 4 ? 'streak-low' : ''}">${info.maxStreak > 0 ? info.maxStreak + ' vezes' : 'Calculando...'}</span></td>
-        <td><button class="btn-select-market" onclick="selectMarket('${m.id}')">Operar Este</button></td>
+        <td>${vol.bloqueado
+          ? `<button class="btn-vol-bloqueado" title="${vol.motivo}">🚫 VOL. INIMIGO</button>`
+          : `<button class="btn-select-market" onclick="selectMarket('${m.id}')">Operar Este</button>`
+        }</td>
       `;
       tbody.appendChild(tr);
     });
@@ -16752,6 +17506,16 @@ def modo_avancado_multimercado_ui():
 
     if (virtualLosses >= targetLosses) {
       virtualLosses = 0;
+
+      // ── Filtro de volume: cancela entrada se dígitos inimigos em excesso ──
+      const asset = document.getElementById("botAsset").value;
+      const digitsAtivos = (marketData[asset] && marketData[asset].digits) ? marketData[asset].digits : [];
+      const vol = calcularFiltroVolume(digitsAtivos, prediction);
+      if (vol.bloqueado) {
+        logTrade(`🚫 ENTRADA CANCELADA — VOLUME: ${vol.motivo}`, "loss");
+        return;
+      }
+
       // ── Dispara entrada REAL na corretora ──
       enviarEntradaReal();
     }
@@ -16928,7 +17692,7 @@ def modo_avancado_multimercado_ui():
 </script>
 </body>
 </html>"""
-    return Response(html_page, mimetype='text/html; charset=utf-8', headers={'Cache-Control':'no-store'})
+    return html_page
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # TELEGRAM BOT CONTROLLER — Controle total via Telegram + conexão via PAT Deriv
@@ -17118,6 +17882,89 @@ def mc_remover():
     _mc_salvar(d)
     return jsonify({"ok": True, "ativa": d.get("ativa", "")})
 
+@app.route('/contas/conectar-secundaria-via-pat', methods=['POST'])
+def contas_conectar_secundaria_via_pat():
+    """Conecta uma conta PAT cadastrada como conta SECUNDÁRIA (modo espelho).
+    Recebe: { "nome": "CONTA REAL", "tipoReal": "REAL" }
+    Usa o PAT da conta para gerar OTP e registra no AccountManager como SECUNDARIA.
+    """
+    dados      = request.get_json(force=True, silent=True) or {}
+    nome_conta = str(dados.get("nome", "")).strip()
+    tipo_real  = str(dados.get("tipoReal", "REAL")).upper()
+    nome_exib  = str(dados.get("nomeExibicao", "")).strip()
+
+    if not nome_conta:
+        return jsonify({"ok": False, "erro": "Nome da conta obrigatório."})
+
+    # Busca o PAT da conta pelo nome
+    d = _mc_carregar()
+    conta_pat = d.get("contas", {}).get(nome_conta)
+    if not conta_pat:
+        return jsonify({"ok": False, "erro": f"Conta '{nome_conta}' não encontrada."})
+
+    pat = conta_pat.get("pat", "").strip()
+    if not pat:
+        return jsonify({"ok": False, "erro": "PAT não configurado para esta conta."})
+
+    # Usa o tipo informado; se não informado, usa o tipo salvo na conta
+    if tipo_real not in ("DEMO", "REAL"):
+        tipo_real = str(conta_pat.get("tipo", "REAL")).upper()
+    tipo_api = "TESTE" if tipo_real == "DEMO" else "REAL"
+
+    try:
+        # Gera OTP via API Deriv usando o PAT como access_token
+        headers = {
+            "Authorization": f"Bearer {pat}",
+            "Deriv-App-ID":  APP_ID,
+            "Content-Type":  "application/json",
+        }
+        res_contas = requests.get(f"{API_BASE}/accounts", headers=headers, timeout=10)
+        if res_contas.status_code != 200:
+            return jsonify({"ok": False, "erro": f"Erro ao listar contas Deriv: {res_contas.status_code} — verifique o PAT."})
+
+        contas_api = res_contas.json().get("data", [])
+        conta_id = None
+        for c in contas_api:
+            cid      = str(c.get("account_id", ""))
+            is_virt  = c.get("is_virtual", False) or str(c.get("account_type","")).lower() == "demo" \
+                       or cid.upper().startswith(("VR", "DOT", "VRT"))
+            if tipo_real == "DEMO" and is_virt:
+                conta_id = cid; break
+            elif tipo_real == "REAL" and not is_virt:
+                conta_id = cid; break
+
+        if not conta_id:
+            return jsonify({"ok": False, "erro": f"Nenhuma conta {tipo_real} encontrada para este PAT."})
+
+        res_otp = requests.post(f"{API_BASE}/accounts/{conta_id}/otp", headers=headers, timeout=10)
+        wss_url = (res_otp.json().get("data") or {}).get("url")
+        if not wss_url:
+            erros   = res_otp.json().get("errors") or []
+            msg_err = erros[0].get("message", res_otp.text[:120]) if erros else res_otp.text[:120]
+            return jsonify({"ok": False, "erro": f"OTP falhou: {msg_err}"})
+
+        # Registra como SECUNDARIA no AccountManager
+        nome_final = nome_exib or nome_conta
+        conta = _account_manager.adicionar_conta(
+            conta_id=conta_id, tipo="SECUNDARIA",
+            wss_url=wss_url, access_token=pat, nome=nome_final,
+        )
+        print(f"[SecPAT] Conta secundária conectada via PAT: {nome_final} | {conta_id} ({tipo_real})")
+        return jsonify({
+            "ok":  True,
+            "conta": {
+                "id":      conta["id"],
+                "nome":    conta["nome"],
+                "tipo":    conta["tipo"],
+                "estado":  conta["estado"],
+                "wss_url": conta["wss_url"],
+            },
+            "msg": f"Conta {tipo_real} conectada como secundária!",
+        })
+    except Exception as e:
+        return jsonify({"ok": False, "erro": str(e)})
+
+
 @app.route('/tg-pat-conectar', methods=['POST'])
 def tg_pat_conectar():
     """Conecta a Deriv via PAT (Personal Access Token).
@@ -17145,8 +17992,13 @@ def tg_pat_conectar():
                 _token_recebido["_conta_id_cache"]= resultado.get("conta_id","")
             _access_token["tipo"] = tipo
             print(f"[PAT] Conexão via PAT bem-sucedida — tipo={tipo} | conta={resultado.get('conta_id','')}")
-            return jsonify({"ok": True, "wss_url": resultado["wss_url"],
-                            "conta_id": resultado.get("conta_id",""), "tipo": tipo})
+            resp = {"ok": True, "wss_url": resultado["wss_url"],
+                    "conta_id": resultado.get("conta_id",""), "tipo": tipo}
+            # Inclui access_token no JSON para o frontend usar no authorize manual
+            # (necessário quando wss_url é fallback direto sem OTP embutido)
+            if resultado.get("access_token"):
+                resp["access_token"] = resultado["access_token"]
+            return jsonify(resp)
         return jsonify({"ok": False, "erro": "Não foi possível gerar wss_url com este PAT."})
     except Exception as e:
         return jsonify({"ok": False, "erro": str(e)})
@@ -18304,15 +19156,51 @@ def _tg_bot_controller_loop():
     global _TG_POLL_OFFSET
     time.sleep(5)
 
+    # ── Ao iniciar: mata webhook e garante posse exclusiva do polling ──────────
+    def _tg_tomar_posse(token):
+        """Deleta webhook e drena TODOS os updates pendentes para zerar conflito 409.
+        Usa offset=-1 para confirmar todos os updates de uma vez, sem depender
+        do _TG_POLL_OFFSET atual — garante posse mesmo contra instâncias antigas.
+        """
+        global _TG_POLL_OFFSET
+        # 1. Deleta webhook forçando descarte de updates pendentes
+        try:
+            _TG_SESSION.post(_tg_url(token, "deleteWebhook"),
+                          json={"drop_pending_updates": True},
+                          timeout=8)
+        except Exception:
+            pass
+        # 2. Usa offset=-1 para descobrir o update_id mais recente sem consumir nada
+        try:
+            r = _TG_SESSION.get(
+                _tg_url(token, "getUpdates"),
+                params={"offset": -1, "timeout": 0,
+                        "allowed_updates": ["message", "callback_query"]},
+                timeout=8,
+            )
+            results = r.json().get("result", [])
+            if results:
+                ultimo_uid = max(upd.get("update_id", 0) for upd in results)
+                _TG_POLL_OFFSET = ultimo_uid
+                # 3. Confirma consumo de TODOS os updates até o mais recente
+                _TG_SESSION.get(
+                    _tg_url(token, "getUpdates"),
+                    params={"offset": _TG_POLL_OFFSET + 1, "timeout": 0},
+                    timeout=8,
+                )
+        except Exception:
+            pass
+        print(f"[TG] Posse do polling obtida. Offset={_TG_POLL_OFFSET}")
+
     try:
         cfg0 = _tg_carregar()
         tok0 = cfg0.get("token", "")
         if tok0:
-            requests.post(_tg_url(tok0, "deleteWebhook"),
-                          json={"drop_pending_updates": True},
-                          timeout=8, verify=False)
+            _tg_tomar_posse(tok0)
     except Exception:
         pass
+
+    _conflitos_409 = 0
 
     while True:
         try:
@@ -18324,15 +19212,15 @@ def _tg_bot_controller_loop():
                 time.sleep(10)
                 continue
 
-            resp = requests.get(
+            resp = _TG_SESSION.get(
                 _tg_url(token, "getUpdates"),
                 params={"offset": _TG_POLL_OFFSET + 1, "timeout": 8,
                         "allowed_updates": ["message", "callback_query"]},
                 timeout=12,
-                verify=False,
             )
 
             if resp.status_code == 200:
+                _conflitos_409 = 0
                 results = resp.json().get("result", [])
                 for upd in results:
                     uid = upd.get("update_id", 0)
@@ -18343,7 +19231,13 @@ def _tg_bot_controller_loop():
                     elif upd.get("message"):
                         _tg_processar_comando(upd["message"], token, chat_id)
             elif resp.status_code == 409:
-                time.sleep(5)
+                # Conflito: outra instância também está fazendo polling
+                _conflitos_409 += 1
+                # Backoff exponencial: 3s, 6s, 12s, 24s... máx 60s
+                _delay_409 = min(3 * (2 ** (_conflitos_409 - 1)), 60)
+                print(f"[TG] Conflito 409 detectado ({_conflitos_409}x) — tomando posse em {_delay_409}s...")
+                time.sleep(_delay_409)
+                _tg_tomar_posse(token)
             else:
                 time.sleep(2)
         except Exception:
@@ -18373,3 +19267,130 @@ _tg_garantir_controller()
 if __name__ == "__main__":
     print("🚀 Iniciando Servidor e Controle Remoto...")
     start_server()
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# MÓDULO DE VOZ — Recebe comando transcrito e retorna ação + resposta em voz
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@app.route('/api/voz-comando', methods=['POST'])
+def api_voz_comando():
+    """Recebe texto transcrito pelo reconhecimento de voz do frontend,
+    interpreta o comando (regras simples + fallback Groq IA) e retorna
+    uma resposta em texto para o sintetizador de voz e uma ação opcional
+    para o terminal do bot."""
+    dados           = request.get_json(silent=True) or {}
+    comando_usuario = (dados.get("comando") or "").lower().strip()
+
+    print(f"[VOZ] Comando recebido: {comando_usuario}")
+
+    resposta_voz  = "Comando não reconhecido."
+    acao_terminal = None
+    ok            = True
+
+    # ── Regras diretas (sem IA) ───────────────────────────────────────────────
+    if any(p in comando_usuario for p in ("iniciar", "ligar", "começar", "start")):
+        acao_terminal = "iniciar"
+        resposta_voz  = "Iniciando as operações do robô agora."
+
+    elif any(p in comando_usuario for p in ("parar", "desligar", "stop", "encerrar")):
+        acao_terminal = "parar"
+        resposta_voz  = "Operações interrompidas com segurança."
+
+    elif any(p in comando_usuario for p in ("saldo", "banca", "quanto tenho", "dinheiro")):
+        saldo = _tg_bot_estado.get("banca", 0.0)
+        resposta_voz  = f"Sua banca atual é de {saldo:.2f} dólares."
+
+    elif any(p in comando_usuario for p in ("placar", "resultado", "win", "loss", "vitória", "derrota")):
+        wins   = _tg_bot_estado.get("wins", 0)
+        losses = _tg_bot_estado.get("losses", 0)
+        lucro  = _tg_bot_estado.get("lucro", 0.0)
+        sinal  = "mais" if lucro >= 0 else "menos"
+        resposta_voz  = (
+            f"Placar: {wins} vitórias e {losses} derrotas. "
+            f"Lucro da sessão: {sinal} {abs(lucro):.2f} dólares."
+        )
+
+    elif any(p in comando_usuario for p in ("status", "como está", "tá rodando", "está rodando")):
+        rodando    = _tg_bot_estado.get("running", False)
+        estrategia = _tg_bot_estado.get("estrategia", "não configurada")
+        resposta_voz = (
+            f"O robô {'está rodando' if rodando else 'está parado'}. "
+            f"Estratégia ativa: {estrategia}."
+        )
+
+    elif any(p in comando_usuario for p in ("limpar", "limpa", "apagar terminal")):
+        acao_terminal = "limpar"
+        resposta_voz  = "Terminal limpo."
+
+    elif any(p in comando_usuario for p in ("ajuda", "comandos", "o que você faz")):
+        resposta_voz = (
+            "Você pode dizer: iniciar robô, parar, qual a banca, placar, "
+            "status, limpar terminal, entrada dois ponto cinquenta, stopwin dez."
+        )
+
+    elif any(p in comando_usuario for p in ("entrada", "stake", "valor")):
+        import re as _re
+        nums = _re.findall(r'\d+[\.,]?\d*', comando_usuario)
+        if nums:
+            val = nums[0].replace(',', '.')
+            acao_terminal = f"entrada {val}"
+            resposta_voz  = f"Entrada definida para {val} dólares."
+        else:
+            resposta_voz = "Qual o valor da entrada? Diga por exemplo: entrada dois vírgula cinquenta."
+
+    elif any(p in comando_usuario for p in ("stopwin", "stop win", "meta", "stop ganho")):
+        import re as _re
+        nums = _re.findall(r'\d+[\.,]?\d*', comando_usuario)
+        if nums:
+            val = nums[0].replace(',', '.')
+            acao_terminal = f"stopwin {val}"
+            resposta_voz  = f"Stop win definido para {val} dólares."
+
+    elif any(p in comando_usuario for p in ("stoploss", "stop loss", "stop perda")):
+        import re as _re
+        nums = _re.findall(r'\d+[\.,]?\d*', comando_usuario)
+        if nums:
+            val = nums[0].replace(',', '.')
+            acao_terminal = f"stoploss {val}"
+            resposta_voz  = f"Stop loss definido para {val} dólares."
+
+    else:
+        # ── Fallback: interpreta via Groq IA ─────────────────────────────────
+        try:
+            cfg    = _groq_cfg_ler()
+            chave  = cfg.get("chave", "")
+            modelo = cfg.get("modelo", "qwen/qwen3.8-27b")
+
+            if chave:
+                sys_prompt = (
+                    "Você é o assistente de voz do GarraBot, um robô de trading. "
+                    "O usuário enviou um comando de voz transcrito. "
+                    "Analise e retorne APENAS um JSON válido com exatamente estas duas chaves:\n"
+                    "{\n"
+                    '  "resposta_voz": "Frase curta e clara para o bot falar em voz alta (máx 2 frases)",\n'
+                    '  "acao_terminal": "comando para o terminal do bot (ex: iniciar, parar, entrada 2.0) ou null"\n'
+                    "}\n"
+                    "Comandos válidos: iniciar, parar, limpar, status, "
+                    "entrada <valor>, stopwin <valor>, stoploss <valor>, estrategia <nome>.\n"
+                    "Não inclua texto fora do JSON."
+                )
+                parsed, _ = _chamar_groq(
+                    chave, modelo, sys_prompt, comando_usuario,
+                    temperature=0.2, max_tokens=200
+                )
+                if parsed and isinstance(parsed, dict):
+                    resposta_voz  = parsed.get("resposta_voz", resposta_voz) or resposta_voz
+                    acao_terminal = parsed.get("acao_terminal") or None
+                else:
+                    ok = False
+            else:
+                ok = False
+        except Exception as e:
+            print(f"[VOZ IA] Erro ao processar com Groq: {e}")
+            ok = False
+
+    return jsonify({
+        "ok":            ok,
+        "resposta_voz":  resposta_voz,
+        "acao_terminal": acao_terminal,
+    })

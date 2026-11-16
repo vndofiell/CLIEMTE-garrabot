@@ -96,6 +96,97 @@ def _side_rate(digits: list[int], tipo: str, barrier: int) -> float:
     return sum(d > barrier for d in digits) / len(digits)
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# FILTRO DE VOLUME DE DÍGITOS
+# Lógica:
+#   DIGITUNDER X  → dígitos >= X são "inimigos" (causam perda).
+#                   Se o volume desses inimigos nos últimos N ticks for alto → BLOQUEAR.
+#                   Os dígitos do lado favorável (< X) devem ter volume dominante.
+#
+#   DIGITOVER X   → dígitos <= X são "inimigos".
+#                   Se o volume desses inimigos for alto → BLOQUEAR.
+#
+# Parâmetros:
+#   VOLUME_JANELA       : quantos ticks analisar para volume (padrão: 30)
+#   VOLUME_INIMIGO_MAX  : % máxima de dígitos inimigos permitida (ex: 0.30 = 30%)
+#   VOLUME_FAVORAVEL_MIN: % mínima de dígitos favoráveis exigida  (ex: 0.55 = 55%)
+# ═══════════════════════════════════════════════════════════════════════════════
+VOLUME_JANELA        = 30    # janela de ticks para análise de volume
+VOLUME_INIMIGO_MAX   = 0.30  # máx 30% de dígitos inimigos → acima disso bloqueia
+VOLUME_FAVORAVEL_MIN = 0.55  # mín 55% de dígitos favoráveis → abaixo disso bloqueia
+
+
+def _filtro_volume(
+    digits: list[int],
+    tipo: str,
+    barrier: int,
+    janela: int = VOLUME_JANELA,
+    inimigo_max: float = VOLUME_INIMIGO_MAX,
+    favoravel_min: float = VOLUME_FAVORAVEL_MIN,
+) -> dict:
+    """
+    Analisa o volume dos dígitos inimigos e favoráveis.
+
+    Para DIGITUNDER X:
+      - Inimigos = dígitos >= X  (ex: Under 7 → inimigos são 7, 8, 9)
+      - Favoráveis = dígitos < X (ex: Under 7 → favoráveis são 0..6)
+
+    Para DIGITOVER X:
+      - Inimigos = dígitos <= X  (ex: Over 4 → inimigos são 0..4)
+      - Favoráveis = dígitos > X (ex: Over 4 → favoráveis são 5..9)
+
+    Retorna:
+      ok          : True se passou no filtro, False se entrada deve ser CANCELADA
+      pct_inimigo : % de dígitos inimigos na janela
+      pct_favoravel: % de dígitos favoráveis na janela
+      inimigos    : lista dos dígitos inimigos
+      motivo      : texto explicativo quando bloqueia
+    """
+    if not digits:
+        return {"ok": True, "pct_inimigo": 0.0, "pct_favoravel": 0.0,
+                "inimigos": [], "motivo": ""}
+
+    amostra = digits[-janela:]
+    n = len(amostra)
+    if n == 0:
+        return {"ok": True, "pct_inimigo": 0.0, "pct_favoravel": 0.0,
+                "inimigos": [], "motivo": ""}
+
+    if tipo == "DIGITUNDER":
+        # inimigos: dígitos que CAUSAM PERDA = d >= barrier
+        inimigos    = [d for d in amostra if d >= barrier]
+        favoraveis  = [d for d in amostra if d < barrier]
+        lista_inim  = list(range(barrier, 10))   # ex: Under 7 → [7,8,9]
+    else:  # DIGITOVER
+        # inimigos: dígitos que CAUSAM PERDA = d <= barrier
+        inimigos    = [d for d in amostra if d <= barrier]
+        favoraveis  = [d for d in amostra if d > barrier]
+        lista_inim  = list(range(0, barrier + 1))  # ex: Over 4 → [0,1,2,3,4]
+
+    pct_inim  = len(inimigos)  / n
+    pct_fav   = len(favoraveis) / n
+
+    motivos = []
+    if pct_inim > inimigo_max:
+        motivos.append(
+            f"volume inimigo alto: {pct_inim*100:.0f}% (dígitos {lista_inim}, "
+            f"max permitido: {inimigo_max*100:.0f}%)"
+        )
+    if pct_fav < favoravel_min:
+        motivos.append(
+            f"volume favorável baixo: {pct_fav*100:.0f}% "
+            f"(mín exigido: {favoravel_min*100:.0f}%)"
+        )
+
+    return {
+        "ok":             len(motivos) == 0,
+        "pct_inimigo":    round(pct_inim  * 100, 1),
+        "pct_favoravel":  round(pct_fav   * 100, 1),
+        "inimigos":       lista_inim,
+        "motivo":         "; ".join(motivos),
+    }
+
+
 def _score_candidate(
     digits: list[int],
     tipo: str,
@@ -109,6 +200,7 @@ def _score_candidate(
             "taxa20": 0, "taxa50": 0, "payout": payout,
             "status": "NÃO OPERAR", "entrada": False,
             "motivo": "Aguardando pelo menos 20 ticks",
+            "volume": {"ok": False, "pct_inimigo": 0, "pct_favoravel": 0},
         }
 
     w20 = digits[-20:]
@@ -118,10 +210,11 @@ def _score_candidate(
     trigger = _streak_same_side(w20, tipo, barrier)
     ent = _entropy(w50)
 
+    # ── Filtro de volume (aplicado ANTES de calcular score) ──────────────────
+    vol = _filtro_volume(digits, tipo, barrier)
+
     # Frequência 25%, consistência 15%, gatilho 35%,
     # payout 15%, estabilidade 10%.
-    # Gatilho (exaustão) tem o maior peso — é o principal sinal de entrada.
-    # Frequência usa escala centrada em 50% (mercado equilibrado = 50 pts).
     freq_score = min(100.0, max(0.0, (rate20 - 0.35) / 0.30 * 100.0))
     consistency = 100.0 - min(100.0, abs(rate20 - rate50) * 200.0)
 
@@ -159,27 +252,40 @@ def _score_candidate(
     if abs(rate20 - rate50) > 0.20:
         reasons.append("janelas divergentes")
 
+    # ── Filtro de volume cancela entrada mesmo com score alto ────────────────
+    if not vol["ok"]:
+        reasons.append(f"🚫 VOLUME: {vol['motivo']}")
+
     entrada = score >= MIN_SCORE and not reasons
 
     if entrada:
         status = "ENTRADA LIBERADA"
-    elif score >= 70:
+    elif score >= 70 and vol["ok"]:
         status = "AGUARDANDO CONFIRMAÇÃO"
+    elif not vol["ok"]:
+        status = "BLOQUEADO — VOLUME INIMIGO"
     else:
         status = "NÃO OPERAR"
 
     return {
-        "score": round(score, 1),
-        "tipo": tipo,
-        "barreira": barrier,
-        "gatilho": trigger,
-        "taxa20": round(rate20 * 100, 1),
-        "taxa50": round(rate50 * 100, 1),
-        "payout": round(payout, 4),
-        "entropia": round(ent, 3),
-        "status": status,
-        "entrada": entrada,
-        "motivo": "; ".join(reasons) if reasons else "Todos os filtros aprovados",
+        "score":      round(score, 1),
+        "tipo":       tipo,
+        "barreira":   barrier,
+        "gatilho":    trigger,
+        "taxa20":     round(rate20 * 100, 1),
+        "taxa50":     round(rate50 * 100, 1),
+        "payout":     round(payout, 4),
+        "entropia":   round(ent, 3),
+        "status":     status,
+        "entrada":    entrada,
+        "motivo":     "; ".join(reasons) if reasons else "Todos os filtros aprovados",
+        "volume": {
+            "ok":           vol["ok"],
+            "pct_inimigo":  vol["pct_inimigo"],
+            "pct_favoravel": vol["pct_favoravel"],
+            "inimigos":     vol["inimigos"],
+            "motivo":       vol["motivo"],
+        },
     }
 
 

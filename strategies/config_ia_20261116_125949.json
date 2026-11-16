@@ -1,0 +1,18 @@
+{
+  "ativo": "R_75",
+  "barreira": 0,
+  "descricao": "Entra Rise/Fall em R_75 quando RSI >75 ou <25 com 4 ticks de exaustão. Perfil conservador.",
+  "duracao": 5,
+  "entrada_usd": 0.35,
+  "gerenciamento": "soros",
+  "nome": "Sniper RSI Extremo R75",
+  "seq_gatilho": 4,
+  "stop_loss_usd": 100,
+  "take_profit_usd": 10,
+  "tipo_contrato": "FLUXO",
+  "velas": 4,
+  "_prompt_original": "Quero uma estratégia Sniper para Volatility 75 (R_75) operando Rise/Fall (Sobe/Desce) com expiração de 5 ticks. O gatilho só deve disparar quando o indicador RSI estiver em zona extrema (acima de 75 para entrar em Fall/Desce, ou abaixo de 25 para entrar em Rise/Sobe) confirmado por uma sequência de 4 ticks seguidos na mesma direção antes da exaustão. Use perfil conservador, stake fixa com Soros de 2 níveis após acerto, Stop Win de 4% e Stop Loss máximo de 6% da banca",
+  "data": "2026-11-16 12:59",
+  "_feedback": "curtida",
+  "_avaliada_em": "2026-11-16 12:59"
+}
